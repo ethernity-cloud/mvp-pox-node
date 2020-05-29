@@ -1,0 +1,98 @@
+#
+# Copyright (C) 2018, 2019 Ethernity HODL UG
+#
+# This file is part of ETHERNITY NODE.
+#
+# ETHERNITY SC is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as
+# published by the Free Software Foundation, either version 3 of the
+# License, or (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
+#
+
+- name: Ethernity NODE 
+  hosts: all
+  connection: local
+  become: yes
+  gather_facts: yes
+  roles:
+    - role: crivetimihai.virtualization.kvm
+    - role: crivetimihai.virtualization.vagrant
+  tasks:
+  - name: kernel SGX - Ubuntu 18.04
+    when: (ansible_facts['distribution'] == "Ubuntu" and ansible_facts['distribution_major_version'] == "18" and ansible_kernel is version('5.0.0-050000-generic','!='))
+    apt: deb={{item}}
+    with_items:
+       - ubuntu/linux-image-unsigned-5.0.0-050000-generic_5.0.0-050000.201903032031_amd64.deb
+       - ubuntu/linux-modules-5.0.0-050000-generic_5.0.0-050000.201903032031_amd64.deb
+       - ubuntu/linux-headers-5.0.0-050000_5.0.0-050000.201903032031_all.deb
+       - ubuntu/linux-modules-extra-5.0.0-050000-generic_5.0.0-050000.201903032031_amd64.deb
+       - ubuntu/linux-headers-5.0.0-050000-generic_5.0.0-050000.201903032031_amd64.deb
+  - name: reboot - Ubuntu 18.04
+    when: (ansible_facts['distribution'] == "Ubuntu" and ansible_facts['distribution_major_version'] == "18" and ansible_kernel is version('5.0.0-050000-generic','!='))
+    debug:
+      msg: The kernel has been updated, a reboot is required
+  - name: exit - Ubuntu 18.04
+    when: (ansible_facts['distribution'] == "Ubuntu" and ansible_facts['distribution_major_version'] == "18" and ansible_kernel is version('5.0.0-050000-generic','!='))
+    meta: end_play
+  - name: qemu SGX cleanup - Ubuntu 18.04
+    when: (ansible_facts['distribution'] == "Ubuntu" and ansible_facts['distribution_major_version'] == "18" and ansible_kernel is version('5.0.0-050000-generic','=='))
+    apt:
+      pkg:
+      - qemu-kvm
+      - qemu-utils
+      - qemu-system-x86
+      - qemu-system-common
+      - qemu-block-extra
+      - libcacard0
+      - qemu-user-binfmt
+      - qemu-user
+      state: absent 
+  - name: qemu SGX - Ubuntu 18.04
+    when: (ansible_facts['distribution'] == "Ubuntu" and ansible_facts['distribution_major_version'] == "18" and ansible_kernel is version('5.0.0-050000-generic','=='))
+    apt: deb={{item}}
+    with_items:
+       - ubuntu/libcacard0_2.5.1-etny_amd64.deb
+       - ubuntu/qemu-block-extra_3.1.0r1-etny_amd64.deb
+       - ubuntu/qemu-system-common_3.1.0r1-etny_amd64.deb
+       - ubuntu/qemu-system-data_3.1.0r1-etny_all.deb
+       - ubuntu/qemu-system-mips_3.1.0r1-etny_amd64.deb
+       - ubuntu/qemu-system-misc_3.1.0r1-etny_amd64.deb
+       - ubuntu/qemu-system-ppc_3.1.0r1-etny_amd64.deb
+       - ubuntu/qemu-system-x86_3.1.0r1-etny_amd64.deb
+       - ubuntu/qemu-system-s390x_3.1.0r1-etny_amd64.deb
+       - ubuntu/qemu-system-sparc_3.1.0r1-etny_amd64.deb
+       - ubuntu/qemu-system-arm_3.1.0r1-etny_amd64.deb
+       - ubuntu/qemu-kvm_3.1.0r1-etny_amd64.deb
+       - ubuntu/qemu-system_3.1.0r1-etny_amd64.deb
+       - ubuntu/qemu-user_3.1.0r1-etny_amd64.deb
+       - ubuntu/qemu-user-binfmt_3.1.0r1-etny_amd64.deb
+       - ubuntu/qemu-utils_3.1.0r1-etny_amd64.deb
+       - ubuntu/qemu_3.1.0r1-etny_amd64.deb
+  - name: vagrant-libvirt package dependencies - install
+    when: (ansible_facts['distribution'] == "Ubuntu" and ansible_facts['distribution_major_version'] == "18" and ansible_kernel is version('5.0.0-050000-generic','=='))
+    apt:
+      pkg:
+      - libvirt-bin
+      - ebtables
+      - dnsmasq-base
+      - libxslt-dev
+      - libxml2-dev
+      - libvirt-dev
+      - zlib1g-dev
+      - ruby-dev
+  - name: vagrant-libvirt - install
+    shell: vagrant plugin install vagrant-libvirt
+  - name: vagrant-preload - install
+    shell: vagrant plugin install vagrant-reload
+  - name: vagrant - cleanup VM
+    shell: vagrant destroy -f
+  - name: vagrant - provision VM
+    shell: vagrant up --provider=libvirt

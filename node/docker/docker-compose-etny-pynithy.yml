@@ -1,0 +1,17 @@
+version: '3.7'
+
+services:
+  etny-pynithy:
+    image: localhost:5000/iosif/etny-pynithy
+    volumes:
+      - .:/myapp
+    devices:
+      - /dev/isgx
+    environment:
+      - SCONE_HEAP=256M
+      - SCONE_MODE=HW
+      - SCONE_ALLOW_DLOPEN=2
+      - SCONE_ALPINE=0
+      - SCONE_VERSION=1
+      - SCONE_LOG=0
+    working_dir: /myapp
