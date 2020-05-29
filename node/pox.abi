@@ -1,0 +1,1114 @@
+[
+	{
+		"constant": false,
+		"inputs": [
+			{
+				"name": "_cpuRequest",
+				"type": "uint8"
+			},
+			{
+				"name": "_memRequest",
+				"type": "uint8"
+			},
+			{
+				"name": "_storageRequest",
+				"type": "uint8"
+			},
+			{
+				"name": "_bandwidthRequest",
+				"type": "uint8"
+			},
+			{
+				"name": "_duration",
+				"type": "uint16"
+			},
+			{
+				"name": "_instances",
+				"type": "uint8"
+			},
+			{
+				"name": "_maxPrice",
+				"type": "uint8"
+			},
+			{
+				"name": "_metadata1",
+				"type": "string"
+			},
+			{
+				"name": "_metadata2",
+				"type": "string"
+			},
+			{
+				"name": "_metadata3",
+				"type": "string"
+			},
+			{
+				"name": "_metadata4",
+				"type": "string"
+			}
+		],
+		"name": "_addDORequest",
+		"outputs": [
+			{
+				"name": "_rowNumber",
+				"type": "uint256"
+			}
+		],
+		"payable": false,
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"constant": false,
+		"inputs": [
+			{
+				"name": "_cpuRequest",
+				"type": "uint8"
+			},
+			{
+				"name": "_memRequest",
+				"type": "uint8"
+			},
+			{
+				"name": "_storageRequest",
+				"type": "uint8"
+			},
+			{
+				"name": "_bandwidthRequest",
+				"type": "uint8"
+			},
+			{
+				"name": "_duration",
+				"type": "uint16"
+			},
+			{
+				"name": "_minPrice",
+				"type": "uint8"
+			},
+			{
+				"name": "_metadata1",
+				"type": "string"
+			},
+			{
+				"name": "_metadata2",
+				"type": "string"
+			},
+			{
+				"name": "_metadata3",
+				"type": "string"
+			},
+			{
+				"name": "_metadata4",
+				"type": "string"
+			}
+		],
+		"name": "_addDPRequest",
+		"outputs": [
+			{
+				"name": "_rowNumber",
+				"type": "uint256"
+			}
+		],
+		"payable": false,
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"constant": false,
+		"inputs": [
+			{
+				"name": "_requestListItem",
+				"type": "uint256"
+			},
+			{
+				"name": "_key",
+				"type": "string"
+			},
+			{
+				"name": "_value",
+				"type": "string"
+			}
+		],
+		"name": "_addMetadataToDPRequest",
+		"outputs": [
+			{
+				"name": "_rowNumber",
+				"type": "uint256"
+			}
+		],
+		"payable": false,
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"constant": false,
+		"inputs": [
+			{
+				"name": "_requestListItem",
+				"type": "uint256"
+			},
+			{
+				"name": "_key",
+				"type": "string"
+			},
+			{
+				"name": "_value",
+				"type": "string"
+			}
+		],
+		"name": "_addMetadataToRequest",
+		"outputs": [
+			{
+				"name": "_rowNumber",
+				"type": "uint256"
+			}
+		],
+		"payable": false,
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"constant": false,
+		"inputs": [
+			{
+				"name": "_orderItem",
+				"type": "uint256"
+			},
+			{
+				"name": "processor",
+				"type": "address"
+			}
+		],
+		"name": "_addProcessorToOrder",
+		"outputs": [
+			{
+				"name": "success",
+				"type": "bool"
+			}
+		],
+		"payable": false,
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"constant": false,
+		"inputs": [
+			{
+				"name": "_orderItem",
+				"type": "uint256"
+			},
+			{
+				"name": "_result",
+				"type": "string"
+			}
+		],
+		"name": "_addResultToOrder",
+		"outputs": [
+			{
+				"name": "success",
+				"type": "bool"
+			}
+		],
+		"payable": false,
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"constant": false,
+		"inputs": [
+			{
+				"name": "_orderItem",
+				"type": "uint256"
+			}
+		],
+		"name": "_approveOrder",
+		"outputs": [
+			{
+				"name": "success",
+				"type": "bool"
+			}
+		],
+		"payable": false,
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"constant": false,
+		"inputs": [
+			{
+				"name": "_requestListItem",
+				"type": "uint256"
+			}
+		],
+		"name": "_cancelDORequest",
+		"outputs": [],
+		"payable": false,
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"constant": false,
+		"inputs": [
+			{
+				"name": "_requestListItem",
+				"type": "uint256"
+			}
+		],
+		"name": "_cancelDPRequest",
+		"outputs": [],
+		"payable": false,
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"constant": false,
+		"inputs": [
+			{
+				"name": "_doRequestItem",
+				"type": "uint256"
+			},
+			{
+				"name": "_dpRequestItem",
+				"type": "uint256"
+			}
+		],
+		"name": "_placeOrder",
+		"outputs": [
+			{
+				"name": "_orderNumber",
+				"type": "uint256"
+			}
+		],
+		"payable": false,
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"constant": false,
+		"inputs": [],
+		"name": "acceptOwnership",
+		"outputs": [],
+		"payable": false,
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"constant": false,
+		"inputs": [
+			{
+				"name": "spender",
+				"type": "address"
+			},
+			{
+				"name": "tokens",
+				"type": "uint256"
+			}
+		],
+		"name": "approve",
+		"outputs": [
+			{
+				"name": "success",
+				"type": "bool"
+			}
+		],
+		"payable": false,
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"constant": false,
+		"inputs": [
+			{
+				"name": "spender",
+				"type": "address"
+			},
+			{
+				"name": "tokens",
+				"type": "uint256"
+			},
+			{
+				"name": "data",
+				"type": "bytes"
+			}
+		],
+		"name": "approveAndCall",
+		"outputs": [
+			{
+				"name": "success",
+				"type": "bool"
+			}
+		],
+		"payable": false,
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"constant": false,
+		"inputs": [],
+		"name": "FixedSupplyToken",
+		"outputs": [],
+		"payable": false,
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"constant": false,
+		"inputs": [
+			{
+				"name": "to",
+				"type": "address"
+			},
+			{
+				"name": "tokens",
+				"type": "uint256"
+			}
+		],
+		"name": "transfer",
+		"outputs": [
+			{
+				"name": "success",
+				"type": "bool"
+			}
+		],
+		"payable": false,
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"constant": false,
+		"inputs": [
+			{
+				"name": "tokenAddress",
+				"type": "address"
+			},
+			{
+				"name": "tokens",
+				"type": "uint256"
+			}
+		],
+		"name": "transferAnyERC20Token",
+		"outputs": [
+			{
+				"name": "success",
+				"type": "bool"
+			}
+		],
+		"payable": false,
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"constant": false,
+		"inputs": [
+			{
+				"name": "from",
+				"type": "address"
+			},
+			{
+				"name": "to",
+				"type": "address"
+			},
+			{
+				"name": "tokens",
+				"type": "uint256"
+			}
+		],
+		"name": "transferFrom",
+		"outputs": [
+			{
+				"name": "success",
+				"type": "bool"
+			}
+		],
+		"payable": false,
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"constant": false,
+		"inputs": [
+			{
+				"name": "_newOwner",
+				"type": "address"
+			}
+		],
+		"name": "transferOwnership",
+		"outputs": [],
+		"payable": false,
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"constant": false,
+		"inputs": [
+			{
+				"name": "_newProxy",
+				"type": "address"
+			}
+		],
+		"name": "transferProxy",
+		"outputs": [],
+		"payable": false,
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"payable": true,
+		"stateMutability": "payable",
+		"type": "fallback"
+	},
+	{
+		"anonymous": false,
+		"inputs": [
+			{
+				"indexed": true,
+				"name": "_from",
+				"type": "address"
+			},
+			{
+				"indexed": true,
+				"name": "_to",
+				"type": "address"
+			}
+		],
+		"name": "ProxyTransferred",
+		"type": "event"
+	},
+	{
+		"anonymous": false,
+		"inputs": [
+			{
+				"indexed": true,
+				"name": "_from",
+				"type": "address"
+			},
+			{
+				"indexed": true,
+				"name": "_to",
+				"type": "address"
+			}
+		],
+		"name": "OwnershipTransferred",
+		"type": "event"
+	},
+	{
+		"anonymous": false,
+		"inputs": [
+			{
+				"indexed": true,
+				"name": "from",
+				"type": "address"
+			},
+			{
+				"indexed": true,
+				"name": "to",
+				"type": "address"
+			},
+			{
+				"indexed": false,
+				"name": "tokens",
+				"type": "uint256"
+			}
+		],
+		"name": "Transfer",
+		"type": "event"
+	},
+	{
+		"anonymous": false,
+		"inputs": [
+			{
+				"indexed": true,
+				"name": "tokenOwner",
+				"type": "address"
+			},
+			{
+				"indexed": true,
+				"name": "spender",
+				"type": "address"
+			},
+			{
+				"indexed": false,
+				"name": "tokens",
+				"type": "uint256"
+			}
+		],
+		"name": "Approval",
+		"type": "event"
+	},
+	{
+		"constant": true,
+		"inputs": [
+			{
+				"name": "_requestListItem",
+				"type": "uint256"
+			}
+		],
+		"name": "_getDORequest",
+		"outputs": [
+			{
+				"name": "downer",
+				"type": "address"
+			},
+			{
+				"name": "cpuRequest",
+				"type": "uint8"
+			},
+			{
+				"name": "memoryRequest",
+				"type": "uint8"
+			},
+			{
+				"name": "storageRequest",
+				"type": "uint8"
+			},
+			{
+				"name": "bandwidthRequest",
+				"type": "uint8"
+			},
+			{
+				"name": "duration",
+				"type": "uint16"
+			},
+			{
+				"name": "maxPrice",
+				"type": "uint8"
+			},
+			{
+				"name": "status",
+				"type": "uint256"
+			}
+		],
+		"payable": false,
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"constant": true,
+		"inputs": [
+			{
+				"name": "_requestListItem",
+				"type": "uint256"
+			}
+		],
+		"name": "_getDORequestMetadata",
+		"outputs": [
+			{
+				"name": "downer",
+				"type": "address"
+			},
+			{
+				"name": "metadata1",
+				"type": "string"
+			},
+			{
+				"name": "metadata2",
+				"type": "string"
+			},
+			{
+				"name": "metadata3",
+				"type": "string"
+			},
+			{
+				"name": "metadata4",
+				"type": "string"
+			}
+		],
+		"payable": false,
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"constant": true,
+		"inputs": [],
+		"name": "_getDORequestsCount",
+		"outputs": [
+			{
+				"name": "_length",
+				"type": "uint256"
+			}
+		],
+		"payable": false,
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"constant": true,
+		"inputs": [
+			{
+				"name": "_requestListItem",
+				"type": "uint256"
+			}
+		],
+		"name": "_getDPRequest",
+		"outputs": [
+			{
+				"name": "dproc",
+				"type": "address"
+			},
+			{
+				"name": "cpuRequest",
+				"type": "uint8"
+			},
+			{
+				"name": "memoryRequest",
+				"type": "uint8"
+			},
+			{
+				"name": "storageRequest",
+				"type": "uint8"
+			},
+			{
+				"name": "bandwidthRequest",
+				"type": "uint8"
+			},
+			{
+				"name": "duration",
+				"type": "uint16"
+			},
+			{
+				"name": "minPrice",
+				"type": "uint8"
+			},
+			{
+				"name": "status",
+				"type": "uint256"
+			}
+		],
+		"payable": false,
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"constant": true,
+		"inputs": [
+			{
+				"name": "_requestListItem",
+				"type": "uint256"
+			}
+		],
+		"name": "_getDPRequestMetadata",
+		"outputs": [
+			{
+				"name": "dproc",
+				"type": "address"
+			},
+			{
+				"name": "metadata1",
+				"type": "string"
+			},
+			{
+				"name": "metadata2",
+				"type": "string"
+			},
+			{
+				"name": "metadata3",
+				"type": "string"
+			},
+			{
+				"name": "metadata4",
+				"type": "string"
+			}
+		],
+		"payable": false,
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"constant": true,
+		"inputs": [],
+		"name": "_getDPRequestsCount",
+		"outputs": [
+			{
+				"name": "_length",
+				"type": "uint256"
+			}
+		],
+		"payable": false,
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"constant": true,
+		"inputs": [
+			{
+				"name": "_requestListItem",
+				"type": "uint256"
+			}
+		],
+		"name": "_getMetadataCountForDPRequest",
+		"outputs": [
+			{
+				"name": "_length",
+				"type": "uint256"
+			}
+		],
+		"payable": false,
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"constant": true,
+		"inputs": [
+			{
+				"name": "_requestListItem",
+				"type": "uint256"
+			}
+		],
+		"name": "_getMetadataCountForRequest",
+		"outputs": [
+			{
+				"name": "_length",
+				"type": "uint256"
+			}
+		],
+		"payable": false,
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"constant": true,
+		"inputs": [
+			{
+				"name": "_requestListItem",
+				"type": "uint256"
+			},
+			{
+				"name": "_metadataItem",
+				"type": "uint256"
+			}
+		],
+		"name": "_getMetadataValueForDPRequest",
+		"outputs": [
+			{
+				"name": "key",
+				"type": "string"
+			},
+			{
+				"name": "value",
+				"type": "string"
+			}
+		],
+		"payable": false,
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"constant": true,
+		"inputs": [
+			{
+				"name": "_requestListItem",
+				"type": "uint256"
+			},
+			{
+				"name": "_metadataItem",
+				"type": "uint256"
+			}
+		],
+		"name": "_getMetadataValueForRequest",
+		"outputs": [
+			{
+				"name": "key",
+				"type": "string"
+			},
+			{
+				"name": "value",
+				"type": "string"
+			}
+		],
+		"payable": false,
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"constant": true,
+		"inputs": [],
+		"name": "_getMyDOOrders",
+		"outputs": [
+			{
+				"name": "req",
+				"type": "uint256[]"
+			}
+		],
+		"payable": false,
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"constant": true,
+		"inputs": [],
+		"name": "_getMyDORequests",
+		"outputs": [
+			{
+				"name": "req",
+				"type": "uint256[]"
+			}
+		],
+		"payable": false,
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"constant": true,
+		"inputs": [],
+		"name": "_getMyDPRequests",
+		"outputs": [
+			{
+				"name": "req",
+				"type": "uint256[]"
+			}
+		],
+		"payable": false,
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"constant": true,
+		"inputs": [
+			{
+				"name": "_orderItem",
+				"type": "uint256"
+			}
+		],
+		"name": "_getOrder",
+		"outputs": [
+			{
+				"name": "downer",
+				"type": "address"
+			},
+			{
+				"name": "dproc",
+				"type": "address"
+			},
+			{
+				"name": "doRequest",
+				"type": "uint256"
+			},
+			{
+				"name": "dpRequest",
+				"type": "uint256"
+			},
+			{
+				"name": "status",
+				"type": "uint256"
+			}
+		],
+		"payable": false,
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"constant": true,
+		"inputs": [],
+		"name": "_getOrdersCount",
+		"outputs": [
+			{
+				"name": "_length",
+				"type": "uint256"
+			}
+		],
+		"payable": false,
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"constant": true,
+		"inputs": [
+			{
+				"name": "_orderItem",
+				"type": "uint256"
+			}
+		],
+		"name": "_getResultFromOrder",
+		"outputs": [
+			{
+				"name": "_Result",
+				"type": "string"
+			}
+		],
+		"payable": false,
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"constant": true,
+		"inputs": [],
+		"name": "_totalSupply",
+		"outputs": [
+			{
+				"name": "",
+				"type": "uint256"
+			}
+		],
+		"payable": false,
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"constant": true,
+		"inputs": [
+			{
+				"name": "tokenOwner",
+				"type": "address"
+			},
+			{
+				"name": "spender",
+				"type": "address"
+			}
+		],
+		"name": "allowance",
+		"outputs": [
+			{
+				"name": "remaining",
+				"type": "uint256"
+			}
+		],
+		"payable": false,
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"constant": true,
+		"inputs": [
+			{
+				"name": "tokenOwner",
+				"type": "address"
+			}
+		],
+		"name": "balanceOf",
+		"outputs": [
+			{
+				"name": "balance",
+				"type": "uint256"
+			}
+		],
+		"payable": false,
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"constant": true,
+		"inputs": [],
+		"name": "caller",
+		"outputs": [
+			{
+				"name": "",
+				"type": "address"
+			}
+		],
+		"payable": false,
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"constant": true,
+		"inputs": [],
+		"name": "decimals",
+		"outputs": [
+			{
+				"name": "",
+				"type": "uint8"
+			}
+		],
+		"payable": false,
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"constant": true,
+		"inputs": [],
+		"name": "implementation",
+		"outputs": [
+			{
+				"name": "",
+				"type": "address"
+			}
+		],
+		"payable": false,
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"constant": true,
+		"inputs": [],
+		"name": "implementationPro",
+		"outputs": [
+			{
+				"name": "",
+				"type": "address"
+			}
+		],
+		"payable": false,
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"constant": true,
+		"inputs": [],
+		"name": "name",
+		"outputs": [
+			{
+				"name": "",
+				"type": "string"
+			}
+		],
+		"payable": false,
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"constant": true,
+		"inputs": [],
+		"name": "newOwner",
+		"outputs": [
+			{
+				"name": "",
+				"type": "address"
+			}
+		],
+		"payable": false,
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"constant": true,
+		"inputs": [],
+		"name": "owner",
+		"outputs": [
+			{
+				"name": "",
+				"type": "address"
+			}
+		],
+		"payable": false,
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"constant": true,
+		"inputs": [],
+		"name": "symbol",
+		"outputs": [
+			{
+				"name": "",
+				"type": "string"
+			}
+		],
+		"payable": false,
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"constant": true,
+		"inputs": [],
+		"name": "totalSupply",
+		"outputs": [
+			{
+				"name": "",
+				"type": "uint256"
+			}
+		],
+		"payable": false,
+		"stateMutability": "view",
+		"type": "function"
+	}
+]
