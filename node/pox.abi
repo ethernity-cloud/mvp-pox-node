@@ -466,6 +466,57 @@
 				"type": "address"
 			},
 			{
+				"indexed": false,
+				"name": "_rowNumber",
+				"type": "uint256"
+			}
+		],
+		"name": "_addDPRequestEV",
+		"type": "event"
+	},
+	{
+		"anonymous": false,
+		"inputs": [
+			{
+				"indexed": true,
+				"name": "_from",
+				"type": "address"
+			},
+			{
+				"indexed": false,
+				"name": "_rowNumber",
+				"type": "uint256"
+			}
+		],
+		"name": "_addDORequestEV",
+		"type": "event"
+	},
+	{
+		"anonymous": false,
+		"inputs": [
+			{
+				"indexed": true,
+				"name": "_from",
+				"type": "address"
+			},
+			{
+				"indexed": false,
+				"name": "_orderNumber",
+				"type": "uint256"
+			}
+		],
+		"name": "_placeOrderEV",
+		"type": "event"
+	},
+	{
+		"anonymous": false,
+		"inputs": [
+			{
+				"indexed": true,
+				"name": "_from",
+				"type": "address"
+			},
+			{
 				"indexed": true,
 				"name": "_to",
 				"type": "address"
