@@ -38,10 +38,10 @@ class DPInProcessing(Exception):
 class etnyPoX:
     def __init__(self):
         parser = argparse.ArgumentParser(description = "Ethernity PoX request")
-        parser.add_argument("-p", "--publickey", help = "Etherem publickey (0x0123456789abcDEF0123456789abcDEF01234567)", required = True)
-        parser.add_argument("-k", "--privatekey", help = "Etherem privatekey (0x0123456789abcDEF0123456789abcDEF0123456789abcDEF0123456789abcDEF)", required = True)
-        parser.add_argument("-o", "--resultpublickey", help = "Etherem publickey for result (0x0123456789abcDEF0123456789abcDEF01234567)", required = True)
-        parser.add_argument("-j", "--resultprivatekey", help = "Etherem privatekey for result (0x0123456789abcDEF0123456789abcDEF0123456789abcDEF0123456789abcDEF)", required = True)
+        parser.add_argument("-a", "--address", help = "Etherem DP address (0xf17f52151EbEF6C7334FAD080c5704D77216b732)", required = True)
+        parser.add_argument("-k", "--privatekey", help = "Etherem DP privatekey (AE6AE8E5CCBFB04590405997EE2D52D2B330726137B875053C36D94E974D162F)", required = True)
+        parser.add_argument("-r", "--resultaddress", help = "Etherem RP address (0xC5fdf4076b8F3A5357c5E395ab970B5B54098Fef)", required = True)
+        parser.add_argument("-j", "--resultprivatekey", help = "Etherem RP privatekey (0DBBE8E4AE425A6D2687F1A7E3BA17BC98C673636790F1B8AD91193C05875EF1)", required = True)
         parser.add_argument("-c", "--cpu", help = "Number of CPUs (count)", required = False, default = "1")
         parser.add_argument("-m", "--memory", help = "Amount of memory (GB)", required = False, default = "1")
         parser.add_argument("-s", "--storage", help = "Amount of storage (GB)", required = False, default = "40")
@@ -54,14 +54,14 @@ class etnyPoX:
         argument = parser.parse_args()
         status = False
 
-        if argument.publickey:
-            etnyPoX.publickey = format(argument.publickey)
+        if argument.address:
+            etnyPoX.address = format(argument.address)
             status = True
         if argument.privatekey:
             etnyPoX.privatekey = format(argument.privatekey)
             status = True
-        if argument.resultpublickey:
-            etnyPoX.resultpublickey = format(argument.resultpublickey)
+        if argument.resultaddress:
+            etnyPoX.resultaddress = format(argument.resultaddress)
             status = True
         if argument.resultprivatekey:
             etnyPoX.resultprivatekey = format(argument.resultprivatekey)
@@ -91,7 +91,7 @@ class etnyPoX:
 
         etnyPoX.acct = Account.privateKeyToAccount(etnyPoX.privatekey)
         etnyPoX.etny = etnyPoX.w3.eth.contract(address=etnyPoX.w3.toChecksumAddress("0x99738e909a62e2e4840a59214638828E082A9A2b"), abi=etnyPoX.contract_abi)
-        etnyPoX.nonce = etnyPoX.w3.eth.getTransactionCount(etnyPoX.publickey)
+        etnyPoX.nonce = etnyPoX.w3.eth.getTransactionCount(etnyPoX.address)
 
         etnyPoX.dprequest = etnyPoX.etny.functions._getDPRequestsCount().call() - 3
 
@@ -124,7 +124,7 @@ class etnyPoX:
         for i in range(count-3, count):
             req = etnyPoX.etny.caller()._getDPRequest(i)
             metadata = etnyPoX.etny.caller()._getDPRequestMetadata(i)
-            if metadata[1] == etnyPoX.uuid and req[0] == etnyPoX.publickey:
+            if metadata[1] == etnyPoX.uuid and req[0] == etnyPoX.address:
                 if req[7] == 1:
                     raise DPInProcessing
                 if req[7] == 2:
@@ -133,7 +133,7 @@ class etnyPoX:
 
 
     def addDPRequest():
-        etnyPoX.nonce = etnyPoX.w3.eth.getTransactionCount(etnyPoX.publickey)
+        etnyPoX.nonce = etnyPoX.w3.eth.getTransactionCount(etnyPoX.address)
         unicorn_txn = etnyPoX.etny.functions._addDPRequest(
             etnyPoX.cpu, etnyPoX.memory, etnyPoX.storage, etnyPoX.bandwidth, etnyPoX.duration, 0, etnyPoX.uuid, "", "", ""
         ).buildTransaction({
@@ -159,7 +159,7 @@ class etnyPoX:
 
     def cancelDPRequest(req):
         print("Cancelling DP request %s" % req)
-        etnyPoX.nonce = etnyPoX.w3.eth.getTransactionCount(etnyPoX.publickey)
+        etnyPoX.nonce = etnyPoX.w3.eth.getTransactionCount(etnyPoX.address)
 
         unicorn_txn = etnyPoX.etny.functions._cancelDPRequest(req).buildTransaction({
             'chainId': 8995,
@@ -193,7 +193,7 @@ class etnyPoX:
 
         dpReq = etnyPoX.etny.caller()._getDPRequest(etnyPoX.dprequest)
         metadata = etnyPoX.etny.caller()._getDPRequestMetadata(etnyPoX.dprequest)
-        if dpReq[0] == etnyPoX.publickey and dpReq [7] < 2 and  metadata[1] == etnyPoX.uuid:
+        if dpReq[0] == etnyPoX.address and dpReq [7] < 2 and  metadata[1] == etnyPoX.uuid:
             etnyPoX.dprequest += 1
             return  etnyPoX.dprequest-1
         etnyPoX.dprequest += 1
@@ -258,7 +258,7 @@ class etnyPoX:
                 stdout,stderr = out.communicate()
                 print (stdout)
                 print (stderr)
-                out = subprocess.Popen(['docker-compose', '-f', 'docker/docker-compose-etny-pynithy.yml', 'run', 'etny-pynithy', str(order), metadata[2], metadata[3], etnyPoX.resultpublickey, etnyPoX.resultprivatekey],
+                out = subprocess.Popen(['docker-compose', '-f', 'docker/docker-compose-etny-pynithy.yml', 'run', 'etny-pynithy', str(order), metadata[2], metadata[3], etnyPoX.resultaddress, etnyPoX.resultprivatekey],
                     stdout=subprocess.PIPE,
                     stderr=subprocess.STDOUT)
                 stdout,stderr = out.communicate()
@@ -267,9 +267,9 @@ class etnyPoX:
                 etnyPoX.addDPRequest()
 
     def addProcessorToOrder(order):
-        etnyPoX.nonce = etnyPoX.w3.eth.getTransactionCount(etnyPoX.publickey)
+        etnyPoX.nonce = etnyPoX.w3.eth.getTransactionCount(etnyPoX.address)
 
-        unicorn_txn = etnyPoX.etny.functions._addProcessorToOrder(order, etnyPoX.resultpublickey).buildTransaction({
+        unicorn_txn = etnyPoX.etny.functions._addProcessorToOrder(order, etnyPoX.resultaddress).buildTransaction({
             'chainId': 8995,
             'gas': 1000000,
             'nonce': etnyPoX.nonce,
@@ -318,7 +318,7 @@ class etnyPoX:
 
 
     def placeOrder(doReq, dpReq):
-        etnyPoX.nonce = etnyPoX.w3.eth.getTransactionCount(etnyPoX.publickey)
+        etnyPoX.nonce = etnyPoX.w3.eth.getTransactionCount(etnyPoX.address)
 
         unicorn_txn = etnyPoX.etny.functions._placeOrder(
                 int(doReq), int(dpReq),
