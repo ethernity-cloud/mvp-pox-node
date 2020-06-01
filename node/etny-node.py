@@ -7,6 +7,7 @@ import errno
 import os
 import sys
 import ipfshttpclient
+import socket
 from os.path import expanduser
 import subprocess
 
@@ -274,7 +275,8 @@ class etnyPoX:
                             print("Order was not approved in the latest ~10 blocks, skipping to next request")
                             break
                         etnyPoX.processOrder(etnyPoX.order)
-
+                        print("Order %s, with DO request %s and DP request %s processed successfully" % (etnyPoX.order, i, etnyPoX.dprequest))
+                        break
             if found == 1:
                 break
 
@@ -304,8 +306,11 @@ class etnyPoX:
 
 
     def downloadIPFS(hash):
-        print(hash)
+        ipfsnode = socket.gethostbyname('ipfs.ethernity.cloud')
         client = ipfshttpclient.connect('/ip4/127.0.0.1/tcp/5001/http')
+        client.bootstrap.add('/ip4/%s/tcp/4001/ipfs/QmRBc1eBt4hpJQUqHqn6eA8ixQPD3LFcUDsn6coKBQtia5' % ipfsnode)
+        client.swarm.connect('/ip4/%s/tcp/4001/ipfs/QmRBc1eBt4hpJQUqHqn6eA8ixQPD3LFcUDsn6coKBQtia5' % ipfsnode)
+
         client.get(hash)
 
         return None
