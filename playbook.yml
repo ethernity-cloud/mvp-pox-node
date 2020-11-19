@@ -25,13 +25,26 @@
   roles:
     - role: crivetimihai.virtualization.kvm
     - role: crivetimihai.virtualization.vagrant
+    - role: uoi-io.libvirt
+      libvirt_firewalld: false
+      libvirt_selinux: false
+      libvirt_config:
+        - { option: 'listen_tls', value: 'listen_tls = 0' }
+        - { option: 'listen_tcp', value: 'listen_tcp = 0' }
+      libvirt_qemu_config:
+        - { option: 'user', value: 'user = "+0"' }
+        - { option: 'cgroup_device_acl', value: 'cgroup_device_acl = [ "/dev/null", "/dev/full", "/dev/zero", "/dev/random", "/dev/urandom", "/dev/ptmx", "/dev/kvm", "/dev/kqemu", "/dev/rtc", "/dev/hpet", "/dev/sgx_virt" ]' }
   tasks:
+  - name: apparmor - enable sgx support for libvirt qemu
+    copy:
+      src: ubuntu/etc/apparmor.d/libvirt/TEMPLATE.qemu
+      dest: /etc/apparmor.d/libvirt/TEMPLATE.qemu
   - name: kernel SGX - Ubuntu 18.04
     when: (ansible_facts['distribution'] == "Ubuntu" and ansible_facts['distribution_major_version'] == "18" and ansible_kernel is version('5.0.0-050000-generic','!='))
     apt: deb={{item}}
     with_items:
-       - ubuntu/linux-image-unsigned-5.0.0-050000-generic_5.0.0-050000.201903032031_amd64.deb
        - ubuntu/linux-modules-5.0.0-050000-generic_5.0.0-050000.201903032031_amd64.deb
+       - ubuntu/linux-image-unsigned-5.0.0-050000-generic_5.0.0-050000.201903032031_amd64.deb
        - ubuntu/linux-headers-5.0.0-050000_5.0.0-050000.201903032031_all.deb
        - ubuntu/linux-modules-extra-5.0.0-050000-generic_5.0.0-050000.201903032031_amd64.deb
        - ubuntu/linux-headers-5.0.0-050000-generic_5.0.0-050000.201903032031_amd64.deb
@@ -80,7 +93,6 @@
     when: (ansible_facts['distribution'] == "Ubuntu" and ansible_facts['distribution_major_version'] == "18" and ansible_kernel is version('5.0.0-050000-generic','=='))
     apt:
       pkg:
-      - libvirt-bin
       - ebtables
       - dnsmasq-base
       - libxslt-dev
