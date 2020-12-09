@@ -147,7 +147,7 @@ class etnyPoX:
             'chainId': 8995,
             'gas': 1000000,
             'nonce': etnyPoX.nonce,
-            'gasPrice':  etnyPoX.w3.toWei("1000", "gwei"),
+            'gasPrice':  etnyPoX.w3.toWei("1", "wei"),
         })
 
 
@@ -174,7 +174,7 @@ class etnyPoX:
             'chainId': 8995,
             'gas': 1000000,
             'nonce': etnyPoX.nonce,
-            'gasPrice':  etnyPoX.w3.toWei("1000", "gwei"),
+            'gasPrice':  etnyPoX.w3.toWei("1", "wei"),
         })
 
         signed_txn = etnyPoX.w3.eth.account.sign_transaction(unicorn_txn, private_key=etnyPoX.acct.key)
@@ -197,9 +197,20 @@ class etnyPoX:
         print ("Downloading IPFS content...")
         metadata = etnyPoX.etny.caller()._getDORequestMetadata(order[2])
         template = metadata[1].split(':')
-        etnyPoX.downloadIPFS(template[0])
-        etnyPoX.downloadIPFS(metadata[2])
-        etnyPoX.downloadIPFS(metadata[3])
+        for attempt in range(10):
+            try:
+                etnyPoX.downloadIPFS(template[0])
+                etnyPoX.downloadIPFS(metadata[2])
+                etnyPoX.downloadIPFS(metadata[3])
+            except:
+                if attempt == 10:
+                    print("Cannot download data from IPFS, cancelling processing")
+                    return
+                continue
+            else:
+                break
+
+
         print ("Stopping previous docker registry")
         out = subprocess.Popen(['docker', 'stop', 'registry'],
             stdout=subprocess.PIPE,
@@ -288,7 +299,7 @@ class etnyPoX:
             'chainId': 8995,
             'gas': 1000000,
             'nonce': etnyPoX.nonce,
-            'gasPrice':  etnyPoX.w3.toWei("1000", "gwei"),
+            'gasPrice':  etnyPoX.w3.toWei("1", "wei"),
         })
 
         signed_txn = etnyPoX.w3.eth.account.sign_transaction(unicorn_txn, private_key=etnyPoX.acct.key)
@@ -309,7 +320,7 @@ class etnyPoX:
         ipfsnode = socket.gethostbyname('ipfs.ethernity.cloud')
         client = ipfshttpclient.connect('/ip4/127.0.0.1/tcp/5001/http')
         client.bootstrap.add('/ip4/%s/tcp/4001/ipfs/QmRBc1eBt4hpJQUqHqn6eA8ixQPD3LFcUDsn6coKBQtia5' % ipfsnode)
-        client.swarm.connect('/ip4/%s/tcp/4001/ipfs/QmRBc1eBt4hpJQUqHqn6eA8ixQPD3LFcUDsn6coKBQtia5' % ipfsnode)
+        #client.swarm.connect('/ip4/%s/tcp/4001/ipfs/QmRBc1eBt4hpJQUqHqn6eA8ixQPD3LFcUDsn6coKBQtia5' % ipfsnode) # bug tracked under https://github.com/ipfs-shipyard/py-ipfs-http-client/issues/246
 
         client.get(hash)
 
@@ -357,7 +368,7 @@ class etnyPoX:
             'chainId': 8995,
             'gas': 1000000,
             'nonce': etnyPoX.nonce,
-            'gasPrice':  etnyPoX.w3.toWei("1000", "gwei"),
+            'gasPrice':  etnyPoX.w3.toWei("1", "wei"),
         })
 
         signed_txn = etnyPoX.w3.eth.account.sign_transaction(unicorn_txn, private_key=etnyPoX.acct.key)
