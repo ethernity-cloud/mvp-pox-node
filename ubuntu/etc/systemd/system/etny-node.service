@@ -1,0 +1,11 @@
+[Unit]
+Description=ETHERNITY Node
+After=network.target
+
+[Service]
+ExecStart=/home/vagrant/etny/node/etny-node-start.sh
+Restart=on-failure
+KillSignal=SIGHUP
+
+[Install]
+WantedBy=default.target
