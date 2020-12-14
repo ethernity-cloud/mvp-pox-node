@@ -18,6 +18,7 @@
 #
 
 Vagrant.configure("2") do |config|
+  interface = `ip a | grep '2:' | head -1 | awk '{print $2}' | awk -F ':' '{print $1}'`
   
   config.vm.define :etnyvm1 do |etnyvm1|
     etnyvm1.vm.box = "generic/ubuntu1804"
@@ -37,7 +38,7 @@ Vagrant.configure("2") do |config|
       domain.qemuargs :value => 'id=epc1,memdev=mem1'
     end
     etnyvm1.vm.network :public_network,
-      :dev => 'enp2s0',
+      :dev => interface.strip!,
       :mode => 'vepa',
       :type => 'direct'
     etnyvm1.vm.provision "file", source: "./node/etny-node.py", destination: "~/etny/node/etny-node.py"
