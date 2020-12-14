@@ -67,7 +67,10 @@
       - libcacard0
       - qemu-user-binfmt
       - qemu-user
-      state: absent 
+      state: absent
+  - name: qemu SGX remove unused packages - Ubuntu 18.04
+    apt:
+      autoremove: yes
   - name: qemu SGX - Ubuntu 18.04
     when: (ansible_facts['distribution'] == "Ubuntu" and ansible_facts['distribution_major_version'] == "18" and ansible_kernel is version('5.0.0-050000-generic','=='))
     apt: deb={{item}}
