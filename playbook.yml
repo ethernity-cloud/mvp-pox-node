@@ -111,5 +111,16 @@
     shell: vagrant destroy -f
   - name: vagrant - provision VM
     shell: vagrant up --provider=libvirt
+  - name: startup - set etny-vagrant configuration
+    shell: echo "ETNY_PATH=${PWD}" > /etc/default/etny-vagrant
+  - name: startup - create etny-vagrant.service
+    copy:
+      src: etc/systemd/system/etny-vagrant.service
+      dest: /etc/systemd/system/etny-vagrant.service
+  - name: startup - enable etny-vagrant.service
+    shell: systemctl enable etny-vagrant.service
+  - name: startup - start etny-vagrant.service
+    shell: systemctl start etny-vagrant.service
+  - name: finished
     debug:
       msg: Ethernity NODE installation successful
