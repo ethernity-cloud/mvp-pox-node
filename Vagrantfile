@@ -41,13 +41,11 @@ Vagrant.configure("2") do |config|
       :dev => interface.strip!,
       :mode => 'vepa',
       :type => 'direct'
-    etnyvm1.vm.provision "file", source: "./node/etny-node.py", destination: "~/etny/node/etny-node.py"
-    etnyvm1.vm.provision "file", source: "./node/pox.abi", destination: "~/etny/node/pox.abi"
-    etnyvm1.vm.provision "file", source: "./node/docker/docker-compose-etny-pynithy.yml", destination: "~/etny/node/docker/docker-compose-etny-pynithy.yml"
     etnyvm1.vm.provision "file", source: "./ubuntu/etny-node-provision-docker.sh", destination: "~/etny/node/etny-node-provision-docker.sh"
     etnyvm1.vm.provision "file", source: "./ubuntu/etny-node-provision-sgx.sh", destination: "~/etny/node/etny-node-provision-sgx.sh"
     etnyvm1.vm.provision "file", source: "./ubuntu/etny-node-provision-python.sh", destination: "~/etny/node/etny-node-provision-python.sh"
     etnyvm1.vm.provision "file", source: "./ubuntu/etny-node-provision-ipfs.sh", destination: "~/etny/node/etny-node-provision-ipfs.sh"
+    etnyvm1.vm.provision "file", source: "./ubuntu/etny-node-provision-etny.sh", destination: "~/etny/node/etny-node-provision-etny.sh"
     etnyvm1.vm.provision "file", source: "./ubuntu/etny-node-start.sh", destination: "~/etny/node/etny-node-start.sh"
     etnyvm1.vm.provision "file", source: "./ubuntu/etc/systemd/system/etny-node.service", destination: "~/etny/node/etny-node.service"
     etnyvm1.vm.provision "file", source: "./config", destination: "~/etny/node/config"
@@ -61,6 +59,8 @@ Vagrant.configure("2") do |config|
       inline: "/bin/bash /home/vagrant/etny/node/etny-node-provision-python.sh"
     etnyvm1.vm.provision "shell",
       inline: "/bin/bash /home/vagrant/etny/node/etny-node-provision-ipfs.sh"
+    etnyvm1.vm.provision "shell",
+      inline: "/bin/bash /home/vagrant/etny/node/etny-node-provision-etny.sh"
     etnyvm1.vm.provision "shell",
       inline: "/bin/mv /home/vagrant/etny/node/etny-node.service /etc/systemd/system/"
     etnyvm1.vm.provision "shell",
