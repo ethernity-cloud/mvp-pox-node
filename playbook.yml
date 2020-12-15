@@ -111,3 +111,5 @@
     shell: vagrant destroy -f
   - name: vagrant - provision VM
     shell: vagrant up --provider=libvirt
+    debug:
+      msg: Ethernity NODE installation successful

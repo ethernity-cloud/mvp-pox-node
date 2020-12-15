@@ -22,7 +22,7 @@ from web3.exceptions import (
 )
 
 
-logging.basicConfig(filename='/var/log/etny-node.log', level=logging.INFO)
+logging.basicConfig(filename='/var/log/etny-node.log', format='%(asctime)s %(message)s', level=logging.INFO)
 
 
 class DPInProcessing(Exception):
