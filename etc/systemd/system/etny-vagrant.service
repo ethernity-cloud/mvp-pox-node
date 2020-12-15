@@ -1,0 +1,22 @@
+# vagrant service file to start/stop a specific box
+# be sure to adjust ExecStart and ExecStop to match the name of scripts
+# located in /usr/lib/systemd/scripts/
+#
+# Once all files are in place use systemctl enable vagrant-hostname.service
+# and then you can sudo service start/stop
+#
+# -- Geoffrey McClinsey
+
+[Unit]
+Description=power-on/off Ethernity vagrant box
+After=network.target libvirtd.service
+Requires=network.target libvirtd.service
+
+[Service]
+User=root
+EnvironmentFile=/etc/default/etny-vagrant
+ExecStart=/bin/bash -c "cd ${ETNY_PATH} && vagrant up --provider=libvirt && echo 'tail -f /var/log/etny-node.log' | vagrant ssh"
+ExecStop=/bin/bash -c "cd ${ETNY_PATH} && vagrant halt"
+
+[Install]
+WantedBy=multi-user.target
