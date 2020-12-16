@@ -103,6 +103,7 @@ $
 ### 5. Start the node
 
 ```bash
+$ sudo cp -rf ~/.vagrant.d /root
 $ sudo ansible-galaxy collection install crivetimihai.virtualization
 $ sudo ansible-galaxy install uoi-io.libvirt
 $ sudo ansible-playbook -i localhost, playbook.yml \
