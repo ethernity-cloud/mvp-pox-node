@@ -286,7 +286,7 @@ class etnyPoX:
                         etnyPoX.placeOrder(i)
                         logging.info("Waiting for order %s approval..." % etnyPoX.order)
                         if etnyPoX.waitForOrderApproval() == False:
-                            logging.info("Order was not approved in the latest ~10 blocks, skipping to next request")
+                            logging.info("Order was not approved in the last ~30 blocks, skipping to next request")
                             break
                         etnyPoX.processOrder(etnyPoX.order)
                         logging.info("Order %s, with DO request %s and DP request %s processed successfully" % (etnyPoX.order, i, etnyPoX.dprequest))
@@ -330,7 +330,7 @@ class etnyPoX:
         return None
 
     def waitForOrderApproval():
-        for o in range (0, 10):
+        for o in range (0, 30):
             order = etnyPoX.etny.caller()._getOrder(etnyPoX.order)
             if order[4] > 0:
                 return True
