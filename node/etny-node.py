@@ -289,6 +289,10 @@ class etnyPoX:
                             print(error)
                             logging.info("Order already created, skipping to next request");
                             break
+                        except IndexError as error:
+                            print(error)
+                            logging.info("Order already created, skipping to next request");
+                            break
                         logging.info("Waiting for order %s approval..." % etnyPoX.order)
                         if etnyPoX.waitForOrderApproval() == False:
                             logging.info("Order was not approved in the last ~30 blocks, skipping to next request")
