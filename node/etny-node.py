@@ -13,6 +13,7 @@ import subprocess
 import logging
 
 from web3 import Web3
+from web3 import exceptions
 from eth_account import Account
 from web3.middleware import geth_poa_middleware
 from web3.exceptions import (
@@ -279,11 +280,15 @@ class etnyPoX:
                 doReq = etnyPoX.etny.caller()._getDORequest(i)
                 if doReq[7] == 0:
                     found = 1
-                    logging.info("Processing DO request: %s" % i)
+                    logging.info("Checking DO request: %s" % i)
                     if doReq[1] <= cpu and doReq[2] <= memory and doReq[3] <= storage and doReq[4] <= bandwidth:
-                        logging.info("Found DO request: %s " % i)
                         logging.info("Placing order...")
-                        etnyPoX.placeOrder(i)
+                        try:
+                            etnyPoX.placeOrder(i)
+                        except exceptions.SolidityError as error:
+                            print(error)
+                            logging.info("Order already created, skipping to next request");
+                            break
                         logging.info("Waiting for order %s approval..." % etnyPoX.order)
                         if etnyPoX.waitForOrderApproval() == False:
                             logging.info("Order was not approved in the last ~30 blocks, skipping to next request")
