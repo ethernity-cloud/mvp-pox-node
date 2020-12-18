@@ -279,7 +279,6 @@ class etnyPoX:
             for i in range(count-1, -1, -1):
                 doReq = etnyPoX.etny.caller()._getDORequest(i)
                 if doReq[7] == 0:
-                    found = 1
                     logging.info("Checking DO request: %s" % i)
                     if doReq[1] <= cpu and doReq[2] <= memory and doReq[3] <= storage and doReq[4] <= bandwidth:
                         logging.info("Placing order...")
@@ -288,11 +287,12 @@ class etnyPoX:
                         except exceptions.SolidityError as error:
                             print(error)
                             logging.info("Order already created, skipping to next request");
-                            break
+                            continue
                         except IndexError as error:
                             print(error)
                             logging.info("Order already created, skipping to next request");
-                            break
+                            continue
+                        found = 1
                         logging.info("Waiting for order %s approval..." % etnyPoX.order)
                         if etnyPoX.waitForOrderApproval() == False:
                             logging.info("Order was not approved in the last ~10 blocks, skipping to next request")
