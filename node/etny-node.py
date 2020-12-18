@@ -151,7 +151,7 @@ class etnyPoX:
             'chainId': 8995,
             'gas': 1000000,
             'nonce': etnyPoX.nonce,
-            'gasPrice':  etnyPoX.w3.toWei("1", "wei"),
+            'gasPrice':  etnyPoX.w3.toWei("1", "mwei"),
         })
 
 
@@ -178,7 +178,7 @@ class etnyPoX:
             'chainId': 8995,
             'gas': 1000000,
             'nonce': etnyPoX.nonce,
-            'gasPrice':  etnyPoX.w3.toWei("1", "wei"),
+            'gasPrice':  etnyPoX.w3.toWei("1", "mwei"),
         })
 
         signed_txn = etnyPoX.w3.eth.account.sign_transaction(unicorn_txn, private_key=etnyPoX.acct.key)
@@ -295,7 +295,7 @@ class etnyPoX:
                             break
                         logging.info("Waiting for order %s approval..." % etnyPoX.order)
                         if etnyPoX.waitForOrderApproval() == False:
-                            logging.info("Order was not approved in the last ~30 blocks, skipping to next request")
+                            logging.info("Order was not approved in the last ~10 blocks, skipping to next request")
                             break
                         etnyPoX.processOrder(etnyPoX.order)
                         logging.info("Order %s, with DO request %s and DP request %s processed successfully" % (etnyPoX.order, i, etnyPoX.dprequest))
@@ -311,7 +311,7 @@ class etnyPoX:
             'chainId': 8995,
             'gas': 1000000,
             'nonce': etnyPoX.nonce,
-            'gasPrice':  etnyPoX.w3.toWei("1", "wei"),
+            'gasPrice':  etnyPoX.w3.toWei("1", "mwei"),
         })
 
         signed_txn = etnyPoX.w3.eth.account.sign_transaction(unicorn_txn, private_key=etnyPoX.acct.key)
@@ -339,7 +339,7 @@ class etnyPoX:
         return None
 
     def waitForOrderApproval():
-        for o in range (0, 30):
+        for o in range (0, 10):
             order = etnyPoX.etny.caller()._getOrder(etnyPoX.order)
             if order[4] > 0:
                 return True
@@ -380,7 +380,7 @@ class etnyPoX:
             'chainId': 8995,
             'gas': 1000000,
             'nonce': etnyPoX.nonce,
-            'gasPrice':  etnyPoX.w3.toWei("1", "wei"),
+            'gasPrice':  etnyPoX.w3.toWei("1", "mwei"),
         })
 
         signed_txn = etnyPoX.w3.eth.account.sign_transaction(unicorn_txn, private_key=etnyPoX.acct.key)
