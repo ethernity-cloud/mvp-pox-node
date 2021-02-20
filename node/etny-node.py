@@ -273,10 +273,12 @@ class etnyPoX:
 
         logging.info("Processing NEW DP request %s" % etnyPoX.dprequest)
 
+        checked = 0
+
         while True:
             found = 0
             count = etnyPoX.etny.caller()._getDORequestsCount()
-            for i in range(count-1, -1, -1):
+            for i in range(count - 1, -1, checked - 1):
                 doReq = etnyPoX.etny.caller()._getDORequest(i)
                 if doReq[7] == 0:
                     logging.info("Checking DO request: %s" % i)
@@ -301,6 +303,14 @@ class etnyPoX:
                         logging.info("Order %s, with DO request %s and DP request %s processed successfully" % (etnyPoX.order, i, etnyPoX.dprequest))
                         break
             if found == 1:
+                break
+            checked = count
+            time.sleep(5)
+
+            seconds += 5
+            if seconds >= 60 * 60 * 24:
+                logging.info("DP request timed out!")
+                cancelDPRequest(etnyPoX.dprequest)
                 break
 
 
