@@ -274,11 +274,12 @@ class etnyPoX:
         logging.info("Processing NEW DP request %s" % etnyPoX.dprequest)
 
         checked = 0
+        seconds = 0
 
         while True:
             found = 0
             count = etnyPoX.etny.caller()._getDORequestsCount()
-            for i in range(count - 1, -1, checked - 1):
+            for i in range(count - 1, checked - 1, -1):
                 doReq = etnyPoX.etny.caller()._getDORequest(i)
                 if doReq[7] == 0:
                     logging.info("Checking DO request: %s" % i)
@@ -303,8 +304,9 @@ class etnyPoX:
                         logging.info("Order %s, with DO request %s and DP request %s processed successfully" % (etnyPoX.order, i, etnyPoX.dprequest))
                         break
             if found == 1:
+                logging.info("Finished processing order %s" % etnyPoX.order)
                 break
-            checked = count
+            checked = count - 1
             time.sleep(5)
 
             seconds += 5
