@@ -237,9 +237,31 @@ class etnyPoX:
         stdout,stderr = out.communicate()
         logging.debug(stdout)
         logging.debug(stderr)
-        out = subprocess.Popen(['docker-compose', '-f', 'docker/docker-compose-etny-pynithy.yml', 'run', 'etny-pynithy', str(orderID), metadata[2], metadata[3], etnyPoX.resultaddress, etnyPoX.resultprivatekey],
+        logging.info("Cleaning up docker image")
+        out = subprocess.Popen(['docker', 'rm', 'etny-pynithy-' + str(orderID)],
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT)
+        stdout,stderr = out.communicate()
+        logging.debug(stdout)
+        logging.debug(stderr)
+
+        logging.info("Running docker-compose")
+        out = subprocess.Popen(['docker-compose', '-f', 'docker/docker-compose-etny-pynithy.yml', 'run', '--rm', '-d', '--name', 'etny-pynity-' + str(orderID), 'etny-pynithy', str(orderID), metadata[2], metadata[3], etnyPoX.resultaddress, etnyPoX.resultprivatekey],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT)
+
+        stdout,stderr = out.communicate()
+        logging.debug(stdout)
+        logging.debug(stderr)
+
+        time.sleep(10)
+
+        logging.info("Attaching to docker process")
+
+        out = subprocess.Popen(['docker', 'attach', 'etny-pynithy-' + str(orderID)],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT)
+
         stdout,stderr = out.communicate()
         logging.debug(stdout)
         logging.debug(stderr)
