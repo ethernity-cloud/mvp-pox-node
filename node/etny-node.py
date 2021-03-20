@@ -11,6 +11,7 @@ import socket
 from os.path import expanduser
 import subprocess
 import logging
+import logging.handlers
 
 from web3 import Web3
 from web3 import exceptions
@@ -22,8 +23,15 @@ from web3.exceptions import (
     TransactionNotFound,
 )
 
+logger = logging.getLogger("ETNY NODE")
 
-logging.basicConfig(filename='/var/log/etny-node.log', format='%(asctime)s %(message)s', level=logging.INFO)
+handler = logging.handlers.RotatingFileHandler('/var/log/etny-node.log', maxBytes=2048000, backupCount=5)
+formatter = logging.Formatter('%(asctime)s %(message)s')
+handler.setFormatter(formatter)
+logger.addHandler(handler)
+logger.setLevel(logging.INFO)
+
+
 
 
 class DPInProcessing(Exception):
@@ -120,7 +128,7 @@ class etnyPoX:
             f.close()
             f = open(filename)
         except OSError as e:
-            logging.error(e.errno)
+            logger.error(e.errno)
         finally:
             etnyPoX.uuid=f.read()
             f.close()
@@ -128,19 +136,19 @@ class etnyPoX:
     def cleanupDPRequests():
         count=etnyPoX.etny.functions._getDPRequestsCount().call()
         for i in range(count-1, -1, -1):
-            logging.debug("Cleaning up DP request %s" % i)
+            logger.debug("Cleaning up DP request %s" % i)
             req = etnyPoX.etny.caller()._getDPRequest(i)
             metadata = etnyPoX.etny.caller()._getDPRequestMetadata(i)
             if metadata[1] == etnyPoX.uuid and req[0] == etnyPoX.address:
                 if req[7] == 1:
-                    logging.debug("Request %s already assigned to order" % i)
+                    logger.debug("Request %s already assigned to order" % i)
                     etnyPoX.dprequest = i
                     etnyPoX.processDPRequest()
                     continue
                 if req[7] == 0:
                     etnyPoX.cancelDPRequest(i)
             else:
-                logging.debug("Skipping DP request %s, not mine" % i)
+                logger.debug("Skipping DP request %s, not mine" % i)
 
 
     def addDPRequest():
@@ -166,12 +174,12 @@ class etnyPoX:
         except:
             raise
         else:
-            logging.info("DP request created successfully!")
-            logging.info("TX Hash: %s" % hash)
+            logger.info("DP request created successfully!")
+            logger.info("TX Hash: %s" % hash)
 
 
     def cancelDPRequest(req):
-        logging.info("Cancelling DP request %s" % req)
+        logger.info("Cancelling DP request %s" % req)
         etnyPoX.nonce = etnyPoX.w3.eth.getTransactionCount(etnyPoX.address)
 
         unicorn_txn = etnyPoX.etny.functions._cancelDPRequest(req).buildTransaction({
@@ -191,14 +199,14 @@ class etnyPoX:
         except:
             raise
         else:
-            logging.info("DP request %s cancelled successfully!" % req)
-            logging.info("TX Hash: %s" % hash)
+            logger.info("DP request %s cancelled successfully!" % req)
+            logger.info("TX Hash: %s" % hash)
 
 
     def processOrder(orderID):
         order = etnyPoX.etny.caller()._getOrder(orderID)
         etnyPoX.addProcessorToOrder(orderID)
-        logging.info("Downloading IPFS content...")
+        logger.info("Downloading IPFS content...")
         metadata = etnyPoX.etny.caller()._getDORequestMetadata(order[2])
         template = metadata[1].split(':')
         for attempt in range(10):
@@ -208,63 +216,63 @@ class etnyPoX:
                 etnyPoX.downloadIPFS(metadata[3])
             except:
                 if attempt == 10:
-                    logging.info("Cannot download data from IPFS, cancelling processing")
+                    logger.info("Cannot download data from IPFS, cancelling processing")
                     return
                 continue
             else:
                 break
 
 
-        logging.info("Stopping previous docker registry")
+        logger.info("Stopping previous docker registry")
         out = subprocess.Popen(['docker', 'stop', 'registry'],
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT)
         stdout,stderr = out.communicate()
-        logging.debug(stdout)
-        logging.debug(stderr)
-        logging.info("Cleaning up docker registry")
+        logger.debug(stdout)
+        logger.debug(stderr)
+        logger.info("Cleaning up docker registry")
         out = subprocess.Popen(['docker', 'system', 'prune', '-a', '-f'],
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT)
         stdout,stderr = out.communicate()
-        logging.debug(stdout)
-        logging.debug(stderr)
-        logging.info("Running new docker registry")
-        logging.debug(os.path.dirname(os.path.realpath(__file__)) + '/' + template[0] + ':/var/lib/registry')
+        logger.debug(stdout)
+        logger.debug(stderr)
+        logger.info("Running new docker registry")
+        logger.debug(os.path.dirname(os.path.realpath(__file__)) + '/' + template[0] + ':/var/lib/registry')
         out = subprocess.Popen(['docker', 'run', '-d', '--restart=always', '-p', '5000:5000', '--name', 'registry', '-v', os.path.dirname(os.path.realpath(__file__)) + '/' + template[0] + ':/var/lib/registry', 'registry:2'],
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT)
         stdout,stderr = out.communicate()
-        logging.debug(stdout)
-        logging.debug(stderr)
-        logging.info("Cleaning up docker image")
+        logger.debug(stdout)
+        logger.debug(stderr)
+        logger.info("Cleaning up docker image")
         out = subprocess.Popen(['docker', 'rm', 'etny-pynithy-' + str(orderID)],
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT)
         stdout,stderr = out.communicate()
-        logging.debug(stdout)
-        logging.debug(stderr)
+        logger.debug(stdout)
+        logger.debug(stderr)
 
-        logging.info("Running docker-compose")
+        logger.info("Running docker-compose")
         out = subprocess.Popen(['docker-compose', '-f', 'docker/docker-compose-etny-pynithy.yml', 'run', '--rm', '-d', '--name', 'etny-pynity-' + str(orderID), 'etny-pynithy', str(orderID), metadata[2], metadata[3], etnyPoX.resultaddress, etnyPoX.resultprivatekey],
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT)
 
         stdout,stderr = out.communicate()
-        logging.debug(stdout)
-        logging.debug(stderr)
+        logger.debug(stdout)
+        logger.debug(stderr)
 
         time.sleep(10)
 
-        logging.info("Attaching to docker process")
+        logger.info("Attaching to docker process")
 
         out = subprocess.Popen(['docker', 'attach', 'etny-pynithy-' + str(orderID)],
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT)
 
         stdout,stderr = out.communicate()
-        logging.debug(stdout)
-        logging.debug(stderr)
+        logger.debug(stdout)
+        logger.debug(stderr)
 
     def processDPRequest():
         req = etnyPoX.etny.caller()._getDPRequest(etnyPoX.dprequest)
@@ -285,15 +293,15 @@ class etnyPoX:
         if orderID != None:
            order = etnyPoX.etny.caller()._getOrder(orderID)
            if order[4] == 2:
-               logging.info("DP request %s completed successfully!" % etnyPoX.dprequest)
+               logger.info("DP request %s completed successfully!" % etnyPoX.dprequest)
            if order[4] == 1:
-               logging.info("DP request never finished, processing order %s" % orderID)
+               logger.info("DP request never finished, processing order %s" % orderID)
                etnyPoX.processOrder(orderID)
            if order[4] == 0:
-               logging.info("Order was never approved, skipping")
+               logger.info("Order was never approved, skipping")
            return
 
-        logging.info("Processing NEW DP request %s" % etnyPoX.dprequest)
+        logger.info("Processing NEW DP request %s" % etnyPoX.dprequest)
 
         checked = 0
         seconds = 0
@@ -304,36 +312,36 @@ class etnyPoX:
             for i in range(count - 1, checked - 1, -1):
                 doReq = etnyPoX.etny.caller()._getDORequest(i)
                 if doReq[7] == 0:
-                    logging.info("Checking DO request: %s" % i)
+                    logger.info("Checking DO request: %s" % i)
                     if doReq[1] <= cpu and doReq[2] <= memory and doReq[3] <= storage and doReq[4] <= bandwidth:
-                        logging.info("Placing order...")
+                        logger.info("Placing order...")
                         try:
                             etnyPoX.placeOrder(i)
                         except exceptions.SolidityError as error:
                             print(error)
-                            logging.info("Order already created, skipping to next request");
+                            logger.info("Order already created, skipping to next request");
                             continue
                         except IndexError as error:
                             print(error)
-                            logging.info("Order already created, skipping to next request");
+                            logger.info("Order already created, skipping to next request");
                             continue
                         found = 1
-                        logging.info("Waiting for order %s approval..." % etnyPoX.order)
+                        logger.info("Waiting for order %s approval..." % etnyPoX.order)
                         if etnyPoX.waitForOrderApproval() == False:
-                            logging.info("Order was not approved in the last ~10 blocks, skipping to next request")
+                            logger.info("Order was not approved in the last ~10 blocks, skipping to next request")
                             break
                         etnyPoX.processOrder(etnyPoX.order)
-                        logging.info("Order %s, with DO request %s and DP request %s processed successfully" % (etnyPoX.order, i, etnyPoX.dprequest))
+                        logger.info("Order %s, with DO request %s and DP request %s processed successfully" % (etnyPoX.order, i, etnyPoX.dprequest))
                         break
             if found == 1:
-                logging.info("Finished processing order %s" % etnyPoX.order)
+                logger.info("Finished processing order %s" % etnyPoX.order)
                 break
             checked = count - 1
             time.sleep(5)
 
             seconds += 5
             if seconds >= 60 * 60 * 24:
-                logging.info("DP request timed out!")
+                logger.info("DP request timed out!")
                 cancelDPRequest(etnyPoX.dprequest)
                 break
 
@@ -358,8 +366,8 @@ class etnyPoX:
         except:
             raise
         else:
-            logging.info("Added the enclave processor to the order!")
-            logging.info("TX Hash: %s" % hash)
+            logger.info("Added the enclave processor to the order!")
+            logger.info("TX Hash: %s" % hash)
 
 
     def downloadIPFS(hash):
@@ -384,21 +392,21 @@ class etnyPoX:
 
 
     def findOrder(doReq):
-        logging.info("Finding order match for %s and %s" % (doReq, etnyPoX.dprequest))
+        logger.info("Finding order match for %s and %s" % (doReq, etnyPoX.dprequest))
         count=etnyPoX.etny.functions._getOrdersCount().call()
         for i in range(count-1, -1, -1):
             order = etnyPoX.etny.caller()._getOrder(i)
-            logging.debug("Checking order %s " % i)
+            logger.debug("Checking order %s " % i)
             if order[2] == doReq and order[3] == etnyPoX.dprequest and order[4] == 0:
                 return i
         return None
 
     def findOrderByDPReq():
-        logging.info("Finding order with DP request %s " % etnyPoX.dprequest)
+        logger.info("Finding order with DP request %s " % etnyPoX.dprequest)
         count=etnyPoX.etny.functions._getOrdersCount().call()
         for i in range(count-1, 0, -1):
             order = etnyPoX.etny.caller()._getOrder(i)
-            logging.debug("Checking order %s " % i)
+            logger.debug("Checking order %s " % i)
             if order[3] == etnyPoX.dprequest:
                 return i
         return None
@@ -429,8 +437,8 @@ class etnyPoX:
         except:
             raise
         else:
-            logging.info("Order placed successfully!")
-            logging.info("TX Hash: %s" % hash)
+            logger.info("Order placed successfully!")
+            logger.info("TX Hash: %s" % hash)
 
     def resumeProcessing():
         while True:
@@ -441,7 +449,7 @@ if __name__ == '__main__':
     app = etnyPoX()
 
     dots="."
-    logging.info("Cleaning up previous DP requests...")
+    logger.info("Cleaning up previous DP requests...")
     while True:
         try:
             etnyPoX.cleanupDPRequests()
@@ -449,7 +457,7 @@ if __name__ == '__main__':
             raise
         else:
             break
-    logging.info("[DONE]")
+    logger.info("[DONE]")
 
 
 
