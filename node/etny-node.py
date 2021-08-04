@@ -227,8 +227,8 @@ class EtnyPoXNode:
         for attempt in range(10):
             try:
                 self.__download_ipfs(template[0])
-                self.__download_ipfs(template[2])
-                self.__download_ipfs(template[3])
+                self.__download_ipfs(metadata[2])
+                self.__download_ipfs(metadata[3])
             except Exception as ex:
                 logger.error(ex)
                 if attempt == 10:
