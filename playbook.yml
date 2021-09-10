@@ -103,6 +103,21 @@
       - libvirt-dev
       - zlib1g-dev
       - ruby-dev
+  - name: Add an apt signing key for vagrant-repository
+    apt_key:
+      url: https://apt.releases.hashicorp.com/gpg
+  - name: vagrant-repository - install
+    apt_repository:
+      repo: "deb [arch=amd64] https://apt.releases.hashicorp.com {{ ansible_distribution_release }} main"
+  - name: vargant - remove old vagrant installed by role crivetimihai.virtualization.vagrant
+    apt:
+      pkg:
+      - vagrant
+      state: absent
+  - name: vargant - install the latest version
+    apt:
+      pkg:
+      - vagrant
   - name: vagrant-libvirt - install
     shell: vagrant plugin install vagrant-libvirt
   - name: vagrant-preload - install
