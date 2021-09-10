@@ -122,6 +122,11 @@
     shell: vagrant plugin install vagrant-libvirt
   - name: vagrant-preload - install
     shell: vagrant plugin install vagrant-reload
+  - name: vagrant volume_cache setup fix
+    lineinfile:
+      path: Vagrantfile
+      regexp: "^      domain.volume_cache = 'none'$"
+      line: "      domain.disk_driver :cache => 'none'" 
   - name: vagrant - cleanup VM
     shell: vagrant destroy -f
   - name: vagrant - provision VM
