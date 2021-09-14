@@ -29,7 +29,7 @@ Vagrant.configure("2") do |config|
       domain.nested = true
       domain.kvm_hidden = false
       domain.machine_virtual_size = 40
-      domain.volume_cache = 'none'
+      domain.disk_driver :cache => 'none'
       domain.qemuargs :value => '-cpu'
       domain.qemuargs :value => 'host,+sgx'
       domain.qemuargs :value => '-object'
