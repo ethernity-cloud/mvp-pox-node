@@ -1,5 +1,5 @@
 #
-# Copyright (C) 2018, 2019 Ethernity HODL UG
+# Copyright (C) 2018-2021 Ethernity HODL UG
 #
 # This file is part of ETHERNITY NODE.
 #
@@ -16,6 +16,7 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #
+# Version 20210925_1723
 
 Vagrant.configure("2") do |config|
   interface = `ip a | grep '2:' | head -1 | awk '{print $2}' | awk -F ':' '{print $1}'`
@@ -28,7 +29,7 @@ Vagrant.configure("2") do |config|
       domain.cpu_mode = 'host-passthrough'
       domain.nested = true
       domain.kvm_hidden = false
-      domain.machine_virtual_size = 40
+      domain.machine_virtual_size = 128
       domain.disk_driver :cache => 'none'
       domain.qemuargs :value => '-cpu'
       domain.qemuargs :value => 'host,+sgx'
