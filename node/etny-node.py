@@ -76,7 +76,7 @@ class EtnyPoXNode:
 
         self.__acct = Account.privateKeyToAccount(self.__privatekey)
         self.__etny = self.__w3.eth.contract(
-            address=self.__w3.toChecksumAddress("0x99738e909a62e2e4840a59214638828E082A9A2b"),
+            address=self.__w3.toChecksumAddress("0x549A6E06BB2084100148D50F51CF77a3436C3Ae7"),
             abi=self.__contract_abi)
         self.__nonce = self.__w3.eth.getTransactionCount(self.__address)
 
