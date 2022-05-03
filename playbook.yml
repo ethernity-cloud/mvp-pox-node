@@ -22,9 +22,13 @@
   connection: local
   become: yes
   gather_facts: yes
+  pre_tasks:
+  - name: "Fix libvirt packages name for Ubuntu 20.04"
+    copy:
+      src: root/ansible/roles/uoi-io.libvirt/vars/Debian.yml
+      dest: /root/.ansible/roles/uoi-io.libvirt/vars/Debian.yml
+    when: (ansible_facts['distribution'] == "Ubuntu" and ansible_facts['distribution_major_version'] == "20")  
   roles:
-    - role: crivetimihai.virtualization.kvm
-    - role: crivetimihai.virtualization.vagrant
     - role: uoi-io.libvirt
       libvirt_firewalld: false
       libvirt_selinux: false
@@ -33,101 +37,228 @@
         - { option: 'listen_tcp', value: 'listen_tcp = 0' }
       libvirt_qemu_config:
         - { option: 'user', value: 'user = "+0"' }
-        - { option: 'cgroup_device_acl', value: 'cgroup_device_acl = [ "/dev/null", "/dev/full", "/dev/zero", "/dev/random", "/dev/urandom", "/dev/ptmx", "/dev/kvm", "/dev/kqemu", "/dev/rtc", "/dev/hpet", "/dev/sgx_virt" ]' }
+        - { option: 'cgroup_device_acl', value: 'cgroup_device_acl = [ "/dev/null", "/dev/full", "/dev/zero", "/dev/random", "/dev/urandom", "/dev/ptmx", "/dev/kvm", "/dev/kqemu", "/dev/rtc", "/dev/hpet", "/dev/sgx_virt", "/dev/sgx_enclave", "/dev/sgx_provision", "/dev/sgx_vepc" ]' }
   tasks:
+  - name: Prepare Ubuntu 18.04
+    block:
+    - name: Ubuntu 18.04 | enable_sgx dependencies
+      apt:
+        pkg:
+          - make-guile
+          - gcc
+    - name: Ubuntu 18.04 | build enable_sgx
+      shell: make all -C sgx/
+    - name: Ubuntu 18.04 | run enable_sgx
+      shell: sgx/sgx_enable
+    - name: Ubuntu 18.04 | kernel SGX 
+      when: (ansible_kernel is version('5.0.0-050000-generic','!='))
+      apt: deb={{item}}
+      with_items:
+         - ubuntu/packages/Ubuntu-18.04/linux-modules-5.0.0-050000-generic_5.0.0-050000.201903032031_amd64.deb
+         - ubuntu/packages/Ubuntu-18.04/linux-image-unsigned-5.0.0-050000-generic_5.0.0-050000.201903032031_amd64.deb
+         - ubuntu/packages/Ubuntu-18.04/linux-headers-5.0.0-050000_5.0.0-050000.201903032031_all.deb
+         - ubuntu/packages/Ubuntu-18.04/linux-modules-extra-5.0.0-050000-generic_5.0.0-050000.201903032031_amd64.deb
+         - ubuntu/packages/Ubuntu-18.04/linux-headers-5.0.0-050000-generic_5.0.0-050000.201903032031_amd64.deb
+    - name: Ubuntu 18.04 | reboot
+      when: (ansible_kernel is version('5.0.0-050000-generic','!='))
+      debug:
+        msg: The kernel has been updated, a reboot is required
+    - name: Ubuntu 18.04 | exit
+      when: (ansible_kernel is version('5.0.0-050000-generic','!='))
+      meta: end_play
+    - name: Ubuntu 18.04 | qemu packages
+      apt:
+        pkg:
+          - policycoreutils-python-utils
+          - libvirt-clients
+          - libvirt-daemon-system
+          - bridge-utils
+          - python3-libvirt
+          - libnss-libvirt
+          - libguestfs-tools
+          - virtinst
+          - virt-top
+          - genisoimage
+          - libgbm1 
+          - libvirglrenderer0 
+          - libwayland-server0
+          - qemu-slof
+          - binfmt-support
+        state: present
+    - name:  Ubuntu 18.04 | vagrant add key  
+      apt_key:
+        url: https://apt.releases.hashicorp.com/gpg
+    - name:  Ubuntu 18.04 | vagrant repo
+      apt_repository:
+        repo: "deb [arch=amd64] https://apt.releases.hashicorp.com {{ ansible_distribution_release }} main"
+    - name:  Ubuntu 18.04 | vagrant install
+      apt:
+        pkg:
+        - vagrant
+    - name: Ubuntu 18.04 | qemu SGX
+      apt:
+        deb: "{{item}}"
+        force: yes
+      with_items:
+         - ubuntu/packages/Ubuntu-18.04/libcacard0_2.5.1-etny_amd64.deb
+         - ubuntu/packages/Ubuntu-18.04/qemu-block-extra_3.1.0r1-etny_amd64.deb
+         - ubuntu/packages/Ubuntu-18.04/qemu-system-common_3.1.0r1-etny_amd64.deb
+         - ubuntu/packages/Ubuntu-18.04/qemu-system-data_3.1.0r1-etny_all.deb
+         - ubuntu/packages/Ubuntu-18.04/qemu-system-mips_3.1.0r1-etny_amd64.deb
+         - ubuntu/packages/Ubuntu-18.04/qemu-system-misc_3.1.0r1-etny_amd64.deb
+         - ubuntu/packages/Ubuntu-18.04/qemu-system-ppc_3.1.0r1-etny_amd64.deb
+         - ubuntu/packages/Ubuntu-18.04/qemu-system-x86_3.1.0r1-etny_amd64.deb
+         - ubuntu/packages/Ubuntu-18.04/qemu-system-s390x_3.1.0r1-etny_amd64.deb
+         - ubuntu/packages/Ubuntu-18.04/qemu-system-sparc_3.1.0r1-etny_amd64.deb
+         - ubuntu/packages/Ubuntu-18.04/qemu-system-arm_3.1.0r1-etny_amd64.deb
+         - ubuntu/packages/Ubuntu-18.04/qemu-kvm_3.1.0r1-etny_amd64.deb
+         - ubuntu/packages/Ubuntu-18.04/qemu-system_3.1.0r1-etny_amd64.deb
+         - ubuntu/packages/Ubuntu-18.04/qemu-user_3.1.0r1-etny_amd64.deb
+         - ubuntu/packages/Ubuntu-18.04/qemu-user-binfmt_3.1.0r1-etny_amd64.deb
+         - ubuntu/packages/Ubuntu-18.04/qemu-utils_3.1.0r1-etny_amd64.deb
+         - ubuntu/packages/Ubuntu-18.04/qemu_3.1.0r1-etny_amd64.deb
+    - name: Ubuntu 18.04 | vagrant-libvirt packages
+      apt:
+        pkg:
+        - ebtables
+        - dnsmasq-base
+        - libxslt-dev
+        - libxml2-dev
+        - libvirt-dev
+        - zlib1g-dev
+        - ruby-dev
+    - name: Ubuntu 18.04 | vagrant template
+      copy:
+        src: vagrant/qemu-3.1
+        dest: Vagrantfile
+    when: (ansible_facts['distribution'] == "Ubuntu" and ansible_facts['distribution_major_version'] == "18")
+    become: true
+    become_user: root
+    ignore_errors: no
+  - name: Prepare Ubuntu 20.04
+    block:
+    - name: Ubuntu 20.04 | enable_sgx dependencies
+      apt:
+        pkg:
+          - make-guile
+          - gcc
+    - name: Ubuntu 20.04 | build enable_sgx
+      shell: make all -C sgx/
+    - name: Ubuntu 20.04 | run enable_sgx
+      shell: sgx/sgx_enable
+    - name: Ubuntu 20.04 | kernel SGX
+      when: ansible_kernel is version('5.13','<')
+      apt:
+        pkg: linux-generic-hwe-20.04
+    - name: Ubuntu 20.04 | reboot
+      when: ansible_kernel is version('5.13','<')
+      debug:
+        msg: The kernel has been updated, a reboot is required
+    - name: Ubuntu 20.04 | exit
+      when: ansible_kernel is version('5.13','<')
+      meta: end_play
+    - name: Ubuntu 20.04 | qemu repo
+      ansible.builtin.apt_repository:
+        repo: 'ppa:savoury1/virtualisation'
+        codename: focal
+    - name: Ubuntu 20.04 | qemu packages
+      apt:
+        pkg:
+#          - policycoreutils-python-utils
+#          - qemu-utils
+#          - qemu-system
+#          - qemu-system-common
+#          - qemu-system-x86
+#          - libfdt1
+#          - qemu-system-data
+#          - libvirt-clients
+#          - libvirt-daemon-system
+#          - bridge-utils
+#          - python3-libvirt
+#          - libnss-libvirt
+#          - libguestfs-tools
+#          - virtinst
+#          - virt-top
+#          - genisoimage
+           - mc
+        state: present
+    - name:  Ubuntu 20.04 | vagrant add key  
+      apt_key:
+        url: https://apt.releases.hashicorp.com/gpg
+    - name: Ubuntu 20.04 | vagrant repo
+      apt_repository:
+        repo: "deb [arch=amd64] https://apt.releases.hashicorp.com {{ ansible_distribution_release }} main"
+    - name: Ubuntu 20.04 | vagrant install
+      apt:
+        pkg:
+        - vagrant
+    - name: "Remove old qemu"
+      apt:
+        pkg:
+        - qemu*
+        state: absent
+      when: (ansible_facts['distribution'] == "Ubuntu" and ansible_facts['distribution_major_version'] == "20")
+    - name: "Remove unused packages"
+      apt:
+        autoremove: yes
+      when: (ansible_facts['distribution'] == "Ubuntu" and ansible_facts['distribution_major_version'] == "20")
+    - name: "Refresh packages"
+      apt:
+        upgrade: yes
+        update_cache: yes
+      when: (ansible_facts['distribution'] == "Ubuntu" and ansible_facts['distribution_major_version'] == "20")
+    - name: Ubuntu 20.04 | qemu SGX
+      apt:
+        deb: "{{item}}"
+        allow-downgrades: yes
+      with_items:
+         - ubuntu/packages/Ubuntu-20.04/qemu-system-common_6.2+dfsg-2ubuntu6~20.04.etny0_amd64.deb
+         - ubuntu/packages/Ubuntu-20.04/qemu-system-x86_6.2+dfsg-2ubuntu6~20.04.etny0_amd64.deb
+    - name: "Installing qemu-utils"
+      apt:
+        pkg:
+        - qemu-utils
+      when: (ansible_facts['distribution'] == "Ubuntu" and ansible_facts['distribution_major_version'] == "20")
+    - name: Ubuntu 20.04 | vagrant-libvirt packages
+      apt:
+        pkg:
+        - ebtables
+        - dnsmasq-base
+        - libxslt-dev
+        - libxml2-dev
+        - libvirt-dev
+        - zlib1g-dev
+        - ruby-dev
+    - name: Ubuntu 20.04 | vagrant template
+      copy:
+        src: vagrant/qemu-6.2
+        dest: Vagrantfile
+    when: (ansible_facts['distribution'] == "Ubuntu" and ansible_facts['distribution_major_version'] == "20")
+    become: true
+    become_user: root
+    ignore_errors: no
   - name: apparmor - enable sgx support for libvirt qemu
     copy:
       src: ubuntu/etc/apparmor.d/libvirt/TEMPLATE.qemu
       dest: /etc/apparmor.d/libvirt/TEMPLATE.qemu
-  - name: kernel SGX - Ubuntu 18.04
-    when: (ansible_facts['distribution'] == "Ubuntu" and ansible_facts['distribution_major_version'] == "18" and ansible_kernel is version('5.0.0-050000-generic','!='))
-    apt: deb={{item}}
-    with_items:
-       - ubuntu/linux-modules-5.0.0-050000-generic_5.0.0-050000.201903032031_amd64.deb
-       - ubuntu/linux-image-unsigned-5.0.0-050000-generic_5.0.0-050000.201903032031_amd64.deb
-       - ubuntu/linux-headers-5.0.0-050000_5.0.0-050000.201903032031_all.deb
-       - ubuntu/linux-modules-extra-5.0.0-050000-generic_5.0.0-050000.201903032031_amd64.deb
-       - ubuntu/linux-headers-5.0.0-050000-generic_5.0.0-050000.201903032031_amd64.deb
-  - name: reboot - Ubuntu 18.04
-    when: (ansible_facts['distribution'] == "Ubuntu" and ansible_facts['distribution_major_version'] == "18" and ansible_kernel is version('5.0.0-050000-generic','!='))
-    debug:
-      msg: The kernel has been updated, a reboot is required
-  - name: exit - Ubuntu 18.04
-    when: (ansible_facts['distribution'] == "Ubuntu" and ansible_facts['distribution_major_version'] == "18" and ansible_kernel is version('5.0.0-050000-generic','!='))
-    meta: end_play
-  - name: qemu SGX cleanup - Ubuntu 18.04
-    when: (ansible_facts['distribution'] == "Ubuntu" and ansible_facts['distribution_major_version'] == "18" and ansible_kernel is version('5.0.0-050000-generic','=='))
-    apt:
-      pkg:
-      - qemu-kvm
-      - qemu-utils
-      - qemu-system-x86
-      - qemu-system-common
-      - qemu-block-extra
-      - libcacard0
-      - qemu-user-binfmt
-      - qemu-user
-      state: absent
-  - name: qemu SGX remove unused packages - Ubuntu 18.04
-    apt:
-      autoremove: yes
-  - name: qemu SGX - Ubuntu 18.04
-    when: (ansible_facts['distribution'] == "Ubuntu" and ansible_facts['distribution_major_version'] == "18" and ansible_kernel is version('5.0.0-050000-generic','=='))
-    apt: deb={{item}}
-    with_items:
-       - ubuntu/libcacard0_2.5.1-etny_amd64.deb
-       - ubuntu/qemu-block-extra_3.1.0r1-etny_amd64.deb
-       - ubuntu/qemu-system-common_3.1.0r1-etny_amd64.deb
-       - ubuntu/qemu-system-data_3.1.0r1-etny_all.deb
-       - ubuntu/qemu-system-mips_3.1.0r1-etny_amd64.deb
-       - ubuntu/qemu-system-misc_3.1.0r1-etny_amd64.deb
-       - ubuntu/qemu-system-ppc_3.1.0r1-etny_amd64.deb
-       - ubuntu/qemu-system-x86_3.1.0r1-etny_amd64.deb
-       - ubuntu/qemu-system-s390x_3.1.0r1-etny_amd64.deb
-       - ubuntu/qemu-system-sparc_3.1.0r1-etny_amd64.deb
-       - ubuntu/qemu-system-arm_3.1.0r1-etny_amd64.deb
-       - ubuntu/qemu-kvm_3.1.0r1-etny_amd64.deb
-       - ubuntu/qemu-system_3.1.0r1-etny_amd64.deb
-       - ubuntu/qemu-user_3.1.0r1-etny_amd64.deb
-       - ubuntu/qemu-user-binfmt_3.1.0r1-etny_amd64.deb
-       - ubuntu/qemu-utils_3.1.0r1-etny_amd64.deb
-       - ubuntu/qemu_3.1.0r1-etny_amd64.deb
-  - name: vagrant-libvirt package dependencies - install
-    when: (ansible_facts['distribution'] == "Ubuntu" and ansible_facts['distribution_major_version'] == "18" and ansible_kernel is version('5.0.0-050000-generic','=='))
-    apt:
-      pkg:
-      - ebtables
-      - dnsmasq-base
-      - libxslt-dev
-      - libxml2-dev
-      - libvirt-dev
-      - zlib1g-dev
-      - ruby-dev
-  - name: Add an apt signing key for vagrant-repository
-    apt_key:
-      url: https://apt.releases.hashicorp.com/gpg
-  - name: vagrant-repository - install
-    apt_repository:
-      repo: "deb [arch=amd64] https://apt.releases.hashicorp.com {{ ansible_distribution_release }} main"
-  - name: vargant - remove old vagrant installed by role crivetimihai.virtualization.vagrant
-    apt:
-      pkg:
-      - vagrant
-      state: absent
-  - name: vargant - install the latest version
-    apt:
-      pkg:
-      - vagrant
   - name: vagrant-libvirt - install
     shell: vagrant plugin install vagrant-libvirt
   - name: vagrant-preload - install
     shell: vagrant plugin install vagrant-reload
   - name: vagrant - cleanup VM
     shell: vagrant destroy -f
+  - name: vagrant - cleanup VM 2
+    command: vagrant destroy -f  
   - name: vagrant - provision VM
     shell: vagrant up --provider=libvirt
   - name: startup - set etny-vagrant configuration
     shell: echo "ETNY_PATH=${PWD}" > /etc/default/etny-vagrant
+  - name: Copy vagrant dir to root
+    when: (ansible_facts['distribution'] == "Ubuntu" and ansible_facts['distribution_major_version'] == "18" and ansible_kernel is version('5.0.0-050000-generic','=='))
+    copy:
+      src: ~/.vagrant.d
+      dest: /root
+      force: yes
   - name: startup - create etny-vagrant.service
     copy:
       src: etc/systemd/system/etny-vagrant.service

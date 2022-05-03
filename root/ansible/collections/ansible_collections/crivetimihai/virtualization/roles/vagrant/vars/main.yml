@@ -1,0 +1,20 @@
+---
+# vars file for vagrant
+
+# Vagrant version to install
+vagrant_version: 2.2.18
+
+centos_packages:
+  - "https://releases.hashicorp.com/vagrant/{{ vagrant_version }}/vagrant_{{ vagrant_version }}_x86_64.rpm"
+
+rhel_packages:
+  - "https://releases.hashicorp.com/vagrant/{{ vagrant_version }}/vagrant_{{ vagrant_version }}_x86_64.rpm"
+
+fedora_packages:
+  - "https://releases.hashicorp.com/vagrant/{{ vagrant_version }}/vagrant_{{ vagrant_version }}_x86_64.rpm"
+
+debian_packages:
+  - "https://releases.hashicorp.com/vagrant/{{ vagrant_version }}/vagrant_{{ vagrant_version }}_x86_64.deb"
+
+ubuntu_packages:
+  - "https://releases.hashicorp.com/vagrant/{{ vagrant_version }}/vagrant_{{ vagrant_version }}_x86_64.deb"
