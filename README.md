@@ -131,8 +131,8 @@ systemctl status etny-vagrant.service
     <td align="center"><img src="https://avatars.githubusercontent.com/u/3407270?v=4" width="100px;" alt=""/><br /><sub><b>Iosif Peterfi</b></sub></a><br /></td>
     <td align="center"><img src="https://avatars.githubusercontent.com/u/3461021?v=4" width="100px;" alt=""/><br /><sub><b>Florin Nedelcu</b></sub><br /></td>
     <td align="center"><img src="https://avatars.githubusercontent.com/u/36377785?v=4" width="100px;" alt=""/><br /><sub><b>Andrei Butoi</b></sub></a><br /></td>
-    <td align="center"><img src="https://avatars.githubusercontent.com/u/90276864?v=4" width="100px;" alt=""/><br /><sub><b>Alexey Marushchenko</b></sub></a><br /></td>
     <td align="center"><img src="https://avatars.githubusercontent.com/u/103731835?v=4" width="100px;" alt=""/><br /><sub><b>Adrian Poeana</b></sub></a><br /></td>
+    <td align="center"><img src="https://avatars.githubusercontent.com/u/90276864?v=4" width="100px;" alt=""/><br /><sub><b>Alexey Marushchenko</b></sub></a><br /></td>
   </tr>
  </table>
 
