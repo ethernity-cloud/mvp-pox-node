@@ -33,6 +33,7 @@ Currently the following operating systems are suported:
 
 ```
 Ubuntu 18.04
+Ubuntu 20.04
 
 ```
 
@@ -69,13 +70,12 @@ $ git clone https://github.com/ethernity-cloud/mvp-pox-node.git
 
 ```bash
 $ cd mvp-pox-node
-$ sudo ansible-galaxy collection install crivetimihai.virtualization
 $ sudo ansible-galaxy install uoi-io.libvirt
 $ sudo ansible-playbook -i localhost, playbook.yml \
   -e "ansible_python_interpreter=/usr/bin/python3"
 ```
 
-After the first run of the script, the new kernel is installed and the following message will be displayed:
+After the first run of the script, the new kernel(with SGX support) is installed and the following message will be displayed:
 
 ```
 ok: [localhost] => {
@@ -86,7 +86,7 @@ ok: [localhost] => {
 Reboot the system as requested.
 
 
-### 4. Create config file:
+### 4. Create config file (please use your own wallets):
 
 ```bash
 $ cd mvp-pox-node
@@ -103,9 +103,36 @@ $
 ### 5. Start the node
 
 ```bash
-$ sudo cp -rf ~/.vagrant.d /root
-$ sudo ansible-galaxy collection install crivetimihai.virtualization
+cd mvp-pox-node
 $ sudo ansible-galaxy install uoi-io.libvirt
 $ sudo ansible-playbook -i localhost, playbook.yml \
   -e "ansible_python_interpreter=/usr/bin/python3"
 ```
+
+After the second run of the script the node should be successfully installed and the following message will be seen on the screen:
+
+```
+ok: [localhost] => {
+    "msg": "Ethernity NODE installation successful"
+}
+```
+
+### 6. Check if the service is running correctly.
+
+Service status can be seen by running the below command.
+
+```
+systemctl status etny-vagrant.service
+```
+
+## Contributors
+<table>
+  <tr>
+    <td align="center"><img src="https://avatars.githubusercontent.com/u/3407270?v=4" width="100px;" alt=""/><br /><sub><b>Iosif Peterfi</b></sub></a><br /></td>
+    <td align="center"><img src="https://avatars.githubusercontent.com/u/3461021?v=4" width="100px;" alt=""/><br /><sub><b>Florin Nedelcu</b></sub><br /></td>
+    <td align="center"><img src="https://avatars.githubusercontent.com/u/36377785?v=4" width="100px;" alt=""/><br /><sub><b>Andrei Butoi</b></sub></a><br /></td>
+    <td align="center"><img src="https://avatars.githubusercontent.com/u/103731835?v=4" width="100px;" alt=""/><br /><sub><b>Adrian Poeana</b></sub></a><br /></td>
+    <td align="center"><img src="https://avatars.githubusercontent.com/u/90276864?v=4" width="100px;" alt=""/><br /><sub><b>Alexey Marushchenko</b></sub></a><br /></td>
+  </tr>
+ </table>
+
