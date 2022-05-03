@@ -7,4 +7,8 @@
 profile LIBVIRT_TEMPLATE flags=(attach_disconnected) {
   #include <abstractions/libvirt-qemu>
   /dev/sgx_virt rw,
+  /dev/sgx_enclave rw,
+  /dev/sgx_provision rw,
+  /dev/sgx_vepc rw,
 }
+
