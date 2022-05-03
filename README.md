@@ -69,7 +69,7 @@ $ git clone https://github.com/ethernity-cloud/mvp-pox-node.git
 ### 3. Install the kernel with SGX support
 
 ```bash
-$ cd etny-node
+$ cd mvp-pox-node
 $ sudo ansible-galaxy install uoi-io.libvirt
 $ sudo ansible-playbook -i localhost, playbook.yml \
   -e "ansible_python_interpreter=/usr/bin/python3"
@@ -89,7 +89,7 @@ Reboot the system as requested.
 ### 4. Create config file (please use your own wallets):
 
 ```bash
-$ cd etny-node
+$ cd mvp-pox-node
 $ cat << EOF > config
 ADDRESS=0xf17f52151EbEF6C7334FAD080c5704D77216b732
 PRIVATE_KEY=AE6AE8E5CCBFB04590405997EE2D52D2B330726137B875053C36D94E974D162F
@@ -103,7 +103,7 @@ $
 ### 5. Start the node
 
 ```bash
-cd etny-node
+cd mvp-pox-node
 $ sudo ansible-galaxy install uoi-io.libvirt
 $ sudo ansible-playbook -i localhost, playbook.yml \
   -e "ansible_python_interpreter=/usr/bin/python3"
