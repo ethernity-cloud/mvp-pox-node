@@ -49,6 +49,10 @@ RHEL 8*
 
 ## Installation
 
+### Automated Installation
+For Automated installation please check the automated process at https://github.com/ethernity-cloud/etny-node-installer.
+For Manual installation please continue reading below.
+
 ### 1. Install ansible
 
 ```bash
