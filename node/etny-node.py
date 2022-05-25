@@ -35,16 +35,12 @@ logger.setLevel(logging.INFO)
 
 class DPInProcessing(Exception):
     def __init__(self, *args):
-        if args:
-            self.message = args[0]
-        else:
-            self.message = None
+        self.message = args[0] if args else None
 
     def __str__(self):
         if self.message:
             return 'DPInProcessing, {0} '.format(self.message)
-        else:
-            return 'DP is already processing another task'
+        return 'DP is already processing another task'
 
 
 class EtnyPoXNode:
@@ -67,9 +63,8 @@ class EtnyPoXNode:
         arguments = self.__read_arguments()
         self.__parse_arguments(arguments)
 
-        f = open(os.path.dirname(os.path.realpath(__file__)) + '/pox.abi')
-        self.__contract_abi = f.read()
-        f.close()
+        with open(os.path.dirname(os.path.realpath(__file__)) + '/pox.abi') as f:
+            self.__contract_abi = f.read()
 
         self.__w3 = Web3(Web3.HTTPProvider("https://core.bloxberg.org"))
         self.__w3.middleware_onion.inject(geth_poa_middleware, layer=0)
@@ -85,24 +80,25 @@ class EtnyPoXNode:
 
         home = expanduser("~")
         filename = home + "/opt/etny/node/UUID"
+        self.create_uuid(filename)
 
+    def create_uuid(self, filename):
         if not os.path.exists(os.path.dirname(filename)):
             try:
                 os.makedirs(os.path.dirname(filename))
             except OSError as exc:  # Guard against race condition
                 if exc.errno != errno.EEXIST:
                     raise
-
         try:
             f = open(filename)
             # Do something with the file
         except FileNotFoundError:
-            f = open(filename, "w+")
-            f.write(uuid.uuid4().hex)
-            f.close()
+            with open(filename, "w+") as f:
+                f.write(uuid.uuid4().hex)
             f = open(filename)
         except OSError as ex:
             logger.error(ex.errno)
+            raise
         finally:
             self.__uuid = f.read()
             f.close()
@@ -131,28 +127,16 @@ class EtnyPoXNode:
         return parser.parse_args()
 
     def __parse_arguments(self, arguments):
-        if arguments.address:
-            self.__address = format(arguments.address)
-        if arguments.privatekey:
-            self.__privatekey = format(arguments.privatekey)
-        if arguments.resultaddress:
-            self.__resultaddress = format(arguments.resultaddress)
-        if arguments.resultprivatekey:
-            self.__resultprivatekey = format(arguments.resultprivatekey)
-        if arguments.cpu:
-            self.__cpu = int(format(arguments.cpu))
-        if arguments.memory:
-            self.__memory = int(format(arguments.memory))
-        if arguments.storage:
-            self.__storage = int(format(arguments.storage))
-        if arguments.bandwidth:
-            self.__bandwidth = int(format(arguments.bandwidth))
-        if arguments.duration:
-            self.__duration = int(format(arguments.duration))
+        # string attributes
+        for arg in ['address', 'privatekey', 'resultaddress', 'resultprivatekey']:
+            setattr(self, "_" + self.__class__.__name__ + "__" + arg, getattr(arguments, arg))
+        # int attributes
+        for arg in ['cpu', 'memory', 'storage', 'storage', 'bandwidth', 'duration']:
+            setattr(self, "_" + self.__class__.__name__ + "__" + arg, int(getattr(arguments, arg)))
 
     def cleanup_dp_requests(self):
         count = self.__etny.functions._getDPRequestsCount().call()
-        for i in range(count - 1, -1, -1):
+        for i in reversed(range(count)):
             logger.debug("Cleaning up DP request %s" % i)
             req = self.__etny.caller()._getDPRequest(i)
             metadata = self.__etny.caller()._getDPRequestMetadata(i)
@@ -161,27 +145,17 @@ class EtnyPoXNode:
                     logger.debug("Request %s already assigned to order" % i)
                     self.__dprequest = i
                     self.process_dp_request()
-                    continue
                 if req[7] == 0:
                     self.cancel_dp_request(i)
             else:
                 logger.debug("Skipping DP request %s, not mine" % i)
 
     def add_dp_request(self):
-        self.__nonce = self.__w3.eth.getTransactionCount(self.__address)
         unicorn_txn = self.__etny.functions._addDPRequest(
             self.__cpu, self.__memory, self.__storage, self.__bandwidth, self.__duration, 0, self.__uuid, "", "",
             ""
-        ).buildTransaction({
-            'chainId': 8995,
-            'gas': 1000000,
-            'nonce': self.__nonce,
-            'gasPrice': self.__w3.toWei("1", "mwei"),
-        })
-
-        signed_txn = self.__w3.eth.account.sign_transaction(unicorn_txn, private_key=self.__acct.key)
-        self.__w3.eth.sendRawTransaction(signed_txn.rawTransaction)
-        _hash = self.__w3.toHex(self.__w3.sha3(signed_txn.rawTransaction))
+        ).buildTransaction(self.get_transaction_build())
+        _hash = self.send_transaction(unicorn_txn)
 
         try:
             receipt = self.__w3.eth.waitForTransactionReceipt(_hash)
@@ -190,33 +164,32 @@ class EtnyPoXNode:
         except Exception as ex:
             logger.error(ex)
             raise
-        else:
-            logger.info("DP request created successfully!")
-            logger.info("TX Hash: %s" % _hash)
+
+        logger.info("DP request created successfully!")
+        logger.info("TX Hash: %s" % _hash)
 
     def cancel_dp_request(self, req):
         logger.info("Cancelling DP request %s" % req)
-        self.__nonce = self.__w3.eth.getTransactionCount(self.__address)
-
-        unicorn_txn = self.__etny.functions._cancelDPRequest(req).buildTransaction({
-            'chainId': 8995,
-            'gas': 1000000,
-            'nonce': self.__nonce,
-            'gasPrice': self.__w3.toWei("1", "mwei"),
-        })
-
-        signed_txn = self.__w3.eth.account.sign_transaction(unicorn_txn, private_key=self.__acct.key)
-        self.__w3.eth.sendRawTransaction(signed_txn.rawTransaction)
-        _hash = self.__w3.toHex(self.__w3.sha3(signed_txn.rawTransaction))
+        unicorn_txn = self.__etny.functions._cancelDPRequest(req).buildTransaction(self.get_transaction_build())
+        _hash = self.send_transaction(unicorn_txn)
 
         try:
             self.__w3.eth.waitForTransactionReceipt(_hash)
         except Exception as ex:
             logger.error(ex)
             raise
-        else:
-            logger.info("DP request %s cancelled successfully!" % req)
-            logger.info("TX Hash: %s" % _hash)
+
+        logger.info("DP request %s cancelled successfully!" % req)
+        logger.info("TX Hash: %s" % _hash)
+
+    @staticmethod
+    def run_subprocess(args):
+        out = subprocess.Popen(args,
+                               stdout=subprocess.PIPE,
+                               stderr=subprocess.STDOUT)
+        stdout, stderr = out.communicate()
+        logger.debug(stdout)
+        logger.debug(stderr)
 
     def process_order(self, orderid):
         order = self.__etny.caller()._getOrder(orderid)
@@ -229,82 +202,45 @@ class EtnyPoXNode:
                 self.__download_ipfs(template[0])
                 self.__download_ipfs(metadata[2])
                 self.__download_ipfs(metadata[3])
+                break
             except Exception as ex:
                 logger.error(ex)
-                if attempt == 10:
+                if attempt == 9:
                     logger.info("Cannot download data from IPFS, cancelling processing")
                     return
-                continue
-            else:
-                break
 
         logger.info("Stopping previous docker registry")
-        out = subprocess.Popen(['docker', 'stop', 'registry'],
-                               stdout=subprocess.PIPE,
-                               stderr=subprocess.STDOUT)
-        stdout, stderr = out.communicate()
-        logger.debug(stdout)
-        logger.debug(stderr)
+        self.run_subprocess(['docker', 'stop', 'registry'])
+
         logger.info("Cleaning up docker registry")
-        out = subprocess.Popen(['docker', 'system', 'prune', '-a', '-f'],
-                               stdout=subprocess.PIPE,
-                               stderr=subprocess.STDOUT)
-        stdout, stderr = out.communicate()
-        logger.debug(stdout)
-        logger.debug(stderr)
+        self.run_subprocess(['docker', 'system', 'prune', '-a', '-f'])
+
         logger.info("Running new docker registry")
         logger.debug(os.path.dirname(os.path.realpath(__file__)) + '/' + template[0] + ':/var/lib/registry')
-        out = subprocess.Popen(
-            ['docker', 'run', '-d', '--restart=always', '-p', '5000:5000', '--name', 'registry', '-v',
-             os.path.dirname(os.path.realpath(__file__)) + '/' + template[0] + ':/var/lib/registry', 'registry:2'],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT)
-        stdout, stderr = out.communicate()
-        logger.debug(stdout)
-        logger.debug(stderr)
+        self.run_subprocess([
+             'docker', 'run', '-d', '--restart=always', '-p', '5000:5000', '--name', 'registry', '-v',
+             os.path.dirname(os.path.realpath(__file__)) + '/' + template[0] + ':/var/lib/registry', 'registry:2'
+        ])
+
         logger.info("Cleaning up docker image")
-        out = subprocess.Popen(['docker', 'rm', 'etny-pynithy-' + str(orderid)],
-                               stdout=subprocess.PIPE,
-                               stderr=subprocess.STDOUT)
-        stdout, stderr = out.communicate()
-        logger.debug(stdout)
-        logger.debug(stderr)
+        self.run_subprocess(['docker', 'rm', 'etny-pynithy-' + str(orderid)])
 
         logger.info("Running docker-compose")
-        out = subprocess.Popen(
-            ['docker-compose', '-f', 'docker/docker-compose-etny-pynithy.yml', 'run', '--rm', '-d', '--name',
+        self.run_subprocess([
+             'docker-compose', '-f', 'docker/docker-compose-etny-pynithy.yml', 'run', '--rm', '-d', '--name',
              'etny-pynity-' + str(orderid), 'etny-pynithy', str(orderid), metadata[2], metadata[3],
-             self.__resultaddress, self.__resultprivatekey],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT)
-
-        stdout, stderr = out.communicate()
-        logger.debug(stdout)
-        logger.debug(stderr)
+             self.__resultaddress, self.__resultprivatekey
+        ])
 
         time.sleep(10)
 
         logger.info("Attaching to docker process")
-
-        out = subprocess.Popen(['docker', 'attach', 'etny-pynithy-' + str(orderid)],
-                               stdout=subprocess.PIPE,
-                               stderr=subprocess.STDOUT)
-
-        stdout, stderr = out.communicate()
-        logger.debug(stdout)
-        logger.debug(stderr)
+        self.run_subprocess(['docker', 'attach', 'etny-pynithy-' + str(orderid)])
 
     def process_dp_request(self):
         req = self.__etny.caller()._getDPRequest(self.__dprequest)
         metadata = self.__etny.caller()._getDPRequestMetadata(self.__dprequest)
-        dproc = req[0]
-        cpu = req[1]
-        memory = req[2]
-        storage = req[3]
-        bandwidth = req[4]
-        duration = req[5]
-        price = req[6]
-        status = req[7]
+        dproc, cpu, memory, storage, bandwidth, duration, price, status = req[0:8]
         uuid = metadata[1]
 
         orderid = self.find_order_by_dp_req()
@@ -326,34 +262,32 @@ class EtnyPoXNode:
         seconds = 0
 
         while True:
-            found = 0
+            found = False
             count = self.__etny.caller()._getDORequestsCount()
-            for i in range(count - 1, checked - 1, -1):
+            for i in reversed(range(checked, count)):
                 doreq = self.__etny.caller()._getDORequest(i)
-                if doreq[7] == 0:
-                    logger.info("Checking DO request: %s" % i)
-                    if doreq[1] <= cpu and doreq[2] <= memory and doreq[3] <= storage and doreq[4] <= bandwidth:
-                        logger.info("Placing order...")
-                        try:
-                            self.place_order(i)
-                        except exceptions.SolidityError as error:
-                            print(error)
-                            logger.info("Order already created, skipping to next request")
-                            continue
-                        except IndexError as error:
-                            print(error)
-                            logger.info("Order already created, skipping to next request")
-                            continue
-                        found = 1
-                        logger.info("Waiting for order %s approval..." % self.__order)
-                        if not self.wait_for_order_approval():
-                            logger.info("Order was not approved in the last ~10 blocks, skipping to next request")
-                            break
-                        self.process_order(self.__order)
-                        logger.info("Order %s, with DO request %s and DP request %s processed successfully" % (
-                            self.__order, i, self.__dprequest))
+                if doreq[7] != 0:
+                    continue
+
+                logger.info("Checking DO request: %s" % i)
+                if doreq[1] <= cpu and doreq[2] <= memory and doreq[3] <= storage and doreq[4] <= bandwidth:
+                    logger.info("Placing order...")
+                    try:
+                        self.place_order(i)
+                    except (exceptions.SolidityError, IndexError) as error:
+                        print(error)
+                        logger.info("Order already created, skipping to next request")
+                        continue
+                    found = True
+                    logger.info("Waiting for order %s approval..." % self.__order)
+                    if not self.wait_for_order_approval():
+                        logger.info("Order was not approved in the last ~10 blocks, skipping to next request")
                         break
-            if found == 1:
+                    self.process_order(self.__order)
+                    logger.info("Order %s, with DO request %s and DP request %s processed successfully" % (
+                        self.__order, i, self.__dprequest))
+                    break
+            if found:
                 logger.info("Finished processing order %s" % self.__order)
                 break
             checked = count - 1
@@ -366,27 +300,18 @@ class EtnyPoXNode:
                 break
 
     def add_processor_to_order(self, order):
-        self.__nonce = self.__w3.eth.getTransactionCount(self.__address)
-
-        unicorn_txn = self.__etny.functions._addProcessorToOrder(order, self.__resultaddress).buildTransaction({
-            'chainId': 8995,
-            'gas': 1000000,
-            'nonce': self.__nonce,
-            'gasPrice': self.__w3.toWei("1", "mwei"),
-        })
-
-        signed_txn = self.__w3.eth.account.sign_transaction(unicorn_txn, private_key=self.__acct.key)
-        self.__w3.eth.sendRawTransaction(signed_txn.rawTransaction)
-        _hash = self.__w3.toHex(self.__w3.sha3(signed_txn.rawTransaction))
+        unicorn_txn = self.__etny.functions._addProcessorToOrder(order, self.__resultaddress).\
+            buildTransaction(self.get_transaction_build())
+        _hash = self.send_transaction(unicorn_txn)
 
         try:
             self.__w3.eth.waitForTransactionReceipt(_hash)
         except Exception as ex:
             logger.error(ex)
             raise
-        else:
-            logger.info("Added the enclave processor to the order!")
-            logger.info("TX Hash: %s" % _hash)
+
+        logger.info("Added the enclave processor to the order!")
+        logger.info("TX Hash: %s" % _hash)
 
     @staticmethod
     def __download_ipfs(hashvalue):
@@ -405,14 +330,13 @@ class EtnyPoXNode:
             order = self.__etny.caller()._getOrder(self.__order)
             if order[4] > 0:
                 return True
-            else:
-                time.sleep(5)
+            time.sleep(5)
         return False
 
     def find_order(self, doreq):
         logger.info("Finding order match for %s and %s" % (doreq, self.__dprequest))
         count = self.__etny.functions._getOrdersCount().call()
-        for i in range(count - 1, -1, -1):
+        for i in reversed(range(count)):
             order = self.__etny.caller()._getOrder(i)
             logger.debug("Checking order %s " % i)
             if order[2] == doreq and order[3] == self.__dprequest and order[4] == 0:
@@ -422,7 +346,7 @@ class EtnyPoXNode:
     def find_order_by_dp_req(self):
         logger.info("Finding order with DP request %s " % self.__dprequest)
         count = self.__etny.functions._getOrdersCount().call()
-        for i in range(count - 1, 0, -1):
+        for i in reversed(range(1, count)):
             order = self.__etny.caller()._getOrder(i)
             logger.debug("Checking order %s " % i)
             if order[3] == self.__dprequest:
@@ -430,20 +354,10 @@ class EtnyPoXNode:
         return None
 
     def place_order(self, doreq):
-        self.__nonce = self.__w3.eth.getTransactionCount(self.__address)
-
         unicorn_txn = self.__etny.functions._placeOrder(
             int(doreq), int(self.__dprequest),
-        ).buildTransaction({
-            'chainId': 8995,
-            'gas': 1000000,
-            'nonce': self.__nonce,
-            'gasPrice': self.__w3.toWei("1", "mwei"),
-        })
-
-        signed_txn = self.__w3.eth.account.sign_transaction(unicorn_txn, private_key=self.__acct.key)
-        self.__w3.eth.sendRawTransaction(signed_txn.rawTransaction)
-        _hash = self.__w3.toHex(self.__w3.sha3(signed_txn.rawTransaction))
+        ).buildTransaction(self.get_transaction_build())
+        _hash = self.send_transaction(unicorn_txn)
 
         try:
             receipt = self.__w3.eth.waitForTransactionReceipt(_hash)
@@ -452,9 +366,24 @@ class EtnyPoXNode:
         except Exception as ex:
             logger.error(ex)
             raise
-        else:
-            logger.info("Order placed successfully!")
-            logger.info("TX Hash: %s" % _hash)
+
+        logger.info("Order placed successfully!")
+        logger.info("TX Hash: %s" % _hash)
+
+    def get_transaction_build(self):
+        self.__nonce = self.__w3.eth.getTransactionCount(self.__address)
+        return {
+            'chainId': 8995,
+            'gas': 1000000,
+            'nonce': self.__nonce,
+            'gasPrice': self.__w3.toWei("1", "mwei"),
+        }
+
+    def send_transaction(self, unicorn_txn):
+        signed_txn = self.__w3.eth.account.sign_transaction(unicorn_txn, private_key=self.__acct.key)
+        self.__w3.eth.sendRawTransaction(signed_txn.rawTransaction)
+        _hash = self.__w3.toHex(self.__w3.sha3(signed_txn.rawTransaction))
+        return _hash
 
     def resume_processing(self):
         while True:
@@ -465,24 +394,16 @@ class EtnyPoXNode:
 if __name__ == '__main__':
     app = EtnyPoXNode()
 
-    dots = "."
     logger.info("Cleaning up previous DP requests...")
-    while True:
-        try:
-            app.cleanup_dp_requests()
-        except Exception as e:
-            logger.error(e)
-            raise
-        else:
-            break
+    try:
+        app.cleanup_dp_requests()
+    except Exception as e:
+        logger.error(e)
+        raise
     logger.info("[DONE]")
 
-    while True:
-        try:
-            app.resume_processing()
-        except Exception as e:
-            logger.error(e)
-            raise
-            break
-        else:
-            continue
+    try:
+        app.resume_processing()
+    except Exception as e:
+        logger.error(e)
+        raise
