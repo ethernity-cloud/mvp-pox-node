@@ -8,11 +8,9 @@ import os
 # import sys
 import ipfshttpclient
 import socket
-from os.path import expanduser
 import subprocess
-# import logging
-import logging.handlers
 
+from . import config
 from web3 import Web3
 from web3 import exceptions
 from eth_account import Account
@@ -24,13 +22,7 @@ from web3.middleware import geth_poa_middleware
 #    TransactionNotFound,
 # )
 
-logger = logging.getLogger("ETNY NODE")
-
-handler = logging.handlers.RotatingFileHandler('/var/log/etny-node.log', maxBytes=2048000, backupCount=5)
-formatter = logging.Formatter('%(asctime)s %(message)s')
-handler.setFormatter(formatter)
-logger.addHandler(handler)
-logger.setLevel(logging.INFO)
+logger = config.logger
 
 
 class DPInProcessing(Exception):
@@ -59,28 +51,25 @@ class EtnyPoXNode:
     __uuid = None
 
     def __init__(self):
-
         arguments = self.__read_arguments()
         self.__parse_arguments(arguments)
 
-        with open(os.path.dirname(os.path.realpath(__file__)) + '/pox.abi') as f:
+        with open(config.abi_filepath) as f:
             self.__contract_abi = f.read()
 
-        self.__w3 = Web3(Web3.HTTPProvider("https://core.bloxberg.org"))
+        self.__w3 = Web3(Web3.HTTPProvider(config.http_provider))
         self.__w3.middleware_onion.inject(geth_poa_middleware, layer=0)
 
         self.__acct = Account.privateKeyToAccount(self.__privatekey)
         self.__etny = self.__w3.eth.contract(
-            address=self.__w3.toChecksumAddress("0x549A6E06BB2084100148D50F51CF77a3436C3Ae7"),
+            address=self.__w3.toChecksumAddress(config.contract_address),
             abi=self.__contract_abi)
         self.__nonce = self.__w3.eth.getTransactionCount(self.__address)
 
         self.__dprequest = 0
         self.__order = 0
 
-        home = expanduser("~")
-        filename = home + "/opt/etny/node/UUID"
-        self.create_uuid(filename)
+        self.create_uuid(config.uuid_filepath)
 
     def create_uuid(self, filename):
         if not os.path.exists(os.path.dirname(filename)):
@@ -294,7 +283,7 @@ class EtnyPoXNode:
             time.sleep(5)
 
             seconds += 5
-            if seconds >= 60 * 60 * 24:
+            if seconds >= config.dp_request_timeout:
                 logger.info("DP request timed out!")
                 self.cancel_dp_request(self.__dprequest)
                 break
@@ -315,9 +304,9 @@ class EtnyPoXNode:
 
     @staticmethod
     def __download_ipfs(hashvalue):
-        ipfsnode = socket.gethostbyname('ipfs.ethernity.cloud')
-        client = ipfshttpclient.connect('/ip4/127.0.0.1/tcp/5001/http')
-        client.bootstrap.add('/ip4/%s/tcp/4001/ipfs/QmRBc1eBt4hpJQUqHqn6eA8ixQPD3LFcUDsn6coKBQtia5' % ipfsnode)
+        ipfsnode = socket.gethostbyname(config.ipfs_host)
+        client = ipfshttpclient.connect(config.client_connect_url)
+        client.bootstrap.add(config.client_bootstrap_url % ipfsnode)
         # client.swarm.connect('/ip4/%s/tcp/4001/ipfs/QmRBc1eBt4hpJQUqHqn6eA8ixQPD3LFcUDsn6coKBQtia5' % ipfsnode)
         # bug tracked under https://github.com/ipfs-shipyard/py-ipfs-http-client/issues/246
 
@@ -373,10 +362,10 @@ class EtnyPoXNode:
     def get_transaction_build(self):
         self.__nonce = self.__w3.eth.getTransactionCount(self.__address)
         return {
-            'chainId': 8995,
-            'gas': 1000000,
+            'chainId': config.chain_id,
+            'gas': config.gas_limit,
             'nonce': self.__nonce,
-            'gasPrice': self.__w3.toWei("1", "mwei"),
+            'gasPrice': self.__w3.toWei(config.gas_price_value, config.gas_price_measure),
         }
 
     def send_transaction(self, unicorn_txn):
