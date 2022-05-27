@@ -1,21 +1,15 @@
 #!/usr/bin/python3
 
 import time
-import argparse
-import uuid
-import errno
 import os
-# import sys
-import ipfshttpclient
-import socket
-import subprocess
 
-from . import config
 from web3 import Web3
 from web3 import exceptions
 from eth_account import Account
 from web3.middleware import geth_poa_middleware
 
+from . import config
+from .utils import get_or_generate_uuid, run_subprocess, download_ipfs
 # from web3.exceptions import (
 #    BlockNotFound,
 #    TimeExhausted,
@@ -51,7 +45,7 @@ class EtnyPoXNode:
     __uuid = None
 
     def __init__(self):
-        arguments = self.__read_arguments()
+        arguments = config.parser.parse_args()
         self.__parse_arguments(arguments)
 
         with open(config.abi_filepath) as f:
@@ -69,49 +63,13 @@ class EtnyPoXNode:
         self.__dprequest = 0
         self.__order = 0
 
-        self.__uuid = self.get_or_generate_uuid(config.uuid_filepath)
-
-    @staticmethod
-    def get_or_generate_uuid(filename):
-        if os.path.exists(filename):
-            with open(filename) as f:
-                return f.read()
-
-        _uuid = uuid.uuid4().hex
-        os.makedirs(os.path.dirname(filename))
-        with open(filename, "w+") as f:
-            f.write(_uuid)
-        return _uuid
-
-    @staticmethod
-    def __read_arguments():
-        parser = argparse.ArgumentParser(description="Ethernity PoX request")
-        parser.add_argument("-a", "--address", help="Etherem DP address (0xf17f52151EbEF6C7334FAD080c5704D77216b732)",
-                            required=True)
-        parser.add_argument("-k", "--privatekey",
-                            help="Etherem DP privatekey "
-                                 "(AE6AE8E5CCBFB04590405997EE2D52D2B330726137B875053C36D94E974D162F)",
-                            required=True)
-        parser.add_argument("-r", "--resultaddress",
-                            help="Etherem RP address (0xC5fdf4076b8F3A5357c5E395ab970B5B54098Fef)", required=True)
-        parser.add_argument("-j", "--resultprivatekey",
-                            help="Etherem RP privatekey "
-                                 "(0DBBE8E4AE425A6D2687F1A7E3BA17BC98C673636790F1B8AD91193C05875EF1)",
-                            required=True)
-        parser.add_argument("-c", "--cpu", help="Number of CPUs (count)", required=False, default="1")
-        parser.add_argument("-m", "--memory", help="Amount of memory (GB)", required=False, default="1")
-        parser.add_argument("-s", "--storage", help="Amount of storage (GB)", required=False, default="40")
-        parser.add_argument("-b", "--bandwidth", help="Amount of bandwidth (GB)", required=False, default="1")
-        parser.add_argument("-t", "--duration", help="Amount of time allocated for task (minutes)", required=False,
-                            default="60")
-        return parser.parse_args()
+        self.__uuid = get_or_generate_uuid(config.uuid_filepath)
 
     def __parse_arguments(self, arguments):
-        # string attributes
-        for arg in ['address', 'privatekey', 'resultaddress', 'resultprivatekey']:
+        for arg in config.string_args:
             setattr(self, "_" + self.__class__.__name__ + "__" + arg, getattr(arguments, arg))
-        # int attributes
-        for arg in ['cpu', 'memory', 'storage', 'storage', 'bandwidth', 'duration']:
+
+        for arg in config.int_args:
             setattr(self, "_" + self.__class__.__name__ + "__" + arg, int(getattr(arguments, arg)))
 
     def cleanup_dp_requests(self):
@@ -162,15 +120,6 @@ class EtnyPoXNode:
         logger.info("DP request %s cancelled successfully!" % req)
         logger.info("TX Hash: %s" % _hash)
 
-    @staticmethod
-    def run_subprocess(args):
-        out = subprocess.Popen(args,
-                               stdout=subprocess.PIPE,
-                               stderr=subprocess.STDOUT)
-        stdout, stderr = out.communicate()
-        logger.debug(stdout)
-        logger.debug(stderr)
-
     def process_order(self, orderid):
         order = self.__etny.caller()._getOrder(orderid)
         self.add_processor_to_order(orderid)
@@ -179,9 +128,9 @@ class EtnyPoXNode:
         template = metadata[1].split(':')
         for attempt in range(10):
             try:
-                self.__download_ipfs(template[0])
-                self.__download_ipfs(metadata[2])
-                self.__download_ipfs(metadata[3])
+                download_ipfs(template[0])
+                download_ipfs(metadata[2])
+                download_ipfs(metadata[3])
                 break
             except Exception as ex:
                 logger.error(ex)
@@ -190,23 +139,23 @@ class EtnyPoXNode:
                     return
 
         logger.info("Stopping previous docker registry")
-        self.run_subprocess(['docker', 'stop', 'registry'])
+        run_subprocess(['docker', 'stop', 'registry'])
 
         logger.info("Cleaning up docker registry")
-        self.run_subprocess(['docker', 'system', 'prune', '-a', '-f'])
+        run_subprocess(['docker', 'system', 'prune', '-a', '-f'])
 
         logger.info("Running new docker registry")
         logger.debug(os.path.dirname(os.path.realpath(__file__)) + '/' + template[0] + ':/var/lib/registry')
-        self.run_subprocess([
+        run_subprocess([
              'docker', 'run', '-d', '--restart=always', '-p', '5000:5000', '--name', 'registry', '-v',
              os.path.dirname(os.path.realpath(__file__)) + '/' + template[0] + ':/var/lib/registry', 'registry:2'
         ])
 
         logger.info("Cleaning up docker image")
-        self.run_subprocess(['docker', 'rm', 'etny-pynithy-' + str(orderid)])
+        run_subprocess(['docker', 'rm', 'etny-pynithy-' + str(orderid)])
 
         logger.info("Running docker-compose")
-        self.run_subprocess([
+        run_subprocess([
              'docker-compose', '-f', 'docker/docker-compose-etny-pynithy.yml', 'run', '--rm', '-d', '--name',
              'etny-pynity-' + str(orderid), 'etny-pynithy', str(orderid), metadata[2], metadata[3],
              self.__resultaddress, self.__resultprivatekey
@@ -215,7 +164,7 @@ class EtnyPoXNode:
         time.sleep(10)
 
         logger.info("Attaching to docker process")
-        self.run_subprocess(['docker', 'attach', 'etny-pynithy-' + str(orderid)])
+        run_subprocess(['docker', 'attach', 'etny-pynithy-' + str(orderid)])
 
     def process_dp_request(self):
         req = self.__etny.caller()._getDPRequest(self.__dprequest)
@@ -292,18 +241,6 @@ class EtnyPoXNode:
 
         logger.info("Added the enclave processor to the order!")
         logger.info("TX Hash: %s" % _hash)
-
-    @staticmethod
-    def __download_ipfs(hashvalue):
-        ipfsnode = socket.gethostbyname(config.ipfs_host)
-        client = ipfshttpclient.connect(config.client_connect_url)
-        client.bootstrap.add(config.client_bootstrap_url % ipfsnode)
-        # client.swarm.connect('/ip4/%s/tcp/4001/ipfs/QmRBc1eBt4hpJQUqHqn6eA8ixQPD3LFcUDsn6coKBQtia5' % ipfsnode)
-        # bug tracked under https://github.com/ipfs-shipyard/py-ipfs-http-client/issues/246
-
-        client.get(hashvalue)
-
-        return None
 
     def wait_for_order_approval(self):
         for o in range(0, 10):
