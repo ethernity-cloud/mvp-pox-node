@@ -69,28 +69,19 @@ class EtnyPoXNode:
         self.__dprequest = 0
         self.__order = 0
 
-        self.create_uuid(config.uuid_filepath)
+        self.__uuid = self.get_or_generate_uuid(config.uuid_filepath)
 
-    def create_uuid(self, filename):
-        if not os.path.exists(os.path.dirname(filename)):
-            try:
-                os.makedirs(os.path.dirname(filename))
-            except OSError as exc:  # Guard against race condition
-                if exc.errno != errno.EEXIST:
-                    raise
-        try:
-            f = open(filename)
-            # Do something with the file
-        except FileNotFoundError:
-            with open(filename, "w+") as f:
-                f.write(uuid.uuid4().hex)
-            f = open(filename)
-        except OSError as ex:
-            logger.error(ex.errno)
-            raise
-        finally:
-            self.__uuid = f.read()
-            f.close()
+    @staticmethod
+    def get_or_generate_uuid(filename):
+        if os.path.exists(filename):
+            with open(filename) as f:
+                return f.read()
+
+        _uuid = uuid.uuid4().hex
+        os.makedirs(os.path.dirname(filename))
+        with open(filename, "w+") as f:
+            f.write(_uuid)
+        return _uuid
 
     @staticmethod
     def __read_arguments():
@@ -381,17 +372,11 @@ class EtnyPoXNode:
 
 
 if __name__ == '__main__':
-    app = EtnyPoXNode()
-
-    logger.info("Cleaning up previous DP requests...")
     try:
+        app = EtnyPoXNode()
+        logger.info("Cleaning up previous DP requests...")
         app.cleanup_dp_requests()
-    except Exception as e:
-        logger.error(e)
-        raise
-    logger.info("[DONE]")
-
-    try:
+        logger.info("[DONE]")
         app.resume_processing()
     except Exception as e:
         logger.error(e)
