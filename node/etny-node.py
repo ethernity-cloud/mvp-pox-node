@@ -9,7 +9,7 @@ from eth_account import Account
 from web3.middleware import geth_poa_middleware
 
 from . import config
-from .utils import get_or_generate_uuid, run_subprocess, download_ipfs
+from .utils import get_or_generate_uuid, run_subprocess, download_ipfs, Cache
 # from web3.exceptions import (
 #    BlockNotFound,
 #    TimeExhausted,
@@ -64,6 +64,7 @@ class EtnyPoXNode:
         self.__order = 0
 
         self.__uuid = get_or_generate_uuid(config.uuid_filepath)
+        self.cache = Cache(config.cache_filepath)
 
     def __parse_arguments(self, arguments):
         for arg in config.string_args:
@@ -262,9 +263,16 @@ class EtnyPoXNode:
 
     def find_order_by_dp_req(self):
         logger.info("Finding order with DP request %s " % self.__dprequest)
+        order_id = self.cache.get(self.__dprequest)
+        if order_id is not None:
+            logger.info("Found in cache, order_id = %s " % order_id)
+            return order_id
+
         count = self.__etny.functions._getOrdersCount().call()
-        for i in reversed(range(1, count)):
+        cached_ids = self.cache.get_values()
+        for i in [id for id in reversed(range(1, count)) if id not in cached_ids]:
             order = self.__etny.caller()._getOrder(i)
+            self.cache.add(order[3], i)
             logger.debug("Checking order %s " % i)
             if order[3] == self.__dprequest:
                 return i

@@ -3,6 +3,8 @@ import uuid
 import subprocess
 import socket
 import ipfshttpclient
+import json
+
 from . import config
 
 logger = config.logger
@@ -39,3 +41,27 @@ def download_ipfs(hashvalue):
     client.get(hashvalue)
 
     return None
+
+
+class Cache:
+    def __init__(self, filepath):
+        if not os.path.exists(filepath):
+            os.makedirs(os.path.dirname(filepath))
+            with open(filepath, 'w+') as f:
+                f.write("{}")
+        self.filepath = filepath
+        with open(filepath, 'r') as f:
+            self.mem = json.load(f)
+
+    def add(self, key, value):
+        self.mem[key] = value
+        with open(self.filepath, 'w') as f:
+            json.dump(self.mem, f)
+
+    def get(self, key):
+        if key in self.mem:
+            return self.mem[key]
+        return None
+
+    def get_values(self):
+        return self.mem.values()

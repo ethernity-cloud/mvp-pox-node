@@ -21,6 +21,7 @@ gas_price_measure = os.environ.get('GAS_PRICE_MEASURE')
 # constants
 abi_filepath = os.path.dirname(os.path.realpath(__file__)) + '/pox.abi'
 uuid_filepath = expanduser("~") + "/opt/etny/node/UUID"
+cache_filepath = os.path.dirname(os.path.realpath(__file__)) + '/cache.txt'
 dp_request_timeout = 60 * 60 * 24
 
 # logger
