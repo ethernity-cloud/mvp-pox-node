@@ -1,9 +1,11 @@
 import os
 import uuid
-import subprocess
-import socket
-import ipfshttpclient
+import time
 import json
+import socket
+import subprocess
+
+import ipfshttpclient
 
 from . import config
 
@@ -31,16 +33,35 @@ def run_subprocess(args):
     logger.debug(stderr)
 
 
-def download_ipfs(hashvalue):
-    ipfsnode = socket.gethostbyname(config.ipfs_host)
-    client = ipfshttpclient.connect(config.client_connect_url)
-    client.bootstrap.add(config.client_bootstrap_url % ipfsnode)
-    # client.swarm.connect('/ip4/%s/tcp/4001/ipfs/QmRBc1eBt4hpJQUqHqn6eA8ixQPD3LFcUDsn6coKBQtia5' % ipfsnode)
-    # bug tracked under https://github.com/ipfs-shipyard/py-ipfs-http-client/issues/246
+def retry(func, *func_args, attempts, delay=0):
+    for _ in range(attempts):
+        if func(*func_args):
+            return True           # if we succeed we return True
+        time.sleep(delay)
+    return False
 
-    client.get(hashvalue)
 
-    return None
+class Storage:
+    @staticmethod
+    def download(data):
+        try:
+            ipfsnode = socket.gethostbyname(config.ipfs_host)
+            client = ipfshttpclient.connect(config.client_connect_url)
+            client.bootstrap.add(config.client_bootstrap_url % ipfsnode)
+            # client.swarm.connect('/ip4/%s/tcp/4001/ipfs/QmRBc1eBt4hpJQUqHqn6eA8ixQPD3LFcUDsn6coKBQtia5' % ipfsnode)
+            # bug tracked under https://github.com/ipfs-shipyard/py-ipfs-http-client/issues/246
+            client.get(data)
+        except Exception as e:
+            logger.error(e)
+            return False
+        return True
+
+    @staticmethod
+    def download_many(lst):
+        for data in lst:
+            if not Storage.download(data):
+                return False
+        return True
 
 
 class Cache:
