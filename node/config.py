@@ -1,9 +1,10 @@
 import os
+import argparse
 import logging.handlers
 from os.path import expanduser
-import argparse
-
 from dotenv import load_dotenv
+
+from .utils import HardwareInfoProvider
 
 load_dotenv()  # take environment variables from .env.
 
@@ -19,6 +20,7 @@ gas_price_value = os.environ.get('GAS_PRICE_VALUE')
 gas_price_measure = os.environ.get('GAS_PRICE_MEASURE')
 
 # constants
+orders_cache_limit = 10000
 abi_filepath = os.path.dirname(os.path.realpath(__file__)) + '/pox.abi'
 uuid_filepath = expanduser("~") + "/opt/etny/node/UUID"
 cache_filepath = os.path.dirname(os.path.realpath(__file__)) + '/cache.txt'
@@ -46,12 +48,16 @@ parser.add_argument("-j", "--resultprivatekey",
                     help="Etherem RP privatekey "
                          "(0DBBE8E4AE425A6D2687F1A7E3BA17BC98C673636790F1B8AD91193C05875EF1)",
                     required=True)
-parser.add_argument("-c", "--cpu", help="Number of CPUs (count)", required=False, default="1")
-parser.add_argument("-m", "--memory", help="Amount of memory (GB)", required=False, default="1")
-parser.add_argument("-s", "--storage", help="Amount of storage (GB)", required=False, default="40")
+parser.add_argument("-c", "--cpu", help="Number of CPUs (count)", required=False,
+                    default=str(HardwareInfoProvider.get_number_of_cpus()))
+parser.add_argument("-m", "--memory", help="Amount of memory (GB)", required=False,
+                    default=str(HardwareInfoProvider.get_free_memory()))
+parser.add_argument("-s", "--storage", help="Amount of storage (GB)", required=False,
+                    default=str(HardwareInfoProvider.get_free_storage()))
 parser.add_argument("-b", "--bandwidth", help="Amount of bandwidth (GB)", required=False, default="1")
 parser.add_argument("-t", "--duration", help="Amount of time allocated for task (minutes)", required=False,
                     default="60")
-
-string_args = ['address', 'privatekey', 'resultaddress', 'resultprivatekey']
-int_args = ['cpu', 'memory', 'storage', 'storage', 'bandwidth', 'duration']
+arguments = {
+    str: ['address', 'privatekey', 'resultaddress', 'resultprivatekey'],
+    int: ['cpu', 'memory', 'storage', 'storage', 'bandwidth', 'duration']
+}

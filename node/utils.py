@@ -4,6 +4,8 @@ import time
 import json
 import socket
 import subprocess
+import psutil
+from collections import OrderedDict
 
 import ipfshttpclient
 
@@ -65,19 +67,26 @@ class Storage:
 
 
 class Cache:
-    def __init__(self, filepath):
+    def __init__(self, items_limit, filepath):
+        self.items_limit = items_limit
+        self.filepath = filepath
         if not os.path.exists(filepath):
             os.makedirs(os.path.dirname(filepath))
-            with open(filepath, 'w+') as f:
-                f.write("{}")
-        self.filepath = filepath
+            self.mem = OrderedDict({})
+            self._update_file()
+            return
         with open(filepath, 'r') as f:
-            self.mem = json.load(f)
+            self.mem = OrderedDict(json.load(f))
+
+    def _update_file(self):
+        with open(self.filepath, 'w') as f:
+            json.dump(self.mem, f)
 
     def add(self, key, value):
         self.mem[key] = value
-        with open(self.filepath, 'w') as f:
-            json.dump(self.mem, f)
+        if len(self.mem) == self.items_limit + 1:
+            self.mem.popitem(last=False)
+        self._update_file()
 
     def get(self, key):
         if key in self.mem:
@@ -86,3 +95,17 @@ class Cache:
 
     def get_values(self):
         return self.mem.values()
+
+
+class HardwareInfoProvider:
+    @staticmethod
+    def get_number_of_cpus():
+        return psutil.cpu_count()
+
+    @staticmethod
+    def get_free_memory():
+        return psutil.virtual_memory()[1] // (2**30)  # in GB
+
+    @staticmethod
+    def get_free_storage():
+        return psutil.disk_usage("/")[2] // (2**30)  # in GB

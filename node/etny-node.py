@@ -16,64 +16,56 @@ logger = config.logger
 
 
 class EtnyPoXNode:
-    # class variables
-    __user = None
     __address = None
     __privatekey = None
     __resultaddress = None
     __resultprivatekey = None
-
-    __contract_abi = None
-    __etny = None
-    __acct = None
-    __w3 = None
-    __nonce = None
-    __uuid = None
+    __cpu = None
+    __memory = None
+    __storage = None
+    __bandwidth = None
+    __duration = None
 
     def __init__(self):
-        arguments = config.parser.parse_args()
-        self.__parse_arguments(arguments)
+        self.parse_arguments(config.arguments, config.parser)
 
         with open(config.abi_filepath) as f:
             self.__contract_abi = f.read()
-
         self.__w3 = Web3(Web3.HTTPProvider(config.http_provider))
         self.__w3.middleware_onion.inject(geth_poa_middleware, layer=0)
-
         self.__acct = Account.privateKeyToAccount(self.__privatekey)
         self.__etny = self.__w3.eth.contract(
             address=self.__w3.toChecksumAddress(config.contract_address),
-            abi=self.__contract_abi)
+            abi=self.__contract_abi
+        )
         self.__nonce = self.__w3.eth.getTransactionCount(self.__address)
-
         self.__dprequest = 0
         self.__order = 0
 
         self.__uuid = get_or_generate_uuid(config.uuid_filepath)
-        self.cache = Cache(config.cache_filepath)
+        self.orders_cache = Cache(config.orders_cache_limit, config.cache_filepath)
 
-    def __parse_arguments(self, arguments):
-        for arg in config.string_args:
-            setattr(self, "_" + self.__class__.__name__ + "__" + arg, getattr(arguments, arg))
-
-        for arg in config.int_args:
-            setattr(self, "_" + self.__class__.__name__ + "__" + arg, int(getattr(arguments, arg)))
+    def parse_arguments(self, arguments, parser):
+        parser.parse_args()
+        for args_type, args in arguments.items():
+            for arg in args:
+                setattr(self, "_" + self.__class__.__name__ + "__" + arg, args_type(getattr(parser, arg)))
 
     def cleanup_dp_requests(self):
         count = self.__etny.functions._getDPRequestsCount().call()
         for i in reversed(range(count)):
-            logger.debug("Cleaning up DP request %s" % i)
+            logger.debug(f"Cleaning up DP request {i}")
             req = DPRequest(self.__etny.caller()._getDPRequest(i))
             req_uuid = self.__etny.caller()._getDPRequestMetadata(i)[1]
             if req_uuid == self.__uuid and req.dproc == self.__address:
                 if req.status == RequestStatus.BOOKED:
-                    logger.debug("Request %s already assigned to order" % i)
+                    logger.debug(f"Request {i} already assigned to order")
                     self.__dprequest = i
                     self.process_dp_request()
                 if req.status == RequestStatus.AVAILABLE:
                     self.cancel_dp_request(i)
             else:
-                logger.debug("Skipping DP request %s, not mine" % i)
+                logger.debug(f"Skipping DP request {i}, not mine")
 
     def add_dp_request(self):
         unicorn_txn = self.__etny.functions._addDPRequest(
@@ -91,10 +83,10 @@ class EtnyPoXNode:
             raise
 
         logger.info("DP request created successfully!")
-        logger.info("TX Hash: %s" % _hash)
+        logger.info(f"TX Hash: {_hash}")
 
     def cancel_dp_request(self, req):
-        logger.info("Cancelling DP request %s" % req)
+        logger.info(f"Cancelling DP request {req}")
         unicorn_txn = self.__etny.functions._cancelDPRequest(req).buildTransaction(self.get_transaction_build())
         _hash = self.send_transaction(unicorn_txn)
 
@@ -104,8 +96,8 @@ class EtnyPoXNode:
             logger.error(ex)
             raise
 
-        logger.info("DP request %s cancelled successfully!" % req)
-        logger.info("TX Hash: %s" % _hash)
+        logger.info(f"DP request {req} cancelled successfully!")
+        logger.info(f"TX Hash: {_hash}")
 
     def process_order(self, order_id):
         order = Order(self.__etny.caller()._getOrder(order_id))
@@ -141,38 +133,35 @@ class EtnyPoXNode:
         ])
 
         time.sleep(10)
-
         logger.info("Attaching to docker process")
         run_subprocess(['docker', 'attach', 'etny-pynithy-' + str(order_id)])
 
     def process_dp_request(self):
-        req = DPRequest(self.__etny.caller()._getDPRequest(self.__dprequest))
-
         order_id = self.find_order_by_dp_req()
-        if order_id is not None:
+        if order_id is None:
             order = Order(self.__etny.caller()._getOrder(order_id))
             if order.status == OrderStatus.CLOSED:
-                logger.info("DP request %s completed successfully!" % self.__dprequest)
+                logger.info(f"DP request {self.__dprequest} completed successfully!")
             if order.status == OrderStatus.PROCESSING:
-                logger.info("DP request never finished, processing order %s" % order_id)
+                logger.info(f"DP request never finished, processing order {order_id}")
                 self.process_order(order_id)
             if order.status == OrderStatus.OPEN:
                 logger.info("Order was never approved, skipping")
             return
 
-        logger.info("Processing NEW DP request %s" % self.__dprequest)
+        logger.info(f"Processing NEW DP request {self.__dprequest}")
+        req = DPRequest(self.__etny.caller()._getDPRequest(self.__dprequest))
 
         checked = 0
         seconds = 0
-
-        while True:
+        while seconds < config.dp_request_timeout:
             found = False
             count = self.__etny.caller()._getDORequestsCount()
             for i in reversed(range(checked, count)):
                 doreq = DORequest(self.__etny.caller()._getDORequest(i))
                 if doreq.status != RequestStatus.AVAILABLE:
                     continue
-                logger.info("Checking DO request: %s" % i)
+                logger.info(f"Checking DO request: {i}")
                 if not (doreq.cpu <= req.cpu and doreq.memory <= req.memory and
                         doreq.storage <= req.storage and doreq.bandwidth <= req.bandwidth):
                     logger.info("Order doesn't meet requirements, skipping to next request")
@@ -184,28 +173,25 @@ class EtnyPoXNode:
                     logger.info("Order already created, skipping to next request")
                     continue
                 found = True
-                logger.info("Waiting for order %s approval..." % self.__order)
+                logger.info(f"Waiting for order {self.__order} approval...")
                 if not retry(self.wait_for_order_approval, attempts=10, delay=5):
                     logger.info("Order was not approved in the last ~10 blocks, skipping to next request")
                     break
                 self.process_order(self.__order)
-                logger.info("Order %s, with DO request %s and DP request %s processed successfully" % (
-                    self.__order, i, self.__dprequest))
+                logger.info(f"Order {self.__order}, with DO request {i} and DP request {self.__dprequest} processed successfully")
                 break
             if found:
-                logger.info("Finished processing order %s" % self.__order)
-                break
+                logger.info(f"Finished processing order {self.__order}")
+                return
             checked = count - 1
             time.sleep(5)
-
             seconds += 5
-            if seconds >= config.dp_request_timeout:
-                logger.info("DP request timed out!")
-                self.cancel_dp_request(self.__dprequest)
-                break
 
-    def add_processor_to_order(self, order):
-        unicorn_txn = self.__etny.functions._addProcessorToOrder(order, self.__resultaddress).\
+        logger.info("DP request timed out!")
+        self.cancel_dp_request(self.__dprequest)
+
+    def add_processor_to_order(self, order_id):
+        unicorn_txn = self.__etny.functions._addProcessorToOrder(order_id, self.__resultaddress).\
             buildTransaction(self.get_transaction_build())
         _hash = self.send_transaction(unicorn_txn)
 
@@ -216,25 +202,26 @@ class EtnyPoXNode:
             raise
 
         logger.info("Added the enclave processor to the order!")
-        logger.info("TX Hash: %s" % _hash)
+        logger.info(f"TX Hash: {_hash}")
 
     def wait_for_order_approval(self):
         order = Order(self.__etny.caller()._getOrder(self.__order))
         return order.status != OrderStatus.OPEN
 
     def find_order_by_dp_req(self):
-        logger.info("Finding order with DP request %s " % self.__dprequest)
-        order_id = self.cache.get(self.__dprequest)
+        logger.info(f"Finding order with DP request {self.__dprequest}")
+        order_id = self.orders_cache.get(self.__dprequest)
         if order_id is not None:
-            logger.info("Found in cache, order_id = %s " % order_id)
+            logger.info(f"Found in cache, order_id = {order_id}")
             return order_id
 
-        count = self.__etny.functions._getOrdersCount().call()
-        cached_ids = self.cache.get_values()
-        for i in [id for id in reversed(range(1, count)) if id not in cached_ids]:
+        orders_count = self.__etny.functions._getOrdersCount().call()
+        cached_order_ids = self.orders_cache.get_values()
+        uncached_order_ids = reversed(list(set(range(1, orders_count)) - set(cached_order_ids)))
+        for i in uncached_order_ids:
             order = Order(self.__etny.caller()._getOrder(i))
-            self.cache.add(order.dp_req, i)
-            logger.debug("Checking order %s " % i)
+            self.orders_cache.add(order.dp_req, i)
+            logger.debug(f"Checking order {i}")
             if order.dp_req == self.__dprequest:
                 return i
         return None
@@ -254,7 +241,7 @@ class EtnyPoXNode:
             raise
 
         logger.info("Order placed successfully!")
-        logger.info("TX Hash: %s" % _hash)
+        logger.info(f"TX Hash: {_hash}")
 
     def get_transaction_build(self):
         self.__nonce = self.__w3.eth.getTransactionCount(self.__address)
