@@ -1,0 +1,37 @@
+---
+
+- include_tasks: "{{ ansible_os_family | lower() }}_{{ ansible_distribution_major_version }}.yml"
+
+- name: apparmor - enable sgx support for libvirt qemu
+  copy:
+    src: ubuntu/etc/apparmor.d/libvirt/TEMPLATE.qemu
+    dest: /etc/apparmor.d/libvirt/TEMPLATE.qemu
+- name: vagrant-libvirt - install
+  shell: vagrant plugin install vagrant-libvirt
+- name: vagrant-preload - install
+  shell: vagrant plugin install vagrant-reload
+- name: vagrant - cleanup VM
+  shell: vagrant destroy -f
+- name: vagrant - cleanup VM 2
+  command: vagrant destroy -f  
+- name: vagrant - provision VM
+  shell: vagrant up --provider=libvirt
+- name: startup - set etny-vagrant configuration
+  shell: echo "ETNY_PATH=${PWD}" > /etc/default/etny-vagrant
+- name: Copy vagrant dir to root
+  when: (ansible_facts['distribution'] == "Ubuntu" and ansible_facts['distribution_major_version'] == "18" and ansible_kernel is version('5.0.0-050000-generic','=='))
+  copy:
+    src: ~/.vagrant.d
+    dest: /root
+    force: yes
+- name: startup - create etny-vagrant.service
+  copy:
+    src: etc/systemd/system/etny-vagrant.service
+    dest: /etc/systemd/system/etny-vagrant.service
+- name: startup - enable etny-vagrant.service
+  shell: systemctl enable etny-vagrant.service
+- name: startup - start etny-vagrant.service
+  shell: systemctl restart etny-vagrant.service
+- name: finished
+  debug:
+    msg: Ethernity NODE installation successful

@@ -1,0 +1,104 @@
+---
+name: Ansible Role Linux Kernel
+
+trigger:
+  batch: true
+  branches:
+    include:
+      - master
+  tags:
+    include:
+      - "*"
+  paths:
+    exclude:
+      - "*.md"
+      - ".gitignore"
+      - "LICENSE"
+
+pr: none
+
+pool:
+  vmImage: ubuntu-20.04
+
+jobs:
+  - job: tests
+    displayName: Tests
+    variables:
+      cacheDir: /tmp/.pipeline_cache
+    steps:
+
+      - checkout: self
+        fetchDepth: 1
+        path: ansible-role-linux-kernel  # Must match role name in molecule/converge.yml
+
+      - task: Cache@2
+        inputs:
+          key: cache
+          path: $(cacheDir)
+        displayName: Cache packages
+
+      - script: |
+          echo "##vso[task.prependpath]$HOME/.local/bin"
+          pip install --disable-pip-version-check --cache-dir $(cacheDir)/.pip_packages -U ansible flake8 yamllint ansible-lint black bandit molecule-docker pytest-testinfra
+        displayName: Get dependencies
+        condition: always()
+
+      - script: flake8
+        displayName: Lint Python modules
+        condition: always()
+
+      - script: black . --check --diff
+        displayName: Check black style is applied
+        condition: always()
+
+      - script: bandit -r . -x ./molecule
+        displayName: Check Python security
+        condition: always()
+
+      - script: yamllint -s .
+        displayName: Lint YAML files
+        condition: always()
+
+      - script: ansible-lint .
+        displayName: Lint Ansible configuration
+        condition: always()
+
+      - script: molecule test
+        displayName: Test Ansible role
+        condition: always()
+        env:
+          ANSIBLE_DISPLAY_SKIPPED_HOSTS: "False"
+          ANSIBLE_FORCE_COLOR: "True"
+          ANSIBLE_FORKS: "30"
+          ANSIBLE_NOCOLOR": "False"
+          ANSIBLE_PIPELINING: "True"
+          ANSIBLE_SSH_ARGS: "-o ControlMaster=auto -o ControlPersist=60s"
+          ANSIBLE_STDOUT_CALLBACK: debug
+
+  - job:
+    displayName: Ansible Galaxy publish
+    dependsOn: tests
+    condition: and(succeeded(), startsWith(variables['Build.SourceBranch'], 'refs/tags'), ne(variables['Build.Reason'], 'Schedule'))
+    variables:
+      - group: ansibleGalaxy
+    steps:
+
+      - checkout: none
+
+      - script: ansible-galaxy role import --token $(AnsibleGalaxyToken) --role-name accelize.linux_kernel Accelize ansible-role-linux-kernel
+        displayName: Publish role to Ansible Galaxy
+
+      - task: GitHubRelease@1
+        displayName: Publish GitHub release
+        inputs:
+          gitHubConnection: Accelize-application
+          repositoryName: $(Build.Repository.Name)
+          action: create
+          target: $(Build.SourceVersion)
+          tagSource: gitTag
+          tagPattern: '[0-9]+\.[0-9]+\.[0-9]+'
+          isPreRelease: contains($(libraryVersion.version), '-')
+          releaseNotesSource: inline
+          releaseNotesInline: Role Available on Ansible galaxy.
+          changeLogCompareToRelease: lastFullRelease
+          changeLogType: commitBased

@@ -1,0 +1,54 @@
+---
+
+- name: Generate random values
+  command: ./ethkey generate random
+  check_mode: no
+  args:
+    chdir: "{{ role_path }}/files/"
+  register: ethkey_rand
+
+- set_fact:
+    ethkey_map: "{{ dict(_keys|zip(_vals)) }}"
+  vars:
+    _arr: "{{ ethkey_rand.stdout.split('\n')|map('trim')|select()|list }}"
+    _keys: "{{ _arr|map('regex_replace', '^(.*?):(.*)$', '\\1')|map('trim')|list }}"
+    _vals: "{{ _arr|map('regex_replace', '^(.*?):(.*)$', '\\2')|map('trim')|list }}"
+
+- name: Write address to config file
+  copy:
+    content: "ADDRESS={{ ethkey_map.address }}"
+    dest: "{{ config_file_name }}"
+
+- name: line insert
+  lineinfile:
+    path: "{{ config_file_name }}"
+    line: "PRIVATE_KEY={{ ethkey_map.secret }}"
+    insertbefore: BOE
+
+- name: Generate random values
+  command: ./ethkey generate random
+  check_mode: no
+  args:
+    chdir: "{{ role_path }}/files/"
+  register: ethkey_second
+
+- set_fact:
+    ethkey_second_map: "{{ dict(_keys|zip(_vals)) }}"
+  vars:
+    _arr: "{{ ethkey_second.stdout.split('\n')|map('trim')|select()|list }}"
+    _keys: "{{ _arr|map('regex_replace', '^(.*?):(.*)$', '\\1')|map('trim')|list }}"
+    _vals: "{{ _arr|map('regex_replace', '^(.*?):(.*)$', '\\2')|map('trim')|list }}"
+
+- name: line insert
+  lineinfile:
+    path: "{{ config_file_name }}"
+    line: "RESULT_PRIVATE_KEY={{ ethkey_second_map.secret }}"
+    insertbefore: BOE
+
+- name: line insert
+  lineinfile:
+    path: "{{ config_file_name }}"
+    line: "RESULT_ADDRESS={{ ethkey_second_map.address }}"
+    insertbefore: BOE
+
+
