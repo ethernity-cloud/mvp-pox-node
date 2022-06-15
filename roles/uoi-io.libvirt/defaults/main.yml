@@ -1,0 +1,8 @@
+---
+# file: roles/libvirt/defaults/main.yml
+libvirt_firewalld: true
+libvirt_selinux: true
+libvirt_port: 16509
+libvirt_bind_address: 0.0.0.0
+libvirt_config: []
+libvirt_qemu_config: []

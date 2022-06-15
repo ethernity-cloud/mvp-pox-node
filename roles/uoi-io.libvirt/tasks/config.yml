@@ -1,0 +1,27 @@
+---
+# file: roles/libvirt/tasks/config.yml
+- name: Configuring "{{ libvirt_config_file }}" file (libvirt)
+  lineinfile:
+    dest="{{ libvirt_config_file }}"
+    regexp={{ item.option }}
+    line={{ item.value }}
+  with_items: "{{ libvirt_config }}"
+  notify: restart libvirtd
+
+- name: Configuring "{{ libvirt_qemu_config_file }}" file (QEMU)
+  lineinfile:
+    dest="{{ libvirt_qemu_config_file }}"
+    regexp={{ item.option }}
+    line={{ item.value }}
+  with_items: "{{ libvirt_qemu_config }}"
+  notify: restart libvirtd
+
+- name: Configuring "{{ libvirt_daemon_config_file }}" file (daemon)
+  lineinfile:
+    dest="{{ libvirt_daemon_config_file }}"
+    regexp={{ item.option }}
+    line={{ item.value }}
+  with_items: "{{ libvirt_daemon_config }}"
+  notify: restart libvirtd
+
+- meta: flush_handlers

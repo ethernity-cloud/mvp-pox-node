@@ -1,0 +1,46 @@
+---
+
+- name: Ensure APT cache is up to date
+  apt:
+    update_cache: true
+  changed_when: false
+  retries: 10
+  delay: 1
+  register: _apt_update
+  until: _apt_update is successful
+
+- name: Get available kernel versions
+  command: apt-cache showpkg linux-headers-*
+  changed_when: false
+  register: apt_kernel_list
+
+- name: Get installed packages
+  command: dpkg -l
+  changed_when: false
+  register: apt_packages_list
+
+- name: Set target kernel version
+  set_fact: _kernel="{{ apt_kernel_list |
+                     deb_kernel(kernel_version, ansible_kernel,
+                     kernel_variant | default(omit)) }}"
+
+- name: "Ensure kernel {{ _kernel }} packages are installed"
+  apt:
+    name: "{{ item.name | deb_kernel_package(_kernel, ansible_architecture) }}"
+  retries: 10
+  delay: 1
+  register: _apt_install
+  until: _apt_install is successful
+  when: item.when
+  with_items:
+    - name: linux-image
+      when: true
+    - name: linux-headers
+      when: "{{ install_kernel_headers | bool }}"
+
+- name: Ensure any other kernel packages are removed
+  apt:
+    name: "{{ apt_packages_list | deb_installed_kernel(_kernel, ansible_architecture) }}"
+    state: absent
+    purge: true
+  when: _apt_install.changed
