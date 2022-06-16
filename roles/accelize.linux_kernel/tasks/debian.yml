@@ -31,7 +31,9 @@
   delay: 1
   register: _apt_install
   until: _apt_install is successful
-  when: item.when
+  when: 
+    - item.when
+    - "{{ ansible_facts['distribution_version'] is version('_kernel', '>') }}"
   with_items:
     - name: linux-image
       when: true
@@ -43,4 +45,12 @@
     name: "{{ apt_packages_list | deb_installed_kernel(_kernel, ansible_architecture) }}"
     state: absent
     purge: true
+  when: _apt_install.changed
+
+- name: Update iniramf
+  shell: update-initramfs -u -k {{ _kernel }}
+  when: _apt_install.changed
+
+- name: Update iniramf
+  shell: update-grub
   when: _apt_install.changed
