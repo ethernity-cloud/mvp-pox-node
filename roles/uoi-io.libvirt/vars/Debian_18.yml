@@ -6,4 +6,4 @@ libvirt_daemon_config_file: /etc/default/libvirtd
 libvirt_config_file: /etc/libvirt/libvirtd.conf
 libvirt_qemu_config_file: /etc/libvirt/qemu.conf
 libvirt_daemon_config:
-  - { option: 'libvirtd_opts', value: 'libvirtd_opts="-l"' }
+  - { option: 'libvirtd_opts', value: 'libvirtd_opts=""' }
