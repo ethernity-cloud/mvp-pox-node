@@ -33,7 +33,7 @@
   until: _apt_install is successful
   when: 
     - item.when
-    - "{{ ansible_facts['distribution_version'] is version('_kernel', '>') }}"
+    - "{{ ansible_facts['distribution_version'] is version('kernel_version', '>') }}"
   with_items:
     - name: linux-image
       when: true
