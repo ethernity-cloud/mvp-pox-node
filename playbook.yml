@@ -53,23 +53,23 @@
       prompt: " 1) Generate config file with random wallets.\n 2) Use existing config file\n[Type your choice to continue]"
       private: no
   roles:
-#     - role: generate_config_file
-#       when: 
-#         - check_config == '1'
-#         - config_file.stat.exists == false
-#     - role: validate_config_file
-#       when: 
-#         - check_config == '2'
-#         - config_file.stat.exists == true
-#     - role: uoi-io.libvirt
-#       libvirt_firewalld: false
-#       libvirt_selinux: false
-#       libvirt_config:
-#         - { option: 'listen_tls', value: 'listen_tls = 0' }
-#         - { option: 'listen_tcp', value: 'listen_tcp = 0' }
-#       libvirt_qemu_config:
-#         - { option: 'user', value: 'user = "+0"' }
-#         - { option: 'cgroup_device_acl', value: 'cgroup_device_acl = [ "/dev/null", "/dev/full", "/dev/zero", "/dev/random", "/dev/urandom", "/dev/ptmx", "/dev/kvm", "/dev/kqemu", "/dev/rtc", "/dev/hpet", "/dev/sgx_virt", "/dev/sgx_enclave", "/dev/sgx_provision", "/dev/sgx_vepc" ]' }
+    - role: generate_config_file
+      when: 
+        - check_config == '1'
+        - config_file.stat.exists == false
+    - role: validate_config_file
+      when: 
+        - check_config == '2'
+        - config_file.stat.exists == true
+    - role: uoi-io.libvirt
+      libvirt_firewalld: false
+      libvirt_selinux: false
+      libvirt_config:
+        - { option: 'listen_tls', value: 'listen_tls = 0' }
+        - { option: 'listen_tcp', value: 'listen_tcp = 0' }
+      libvirt_qemu_config:
+        - { option: 'user', value: 'user = "+0"' }
+        - { option: 'cgroup_device_acl', value: 'cgroup_device_acl = [ "/dev/null", "/dev/full", "/dev/zero", "/dev/random", "/dev/urandom", "/dev/ptmx", "/dev/kvm", "/dev/kqemu", "/dev/rtc", "/dev/hpet", "/dev/sgx_virt", "/dev/sgx_enclave", "/dev/sgx_provision", "/dev/sgx_vepc" ]' }
     - role: accelize.linux_kernel
       vars:
         kernel_version: 5.13.0-48
