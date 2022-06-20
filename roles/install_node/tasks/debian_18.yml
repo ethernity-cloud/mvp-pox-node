@@ -3,12 +3,19 @@
 - name: Ubuntu 18.04 | kernel SGX 
   when: (ansible_kernel is version('5.0.0-050000-generic','!='))
   apt: deb={{item}}
+  register: _apt_install
   with_items:
      - ubuntu/packages/Ubuntu-18.04/linux-modules-5.0.0-050000-generic_5.0.0-050000.201903032031_amd64.deb
      - ubuntu/packages/Ubuntu-18.04/linux-image-unsigned-5.0.0-050000-generic_5.0.0-050000.201903032031_amd64.deb
      - ubuntu/packages/Ubuntu-18.04/linux-headers-5.0.0-050000_5.0.0-050000.201903032031_all.deb
      - ubuntu/packages/Ubuntu-18.04/linux-modules-extra-5.0.0-050000-generic_5.0.0-050000.201903032031_amd64.deb
      - ubuntu/packages/Ubuntu-18.04/linux-headers-5.0.0-050000-generic_5.0.0-050000.201903032031_amd64.deb
+- name: Update iniramf
+  shell: update-initramfs -u -k 5.0.0-050000-generic
+  when: _apt_install.changed
+- name: Upgrade all apt packages
+  apt: upgrade=dist force_apt_get=yes
+  when: _apt_install.changed
 - name: Ubuntu 18.04 | reboot
   when: (ansible_kernel is version('5.0.0-050000-generic','!='))
   debug:
