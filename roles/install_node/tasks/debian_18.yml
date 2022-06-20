@@ -1,5 +1,22 @@
 ---
 
+- name: Ubuntu 18.04 | kernel SGX 
+  when: (ansible_kernel is version('5.0.0-050000-generic','!='))
+  apt: deb={{item}}
+  with_items:
+     - ubuntu/packages/Ubuntu-18.04/linux-modules-5.0.0-050000-generic_5.0.0-050000.201903032031_amd64.deb
+     - ubuntu/packages/Ubuntu-18.04/linux-image-unsigned-5.0.0-050000-generic_5.0.0-050000.201903032031_amd64.deb
+     - ubuntu/packages/Ubuntu-18.04/linux-headers-5.0.0-050000_5.0.0-050000.201903032031_all.deb
+     - ubuntu/packages/Ubuntu-18.04/linux-modules-extra-5.0.0-050000-generic_5.0.0-050000.201903032031_amd64.deb
+     - ubuntu/packages/Ubuntu-18.04/linux-headers-5.0.0-050000-generic_5.0.0-050000.201903032031_amd64.deb
+- name: Ubuntu 18.04 | reboot
+  when: (ansible_kernel is version('5.0.0-050000-generic','!='))
+  debug:
+    msg: The kernel has been updated, a reboot is required
+- name: Ubuntu 18.04 | exit
+  when: (ansible_kernel is version('5.0.0-050000-generic','!='))
+  meta: end_play
+
 - name: Ubuntu 18.04 | qemu packages
   apt:
     pkg:
