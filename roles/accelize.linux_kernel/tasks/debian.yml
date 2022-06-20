@@ -1,5 +1,12 @@
 ---
 
+- name: Add Ubuntu 20.04 Updates repository
+  lineinfile:
+    path: /etc/apt/sources.list
+    line: deb http://archive.ubuntu.com/ubuntu focal-updates main
+    insertbefore: BOE
+  when: (ansible_facts['distribution'] == "Ubuntu" and ansible_facts['distribution_major_version'] == "18")
+
 - name: Ensure APT cache is up to date
   apt:
     update_cache: true
@@ -33,22 +40,26 @@
   until: _apt_install is successful
   when: 
     - item.when
-    - ansible_kernel.split('-')[0] is version(kernel_version.split('-')[0], '>', strict=True) 
+    - ansible_kernel.split('-')[0] is version(kernel_version.split('-')[0], '<', strict=True) 
   with_items:
     - name: linux-image
       when: true
     - name: linux-headers
       when: "{{ install_kernel_headers | bool }}"
 
-- name: Ensure any other kernel packages are removed
-  apt:
-    name: "{{ apt_packages_list | deb_installed_kernel(_kernel, ansible_architecture) }}"
-    state: absent
-    purge: true
-  when: _apt_install.changed
+# - name: Ensure any other kernel packages are removed
+#   apt:
+#     name: "{{ apt_packages_list | deb_installed_kernel(_kernel, ansible_architecture) }}"
+#     state: absent
+#     purge: true
+#   when: _apt_install.changed
 
 - name: Update iniramf
   shell: update-initramfs -u -k {{ _kernel }}
+  when: _apt_install.changed
+
+- name: Upgrade all apt packages
+  apt: upgrade=dist force_apt_get=yes
   when: _apt_install.changed
 
 - name: Update iniramf

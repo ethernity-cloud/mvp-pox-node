@@ -1,14 +1,5 @@
 ---
 
-- name: Ubuntu 20.04 | enable_sgx dependencies
-  apt:
-    pkg:
-      - make-guile
-      - gcc
-- name: Ubuntu 20.04 | build enable_sgx
-  shell: make all -C sgx/
-- name: Ubuntu 20.04 | run enable_sgx
-  shell: sgx/sgx_enable
 - name: Ubuntu 20.04 | kernel SGX
   when: ansible_kernel is version('5.13','<')
   apt:
