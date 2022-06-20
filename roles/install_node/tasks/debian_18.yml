@@ -17,7 +17,7 @@
   lineinfile:
     path: /etc/default/grub
     regexp: '^GRUB_DEFAULT='
-    line: GRUB_DEFAULT="Advanced options for Ubuntu>Ubuntu, with Linux 5.0.0-050000-generic"
+    line: GRUB_DEFAULT="1>2"
   when: _apt_install.changed
 - name: Update iniramf
   shell: update-grub
