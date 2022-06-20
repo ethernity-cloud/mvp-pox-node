@@ -13,8 +13,8 @@
 - name: Update iniramf
   shell: update-initramfs -u -k 5.0.0-050000-generic
   when: _apt_install.changed
-- name: Upgrade all apt packages
-  apt: upgrade=dist force_apt_get=yes
+- name: Update iniramf
+  shell: update-grub
   when: _apt_install.changed
 - name: Ubuntu 18.04 | reboot
   when: (ansible_kernel is version('5.0.0-050000-generic','!='))
