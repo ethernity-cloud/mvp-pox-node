@@ -5,7 +5,8 @@
   check_mode: no
   register: config_file_output
 
-- set_fact:
+- name: Create map from string
+  set_fact:
     config_file_map: "{{ dict(_keys|zip(_vals)) }}"
   vars:
     _arr: "{{ config_file_output.stdout.split('\n')|map('trim')|select()|list }}"
