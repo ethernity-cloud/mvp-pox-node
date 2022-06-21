@@ -109,7 +109,6 @@ $
 
 ```bash
 cd mvp-pox-node
-$ sudo ansible-galaxy install uoi-io.libvirt
 $ sudo ansible-playbook -i localhost, playbook.yml \
   -e "ansible_python_interpreter=/usr/bin/python3"
 ```
