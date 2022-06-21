@@ -4,7 +4,7 @@ import logging.handlers
 from os.path import expanduser
 from dotenv import load_dotenv
 
-from .utils import HardwareInfoProvider
+from utils import HardwareInfoProvider
 
 load_dotenv()  # take environment variables from .env.
 
@@ -20,10 +20,14 @@ gas_price_value = os.environ.get('GAS_PRICE_VALUE')
 gas_price_measure = os.environ.get('GAS_PRICE_MEASURE')
 
 # constants
-orders_cache_limit = 10000
 abi_filepath = os.path.dirname(os.path.realpath(__file__)) + '/pox.abi'
 uuid_filepath = expanduser("~") + "/opt/etny/node/UUID"
-cache_filepath = os.path.dirname(os.path.realpath(__file__)) + '/cache.txt'
+orders_cache_limit = 10000000
+orders_cache_filepath = os.path.dirname(os.path.realpath(__file__)) + '/orders_cache.txt'
+dpreq_cache_limit = 10000000
+dpreq_filepath = os.path.dirname(os.path.realpath(__file__)) + '/dpreq_cache.txt'
+doreq_cache_limit = 10000000
+doreq_filepath = os.path.dirname(os.path.realpath(__file__)) + '/doreq_cache.txt'
 dp_request_timeout = 60 * 60 * 24
 
 # logger

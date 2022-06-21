@@ -1,17 +1,13 @@
-import os
-import uuid
-import time
 import json
+import os
 import socket
 import subprocess
-import psutil
+import time
+import uuid
 from collections import OrderedDict
 
 import ipfshttpclient
-
-from . import config
-
-logger = config.logger
+import psutil
 
 
 def get_or_generate_uuid(filename):
@@ -26,7 +22,7 @@ def get_or_generate_uuid(filename):
     return _uuid
 
 
-def run_subprocess(args):
+def run_subprocess(args, logger):
     out = subprocess.Popen(args,
                            stdout=subprocess.PIPE,
                            stderr=subprocess.STDOUT)
@@ -37,33 +33,32 @@ def run_subprocess(args):
 
 def retry(func, *func_args, attempts, delay=0):
     for _ in range(attempts):
-        if func(*func_args):
-            return True           # if we succeed we return True
-        time.sleep(delay)
-    return False
+        try:
+            resp = func(*func_args)
+            return True, resp
+        except:
+            time.sleep(delay)
+    return False, None
 
 
 class Storage:
-    @staticmethod
-    def download(data):
+    def __init__(self, ipfs_host, client_connect_url, client_bootstrap_url, logger):
+        ipfs_node = socket.gethostbyname(ipfs_host)
+        self.client = ipfshttpclient.connect(client_connect_url)
+        self.client.bootstrap.add(client_bootstrap_url % ipfs_node)
+        self.logger = logger
+
+    def download(self, data):
         try:
-            ipfsnode = socket.gethostbyname(config.ipfs_host)
-            client = ipfshttpclient.connect(config.client_connect_url)
-            client.bootstrap.add(config.client_bootstrap_url % ipfsnode)
-            # client.swarm.connect('/ip4/%s/tcp/4001/ipfs/QmRBc1eBt4hpJQUqHqn6eA8ixQPD3LFcUDsn6coKBQtia5' % ipfsnode)
-            # bug tracked under https://github.com/ipfs-shipyard/py-ipfs-http-client/issues/246
-            client.get(data)
+            self.client.get(data)
         except Exception as e:
-            logger.error(e)
+            self.logger.error(e)
             return False
         return True
 
-    @staticmethod
-    def download_many(lst):
+    def download_many(self, lst):
         for data in lst:
-            if not Storage.download(data):
-                return False
-        return True
+            self.download(data)
 
 
 class Cache:
@@ -71,7 +66,7 @@ class Cache:
         self.items_limit = items_limit
         self.filepath = filepath
         if not os.path.exists(filepath):
-            os.makedirs(os.path.dirname(filepath))
+            os.makedirs(os.path.dirname(filepath), exist_ok=True)
             self.mem = OrderedDict({})
             self._update_file()
             return
