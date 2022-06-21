@@ -36,7 +36,7 @@ handler = logging.handlers.RotatingFileHandler('/var/log/etny-node.log', maxByte
 formatter = logging.Formatter('%(asctime)s %(message)s')
 handler.setFormatter(formatter)
 logger.addHandler(handler)
-logger.setLevel(logging.INFO)
+logger.setLevel(logging.DEBUG)
 
 # parser
 parser = argparse.ArgumentParser(description="Ethernity PoX request")
