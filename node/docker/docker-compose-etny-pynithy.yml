@@ -2,11 +2,13 @@ version: '3.7'
 
 services:
   etny-pynithy:
-    image: localhost:5000/iosif/etny-pynithy
+    build:
+      context: .
+      dockerfile: etny-pynithy.Dockerfile
     stdin_open: true
     tty: true
-    volumes:
-      - .:/myapp
+#    volumes:
+#      - .:/myapp
     devices:
       - /dev/isgx
     environment:
@@ -16,4 +18,3 @@ services:
       - SCONE_ALPINE=0
       - SCONE_VERSION=1
       - SCONE_LOG=0
-    working_dir: /myapp
