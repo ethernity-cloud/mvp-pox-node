@@ -28,7 +28,7 @@ hash=`./ipfs add results.txt -q`
 
 ./ipfs pin add $hash 2>&1 > /dev/null
 
-python /etny-result.py -o $1 -r $hash -p $4 -k $5a6f8ceabd9a5
+python /etny-result.py -o $1 -r $hash -p $4 -k $5
 
 until ./ipfs swarm connect /ip4/$IP/tcp/4001/ipfs/QmRBc1eBt4hpJQUqHqn6eA8ixQPD3LFcUDsn6coKBQtia5
 do
