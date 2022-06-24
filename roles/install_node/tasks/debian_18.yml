@@ -15,7 +15,7 @@
     path: /etc/default/grub
     regexp: '^GRUB_DEFAULT='
     line: GRUB_DEFAULT='Advanced options for Ubuntu>Ubuntu, with Linux 5.0.0-050000-generic'
-  when: _apt_install.changed
+  when: (ansible_kernel is version('5.0.0-050000-generic','!='))
 - name: Update grub
   shell: update-grub
   when: _apt_install.changed
