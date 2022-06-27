@@ -11,10 +11,6 @@
 - name: Ubuntu 20.04 | exit
   when: ansible_kernel is version('5.13','<')
   meta: end_play
-- name: Ubuntu 20.04 | qemu repo
-  ansible.builtin.apt_repository:
-    repo: 'ppa:savoury1/virtualisation'
-    codename: focal
 - name: Ubuntu 20.04 | qemu packages
   apt:
     default_release: jammy-updates
@@ -64,12 +60,10 @@
   when: (ansible_facts['distribution'] == "Ubuntu" and ansible_facts['distribution_major_version'] == "22")
 - name: Ubuntu 20.04 | qemu SGX
   apt:
-    pkg: "{{item}}"
-    default_release: jammy-updates
-    allow-downgrades: yes
+    deb: "{{item}}"
   with_items:
-     - qemu-system-common
-     - qemu-system-x86
+     - ubuntu/packages/Ubuntu-22.04/qemu-system-common_6.2+dfsg-2ubuntu6_amd64.deb
+     - ubuntu/packages/Ubuntu-22.04/qemu-system-x86_6.2+dfsg-2ubuntu6_amd64.deb
 - name: "Installing qemu-utils"
   apt:
     pkg:
