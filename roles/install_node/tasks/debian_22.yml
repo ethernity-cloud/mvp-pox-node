@@ -31,7 +31,6 @@
        - virtinst
        - virt-top
        - genisoimage
-       - mc
     state: present
 - name:  Ubuntu 22.04 | vagrant add key  
   apt_key:
