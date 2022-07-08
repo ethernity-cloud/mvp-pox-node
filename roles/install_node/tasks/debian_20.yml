@@ -34,7 +34,6 @@
        - virtinst
        - virt-top
        - genisoimage
-       - mc
     state: present
 - name:  Ubuntu 20.04 | vagrant add key  
   apt_key:
