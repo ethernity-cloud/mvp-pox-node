@@ -33,7 +33,7 @@
     msg: "Result private key must be different than the node private key. Try a different private key..."
   when: config_file_map.PRIVATE_KEY == config_file_map.RESULT_PRIVATE_KEY
 
-- name: Get error massage
+- name: Get error message
   debug:
     msg: "{{ result.json.error }}"
   when: result.json.error is defined
