@@ -34,6 +34,7 @@ Currently the following operating systems are suported:
 ```
 Ubuntu 18.04
 Ubuntu 20.04
+Ubuntu 22.04
 
 ```
 
