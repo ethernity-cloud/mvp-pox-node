@@ -1,0 +1,45 @@
+---
+
+dependency:
+  name: galaxy
+
+driver:
+  name: docker
+
+platforms:
+  - name: centos_7
+    image: centos:7
+  - name: centos_8
+    image: quay.io/centos/centos:stream8
+  - name: debian_buster
+    image: debian:buster
+  - name: ubuntu_bionic
+    image: ubuntu:bionic
+
+provisioner:
+  name: ansible
+  lint:
+    name: ansible-lint
+  inventory:
+    host_vars:
+      # Warning: Always specify a version: bad version detected from container
+      centos_7:
+        kernel_version: "3.10.0-693"
+      centos_8:
+        kernel_version: "4.18.0"
+      ubuntu_bionic:
+        kernel_version: "4.15"
+        kernel_variant: generic
+      debian_buster:
+        kernel_version: 4.19.0
+        kernel_variant: common
+
+verifier:
+  name: testinfra
+
+scenario:
+  test_sequence:
+    - create
+    - converge
+    - idempotence
+    - verify

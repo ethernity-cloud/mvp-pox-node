@@ -34,6 +34,7 @@ Currently the following operating systems are suported:
 ```
 Ubuntu 18.04
 Ubuntu 20.04
+Ubuntu 22.04
 
 ```
 
@@ -108,8 +109,7 @@ $
 ### 5. Start the node
 
 ```bash
-cd mvp-pox-node
-$ sudo ansible-galaxy install uoi-io.libvirt
+$ cd mvp-pox-node
 $ sudo ansible-playbook -i localhost, playbook.yml \
   -e "ansible_python_interpreter=/usr/bin/python3"
 ```
@@ -128,4 +128,13 @@ Service status can be seen by running the below command.
 
 ```
 systemctl status etny-vagrant.service
+```
+### 7. For Ubuntu 20.04 installations only if you'd like to upgrade the virtual machine from Ubuntu 18.04 to 22.04
+
+Please run the commands below
+```
+$ cd && cd mvp-pox-node
+$ git pull 
+$ sudo ansible-playbook -i localhost, playbook.yml \
+  -e "ansible_python_interpreter=/usr/bin/python3"
 ```

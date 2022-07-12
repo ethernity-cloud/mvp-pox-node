@@ -1,0 +1,15 @@
+---
+# file: roles/libvirt/tasks/install.yml
+- name: Installing libvirt packages
+  package:
+    name={{ item }}
+    state=latest
+  with_items: "{{ libvirt_packages }}"
+
+- name: Enabling and starting libvirtd service
+  service:
+    name=libvirtd
+    state=started
+    enabled=yes
+
+- meta: flush_handlers
