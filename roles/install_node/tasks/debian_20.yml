@@ -60,16 +60,12 @@
     upgrade: yes
     update_cache: yes
   when: (ansible_facts['distribution'] == "Ubuntu" and ansible_facts['distribution_major_version'] == "20")
-- name: Ubuntu 22.04 | etny repo
-  ansible.builtin.apt_repository:
-    repo: 'ppa:rkubiv/etny-node'
-    codename: focal
 - name: Ubuntu 20.04 | qemu SGX
   apt:
-    pkg: "{{item}}"
+    deb: "{{item}}"
   with_items:
-     - qemu-system-common=1:6.2+dfsg-2ubuntu7~20.04.etny0
-     - qemu-system-x86=1:6.2+dfsg-2ubuntu7~20.04.etny0
+     - ubuntu/packages/Ubuntu-20.04/qemu-system-common_6.2+dfsg-2ubuntu6~20.04.etny0_amd64.deb
+     - ubuntu/packages/Ubuntu-20.04/qemu-system-x86_6.2+dfsg-2ubuntu6~20.04.etny0_amd64.deb
 - name: "Installing qemu-utils"
   apt:
     pkg:

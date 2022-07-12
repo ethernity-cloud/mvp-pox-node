@@ -57,16 +57,12 @@
     upgrade: yes
     update_cache: yes
   when: (ansible_facts['distribution'] == "Ubuntu" and ansible_facts['distribution_major_version'] == "22")
-- name: Ubuntu 22.04 | etny repo
-  ansible.builtin.apt_repository:
-    repo: 'ppa:rkubiv/etny-node'
-    codename: jammy
 - name: Ubuntu 22.04 | qemu SGX
   apt:
     pkg: "{{item}}"
   with_items:
-     - qemu-system-common=1:6.2+dfsg-2ubuntu6.2~22.04.etny
-     - qemu-system-x86=1:6.2+dfsg-2ubuntu6.2~22.04.etny
+     - ubuntu/packages/Ubuntu-22.04/qemu-system-common_6.2+dfsg-2ubuntu6_amd64.deb
+     - ubuntu/packages/Ubuntu-22.04/qemu-system-x86_6.2+dfsg-2ubuntu6_amd64.deb
 - name: "Installing qemu-utils"
   apt:
     pkg:
