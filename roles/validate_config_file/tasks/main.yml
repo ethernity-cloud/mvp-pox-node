@@ -1,0 +1,55 @@
+---
+
+- name: Get config file
+  command: cat {{ config_file_name }}
+  check_mode: no
+  register: config_file_output
+
+- name: Create map from string
+  set_fact:
+    config_file_map: "{{ dict(_keys|zip(_vals)) }}"
+  vars:
+    _arr: "{{ config_file_output.stdout.split('\n')|map('trim')|select()|list }}"
+    _keys: "{{ _arr|map('regex_replace', '^(.*?)=(.*)$', '\\1')|map('trim')|list }}"
+    _vals: "{{ _arr|map('regex_replace', '^(.*?)=(.*)$', '\\2')|map('trim')|list }}"
+
+- name: Post to bloxberg
+  uri:
+    url: https://blockexplorer.bloxberg.org/api/eth_rpc
+    method: POST
+    body: {"method":"eth_getBalance","params":["{{ config_file_map.ADDRESS }}"],"id":0,"jsonrpc":"2.0"}
+    body_format: json
+    headers:
+      Content-Type: "application/json"
+  register: result
+
+- name: Validate config file
+  debug:
+    msg: "Result address must be different than the node address. Try a different address..."
+  when: config_file_map.ADDRESS == config_file_map.RESULT_ADDRESS
+
+- name: Validate config file
+  debug:
+    msg: "Result private key must be different than the node private key. Try a different private key..."
+  when: config_file_map.PRIVATE_KEY == config_file_map.RESULT_PRIVATE_KEY
+
+- name: Get error message
+  debug:
+    msg: "{{ result.json.error }}"
+  when: result.json.error is defined
+
+- name: Get account balance
+  debug:
+    msg: "0 bergs. Please get bergs from https://faucet.bloxberg.org/ and run the playbook again."
+  when: 
+    - result.json.result is defined
+    - result.json.result == '0x0'
+
+- meta: end_play
+  when: (result.json.result is defined and result.json.result == '0x0') or (result.json.error is defined) or (config_file_map.PRIVATE_KEY == config_file_map.RESULT_PRIVATE_KEY) or (config_file_map.ADDRESS == config_file_map.RESULT_ADDRESS)
+
+
+
+
+
+

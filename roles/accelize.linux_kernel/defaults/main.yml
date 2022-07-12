@@ -1,0 +1,9 @@
+---
+# Install kernel headers
+install_kernel_headers: true
+
+# Kernel version to install (Default to any version)
+kernel_version: ''
+
+# Reboot if kernel was updated
+reboot_on_kernel_update: true

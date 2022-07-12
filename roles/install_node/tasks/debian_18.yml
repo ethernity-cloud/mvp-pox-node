@@ -1,0 +1,94 @@
+---
+
+- name: Ubuntu 18.04 | kernel SGX 
+  when: (ansible_kernel is version('5.0.0-050000-generic','!='))
+  apt: deb={{item}}
+  register: _apt_install
+  with_items:
+     - ubuntu/packages/Ubuntu-18.04/linux-modules-5.0.0-050000-generic_5.0.0-050000.201903032031_amd64.deb
+     - ubuntu/packages/Ubuntu-18.04/linux-image-unsigned-5.0.0-050000-generic_5.0.0-050000.201903032031_amd64.deb
+     - ubuntu/packages/Ubuntu-18.04/linux-headers-5.0.0-050000_5.0.0-050000.201903032031_all.deb
+     - ubuntu/packages/Ubuntu-18.04/linux-modules-extra-5.0.0-050000-generic_5.0.0-050000.201903032031_amd64.deb
+     - ubuntu/packages/Ubuntu-18.04/linux-headers-5.0.0-050000-generic_5.0.0-050000.201903032031_amd64.deb
+- name: Change default grub menu
+  lineinfile:
+    path: /etc/default/grub
+    regexp: '^GRUB_DEFAULT='
+    line: GRUB_DEFAULT='Advanced options for Ubuntu>Ubuntu, with Linux 5.0.0-050000-generic'
+  when: (ansible_kernel is version('5.0.0-050000-generic','!='))
+- name: Update grub
+  shell: update-grub
+  when: _apt_install.changed
+- name: Ubuntu 18.04 | reboot
+  when: (ansible_kernel is version('5.0.0-050000-generic','!='))
+  debug:
+    msg: The kernel has been updated, a reboot is required
+- name: Ubuntu 18.04 | exit
+  when: (ansible_kernel is version('5.0.0-050000-generic','!='))
+  meta: end_play
+
+- name: Ubuntu 18.04 | qemu packages
+  apt:
+    pkg:
+      - policycoreutils-python-utils
+      - libvirt-clients
+      - libvirt-daemon-system
+      - bridge-utils
+      - python3-libvirt
+      - libnss-libvirt
+      - libguestfs-tools
+      - virtinst
+      - virt-top
+      - genisoimage
+      - libgbm1 
+      - libvirglrenderer0 
+      - libwayland-server0
+      - qemu-slof
+      - binfmt-support
+    state: present
+- name:  Ubuntu 18.04 | vagrant add key  
+  apt_key:
+    url: https://apt.releases.hashicorp.com/gpg
+- name:  Ubuntu 18.04 | vagrant repo
+  apt_repository:
+    repo: "deb [arch=amd64] https://apt.releases.hashicorp.com {{ ansible_distribution_release }} main"
+- name:  Ubuntu 18.04 | vagrant install
+  apt:
+    pkg:
+    - vagrant
+- name: Ubuntu 18.04 | qemu SGX
+  apt:
+    deb: "{{item}}"
+    force: yes
+  with_items:
+     - ubuntu/packages/Ubuntu-18.04/libcacard0_2.5.1-etny_amd64.deb
+     - ubuntu/packages/Ubuntu-18.04/qemu-block-extra_3.1.0r1-etny_amd64.deb
+     - ubuntu/packages/Ubuntu-18.04/qemu-system-common_3.1.0r1-etny_amd64.deb
+     - ubuntu/packages/Ubuntu-18.04/qemu-system-data_3.1.0r1-etny_all.deb
+     - ubuntu/packages/Ubuntu-18.04/qemu-system-mips_3.1.0r1-etny_amd64.deb
+     - ubuntu/packages/Ubuntu-18.04/qemu-system-misc_3.1.0r1-etny_amd64.deb
+     - ubuntu/packages/Ubuntu-18.04/qemu-system-ppc_3.1.0r1-etny_amd64.deb
+     - ubuntu/packages/Ubuntu-18.04/qemu-system-x86_3.1.0r1-etny_amd64.deb
+     - ubuntu/packages/Ubuntu-18.04/qemu-system-s390x_3.1.0r1-etny_amd64.deb
+     - ubuntu/packages/Ubuntu-18.04/qemu-system-sparc_3.1.0r1-etny_amd64.deb
+     - ubuntu/packages/Ubuntu-18.04/qemu-system-arm_3.1.0r1-etny_amd64.deb
+     - ubuntu/packages/Ubuntu-18.04/qemu-kvm_3.1.0r1-etny_amd64.deb
+     - ubuntu/packages/Ubuntu-18.04/qemu-system_3.1.0r1-etny_amd64.deb
+     - ubuntu/packages/Ubuntu-18.04/qemu-user_3.1.0r1-etny_amd64.deb
+     - ubuntu/packages/Ubuntu-18.04/qemu-user-binfmt_3.1.0r1-etny_amd64.deb
+     - ubuntu/packages/Ubuntu-18.04/qemu-utils_3.1.0r1-etny_amd64.deb
+     - ubuntu/packages/Ubuntu-18.04/qemu_3.1.0r1-etny_amd64.deb
+- name: Ubuntu 18.04 | vagrant-libvirt packages
+  apt:
+    pkg:
+    - ebtables
+    - dnsmasq-base
+    - libxslt-dev
+    - libxml2-dev
+    - libvirt-dev
+    - zlib1g-dev
+    - ruby-dev
+- name: Ubuntu 18.04 | vagrant template
+  copy:
+    src: vagrant/qemu-3.1
+    dest: Vagrantfile

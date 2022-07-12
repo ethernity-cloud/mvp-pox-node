@@ -1,0 +1,8 @@
+---
+- name: Converge
+  hosts: all
+  strategy: free
+  roles:
+    - role: ansible-role-linux-kernel
+  vars:
+    reboot_on_kernel_update: false

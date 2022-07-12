@@ -1,0 +1,8 @@
+---
+# file: roles/libvirt/tasks/selinux.yml
+- name: Labeling SELinux port for libvirt
+  seport:
+    ports={{ libvirt_port }}
+    proto=tcp
+    setype=virt_port_t
+    state=present
