@@ -1,6 +1,6 @@
 #!/bin/bash
 configfile="config"
-nodefolder="/home/rkubiv/codemotion/eth-node/mvp-pox-node"
+nodefolder="eth-node/mvp-pox-node"
 
 check_wallets(){
 #checking if wallets are valid and how much bergs there are in the wallets
