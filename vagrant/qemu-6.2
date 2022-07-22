@@ -42,7 +42,7 @@ Vagrant.configure("2") do |config|
       :mode => 'vepa',
       :type => 'direct'
     etnyvm1.vm.provision "file", source: "./ubuntu/etny-node-provision-docker.sh", destination: "~/etny/node/etny-node-provision-docker.sh"
-    etnyvm1.vm.provision "file", source: "./ubuntu/etny-node-provision-sgx-ubuntu22.sh", destination: "~/etny/node/etny-node-provision-sgx.sh"
+    etnyvm1.vm.provision "file", source: "./ubuntu/etny-node-provision-sgx.sh", destination: "~/etny/node/etny-node-provision-sgx.sh"
     etnyvm1.vm.provision "file", source: "./ubuntu/etny-node-provision-python.sh", destination: "~/etny/node/etny-node-provision-python.sh"
     etnyvm1.vm.provision "file", source: "./ubuntu/etny-node-provision-ipfs.sh", destination: "~/etny/node/etny-node-provision-ipfs.sh"
     etnyvm1.vm.provision "file", source: "./ubuntu/etny-node-provision-etny.sh", destination: "~/etny/node/etny-node-provision-etny.sh"
