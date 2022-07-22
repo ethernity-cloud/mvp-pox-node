@@ -1,6 +1,10 @@
 ---
 
+- name: Populate service facts
+  service_facts:
+
 - include_tasks: "{{ ansible_os_family | lower() }}_{{ ansible_distribution_major_version }}.yml"
+  when: ansible_facts.services['etny-vagrant.service'].state != 'running'
 
 - name: Ubuntu 20.04 | enable_sgx dependencies
   apt:
@@ -11,6 +15,17 @@
   shell: make all -C sgx/
 - name: Ubuntu 20.04 | run enable_sgx
   shell: sgx/sgx_enable
+  register: sgx_register
+- name: "Print message"
+  debug:
+    msg: '{{ sgx_register.stdout }}'
+- name: SGX check reboot
+  when: sgx_register.stdout == 'Software enable has been set. Please reboot your system.'
+  debug:
+    msg: The software enabling procedure completed successfully. Once your system is rebooted Intel SGX will be available for use. After reboot run the ansible-playbook again.
+- name: SGX check reboot
+  when: sgx_register.stdout == 'Software enable has been set. Please reboot your system.'
+  meta: end_play
 - name: apparmor - enable sgx support for libvirt qemu
   copy:
     src: ubuntu/etc/apparmor.d/libvirt/TEMPLATE.qemu
@@ -21,10 +36,10 @@
   shell: vagrant plugin install vagrant-reload
 - name: vagrant - cleanup VM
   shell: vagrant destroy -f
-- name: vagrant - cleanup VM 2
-  command: vagrant destroy -f  
+  when: ansible_facts.services['etny-vagrant.service'].state != 'running'
 - name: vagrant - provision VM
   shell: vagrant up --provider=libvirt
+  when: ansible_facts.services['etny-vagrant.service'].state != 'running'
 - name: startup - set etny-vagrant configuration
   shell: echo "ETNY_PATH=${PWD}" > /etc/default/etny-vagrant
 - name: Copy vagrant dir to root
