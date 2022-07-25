@@ -138,7 +138,7 @@ ubuntu_20_04_ansible_playbook(){
 echo "Running ansible-playbook..."
 cd && cd $nodefolder
 sudo -E ansible-playbook -i localhost, playbook.yml -e "ansible_python_interpreter=/usr/bin/python3"
-if [[ ($? -eq 0 && $os = "Ubuntu 18.04") ]]
+if [ $? -eq 0 ]
 then 
 	echo "Restarting system. Please run the installer script afterwards to continue the setup."
 	sec=30
