@@ -20,11 +20,11 @@
   debug:
     msg: '{{ sgx_register.stdout }}'
 - name: SGX check reboot
-  when: sgx_register.stdout == 'Software enable has been set. Please reboot your system.'
+  when: "'Software enable has been set.' in {{ sgx_register.stdout }}"
   debug:
     msg: The software enabling procedure completed successfully. Once your system is rebooted Intel SGX will be available for use. After reboot run the ansible-playbook again.
 - name: SGX check reboot
-  when: sgx_register.stdout == 'Software enable has been set. Please reboot your system.'
+  when: "'Software enable has been set.' in {{ sgx_register.stdout }}"
   meta: end_play
 - name: apparmor - enable sgx support for libvirt qemu
   copy:
