@@ -13,7 +13,6 @@
   meta: end_play
 - name: Ubuntu 22.04 | qemu packages
   apt:
-    default_release: jammy-updates
     pkg:
        - policycoreutils-python-utils
        - qemu-utils
