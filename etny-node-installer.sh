@@ -33,7 +33,7 @@ then
 	echo "The right kernel is running. Continuing setup..."
 	## check ansible 
 	echo "Check ansible version..." 
-	ANSIBLE_VERSION=`ansible --version 2> /dev/null`
+	ANSIBLE_VERSION=`ansible --version 2> /dev/null || echo ""`
 	if [[ $ANSIBLE_VERSION = "" ]]; then echo "Installing latest ansible version..." && sudo apt-add-repository --yes --update ppa:ansible/ansible && sudo apt update && sudo apt -y install software-properties-common ansible; fi
 	if [ -f $configfile ]
 	then
