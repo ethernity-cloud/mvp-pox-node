@@ -32,8 +32,6 @@
 - name: vagrant-preload - install
   shell: vagrant plugin install vagrant-reload
 - name: vagrant - cleanup VM
-  shell: vagrant destroy -f
-- name: vagrant - cleanup VM
   shell: virsh list --name
   register: vagrant_vm_name
 - name: vagrant - cleanup VM
@@ -42,6 +40,8 @@
 - name: vagrant - cleanup VM
   shell: virsh shutdown {{ vagrant_vm_name.stdout }}
   when: vagrant_vm_name.stdout != ''
+- name: vagrant - cleanup VM
+  shell: vagrant destroy -f
   #when: ansible_facts.services['etny-vagrant.service'].state != 'running'
 - name: vagrant - provision VM
   shell: vagrant up --provider=libvirt
