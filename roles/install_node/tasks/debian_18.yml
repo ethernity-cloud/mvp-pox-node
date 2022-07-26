@@ -23,6 +23,12 @@
   when: (ansible_kernel is version('5.0.0-050000-generic','!='))
   debug:
     msg: The kernel has been updated, a reboot is required
+- name: Ubuntu 18.04 | reboot
+  when: (ansible_kernel is version('5.0.0-050000-generic','!='))
+  copy:
+    content: "yes"
+    dest: /tmp/reboot
+    mode: '0666'
 - name: Ubuntu 18.04 | exit
   when: (ansible_kernel is version('5.0.0-050000-generic','!='))
   meta: end_play
