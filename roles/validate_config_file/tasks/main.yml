@@ -15,10 +15,10 @@
 
 - name: Post to bloxberg
   uri:
-    url: https://blockexplorer.bloxberg.org/api/eth_rpc
-    method: POST
-    body: {"method":"eth_getBalance","params":["{{ config_file_map.ADDRESS }}"],"id":0,"jsonrpc":"2.0"}
-    body_format: json
+    url: https://blockexplorer.bloxberg.org/api?module=account&action=balance&address={{ config_file_map.ADDRESS }}
+    method: GET
+    #body: {"method":"eth_getBalance","params":["{{ config_file_map.ADDRESS }}"],"id":0,"jsonrpc":"2.0"}
+    #body_format: json
     headers:
       Content-Type: "application/json"
   register: result
@@ -35,18 +35,18 @@
 
 - name: Get error message
   debug:
-    msg: "{{ result.json.error }}"
-  when: result.json.error is defined
+    msg: "{{ result.json.message }}"
+  when: result.json.message is defined
 
 - name: Get account balance
   debug:
     msg: "0 bergs. Please get bergs from https://faucet.bloxberg.org/ and run the playbook again."
   when: 
     - result.json.result is defined
-    - result.json.result == '0x0'
+    - result.json.result == '0'
 
 - meta: end_play
-  when: (result.json.result is defined and result.json.result == '0x0') or (result.json.error is defined) or (config_file_map.PRIVATE_KEY == config_file_map.RESULT_PRIVATE_KEY) or (config_file_map.ADDRESS == config_file_map.RESULT_ADDRESS)
+  when: (result.json.result is defined and result.json.result == '0') or (result.json.message is defined) or (config_file_map.PRIVATE_KEY == config_file_map.RESULT_PRIVATE_KEY) or (config_file_map.ADDRESS == config_file_map.RESULT_ADDRESS)
 
 
 
