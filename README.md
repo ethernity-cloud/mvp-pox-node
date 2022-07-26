@@ -129,7 +129,7 @@ Service status can be seen by running the below command.
 ```
 systemctl status etny-vagrant.service
 ```
-### 7. For Ubuntu 20.04 installations only if you'd like to upgrade the virtual machine from Ubuntu 18.04 to 22.04
+### 7. For Ubuntu 18.04 and 20.04 installations if you'd like to upgrade the virtual machine from Ubuntu 18.04 to 22.04
 
 Please run the commands below
 ```
