@@ -17,8 +17,6 @@
   uri:
     url: https://blockexplorer.bloxberg.org/api?module=account&action=balance&address={{ config_file_map.ADDRESS }}
     method: GET
-    #body: {"method":"eth_getBalance","params":["{{ config_file_map.ADDRESS }}"],"id":0,"jsonrpc":"2.0"}
-    #body_format: json
     headers:
       Content-Type: "application/json"
   register: result
