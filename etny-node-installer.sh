@@ -2,6 +2,7 @@
 requiredkernelversion="5.13.0-40"
 nodefolder=$(pwd)
 configfile="config"
+rebootfile="/tmp/reboot"
 service="etny-vagrant.service"
 os=""
 
@@ -43,15 +44,16 @@ then
 		ubuntu_20_04_config_file_choice
 	fi
 	echo "Running ansible-playbook script..."	
+	echo $rebootfile
 	sudo -E ansible-playbook -i localhost, playbook.yml -e "ansible_python_interpreter=/usr/bin/python3"	
-	if [ $? -eq 0 ]
+	if [ -f $rebootfile ]
 	then 
-		echo "Node installation completed successfully. Please allow up to 24h to see transactions on the blockchain. " && exit
-	else
 		echo "Restarting system. Please run the installer script afterwards to continue the setup."
 		sec=30
 		while [ $sec -ge 0 ]; do echo -n "Restarting system in [CTRL+C to cancel]: " && echo -ne "$sec\033[0K\r" && let "sec=sec-1" && sleep 1; done
 		sudo reboot
+	else
+		echo "Node installation completed successfully. Please allow up to 24h to see transactions on the blockchain. " && exit
 	fi
 else 
 	ubuntu_20_04_update_ansible
@@ -138,14 +140,14 @@ ubuntu_20_04_ansible_playbook(){
 echo "Running ansible-playbook..."
 cd && cd $nodefolder
 sudo -E ansible-playbook -i localhost, playbook.yml -e "ansible_python_interpreter=/usr/bin/python3"
-if [ $? -eq 0 ]
+if [ -f $rebootfile ]
 then 
-	echo "Node installation completed successfully. Please allow up to 24h to see transactions on the blockchain. " && exit
-else 
 	echo "Restarting system. Please run the installer script afterwards to continue the setup."
 	sec=30
 	while [ $sec -ge 0 ]; do echo -n "Restarting system in [CTRL+C to cancel]: " && echo -ne "$sec\033[0K\r" && let "sec=sec-1" && sleep 1; done
 	sudo reboot
+else
+	echo "Node installation completed successfully. Please allow up to 24h to see transactions on the blockchain. " && exit
 fi
 }
 
