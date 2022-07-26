@@ -32,13 +32,13 @@
 - name: vagrant-preload - install
   shell: vagrant plugin install vagrant-reload
 - name: vagrant - cleanup VM
-  shell: virsh list --name
+  shell: virsh list --name --all
   register: vagrant_vm_name
 - name: vagrant - cleanup VM
-  shell: virsh undefine {{ vagrant_vm_name.stdout }}
+  shell: virsh shutdown {{ vagrant_vm_name.stdout }}
   when: vagrant_vm_name.stdout != ''
 - name: vagrant - cleanup VM
-  shell: virsh shutdown {{ vagrant_vm_name.stdout }}
+  shell: virsh undefine {{ vagrant_vm_name.stdout }}
   when: vagrant_vm_name.stdout != ''
 - name: vagrant - cleanup VM
   shell: vagrant destroy -f
