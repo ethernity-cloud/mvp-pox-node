@@ -56,7 +56,7 @@
   apt:
     pkg:
     - vagrant
-    clean: yes
+    autoclean: yes
     update_cache: yes
 - name: Ubuntu 18.04 | qemu SGX
   apt:
