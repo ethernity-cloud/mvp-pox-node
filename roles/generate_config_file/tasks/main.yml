@@ -19,6 +19,7 @@
   copy:
     content: "ADDRESS={{ ethkey_map.address }}"
     dest: "{{ config_file_name }}"
+    mode: '0666'
 
 - name: Write private key to config file
   lineinfile:

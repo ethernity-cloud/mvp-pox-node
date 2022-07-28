@@ -1,6 +1,10 @@
 ---
 
+- name: Populate service facts
+  service_facts:
+
 - include_tasks: "{{ ansible_os_family | lower() }}_{{ ansible_distribution_major_version }}.yml"
+  #when: ansible_facts.services['etny-vagrant.service'].state != 'running'
 
 - name: Ubuntu 20.04 | enable_sgx dependencies
   apt:
@@ -11,6 +15,14 @@
   shell: make all -C sgx/
 - name: Ubuntu 20.04 | run enable_sgx
   shell: sgx/sgx_enable
+  register: sgx_register
+- name: "Print message"
+  debug:
+    msg: '{{ sgx_register.stdout }}'
+- name: SGX check reboot
+  failed_when: "('Software enable has been set.' in sgx_register.stdout) or ('The software enable has been performed on this system' in sgx_register.stdout)"
+  debug:
+    msg: The software enabling procedure completed successfully. 
 - name: apparmor - enable sgx support for libvirt qemu
   copy:
     src: ubuntu/etc/apparmor.d/libvirt/TEMPLATE.qemu
@@ -20,11 +32,20 @@
 - name: vagrant-preload - install
   shell: vagrant plugin install vagrant-reload
 - name: vagrant - cleanup VM
+  shell: virsh list --name --all
+  register: vagrant_vm_name
+- name: vagrant - cleanup VM
+  shell: virsh shutdown {{ vagrant_vm_name.stdout }}
+  when: vagrant_vm_name.stdout != ''
+- name: vagrant - cleanup VM
+  shell: virsh undefine {{ vagrant_vm_name.stdout }}
+  when: vagrant_vm_name.stdout != ''
+- name: vagrant - cleanup VM
   shell: vagrant destroy -f
-- name: vagrant - cleanup VM 2
-  command: vagrant destroy -f  
+  #when: ansible_facts.services['etny-vagrant.service'].state != 'running'
 - name: vagrant - provision VM
   shell: vagrant up --provider=libvirt
+  #when: ansible_facts.services['etny-vagrant.service'].state != 'running'
 - name: startup - set etny-vagrant configuration
   shell: echo "ETNY_PATH=${PWD}" > /etc/default/etny-vagrant
 - name: Copy vagrant dir to root
