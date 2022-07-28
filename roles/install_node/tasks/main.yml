@@ -20,9 +20,18 @@
   debug:
     msg: '{{ sgx_register.stdout }}'
 - name: SGX check reboot
-  failed_when: "('Software enable has been set.' in sgx_register.stdout) or ('The software enable has been performed on this system' in sgx_register.stdout)"
+  when: "('Software enable has been set.' in sgx_register.stdout) or ('The software enable has been performed on this system' in sgx_register.stdout)"
   debug:
-    msg: The software enabling procedure completed successfully. 
+    msg: "The software enabling procedure completed successfully."
+- name: SGX reboot
+  when: "('Software enable has been set.' in sgx_register.stdout) or ('The software enable has been performed on this system' in sgx_register.stdout)"
+  copy:
+    content: "yes"
+    dest: /tmp/reboot
+    mode: '0666'
+- name: SGX reboot
+  when: "('Software enable has been set.' in sgx_register.stdout) or ('The software enable has been performed on this system' in sgx_register.stdout)"
+  meta: end_play
 - name: apparmor - enable sgx support for libvirt qemu
   copy:
     src: ubuntu/etc/apparmor.d/libvirt/TEMPLATE.qemu
