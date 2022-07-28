@@ -8,6 +8,12 @@
   when: ansible_kernel is version('5.13','<')
   debug:
     msg: The kernel has been updated, a reboot is required
+- name: Ubuntu 22.04 | reboot
+  when: ansible_kernel is version('5.13','<')
+  copy:
+    content: "yes"
+    dest: /tmp/reboot
+    mode: '0666'
 - name: Ubuntu 22.04 | exit
   when: ansible_kernel is version('5.13','<')
   meta: end_play
