@@ -2,7 +2,7 @@ version: '3.7'
 
 services:
   etny-pynithy:
-    image: localhost:5000/iosif/etny-pynithy
+    image: localhost:5000/$IMAGE_PATH
     stdin_open: true
     tty: true
     volumes:
@@ -17,3 +17,4 @@ services:
       - SCONE_VERSION=1
       - SCONE_LOG=0
     working_dir: /myapp
+    
