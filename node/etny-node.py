@@ -152,7 +152,7 @@ class EtnyPoXNode:
 
         logger.info("Running docker-compose")
         run_subprocess([
-             'docker-compose', '--env-file', 'docker/.env.andrei', '-f', 'docker/docker-compose-etny-pynithy.yml', 'run', '--rm', '-d', '--name',
+             'docker-compose', '-f', 'docker/docker-compose-etny-pynithy.yml', 'run', '--rm', '-d', '--name',
              'etny-pynithy-' + str(order_id), 'etny-pynithy', str(order_id), metadata[2], metadata[3],
              self.__resultaddress, self.__resultprivatekey, config.contract_address
         ], logger)

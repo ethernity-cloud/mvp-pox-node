@@ -2,7 +2,7 @@ version: '3.7'
 
 services:
   etny-pynithy:
-    image: localhost:5000/$IMAGE_PATH
+    image: localhost:5000/iosif/etny-pynithy
     stdin_open: true
     tty: true
     volumes:
