@@ -118,11 +118,11 @@ case "$choice" in
 
 			esac
 		done
-		echo "ADDRESS="$nodeaddress >> ~/$nodefolder/$configfile
-		echo "PRIVATE_KEY="$nodeprivatekey >> ~/$nodefolder/$configfile
-		echo "RESULT_ADDRESS="$resultaddress >> ~/$nodefolder/$configfile
-		echo "RESULT_PRIVATE_KEY="$resultprivatekey >> ~/$nodefolder/$configfile
-		if [ -f ~/$nodefolder/$configfile ]; then echo "Config file generated successfully. Continuing..." && ubuntu_20_04_kernel_check; else echo "Something went wrong. Seek Help!" && exit; fi
+		echo "ADDRESS="$nodeaddress >> $nodefolder/$configfile
+		echo "PRIVATE_KEY="$nodeprivatekey >> $nodefolder/$configfile
+		echo "RESULT_ADDRESS="$resultaddress >> $nodefolder/$configfile
+		echo "RESULT_PRIVATE_KEY="$resultprivatekey >> $nodefolder/$configfile
+		if [ -f $nodefolder/$configfile ]; then echo "Config file generated successfully. Continuing..." && ubuntu_20_04_kernel_check; else echo "Something went wrong. Seek Help!" && exit; fi
 	;;
 	2) 
 		export FILE=generate
