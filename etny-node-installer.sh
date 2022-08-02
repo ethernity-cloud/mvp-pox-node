@@ -44,7 +44,6 @@ then
 		ubuntu_20_04_config_file_choice
 	fi
 	echo "Running ansible-playbook script..."	
-	echo $rebootfile
 	sudo -E ansible-playbook -i localhost, playbook.yml -e "ansible_python_interpreter=/usr/bin/python3"	
 	if [ -f $rebootfile ]
 	then 
