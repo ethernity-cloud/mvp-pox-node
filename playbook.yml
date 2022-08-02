@@ -27,39 +27,24 @@
     stat: 
       path: config
     register: config_file
-  
-  - name: "Invalid choice"
-    debug:
-      msg: " '{{ check_config }}' Invalid choice. Please start Ansible playbook again and choose an option below..."
-    when: 
-      - check_config != '1'
-      - check_config != '2'
-  - meta: end_play
-    when: 
-      - check_config != '1'
-      - check_config != '2'
   - name: "Config file does not exist"
     debug:
       msg: "Config file does not exist. Please create <config> file in this directory with your wallet values or generate a random one." 
     when: 
-      - check_config == '2'
+      - lookup('ansible.builtin.env', 'FILE') == 'existing'
       - config_file.stat.exists == false
   - meta: end_play
     when: 
-      - check_config == '2'
+      - lookup('ansible.builtin.env', 'FILE') == 'existing'
       - config_file.stat.exists == false
-  vars_prompt:
-    - name: check_config
-      prompt: " 1) Generate config file with random wallets.\n 2) Use existing config file\n[Type your choice to continue]"
-      private: no
   roles:
     - role: generate_config_file
       when: 
-        - check_config == '1'
+        - lookup('ansible.builtin.env', 'FILE') == 'generate'
         - config_file.stat.exists == false
     - role: validate_config_file
       when: 
-        - check_config == '2'
+        - lookup('ansible.builtin.env', 'FILE') == 'existing'
         - config_file.stat.exists == true
     - role: uoi-io.libvirt
       libvirt_firewalld: false
