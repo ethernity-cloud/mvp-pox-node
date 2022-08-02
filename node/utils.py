@@ -57,31 +57,27 @@ class Storage:
         ipfs_node = socket.gethostbyname(ipfs_host)
         self.bootstrap_client = ipfshttpclient.connect(client_connect_url)
         self.bootstrap_client.bootstrap.add(client_bootstrap_url % ipfs_node)
-        self.infura_client = ipfshttpclient.connect('/dns/ipfs.infura.io/tcp/5001/https')
         self.logger = logger
         self.cache = cache
 
-    def download(self, data, from_bootstrap=False):
+    def download(self, data):
         if self.cache.contains(data):
             return
         try:
-            if from_bootstrap:
-                self.bootstrap_client.get(data, compress=True, opts={"compression-level": 9}, timeout=120)
-            else:
-                self.infura_client.get(data, compress=True, opts={"compression-level": 9}, timeout=120)
+            self.bootstrap_client.get(data, compress=True, opts={"compression-level": 9}, timeout=120)
             self.cache.add(data, 1)
         except Exception as e:
             self.logger.error(e)
             raise
 
-    def download_many(self, lst, from_bootstrap=False):
+    def download_many(self, lst):
         for data in lst:
-            if retry(self.download, data, from_bootstrap, attempts=1, delay=0)[0] is False:
+            if retry(self.download, data, attempts=1, delay=0)[0] is False:
                 return False
         return True
 
     def add(self, data):
-        return self.infura_client.add_str(data)
+        pass
 
 
 class Cache:

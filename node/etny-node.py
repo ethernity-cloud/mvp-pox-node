@@ -129,7 +129,7 @@ class EtnyPoXNode:
         logger.info(f"Downloading IPFS content... {method_name}")
         metadata = self.__etny.caller()._getDORequestMetadata(order.do_req)
         template = metadata[1].split(':')
-        self.storage.download_many([template[0]], from_bootstrap=True)
+        self.storage.download_many([template[0]])
         if not self.storage.download_many([template[0], metadata[2], metadata[3]]):
             logger.info("Cannot download data from IPFS, cancelling processing")
             self.ipfs_timeout_cancel(order_id)
