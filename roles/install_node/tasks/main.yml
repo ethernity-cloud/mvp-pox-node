@@ -40,12 +40,17 @@
   shell: vagrant plugin install vagrant-libvirt
 - name: vagrant-preload - install
   shell: vagrant plugin install vagrant-reload
-- name: vagrant - cleanup VM
+- name: vagrant - get VM name
   shell: virsh list --name --all
   register: vagrant_vm_name
+- name: vagrant - get VM name
+  shell: virsh list --name --state-running
+  register: vagrant_vm_name_running
 - name: vagrant - cleanup VM
   shell: virsh shutdown {{ vagrant_vm_name.stdout }}
-  when: vagrant_vm_name.stdout != ''
+  when: 
+    - vagrant_vm_name.stdout != ''
+    - vagrant_vm_name_running.stdout != ''
 - name: vagrant - cleanup VM
   shell: virsh undefine {{ vagrant_vm_name.stdout }}
   when: vagrant_vm_name.stdout != ''
