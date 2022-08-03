@@ -1,1 +1,11 @@
+.env
+.vagrant
+*.pyc
+*.pyo
+__pychare__/
+*.py[cod]
+.venv
+.vs-code
+sgx/sgx_enable
+sgx/sgx_enable.o
 config
