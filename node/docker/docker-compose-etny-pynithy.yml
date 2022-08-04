@@ -17,3 +17,4 @@ services:
       - SCONE_VERSION=1
       - SCONE_LOG=0
     working_dir: /myapp
+    
