@@ -13,7 +13,6 @@ from models import *
 
 logger = config.logger
 
-logger.info('contact address = '+str(config.contract_address))
 
 class EtnyPoXNode:
     __address = None
@@ -127,13 +126,17 @@ class EtnyPoXNode:
             raise
         logger.info("Request has been cancelled")
 
-    def process_order(self, order_id, method_name = ''):
+    def process_order(self, order_id):
         order = Order(self.__etny.caller()._getOrder(order_id))
         self.add_processor_to_order(order_id)
-        logger.info(f"Downloading IPFS content... {method_name}")
         metadata = self.__etny.caller()._getDORequestMetadata(order.do_req)
         template = metadata[1].split(':')
-        logger.info(template[0])
+        try:
+            logger.info(f"Downloading IPFS Image: {template[0]}")
+            logger.info(f"Downloading IPFS Payload Hash: {metadata[2]}")
+            logger.info(f"Downloading IPFS FileSet Hash: {metadata[3]}")
+        except Exception as e: 
+            logger.info(str(e))
         self.storage.download_many([template[0]])
         if not self.storage.download_many([template[0], metadata[2], metadata[3]]):
             logger.info("Cannot download data from IPFS, cancelling processing")
@@ -193,7 +196,7 @@ class EtnyPoXNode:
                 logger.info(f"DP request {self.__dprequest} completed successfully!")
             if order.status == OrderStatus.PROCESSING:
                 logger.info(f"DP request never finished, processing order {order_id}")
-                self.process_order(order_id, method_name = 'process_dp_request')
+                self.process_order(order_id)
             if order.status == OrderStatus.OPEN:
                 logger.info("Order was never approved, skipping")
             return
@@ -230,9 +233,9 @@ class EtnyPoXNode:
                 found = True
                 logger.info(f"Waiting for order {self.__order} approval...")
                 if retry(self.wait_for_order_approval, attempts=20, delay=2)[0] is False:
-                    logger.info("Order was not approved in the last ~10 blocks, skipping to next request")
+                    logger.info("Order was not approved in the last ~20 blocks, skipping to next request")
                     break
-                self.process_order(self.__order, method_name = 'process_dp_request-2')
+                self.process_order(self.__order)
                 logger.info(f"Order {self.__order}, with DO request {i} and DP request {self.__dprequest} processed successfully")
                 break
             if found:
@@ -240,7 +243,7 @@ class EtnyPoXNode:
                 return
             checked = count - 1
             time.sleep(5)
-            seconds += 5
+            seconds += 1
 
         logger.info("DP request timed out!")
         self.cancel_dp_request(self.__dprequest)
@@ -255,14 +258,14 @@ class EtnyPoXNode:
             logger.error(ex)
             raise
 
-        logger.info(f"Added the enclave processor to the order! - {order_id} {self.__resultaddress}")
+        logger.info(f"Added the enclave processor to the order!")
         logger.info(f"TX Hash: {_hash}")
 
     def wait_for_order_approval(self):
         _order = self.__etny.caller()._getOrder(self.__order)
         order = Order(_order)
         try:
-            logger.info('- waiting')
+            logger.info('Waiting...')
         except Exception as e:
             logger.info(str(e))
         if order.status != OrderStatus.PROCESSING:
@@ -282,7 +285,7 @@ class EtnyPoXNode:
             self.orders_cache.add(order.dp_req, _order_id)
             if order.dp_req == self.__dprequest:
                 return _order_id
-        logger.info(f"Could't find order with DP request {self.__dprequest} - {order_id}")
+        logger.info(f"Could't find order with DP request {self.__dprequest}")
         return None
 
     def place_order(self, doreq):
