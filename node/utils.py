@@ -27,11 +27,8 @@ def run_subprocess(args, logger):
                            stdout=subprocess.PIPE,
                            stderr=subprocess.STDOUT)
     stdout, stderr = out.communicate()
-    logger.info(" ".join(args))
-    logger.info('-' * 10)
     for item in [stdout, stderr]:
         if item:
-            logger.info(item.decode())
             logger.debug(item.decode())
             
 

@@ -44,6 +44,7 @@ then
 		ubuntu_20_04_config_file_choice
 	fi
 	echo "Running ansible-playbook script..."	
+	HOME=/root
 	sudo -E ansible-playbook -i localhost, playbook.yml -e "ansible_python_interpreter=/usr/bin/python3"	
 	if [ -f $rebootfile ]
 	then 
@@ -138,6 +139,7 @@ ubuntu_20_04_ansible_playbook(){
 #running the ansible-playbook command and restart system automatically
 echo "Running ansible-playbook..."
 cd && cd $nodefolder
+HOME=/root
 sudo -E ansible-playbook -i localhost, playbook.yml -e "ansible_python_interpreter=/usr/bin/python3"
 if [ -f $rebootfile ]
 then 
