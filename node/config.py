@@ -5,8 +5,8 @@ from os.path import expanduser
 
 
 def onImportError():
-     os.system("pip install psutil")
-     os.system("pip install python-dotenv")
+     os.system("pip3 install psutil")
+     os.system("pip3 install python-dotenv")
      os.killpg(os.getpgid(), signal.SIGCHLD)
      sys.exit()
 
