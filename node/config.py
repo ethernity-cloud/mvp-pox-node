@@ -1,8 +1,20 @@
-import os
+import os, sys, signal
 import argparse
 import logging.handlers
 from os.path import expanduser
-from dotenv import load_dotenv
+
+
+def onImportError():
+     os.system("pip install psutil")
+     os.system("pip install python-dotenv")
+     os.killpg(os.getpgid(), signal.SIGCHLD)
+     sys.exit()
+
+try:
+     import psutil
+     from dotenv import load_dotenv
+except ImportError as e:
+    onImportError()
 
 from utils import HardwareInfoProvider
 
