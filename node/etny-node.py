@@ -243,10 +243,15 @@ class EtnyPoXNode:
                 return
             checked = count - 1
             time.sleep(5)
-            seconds += 1
+            
+            seconds += 5
+            if seconds >= 60 * 60 * 24:
+                logger.info("DP request timed out!")
+                self.cancel_dp_request(self.__dprequest)
+                break
 
         logger.info("DP request timed out!")
-        self.cancel_dp_request(self.__dprequest)
+        # self.cancel_dp_request(self.__dprequest)
 
     def add_processor_to_order(self, order_id):
         unicorn_txn = self.__etny.functions._addProcessorToOrder(order_id, self.__resultaddress).buildTransaction(self.get_transaction_build())
