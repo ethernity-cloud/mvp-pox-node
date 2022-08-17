@@ -25,7 +25,7 @@ Vagrant.configure("2") do |config|
     etnyvm1.vm.provider :libvirt do |domain|
       domain.memory = 2048
       domain.cpus = 2 
-      domain.cpu_mode = 'host-passthrough'
+      domain.cpu_mode = 'maximum'
       domain.nested = true
       domain.kvm_hidden = false
       domain.machine_virtual_size = 128
