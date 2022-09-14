@@ -81,13 +81,15 @@ class Cache:
     def __init__(self, items_limit, filepath):
         self.items_limit = items_limit
         self.filepath = filepath
-        if not os.path.exists(filepath):
-            os.makedirs(os.path.dirname(filepath), exist_ok=True)
+        try:
+            if not os.path.exists(filepath):
+                os.makedirs(os.path.dirname(filepath), exist_ok=True)
+                raise Exception
+            with open(filepath, 'r') as f:
+                self.mem = OrderedDict(json.load(f)) 
+        except Exception as e:
             self.mem = OrderedDict({})
             self._update_file()
-            return
-        with open(filepath, 'r') as f:
-            self.mem = OrderedDict(json.load(f))
 
     def _update_file(self):
         with open(self.filepath, 'w') as f:
