@@ -130,7 +130,7 @@ class EtnyPoXNode:
         order = Order(self.__etny.caller()._getOrder(order_id))
         self.add_processor_to_order(order_id)
         metadata = self.__etny.caller()._getDORequestMetadata(order.do_req)
-        [enclaveImage, etny_pinithy] = metadata[1].split(':')
+        [enclaveImage, *etny_pinithy] = metadata[1].split(':')
         try:
             logger.info(f"Downloading IPFS Image: {enclaveImage}")
             logger.info(f"Downloading IPFS Payload Hash: {metadata[2]}")
