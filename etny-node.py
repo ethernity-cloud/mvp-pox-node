@@ -15,7 +15,7 @@ logger = config.logger
 
 
 class EtnyPoXNode:
-    __address = None
+    __address = None    
     __privatekey = None
     __resultaddress = None
     __resultprivatekey = None
