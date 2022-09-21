@@ -58,7 +58,7 @@ then
                 then
 			echo "Node installation completed successfully. Please allow up to 24h to see transactions on the blockchain. " && exit
                 else
-                	echo "Node installation failed! Please check error messages above."
+                	echo "Node installation failed! Please check error messages above." && exit
                 fi
 	fi
 else 
