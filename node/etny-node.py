@@ -130,15 +130,15 @@ class EtnyPoXNode:
         order = Order(self.__etny.caller()._getOrder(order_id))
         self.add_processor_to_order(order_id)
         metadata = self.__etny.caller()._getDORequestMetadata(order.do_req)
-        template = metadata[1].split(':')
+        [enclaveImage, *etny_pinithy] = metadata[1].split(':')
         try:
-            logger.info(f"Downloading IPFS Image: {template[0]}")
+            logger.info(f"Downloading IPFS Image: {enclaveImage}")
             logger.info(f"Downloading IPFS Payload Hash: {metadata[2]}")
             logger.info(f"Downloading IPFS FileSet Hash: {metadata[3]}")
         except Exception as e: 
             logger.info(str(e))
-        self.storage.download_many([template[0]])
-        if not self.storage.download_many([template[0], metadata[2], metadata[3]]):
+        self.storage.download_many([enclaveImage])
+        if not self.storage.download_many([enclaveImage, metadata[2], metadata[3]]):
             logger.info("Cannot download data from IPFS, cancelling processing")
             self.ipfs_timeout_cancel(order_id)
             return
@@ -149,18 +149,21 @@ class EtnyPoXNode:
         logger.info("Cleaning up docker registry")
         run_subprocess(['docker', 'system', 'prune', '-a', '-f', '--volumes'], logger)
         logger.info("Running new docker registry")
-        logger.debug(os.path.dirname(os.path.realpath(__file__)) + '/' + template[0] + ':/var/lib/registry')
+        logger.debug(os.path.dirname(os.path.realpath(__file__)) + '/' + enclaveImage + ':/var/lib/registry')
         run_subprocess([
              'docker', 'run', '-d', '--restart=always', '-p', '5000:5000', '--name', 'registry', '-v',
-             os.path.dirname(os.path.realpath(__file__)) + '/' + template[0] + ':/var/lib/registry', 'registry:2'
+             os.path.dirname(os.path.realpath(__file__)) + '/' + enclaveImage + ':/var/lib/registry', 'registry:2'
         ], logger)
 
         logger.info("Cleaning up docker container")
         run_subprocess(['docker', 'rm', '-f', 'etny-pynithy-' + str(order_id)], logger)
 
         logger.info("Running docker-compose")
+
+        yaml_file = '-initial-image' if enclaveImage in ['QmeQiSC1dLMKv4BvpvjWt1Zeak9zj6TWgWhN7LLiRznJqC'] else ''
+
         run_subprocess([
-             'docker-compose', '-f', 'docker/docker-compose-etny-pynithy.yml', 'run', '--rm', '-d', '--name',
+             'docker-compose', '-f', f'docker/docker-compose-etny-pynithy{yaml_file}.yml', 'run', '--rm', '-d', '--name',
              'etny-pynithy-' + str(order_id), 'etny-pynithy', str(order_id), metadata[2], metadata[3],
              self.__resultaddress, self.__resultprivatekey, config.contract_address
         ], logger)
