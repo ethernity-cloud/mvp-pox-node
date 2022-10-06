@@ -4,6 +4,7 @@ import socket
 import subprocess
 import time
 import uuid
+import math
 from collections import OrderedDict
 
 import ipfshttpclient
@@ -120,7 +121,7 @@ class HardwareInfoProvider:
 
     @staticmethod
     def get_free_memory():
-        return psutil.virtual_memory()[1] // (2**30)  # in GB
+        return math.ceil(psutil.virtual_memory()[1] / (2**30))  # in GB
 
     @staticmethod
     def get_free_storage():
