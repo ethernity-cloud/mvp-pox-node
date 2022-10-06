@@ -39,7 +39,7 @@ class EtnyPoXNode:
         )
         self.__nonce = self.__w3.eth.getTransactionCount(self.__address)
         self.__dprequest = 0
-        self.__order = 0
+        self.__order_id = 0
 
         self.__uuid = get_or_generate_uuid(config.uuid_filepath)
         self.orders_cache = Cache(config.orders_cache_limit, config.orders_cache_filepath)
@@ -111,20 +111,31 @@ class EtnyPoXNode:
                     nonce = self.__w3.eth.getTransactionCount(self.__address)
                     if nonce != self.__nonce:
                         return self.add_dp_request(beginning_of_recursion=t)
-                return
+
+                logger.error('Node retried transaction too many times. Exiting!')
+                raise
+                
             
         try:
             waiting_seconds = 120
+            throw_error = False
             if error and error == 'duplicated':
                 waiting_seconds *= 7
+                throw_error = True
 
             logger.info(f'waiting seconds = {waiting_seconds}')
 
             receipt = self.__w3.eth.waitForTransactionReceipt(transaction_hash = _hash, timeout = waiting_seconds)
+
             processed_logs = self.__etny.events._addDPRequestEV().processReceipt(receipt)
             self.__dprequest = processed_logs[0].args._rowNumber
+
         except Exception as e:
-            return logger.error(f"{e} - {type(e)}")
+            logger.error(f"{e} f- {type(e)}")
+            if throw_error:
+                raise
+            return
+
             
         logger.info("DP request created successfully!")
         logger.info(f"TX Hash: {_hash}")
@@ -157,10 +168,12 @@ class EtnyPoXNode:
             raise
         logger.info("Request has been cancelled")
 
-    def process_order(self, order_id):
-        order = Order(self.__etny.caller()._getOrder(order_id))
+    def process_order(self, order_id, metadata = None):
+        # this line should be checked later
+        if not metadata:
+            order = Order(self.__etny.caller()._getOrder(order_id))
+            metadata = self.__etny.caller()._getDORequestMetadata(order.do_req)
         self.add_processor_to_order(order_id)
-        metadata = self.__etny.caller()._getDORequestMetadata(order.do_req)
         [enclaveImage, *etny_pinithy] = metadata[1].split(':')
         try:
             logger.info(f"Downloading IPFS Image: {enclaveImage}")
@@ -265,6 +278,16 @@ class EtnyPoXNode:
                         doreq.storage <= req.storage and doreq.bandwidth <= req.bandwidth):
                     logger.info("Order doesn't meet requirements, skipping to next request")
                     continue
+
+                metadata = self.__etny.caller()._getDORequestMetadata(i)
+
+                # logger.info(_doreq)
+                # logger.info(metadata)
+                # if metadata[4] != '' and metadata[4] != self.__address:
+
+                if metadata[4] != self.__address:
+                    logger.info(f'Skipping DORequst doe to it is bookd! - {i}')
+                    continue
                 logger.info("Placing order...")
                 try:
                     self.place_order(i)
@@ -272,15 +295,15 @@ class EtnyPoXNode:
                     logger.info(f"Order already created, skipping to next DO request - {type(error)}")
                     continue
                 found = True
-                logger.info(f"Waiting for order {self.__order} approval...")
+                logger.info(f"Waiting for order {self.__order_id} approval...")
                 if retry(self.wait_for_order_approval, attempts=20, delay=2)[0] is False:
                     logger.info("Order was not approved in the last ~20 blocks, skipping to next request")
                     break
-                self.process_order(self.__order)
-                logger.info(f"Order {self.__order}, with DO request {i} and DP request {self.__dprequest} processed successfully")
+                self.process_order(self.__order_id, metadata=metadata)
+                logger.info(f"Order {self.__order_id}, with DO request {i} and DP request {self.__dprequest} processed successfully")
                 break
             if found:
-                logger.info(f"Finished processing order {self.__order}")
+                logger.info(f"Finished processing order {self.__order_id}")
                 return
             checked = count - 1
             time.sleep(5)
@@ -308,12 +331,9 @@ class EtnyPoXNode:
         logger.info(f"TX Hash: {_hash}")
 
     def wait_for_order_approval(self):
-        _order = self.__etny.caller()._getOrder(self.__order)
+        _order = self.__etny.caller()._getOrder(self.__order_id)
         order = Order(_order)
-        try:
-            logger.info('Waiting...')
-        except Exception as e:
-            logger.info(str(e))
+        logger.info('Waiting...')
         if order.status != OrderStatus.PROCESSING:
             raise Exception("Order has not been yet approved")
 
@@ -336,13 +356,14 @@ class EtnyPoXNode:
 
     def place_order(self, doreq):
         unicorn_txn = self.__etny.functions._placeOrder(
-            int(doreq), int(self.__dprequest),
+            int(doreq), 
+            int(self.__dprequest),
         ).buildTransaction(self.get_transaction_build())
         _hash = self.send_transaction(unicorn_txn)
         try:
             receipt = self.__w3.eth.waitForTransactionReceipt(_hash)
             processed_logs = self.__etny.events._placeOrderEV().processReceipt(receipt)
-            self.__order = processed_logs[0].args._orderNumber
+            self.__order_id = processed_logs[0].args._orderNumber
         except Exception as e:
             logger.error(e)
             raise
