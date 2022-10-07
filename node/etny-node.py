@@ -121,9 +121,7 @@ class EtnyPoXNode:
             if error and error == 'duplicated':
                 waiting_seconds *= 7
                 throw_error = True
-
-            logger.info(f'waiting seconds = {waiting_seconds}')
-
+                
             receipt = self.__w3.eth.waitForTransactionReceipt(transaction_hash = _hash, timeout = waiting_seconds)
 
             processed_logs = self.__etny.events._addDPRequestEV().processReceipt(receipt)
