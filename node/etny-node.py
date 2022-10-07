@@ -14,7 +14,6 @@ from error_messages import errorMessages
 
 logger = config.logger
 
-
 class EtnyPoXNode:
     __address = None
     __privatekey = None
@@ -210,8 +209,7 @@ class EtnyPoXNode:
              'docker-compose', '-f', f'docker/docker-compose-etny-pynithy{yaml_file}.yml', 'run', '--rm', '-d', '--name',
              'etny-pynithy-' + str(order_id), 'etny-pynithy', str(order_id), metadata[2], metadata[3],
              self.__resultaddress, self.__resultprivatekey, config.contract_address
-        ], logger)
-        
+        ], logger)        
 
 
         '''new version'''
@@ -282,8 +280,9 @@ class EtnyPoXNode:
                 metadata = self.__etny.caller()._getDORequestMetadata(i)
                 
                 if metadata[4] != '' and metadata[4] != self.__address:
-                    logger.info(f'Skipping DORequst doe to it is bookd! - {i}')
+                    logger.info(f'Skipping DORequst: {i}. Request is delegated to a different Node.')
                     continue
+
                 logger.info("Placing order...")
                 try:
                     self.place_order(i)
@@ -295,7 +294,10 @@ class EtnyPoXNode:
                 if retry(self.wait_for_order_approval, attempts=20, delay=2)[0] is False:
                     logger.info("Order was not approved in the last ~20 blocks, skipping to next request")
                     break
-                self.process_order(self.__order_id, metadata=metadata)
+
+                # performance improvement, to avoid duplication
+                # self.process_order(self.__order_id, metadata=metadata)
+                self.process_order(self.__order_id)
                 logger.info(f"Order {self.__order_id}, with DO request {i} and DP request {self.__dprequest} processed successfully")
                 break
             if found:
