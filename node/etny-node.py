@@ -278,7 +278,7 @@ class EtnyPoXNode:
                 metadata = self.__etny.caller()._getDORequestMetadata(i)
                 
                 if metadata[4] != '' and metadata[4] != self.__address:
-                    logger.info(f'Skipping DORequst: {i}. Request is delegated to a different Node.')
+                    logger.info(f'Skipping DO Request: {i}. Request is delegated to a different Node.')
                     continue
 
                 logger.info("Placing order...")
