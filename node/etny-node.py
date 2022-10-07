@@ -280,12 +280,8 @@ class EtnyPoXNode:
                     continue
 
                 metadata = self.__etny.caller()._getDORequestMetadata(i)
-
-                # logger.info(_doreq)
-                # logger.info(metadata)
-                # if metadata[4] != '' and metadata[4] != self.__address:
-
-                if metadata[4] != self.__address:
+                
+                if metadata[4] != '' and metadata[4] != self.__address:
                     logger.info(f'Skipping DORequst doe to it is bookd! - {i}')
                     continue
                 logger.info("Placing order...")
