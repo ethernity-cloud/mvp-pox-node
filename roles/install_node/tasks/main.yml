@@ -78,4 +78,4 @@
   shell: systemctl restart etny-vagrant.service
 - name: finished
   debug:
-    msg: Ethernity NODE installation successful
+    msg: Ethernity NODE installation finished

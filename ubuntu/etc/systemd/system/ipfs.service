@@ -37,10 +37,9 @@ MemorySwapMax=0
 TimeoutStartSec=infinity
 
 Type=notify
-User=ipfs
-Group=ipfs
+User=root
+Group=root
 StateDirectory=ipfs
-Environment=IPFS_PATH="${HOME}"
 ExecStart=/usr/bin/ipfs daemon --init --migrate
 Restart=on-failure
 KillSignal=SIGINT
