@@ -66,17 +66,17 @@ Vagrant.configure("2") do |config|
     etnyvm1.vm.provision "shell",
       inline: "/bin/bash /home/vagrant/etny/node/etny-node-provision-etny.sh"
     etnyvm1.vm.provision "shell",
-      inline: "/bin/mv /home/vagrant/etny/node/etny-node.service /etc/systemd/system/"
-    etnyvm1.vm.provision "shell",
-      inline: "/bin/systemctl start etny-node.service"
-    etnyvm1.vm.provision "shell",
-      inline: "/bin/systemctl enable etny-node.service"
-    etnyvm1.vm.provision "shell",
       inline: "/bin/mv /home/vagrant/etny/node/ipfs.service /etc/systemd/system/"
     etnyvm1.vm.provision "shell",
       inline: "/bin/systemctl start ipfs.service"
     etnyvm1.vm.provision "shell",
       inline: "/bin/systemctl enable ipfs.service"
+    etnyvm1.vm.provision "shell",
+      inline: "/bin/mv /home/vagrant/etny/node/etny-node.service /etc/systemd/system/"
+    etnyvm1.vm.provision "shell",
+      inline: "/bin/systemctl start etny-node.service"
+    etnyvm1.vm.provision "shell",
+      inline: "/bin/systemctl enable etny-node.service"
   end
 
 end
