@@ -55,8 +55,8 @@
       libvirt_qemu_config:
         - { option: 'user', value: 'user = "+0"' }
         - { option: 'cgroup_device_acl', value: 'cgroup_device_acl = [ "/dev/null", "/dev/full", "/dev/zero", "/dev/random", "/dev/urandom", "/dev/ptmx", "/dev/kvm", "/dev/kqemu", "/dev/rtc", "/dev/hpet", "/dev/sgx_virt", "/dev/sgx_enclave", "/dev/sgx_provision", "/dev/sgx_vepc" ]' }
-	- { option: 'user', value: 'user = "ipfs"' }
-	- { option: 'group', value: 'group = "ipfs"' }
+        - { option: 'user', value: 'user = "ipfs"' }
+        - { option: 'group', value: 'group = "ipfs"' }
 #    - role: accelize.linux_kernel
 #      vars:
 #        kernel_version: 5.13.0-48
