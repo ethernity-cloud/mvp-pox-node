@@ -1,6 +1,7 @@
 [Unit]
 Description=ETHERNITY Node
 After=network.target
+Requires=ipfs.service
 
 [Service]
 ExecStart=/home/vagrant/etny/node/etny-node-start.sh

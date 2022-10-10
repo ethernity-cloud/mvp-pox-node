@@ -40,7 +40,7 @@ Type=notify
 User=root
 Group=root
 StateDirectory=ipfs
-ExecStart=/usr/bin/ipfs daemon --init --migrate
+ExecStart=/home/vagrant/etny/node/go-ipfs/ipfs daemon --init --migrate
 Restart=on-failure
 KillSignal=SIGINT
 
