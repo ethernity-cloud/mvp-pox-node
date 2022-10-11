@@ -54,7 +54,7 @@ then
 		while [ $sec -ge 0 ]; do echo -n "Restarting system in [CTRL+C to cancel]: " && echo -ne "$sec\033[0K\r" && let "sec=sec-1" && sleep 1; done
 		sudo reboot
 	else
-                if [ install_result == 0 ]
+                if [ $install_result == 0 ]
                 then
 			echo "Node installation completed successfully. Please allow up to 24h to see transactions on the blockchain. " && exit
                 else
