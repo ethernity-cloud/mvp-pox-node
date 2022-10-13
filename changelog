@@ -1,0 +1,48 @@
+v0.6.4
+added changelog file
+
+v0.6.3
+fixing "Transaction with the same hash has already been imported" bug
+fixing "Transaction nonce is too low. Try incrementing the nonce." bug
+node won't apply anymore for a transaction which has been delegated to a different node
+fixed a smart contract interaction related to storage
+fixed a bug related to available RAM
+
+v0.6.2
+changed web3 provider
+
+v0.6.1
+fix sgx driver url
+add error checking on ansible
+
+v0.5.6
+fix cache json file creation bug
+
+v0.5.4
+updated ansible-playbook to fix an installation issue introduced by Vagrant’s latest version
+
+v0.5.3
+fixed a bug with the heart-beat call
+
+v0.5.2
+fix pip3 typo
+
+v0.5.1
+fix home directory for root
+
+v0.5.0
+cache implementation for existing orders
+code refactoring
+performance improvement
+fix an issue with the config file when generating random wallets
+disabling automatic updates on VMs
+
+v0.3.1
+fix sgx support for ubuntu 18.04, 20.04 and 22.04
+
+v0.0.2
+ubuntu 20.04 installation support (clean install only)
+ubuntu 20.04: using the box kernel (5.13.0.-40-generic)
+ubuntu 20.04: updated qemu to v6.2
+included SGX activator into setup
+updated playbook.yml
