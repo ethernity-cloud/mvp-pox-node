@@ -1,4 +1,4 @@
-#!/bin/bash -x
+#!/bin/bash
 requiredkernelversion="5.13.0-40"
 nodefolder=$(pwd)
 configfile="config"
