@@ -13,8 +13,6 @@ apt-get -yq  install docker-ce
 sudo curl -L "https://github.com/docker/compose/releases/download/1.25.5/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
 chmod +x /usr/local/bin/docker-compose
 
-blabla
-
 ufw allow in from 127.0.0.1/8
 ufw allow out to 127.0.0.1/8
 ufw allow out from any to 4.2.2.1 port 53
