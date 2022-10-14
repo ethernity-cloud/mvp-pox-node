@@ -1,4 +1,8 @@
 #!/bin/bash
+set -e
+
+trap 'echo "etny-node-start error: \"${BASH_COMMAND}\"command filed with exit code $?."' SIGINT SIGTERM ERR EXIT
+
 . /home/vagrant/etny/node/config
 
 cd /home/vagrant/etny/node/go-ipfs

@@ -1,10 +1,17 @@
-#!/bin/bash
+#!/bin/bash -x
 requiredkernelversion="5.13.0-40"
 nodefolder=$(pwd)
 configfile="config"
 rebootfile="/tmp/reboot"
 service="etny-vagrant.service"
 os=""
+
+if [ "$1" == "-v" ]
+then
+	ansible_cmd="ansible-playbook -v"
+else
+	ansible_cmd="ansible-playbook"
+fi
 
 ubuntu_20_04(){
 #determining if the etny-vagrant service is running. If yes we stop the script as we don't need to run the setup process
@@ -45,7 +52,7 @@ then
 	fi
 	echo "Running ansible-playbook script..."	
 	HOME=/root
-	sudo -E ansible-playbook -i localhost, playbook.yml -e "ansible_python_interpreter=/usr/bin/python3"
+	sudo -E $ansible_cmd -i localhost, playbook.yml -e "ansible_python_interpreter=/usr/bin/python3"
 	install_result=$?
 	if [ -f $rebootfile ]
 	then 

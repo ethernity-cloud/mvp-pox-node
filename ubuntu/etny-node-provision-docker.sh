@@ -1,4 +1,7 @@
 #!/bin/bash
+set -e 
+
+trap 'echo "Installer error: \"${BASH_COMMAND}\"command filed with exit code $?."' SIGINT SIGTERM ERR EXIT
 
 export DEBIAN_FRONTEND=noninteractive
 apt-get -yq update
@@ -9,6 +12,8 @@ add-apt-repository "deb [arch=$(dpkg --print-architecture)] https://download.doc
 apt-get -yq  install docker-ce
 sudo curl -L "https://github.com/docker/compose/releases/download/1.25.5/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
 chmod +x /usr/local/bin/docker-compose
+
+blabla
 
 ufw allow in from 127.0.0.1/8
 ufw allow out to 127.0.0.1/8
