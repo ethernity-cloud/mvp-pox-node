@@ -153,7 +153,7 @@ ubuntu_20_04_ansible_playbook(){
 echo "Running ansible-playbook..."
 cd && cd $nodefolder
 HOME=/root
-sudo -E ansible-playbook -i localhost, playbook.yml -e "ansible_python_interpreter=/usr/bin/python3"
+sudo -E $ansible_cmd -i localhost, playbook.yml -e "ansible_python_interpreter=/usr/bin/python3"
 if [ -f $rebootfile ]
 then 
 	echo "Restarting system. Please run the installer script afterwards to continue the setup."
