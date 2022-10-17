@@ -34,6 +34,7 @@
 - name: Get error message
   debug:
     msg: "{{ result.json.message }}"
+  failed_when: result.json.message != "OK"
   when: result.json.message is defined
 
 - name: Get account balance
