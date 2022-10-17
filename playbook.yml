@@ -30,11 +30,11 @@
   - name: "Config file does not exist"
     debug:
       msg: "Config file does not exist. Please create <config> file in this directory with your wallet values or generate a random one." 
-    when: 
+    failed_when: 
       - lookup('ansible.builtin.env', 'FILE') == 'existing'
       - config_file.stat.exists == false
   - meta: end_play
-    when: 
+    failed_when: 
       - lookup('ansible.builtin.env', 'FILE') == 'existing'
       - config_file.stat.exists == false
   roles:
