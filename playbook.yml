@@ -34,7 +34,7 @@
       - lookup('ansible.builtin.env', 'FILE') == 'existing'
       - config_file.stat.exists == false
   - meta: end_play
-    failed_when: 
+    when: 
       - lookup('ansible.builtin.env', 'FILE') == 'existing'
       - config_file.stat.exists == false
   roles:
