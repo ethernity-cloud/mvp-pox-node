@@ -43,9 +43,6 @@
         - lookup('ansible.builtin.env', 'FILE') == 'generate'
         - config_file.stat.exists == false
     - role: validate_config_file
-      when: 
-        - lookup('ansible.builtin.env', 'FILE') == 'existing'
-        - config_file.stat.exists == true
     - role: uoi-io.libvirt
       libvirt_firewalld: false
       libvirt_selinux: false

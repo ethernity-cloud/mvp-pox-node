@@ -154,6 +154,7 @@ echo "Running ansible-playbook..."
 cd && cd $nodefolder
 HOME=/root
 sudo -E $ansible_cmd -i localhost, playbook.yml -e "ansible_python_interpreter=/usr/bin/python3"
+install_result=$?
 if [ -f $rebootfile ]
 then 
 	echo "Restarting system. Please run the installer script afterwards to continue the setup."
@@ -161,7 +162,12 @@ then
 	while [ $sec -ge 0 ]; do echo -n "Restarting system in [CTRL+C to cancel]: " && echo -ne "$sec\033[0K\r" && let "sec=sec-1" && sleep 1; done
 	sudo reboot
 else
-	echo "Node installation completed successfully. Please allow up to 24h to see transactions on the blockchain. " && exit
+        if [ $install_result == 0 ]
+        then
+               echo "Node installation completed successfully. Please allow up to 24h to see transactions on the blockchain. " && exit
+        else
+               echo "Node installation failed! Please check error messages above." && exit
+        fi
 fi
 }
 
