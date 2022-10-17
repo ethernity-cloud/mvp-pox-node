@@ -38,7 +38,8 @@
 
 - name: Get account balance
   debug:
-    msg: "0 bergs. Please get bergs from https://faucet.bloxberg.org/ and run the playbook again."
+    msg: "Balance: '{{ result.json.result|int / 1000000000000000000 }}' bergs. If balance is 0 then please get bergs from https://faucet.bloxberg.org/ and run the playbook again."
+  failed_when:
   when: 
     - result.json.result is defined
     - result.json.result == '0'
