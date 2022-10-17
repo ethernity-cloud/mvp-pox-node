@@ -44,7 +44,7 @@
     - result.json.result == '0'
 
 - meta: end_play
-  when: (result.json.result is defined and result.json.result == '0') or (result.json.message is defined) or (config_file_map.PRIVATE_KEY == config_file_map.RESULT_PRIVATE_KEY) or (config_file_map.ADDRESS == config_file_map.RESULT_ADDRESS)
+  when: (result.json.result is defined and result.json.result == '0') or (config_file_map.PRIVATE_KEY == config_file_map.RESULT_PRIVATE_KEY) or (config_file_map.ADDRESS == config_file_map.RESULT_ADDRESS)
 
 
 
