@@ -12,6 +12,7 @@
     _arr: "{{ config_file_output.stdout.split('\n')|map('trim')|select()|list }}"
     _keys: "{{ _arr|map('regex_replace', '^(.*?)=(.*)$', '\\1')|map('trim')|list }}"
     _vals: "{{ _arr|map('regex_replace', '^(.*?)=(.*)$', '\\2')|map('trim')|list }}"
+  failed_when: config_file_map.ADDRESS is undefined or config_file_map.RESULT_ADDRESS is undefined or config_file_map.PRIVATE_KEY is undefined or config_file_map.RESULT_PRIVATE_KEY is undefined
 
 - name: Post to bloxberg
   uri:
@@ -39,7 +40,7 @@
 
 - name: Get account balance
   debug:
-    msg: "Balance: '{{ result.json.result|int / 1000000000000000000 }}' bergs. If balance is 0 then please get bergs from https://faucet.bloxberg.org/ and run the playbook again."
+    msg: "Balance: '{{ result.json.result|int / 1000000000000000000 }}' bergs. If balance is 0 then please get bergs from https://faucet.bloxberg.org/ and run the installer again."
   failed_when:
   when: 
     - result.json.result is defined
