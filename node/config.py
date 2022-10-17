@@ -44,6 +44,9 @@ doreq_cache_limit = 10000000
 doreq_filepath = os.path.dirname(os.path.realpath(__file__)) + '/doreq_cache.txt'
 dp_request_timeout = 60 * 60 * 24
 
+mergedreq_filepath = os.path.dirname(os.path.realpath(__file__)) + '/merged_cache.txt'
+mergedreq_cache_limit = 10000000
+
 # logger
 logger = logging.getLogger("ETNY NODE")
 handler = logging.handlers.RotatingFileHandler('/var/log/etny-node.log', maxBytes=2048000, backupCount=5)

@@ -8,11 +8,12 @@ from web3 import exceptions
 from web3.middleware import geth_poa_middleware
 
 import config
-from utils import get_or_generate_uuid, run_subprocess, retry, Storage, Cache, subprocess
+from utils import get_or_generate_uuid, run_subprocess, retry, Storage, Cache, ListCache, MergedCache, subprocess
 from models import *
 from error_messages import errorMessages
 
 logger = config.logger
+
 
 class EtnyPoXNode:
     __address = None
@@ -42,10 +43,11 @@ class EtnyPoXNode:
 
         self.__uuid = get_or_generate_uuid(config.uuid_filepath)
         self.orders_cache = Cache(config.orders_cache_limit, config.orders_cache_filepath)
-        self.dpreq_cache = Cache(config.dpreq_cache_limit, config.dpreq_filepath)
-        self.doreq_cache = Cache(config.doreq_cache_limit, config.doreq_filepath)
-        self.ipfs_cache = Cache(config.ipfs_cache_limit, config.ipfs_cache_filepath)
+        self.dpreq_cache = ListCache(config.dpreq_cache_limit, config.dpreq_filepath)
+        self.doreq_cache = ListCache(config.doreq_cache_limit, config.doreq_filepath)
+        self.ipfs_cache = ListCache(config.ipfs_cache_limit, config.ipfs_cache_filepath)
         self.storage = Storage(config.ipfs_host, config.client_connect_url, config.client_bootstrap_url, self.ipfs_cache, config.logger)
+        self.merged_cache = MergedCache(config.mergedreq_cache_limit, config.mergedreq_filepath)
 
     def parse_arguments(self, arguments, parser):
         parser = parser.parse_args()
@@ -55,12 +57,12 @@ class EtnyPoXNode:
 
     def cleanup_dp_requests(self):
         my_dp_requests = self.__etny.functions._getMyDPRequests().call({'from': self.__address})
-        cached_ids = self.dpreq_cache.get_values()
+        cached_ids = self.dpreq_cache.get_values
         for req_id in set(my_dp_requests) - set(cached_ids):
             req_uuid = self.__etny.caller()._getDPRequestMetadata(req_id)[1]
             if req_uuid != self.__uuid:
                 logger.info(f"Skipping DP request {req_id}, not mine")
-                self.dpreq_cache.add(req_id, req_id)
+                self.dpreq_cache.add(req_id)
                 continue
             req = DPRequest(self.__etny.caller()._getDPRequest(req_id))
             if req.status == RequestStatus.BOOKED:
@@ -69,7 +71,7 @@ class EtnyPoXNode:
                 self.process_dp_request()
             if req.status == RequestStatus.AVAILABLE:
                 self.cancel_dp_request(req_id)
-            self.dpreq_cache.add(req_id, req_id)
+            self.dpreq_cache.add(req_id)
 
     def _limited_arg(self, item, allowed_max = 255):
         return allowed_max if item > allowed_max else item
@@ -121,7 +123,7 @@ class EtnyPoXNode:
             if error and error == 'duplicated':
                 waiting_seconds *= 7
                 throw_error = True
-                
+
             receipt = self.__w3.eth.waitForTransactionReceipt(transaction_hash = _hash, timeout = waiting_seconds)
 
             processed_logs = self.__etny.events._addDPRequestEV().processReceipt(receipt)
@@ -154,7 +156,6 @@ class EtnyPoXNode:
 
     def ipfs_timeout_cancel(self, order_id):
         error_hash = self.storage.add("Error: cannot download files from IPFS")
-
         unicorn_txn = self.__etny.functions._addResultToOrder(
             order_id, error_hash
         ).buildTransaction(self.get_transaction_build())
@@ -170,6 +171,7 @@ class EtnyPoXNode:
         if not metadata:
             order = Order(self.__etny.caller()._getOrder(order_id))
             metadata = self.__etny.caller()._getDORequestMetadata(order.do_req)
+
         self.add_processor_to_order(order_id)
         [enclaveImage, *etny_pinithy] = metadata[1].split(':')
         try:
@@ -207,7 +209,7 @@ class EtnyPoXNode:
              'docker-compose', '-f', f'docker/docker-compose-etny-pynithy{yaml_file}.yml', 'run', '--rm', '-d', '--name',
              'etny-pynithy-' + str(order_id), 'etny-pynithy', str(order_id), metadata[2], metadata[3],
              self.__resultaddress, self.__resultprivatekey, config.contract_address
-        ], logger)        
+        ], logger)
 
 
         '''new version'''
@@ -262,11 +264,12 @@ class EtnyPoXNode:
         while seconds < config.dp_request_timeout:
             count = self.__etny.caller()._getDORequestsCount()
             found = False
-            cached_do_requests = self.doreq_cache.get_values()
+            cached_do_requests = self.doreq_cache.get_values
             for i in reversed(list(set(range(checked, count)) - set(cached_do_requests))):
                 _doreq = self.__etny.caller()._getDORequest(i)
                 doreq = DORequest(_doreq)
-                self.doreq_cache.add(i, i)
+                self.doreq_cache.add(i)
+                
                 if doreq.status != RequestStatus.AVAILABLE:
                     continue
                 logger.info(f"Checking DO request: {i}")
@@ -280,10 +283,12 @@ class EtnyPoXNode:
                 if metadata[4] != '' and metadata[4] != self.__address:
                     logger.info(f'Skipping DO Request: {i}. Request is delegated to a different Node.')
                     continue
-
+                
                 logger.info("Placing order...")
                 try:
                     self.place_order(i)
+                    # store merged log
+                    self.merged_cache.add(do_req_id = i, dp_req_id = self.__dprequest, order_id = self.__order_id)
                 except (exceptions.SolidityError, IndexError) as error:
                     logger.info(f"Order already created, skipping to next DO request - {type(error)}")
                     continue
@@ -292,7 +297,6 @@ class EtnyPoXNode:
                 if retry(self.wait_for_order_approval, attempts=20, delay=2)[0] is False:
                     logger.info("Order was not approved in the last ~20 blocks, skipping to next request")
                     break
-
                 # performance improvement, to avoid duplication
                 # self.process_order(self.__order_id, metadata=metadata)
                 self.process_order(self.__order_id)
@@ -311,6 +315,7 @@ class EtnyPoXNode:
                 break
 
         logger.info("DP request timed out!")
+
         # self.cancel_dp_request(self.__dprequest)
 
     def add_processor_to_order(self, order_id):
@@ -340,7 +345,7 @@ class EtnyPoXNode:
             logger.info(f"Found in cache, order_id = {order_id}")
             return order_id
         my_orders = self.__etny.functions._getMyDOOrders().call({'from': self.__address})
-        cached_order_ids = self.orders_cache.get_values()
+        cached_order_ids = self.orders_cache.get_values
         for _order_id in reversed(list(set(my_orders) - set(cached_order_ids))):
             _order = self.__etny.caller()._getOrder(_order_id)
             order = Order(_order)
