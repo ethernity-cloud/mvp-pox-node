@@ -123,8 +123,7 @@ class ListCache(Cache):
             self._update_file()
 
     def get(self, value):
-        l = [x for x in self.mem if x == value]
-        return l[0] if l else None
+        return value if self.contains(value) else None
 
     def contains(self, value):
         return value in self.mem

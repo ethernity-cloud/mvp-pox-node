@@ -140,14 +140,16 @@ class EtnyPoXNode:
         logger.info(f"TX Hash: {_hash}")
 
     def cancel_dp_request(self, req):
+        
         logger.info(f"Cancelling DP request {req}")
-        unicorn_txn = self.__etny.functions._cancelDPRequest(req).buildTransaction(self.get_transaction_build())
-        _hash = self.send_transaction(unicorn_txn)
-
+        
         try:
+            unicorn_txn = self.__etny.functions._cancelDPRequest(req).buildTransaction(self.get_transaction_build())
+            _hash = self.send_transaction(unicorn_txn)
+
             self.__w3.eth.waitForTransactionReceipt(_hash)
         except Exception as ex:
-            logger.error(ex)
+            logger.error(f"Error while canceling DP request - {req}: Error Message: {ex}")
             raise
 
         logger.info(f"DP request {req} cancelled successfully!")
@@ -159,10 +161,11 @@ class EtnyPoXNode:
         unicorn_txn = self.__etny.functions._addResultToOrder(
             order_id, error_hash
         ).buildTransaction(self.get_transaction_build())
-        _hash = self.send_transaction(unicorn_txn)
         try:
+            _hash = self.send_transaction(unicorn_txn)
             self.__w3.eth.waitForTransactionReceipt(_hash)
         except:
+            logger.error(f"Error while canceling IPFS Request, order: {order_id}, Error Message: {ex}")
             raise
         logger.info("Request has been cancelled")
 
@@ -271,7 +274,9 @@ class EtnyPoXNode:
                 self.doreq_cache.add(i)
                 
                 if doreq.status != RequestStatus.AVAILABLE:
+                    logger.debug(f'''Skipping Order, Order has different status: '{RequestStatus._status_as_string(doreq.status)}' ''')
                     continue
+
                 logger.info(f"Checking DO request: {i}")
                 if not (doreq.cpu <= req.cpu and doreq.memory <= req.memory and
                         doreq.storage <= req.storage and doreq.bandwidth <= req.bandwidth):
@@ -287,10 +292,12 @@ class EtnyPoXNode:
                 logger.info("Placing order...")
                 try:
                     self.place_order(i)
+
                     # store merged log
                     self.merged_cache.add(do_req_id = i, dp_req_id = self.__dprequest, order_id = self.__order_id)
+
                 except (exceptions.SolidityError, IndexError) as error:
-                    logger.info(f"Order already created, skipping to next DO request - {type(error)}")
+                    logger.info(f"Order already created, skipping to next DO request")
                     continue
                 found = True
                 logger.info(f"Waiting for order {self.__order_id} approval...")
@@ -325,7 +332,7 @@ class EtnyPoXNode:
             _hash = self.send_transaction(unicorn_txn)
             self.__w3.eth.waitForTransactionReceipt(_hash)
         except Exception as ex:
-            logger.error(ex)
+            logger.error(f"Error while adding Processor to Order, Error Message:{ex}")
             raise
 
         logger.info(f"Added the enclave processor to the order!")
@@ -360,13 +367,16 @@ class EtnyPoXNode:
             int(doreq), 
             int(self.__dprequest),
         ).buildTransaction(self.get_transaction_build())
-        _hash = self.send_transaction(unicorn_txn)
+        order_id = 0
         try:
+            _hash = self.send_transaction(unicorn_txn)
             receipt = self.__w3.eth.waitForTransactionReceipt(_hash)
             processed_logs = self.__etny.events._placeOrderEV().processReceipt(receipt)
             self.__order_id = processed_logs[0].args._orderNumber
+            order_id = self.__order_id
         except Exception as e:
-            logger.error(e)
+            errorMessage = 'Already Taken' if type(e) == IndexError  else str(e)
+            logger.error(f'''Failed to place Order: {order_id}, DOReqeust_id: {doreq}, DPRequest_id: {self.__dprequest} , Error Message: {errorMessage}''')
             raise
 
         logger.info("Order placed successfully!")
@@ -382,12 +392,15 @@ class EtnyPoXNode:
             'gasPrice': self.__w3.toWei(config.gas_price_value, config.gas_price_measure),
         }
 
-    def send_transaction(self, unicorn_txn, get_only_hash = False):
-        signed_txn = self.__w3.eth.account.sign_transaction(unicorn_txn, private_key=self.__acct.key)
-        if not get_only_hash:
+    def send_transaction(self, unicorn_txn):
+        try:
+            signed_txn = self.__w3.eth.account.sign_transaction(unicorn_txn, private_key=self.__acct.key)
             self.__w3.eth.sendRawTransaction(signed_txn.rawTransaction)
-        _hash = self.__w3.toHex(self.__w3.sha3(signed_txn.rawTransaction))
-        return _hash
+            _hash = self.__w3.toHex(self.__w3.sha3(signed_txn.rawTransaction))
+            return _hash
+        except Exception as e:
+            logger.error(f"Error sending Transaction, Error Message: {e}")
+            raise
 
     def resume_processing(self):
         while True:
