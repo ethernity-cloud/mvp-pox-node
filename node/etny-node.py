@@ -8,7 +8,7 @@ from web3 import exceptions
 from web3.middleware import geth_poa_middleware
 
 import config
-from utils import get_or_generate_uuid, run_subprocess, retry, Storage, Cache, ListCache, MergedCache, subprocess
+from utils import get_or_generate_uuid, run_subprocess, retry, Storage, Cache, ListCache, MergedOrdersCache, subprocess
 from models import *
 from error_messages import errorMessages
 
@@ -47,7 +47,7 @@ class EtnyPoXNode:
         self.doreq_cache = ListCache(config.doreq_cache_limit, config.doreq_filepath)
         self.ipfs_cache = ListCache(config.ipfs_cache_limit, config.ipfs_cache_filepath)
         self.storage = Storage(config.ipfs_host, config.client_connect_url, config.client_bootstrap_url, self.ipfs_cache, config.logger)
-        self.merged_cache = MergedCache(config.mergedreq_cache_limit, config.mergedreq_filepath)
+        self.merged_orders_cache = MergedOrdersCache(config.merged_orders_cache_limit, config.merged_orders_cache)
 
     def parse_arguments(self, arguments, parser):
         parser = parser.parse_args()
@@ -264,7 +264,7 @@ class EtnyPoXNode:
         req = DPRequest(req)
         checked = 0
         seconds = 0
-        while seconds < config.dp_request_timeout:
+        while seconds < config.contract_call_frequency:
             count = self.__etny.caller()._getDORequestsCount()
             found = False
             cached_do_requests = self.doreq_cache.get_values
@@ -274,7 +274,7 @@ class EtnyPoXNode:
                 self.doreq_cache.add(i)
                 
                 if doreq.status != RequestStatus.AVAILABLE:
-                    logger.debug(f'''Skipping Order, Order has different status: '{RequestStatus._status_as_string(doreq.status)}' ''')
+                    logger.debug(f'''Skipping Order, DORequestId = {_doreq}, DPRequestId = {i}, Order has different status: '{RequestStatus._status_as_string(doreq.status)}' ''')
                     continue
 
                 logger.info(f"Checking DO request: {i}")
@@ -294,7 +294,7 @@ class EtnyPoXNode:
                     self.place_order(i)
 
                     # store merged log
-                    self.merged_cache.add(do_req_id = i, dp_req_id = self.__dprequest, order_id = self.__order_id)
+                    self.merged_orders_cache.add(do_req_id = i, dp_req_id = self.__dprequest, order_id = self.__order_id)
 
                 except (exceptions.SolidityError, IndexError) as error:
                     logger.info(f"Order already created, skipping to next DO request")
@@ -375,8 +375,8 @@ class EtnyPoXNode:
             self.__order_id = processed_logs[0].args._orderNumber
             order_id = self.__order_id
         except Exception as e:
-            errorMessage = 'Already Taken' if type(e) == IndexError  else str(e)
-            logger.error(f'''Failed to place Order: {order_id}, DOReqeust_id: {doreq}, DPRequest_id: {self.__dprequest} , Error Message: {errorMessage}''')
+            errorMessage = 'Already Taken by other Node' if type(e) == IndexError  else str(e)
+            logger.error(f'''Failed to place Order: {order_id}, DOReqeust_id: {doreq}, DPRequest_id: {self.__dprequest}, Error Message: {errorMessage}''')
             raise
 
         logger.info("Order placed successfully!")

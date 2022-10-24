@@ -42,10 +42,9 @@ dpreq_cache_limit = 10000000
 dpreq_filepath = os.path.dirname(os.path.realpath(__file__)) + '/dpreq_cache.txt'
 doreq_cache_limit = 10000000
 doreq_filepath = os.path.dirname(os.path.realpath(__file__)) + '/doreq_cache.txt'
-dp_request_timeout = 60 * 60 * 24
 
-mergedreq_filepath = os.path.dirname(os.path.realpath(__file__)) + '/merged_cache.txt'
-mergedreq_cache_limit = 10000000
+merged_orders_cache = os.path.dirname(os.path.realpath(__file__)) + '/merged_orders_cache.txt'
+merged_orders_cache_limit = 10000000
 
 # logger
 logger = logging.getLogger("ETNY NODE")
@@ -55,7 +54,7 @@ handler.setFormatter(formatter)
 logger.addHandler(handler)
 logger.setLevel(logging.DEBUG if os.environ.get('LOG_LEVEL') == 'debug' else logging.INFO)
 
-contract_call_frequency = int(os.environ.get('CONTRACT_CALL_FREQUENCY', 43200)) # 12 hour
+contract_call_frequency= int(os.environ.get('CONTRACT_CALL_FREQUENCY', 43200))
 
 # parser
 parser = argparse.ArgumentParser(description="Ethernity PoX request")

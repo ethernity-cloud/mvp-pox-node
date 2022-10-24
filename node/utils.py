@@ -1,3 +1,4 @@
+from asyncio.log import logger
 import json
 import os
 import socket
@@ -133,7 +134,7 @@ class ListCache(Cache):
         return list(map(lambda x: int(x), self.mem))
 
 
-class MergedCache(Cache):
+class MergedOrdersCache(Cache):
     def __init__(self, items_limit, filepath, store_type=list):
         super().__init__(items_limit, filepath, store_type)
 
