@@ -55,6 +55,8 @@ handler.setFormatter(formatter)
 logger.addHandler(handler)
 logger.setLevel(logging.DEBUG if os.environ.get('LOG_LEVEL') == 'debug' else logging.INFO)
 
+contract_call_frequency = int(os.environ.get('CONTRACT_CALL_FREQUENCY', 43200)) # 12 hour
+
 # parser
 parser = argparse.ArgumentParser(description="Ethernity PoX request")
 parser.add_argument("-a", "--address", help="Etherem DP address (0xf17f52151EbEF6C7334FAD080c5704D77216b732)",

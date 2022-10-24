@@ -316,7 +316,7 @@ class EtnyPoXNode:
             time.sleep(5)
             
             seconds += 5
-            if seconds >= 60 * 60 * 24:
+            if seconds >= config.contract_call_frequency:
                 logger.info("DP request timed out!")
                 self.cancel_dp_request(self.__dprequest)
                 break
