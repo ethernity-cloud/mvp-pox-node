@@ -43,7 +43,7 @@ dpreq_filepath = os.path.dirname(os.path.realpath(__file__)) + '/dpreq_cache.txt
 doreq_cache_limit = 10000000
 doreq_filepath = os.path.dirname(os.path.realpath(__file__)) + '/doreq_cache.txt'
 
-merged_orders_cache = os.path.dirname(os.path.realpath(__file__)) + '/merged_orders_cache.txt'
+merged_orders_cache = os.path.dirname(os.path.realpath(__file__)) + '/merged_orders_cache.json'
 merged_orders_cache_limit = 10000000
 
 # logger
