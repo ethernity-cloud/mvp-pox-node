@@ -1,3 +1,6 @@
+v0.6.6
+fix DoRequestCount bug
+
 v0.6.5
 change contract call from 24 to 12 hours
 added log levels info and debug

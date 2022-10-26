@@ -265,7 +265,14 @@ class EtnyPoXNode:
         checked = 0
         seconds = 0
         while seconds < config.contract_call_frequency:
-            count = self.__etny.caller()._getDORequestsCount()
+            try:
+                count = self.__etny.caller()._getDORequestsCount()
+            except Exception as e:
+                logger.error(f"Error while tring to get DORequestCount, errorMessage: {e}")
+                time.sleep(5)
+                seconds += 5
+                continue
+            
             found = False
             cached_do_requests = self.doreq_cache.get_values
             for i in reversed(list(set(range(checked, count)) - set(cached_do_requests))):
