@@ -1,3 +1,10 @@
+v0.6.5
+change contract call from 24 to 12 hours
+added log levels info and debug
+when debug mode is selected then additional logs are displayed in the log file for troubleshooting purposes
+added transactions cache json file for debug purposes
+error handling on edge cases
+
 v0.6.4
 added changelog file
 
