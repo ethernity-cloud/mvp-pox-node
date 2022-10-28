@@ -1,9 +1,11 @@
+from asyncio.log import logger
 import json
 import os
 import socket
 import subprocess
 import time
 import uuid
+import math
 from collections import OrderedDict
 
 import ipfshttpclient
@@ -62,7 +64,7 @@ class Storage:
             return
         try:
             self.bootstrap_client.get(data, compress=True, opts={"compression-level": 9}, timeout=120)
-            self.cache.add(data, 1)
+            self.cache.add(data)
         except Exception as e:
             self.logger.error(e)
             raise
@@ -78,7 +80,7 @@ class Storage:
 
 
 class Cache:
-    def __init__(self, items_limit, filepath):
+    def __init__(self, items_limit, filepath, store_type = OrderedDict):
         self.items_limit = items_limit
         self.filepath = filepath
         try:
@@ -86,14 +88,17 @@ class Cache:
                 os.makedirs(os.path.dirname(filepath), exist_ok=True)
                 raise Exception
             with open(filepath, 'r') as f:
-                self.mem = OrderedDict(json.load(f)) 
+                self.mem = store_type(json.load(f)) 
         except Exception as e:
-            self.mem = OrderedDict({})
+            self.mem = store_type({})
             self._update_file()
 
     def _update_file(self):
         with open(self.filepath, 'w') as f:
-            json.dump(self.mem, f)
+            try:
+                json.dump(self.mem, f)
+            except TypeError:
+                json.dump(list(self.mem), f)
 
     def add(self, key, value):
         self.mem[key] = value
@@ -101,16 +106,41 @@ class Cache:
             self.mem.popitem(last=False)
         self._update_file()
 
-    def contains(self, key):
-        return key in self.mem
-
     def get(self, key):
-        if not self.contains(key):
-            return None
-        return self.mem[key]
+        return self.mem.get(key)
 
+    @property
     def get_values(self):
         return self.mem.values()
+
+
+class ListCache(Cache):
+    def __init__(self, items_limit, filepath, store_type=set):
+        super().__init__(items_limit, filepath, store_type)
+        
+    def add(self, value):
+        if value not in self.mem:
+            self.mem.add(value)
+            self._update_file()
+
+    def get(self, value):
+        return value if self.contains(value) else None
+
+    def contains(self, value):
+        return value in self.mem
+
+    @property
+    def get_values(self):
+        return list(map(lambda x: int(x), self.mem))
+
+
+class MergedOrdersCache(Cache):
+    def __init__(self, items_limit, filepath, store_type=list):
+        super().__init__(items_limit, filepath, store_type)
+
+    def add(self, do_req_id, dp_req_id, order_id):
+        self.mem.append(dict(do = do_req_id, dp = dp_req_id, order = order_id))
+        self._update_file()
 
 
 class HardwareInfoProvider:
@@ -120,7 +150,7 @@ class HardwareInfoProvider:
 
     @staticmethod
     def get_free_memory():
-        return psutil.virtual_memory()[1] // (2**30)  # in GB
+        return math.ceil(psutil.virtual_memory()[1] / (2**30))  # in GB
 
     @staticmethod
     def get_free_storage():

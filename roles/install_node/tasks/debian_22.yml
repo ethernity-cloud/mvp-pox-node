@@ -17,16 +17,11 @@
 - name: Ubuntu 22.04 | exit
   when: ansible_kernel is version('5.13','<')
   meta: end_play
-- name: Ubuntu 22.04 | qemu packages
+- name: Ubuntu 22.04 | qemu dependency packages
   apt:
     pkg:
        - policycoreutils-python-utils
-       - qemu-utils
-       - qemu-system
-       - qemu-system-common
-       - qemu-system-x86
        - libfdt1
-       - qemu-system-data
        - libvirt-clients
        - libvirt-daemon-system
        - bridge-utils
@@ -37,6 +32,7 @@
        - virt-top
        - genisoimage
     state: present
+    allow_downgrade: true
 - name:  Ubuntu 22.04 | vagrant add key  
   apt_key:
     url: https://apt.releases.hashicorp.com/gpg
@@ -70,8 +66,10 @@
   apt:
     pkg: "{{item}}"
   with_items:
-     - qemu-system-common
-     - qemu-system-x86
+     - qemu-system-data=1:6.2+dfsg-2ubuntu6.4.etny0
+     - qemu-utils=1:6.2+dfsg-2ubuntu6.4.etny0
+     - qemu-system-common=1:6.2+dfsg-2ubuntu6.4.etny0
+     - qemu-system-x86=1:6.2+dfsg-2ubuntu6.4.etny0
 - name: "Installing qemu-utils"
   apt:
     pkg:

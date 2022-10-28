@@ -26,6 +26,11 @@ class RequestStatus:
     BOOKED = 1
     CANCELED = 2
 
+    @staticmethod
+    def _status_as_string(status) -> str:
+        result = [x for x in dir(RequestStatus) if not x.startswith('_')]
+        return result[status] if len(result) - 1 > status else status
+
 
 class Order:
     def __init__(self, req):
