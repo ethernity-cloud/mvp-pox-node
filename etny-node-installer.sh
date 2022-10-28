@@ -20,6 +20,15 @@ else
 fi
 }
 
+qemu_hold(){
+
+apt-mark hold qemu-system-common
+apt-mark hold qemu-system-data
+apt-mark hold qemu-system-x86
+apt-mark hold qemu-utils
+
+}
+
 is_miminum_kernel_version(){
 #returning true or false if we have the minimum required kernel version for Ubuntu 20.04
     version=`uname -r` && currentver=${version%-*} 
@@ -56,6 +65,7 @@ then
 	else
                 if [ install_result == 0 ]
                 then
+			qemu_hold
 			echo "Node installation completed successfully. Please allow up to 24h to see transactions on the blockchain. " && exit
                 else
                 	echo "Node installation failed! Please check error messages above." && exit
