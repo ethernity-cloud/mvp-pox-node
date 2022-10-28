@@ -1,3 +1,6 @@
+v0.6.7
+fix qemu incompatibility
+
 v0.6.6
 fix DoRequestCount bug
 
