@@ -21,6 +21,10 @@
     headers:
       Content-Type: "application/json"
   register: result
+  retries: 64
+  delay: 3
+  until: "result is not failed"
+
 
 - name: Validate config file
   debug:
