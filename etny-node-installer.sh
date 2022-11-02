@@ -36,6 +36,15 @@ apt-mark hold qemu-utils
 
 }
 
+qemu_unhold(){
+
+apt-mark unhold qemu-system-common
+apt-mark unhold qemu-system-data
+apt-mark unhold qemu-system-x86
+apt-mark unhold qemu-utils
+
+}
+
 is_miminum_kernel_version(){
 #returning true or false if we have the minimum required kernel version for Ubuntu 20.04
     version=`uname -r` && currentver=${version%-*} 
@@ -61,6 +70,7 @@ then
 	fi
 	echo "Running ansible-playbook script..."	
 	HOME=/root
+	qemu_unhold
 	sudo -E $ansible_cmd -i localhost, playbook.yml -e "ansible_python_interpreter=/usr/bin/python3"
 	install_result=$?
 	if [ -f $rebootfile ]
