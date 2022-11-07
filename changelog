@@ -1,3 +1,13 @@
+v0.6.8
+added log file for installer (etny-node-installer.log)
+pinned installation packages (python, vagrant, web3)
+added verbose mode for installer (-v)
+added ipfs as a service in VM
+better error handling
+
+v0.6.7
+fix qemu incompatibility
+
 v0.6.6
 fix DoRequestCount bug
 
