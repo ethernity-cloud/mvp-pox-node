@@ -6,6 +6,13 @@ rebootfile="/tmp/reboot"
 service="etny-vagrant.service"
 os=""
 
+if [ "$1" == "-v" ]
+then
+	ansible_cmd="ansible-playbook -v"
+else
+	ansible_cmd="ansible-playbook"
+fi
+
 ubuntu_20_04(){
 #determining if the etny-vagrant service is running. If yes we stop the script as we don't need to run the setup process
 echo $os "found. Continuing..."
@@ -26,6 +33,15 @@ apt-mark hold qemu-system-common
 apt-mark hold qemu-system-data
 apt-mark hold qemu-system-x86
 apt-mark hold qemu-utils
+
+}
+
+qemu_unhold(){
+
+apt-mark unhold qemu-system-common
+apt-mark unhold qemu-system-data
+apt-mark unhold qemu-system-x86
+apt-mark unhold qemu-utils
 
 }
 
@@ -54,7 +70,8 @@ then
 	fi
 	echo "Running ansible-playbook script..."	
 	HOME=/root
-	sudo -E ansible-playbook -i localhost, playbook.yml -e "ansible_python_interpreter=/usr/bin/python3"
+	qemu_unhold
+	sudo -E $ansible_cmd -i localhost, playbook.yml -e "ansible_python_interpreter=/usr/bin/python3"
 	install_result=$?
 	if [ -f $rebootfile ]
 	then 
@@ -63,7 +80,7 @@ then
 		while [ $sec -ge 0 ]; do echo -n "Restarting system in [CTRL+C to cancel]: " && echo -ne "$sec\033[0K\r" && let "sec=sec-1" && sleep 1; done
 		sudo reboot
 	else
-                if [ install_result == 0 ]
+                if [ $install_result == 0 ]
                 then
 			qemu_hold
 			echo "Node installation completed successfully. Please allow up to 24h to see transactions on the blockchain. " && exit
@@ -156,7 +173,8 @@ ubuntu_20_04_ansible_playbook(){
 echo "Running ansible-playbook..."
 cd && cd $nodefolder
 HOME=/root
-sudo -E ansible-playbook -i localhost, playbook.yml -e "ansible_python_interpreter=/usr/bin/python3"
+sudo -E $ansible_cmd -i localhost, playbook.yml -e "ansible_python_interpreter=/usr/bin/python3"
+install_result=$?
 if [ -f $rebootfile ]
 then 
 	echo "Restarting system. Please run the installer script afterwards to continue the setup."
@@ -164,7 +182,12 @@ then
 	while [ $sec -ge 0 ]; do echo -n "Restarting system in [CTRL+C to cancel]: " && echo -ne "$sec\033[0K\r" && let "sec=sec-1" && sleep 1; done
 	sudo reboot
 else
-	echo "Node installation completed successfully. Please allow up to 24h to see transactions on the blockchain. " && exit
+        if [ $install_result == 0 ]
+        then
+               echo "Node installation completed successfully. Please allow up to 24h to see transactions on the blockchain. " && exit
+        else
+               echo "Node installation failed! Please check error messages above." && exit
+        fi
 fi
 }
 

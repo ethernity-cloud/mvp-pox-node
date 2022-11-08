@@ -30,7 +30,7 @@
   - name: "Config file does not exist"
     debug:
       msg: "Config file does not exist. Please create <config> file in this directory with your wallet values or generate a random one." 
-    when: 
+    failed_when: 
       - lookup('ansible.builtin.env', 'FILE') == 'existing'
       - config_file.stat.exists == false
   - meta: end_play
@@ -43,9 +43,6 @@
         - lookup('ansible.builtin.env', 'FILE') == 'generate'
         - config_file.stat.exists == false
     - role: validate_config_file
-      when: 
-        - lookup('ansible.builtin.env', 'FILE') == 'existing'
-        - config_file.stat.exists == true
     - role: uoi-io.libvirt
       libvirt_firewalld: false
       libvirt_selinux: false

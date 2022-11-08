@@ -1,4 +1,7 @@
-#1/bin/bash
+#!/bin/bash
+set -e 
+
+trap 'echo "Installer error: \"${BASH_COMMAND}\"command filed with exit code $?."' SIGINT SIGTERM ERR EXIT
 
 export DEBIAN_FRONTEND=noninteractive
 apt-get -yq update
