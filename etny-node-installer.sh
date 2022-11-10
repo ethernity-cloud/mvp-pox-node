@@ -55,6 +55,12 @@ check_config_file(){
         fi
 }
 
+check_ansible(){
+        echo "Check ansible version..."
+        ANSIBLE_VERSION=`ansible --version 2> /dev/null || echo ""`
+        if [[ $ANSIBLE_VERSION = "" ]]; then echo "Installing latest ansible version..." && sudo apt-add-repository --yes --update ppa:ansible/ansible && sudo apt update && sudo apt -y install software-properties-common ansible; fi
+}
+
 is_miminum_kernel_version(){
 #returning true or false if we have the minimum required kernel version for Ubuntu 20.04
     version=`uname -r` && currentver=${version%-*} 
@@ -68,9 +74,7 @@ if [[ ( "$(is_miminum_kernel_version)" = true && $os = "Ubuntu 20.04" ) || ( $(u
 then  
 	echo "The right kernel is running. Continuing setup..."
 	## check ansible 
-	echo "Check ansible version..." 
-	ANSIBLE_VERSION=`ansible --version 2> /dev/null || echo ""`
-	if [[ $ANSIBLE_VERSION = "" ]]; then echo "Installing latest ansible version..." && sudo apt-add-repository --yes --update ppa:ansible/ansible && sudo apt update && sudo apt -y install software-properties-common ansible; fi
+	check_ansible
 	check_config_file
 	echo "Running ansible-playbook script..."	
 	HOME=/root
@@ -164,9 +168,11 @@ case "$choice" in
 	;;
 	2) 
 		export FILE=generate
+		check_ansible
 		ubuntu_20_04_ansible_playbook;;
 	3) 
 		export FILE=existing
+		check_ansible
 		ubuntu_20_04_ansible_playbook;;
 	4) echo "Exiting..." && exit;;
 	*) echo "Invalid choice. Please choose an option below..." && ubuntu_20_04_config_file_choice;;
