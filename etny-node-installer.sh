@@ -45,6 +45,16 @@ apt-mark unhold qemu-utils
 
 }
 
+check_config_file(){
+        if [ -f $configfile ]
+        then
+                echo "Config file found. "
+        else
+                echo "Config file not found. How would you like to continue?"
+                ubuntu_20_04_config_file_choice
+        fi
+}
+
 is_miminum_kernel_version(){
 #returning true or false if we have the minimum required kernel version for Ubuntu 20.04
     version=`uname -r` && currentver=${version%-*} 
@@ -61,13 +71,7 @@ then
 	echo "Check ansible version..." 
 	ANSIBLE_VERSION=`ansible --version 2> /dev/null || echo ""`
 	if [[ $ANSIBLE_VERSION = "" ]]; then echo "Installing latest ansible version..." && sudo apt-add-repository --yes --update ppa:ansible/ansible && sudo apt update && sudo apt -y install software-properties-common ansible; fi
-	if [ -f $configfile ]
-	then
-		echo "Config file found. "
-	else
-		echo "Config file not found. How would you like to continue?"
-		ubuntu_20_04_config_file_choice
-	fi
+	check_config_file
 	echo "Running ansible-playbook script..."	
 	HOME=/root
 	qemu_unhold
@@ -89,6 +93,7 @@ then
                 fi
 	fi
 else 
+	check_config_file
 	ubuntu_20_04_update_ansible
 fi
 }
