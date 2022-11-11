@@ -16,7 +16,7 @@
 
 - name: Defining node address request
   uri:
-    url: https://blockexplorer.bloxberg.org/api?module=account&action=balance&address={{ config_file_map.ADDRESS  }}
+    url: https://blockexplorer.bloxberg.org/api?module=account&action=balance&address={{ config_file_map.ADDRESS }}
     method: GET
     headers:
       Content-Type: "application/json"
