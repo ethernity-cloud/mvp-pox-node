@@ -45,6 +45,7 @@
   debug:
     msg: "Balance: '{{ result.json.result|int / 1000000000000000000 }}' bergs. If balance is 0 then please get bergs from https://faucet.bloxberg.org/ and run the installer again."
   failed_when:
+    - result.json.result|int == 0
   when: 
     - result.json.result is defined
     - result.json.result == '0'
