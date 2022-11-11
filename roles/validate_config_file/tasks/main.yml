@@ -61,7 +61,7 @@
   debug:
     msg: 
       - "Node ADDRESS balance: '{{ addressbergs.json.result|int / 1000000000000000000 }}' bergs."
-      - "Please get bergs on {{ config_file_map.ADDRESS  }} from https://faucet.bloxberg.org/ and try again."
+      - "Please get bergs on {{ config_file_map.ADDRESS }} from https://faucet.bloxberg.org/ and try again."
   failed_when:
     - addressbergs.json.result|int == 0
   when: 
@@ -72,7 +72,7 @@
   debug:
     msg: 
       - "Node RESULT ADDRESS balance: '{{ resultbergs.json.result|int / 1000000000000000000 }}' bergs."
-      - "Please get bergs on {{ config_file_map.RESULT_ADDRESS  }} from https://faucet.bloxberg.org/ and try again."
+      - "Please get bergs on {{ config_file_map.RESULT_ADDRESS }} from https://faucet.bloxberg.org/ and try again."
   failed_when:
     - resultbergs.json.result|int == 0
   when:
