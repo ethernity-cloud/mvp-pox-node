@@ -45,6 +45,22 @@ apt-mark unhold qemu-utils
 
 }
 
+check_config_file(){
+        if [ -f $configfile ]
+        then
+                echo "Config file found. "
+        else
+                echo "Config file not found. How would you like to continue?"
+                ubuntu_20_04_config_file_choice
+        fi
+}
+
+check_ansible(){
+        echo "Check ansible version..."
+        ANSIBLE_VERSION=`ansible --version 2> /dev/null || echo ""`
+        if [[ $ANSIBLE_VERSION = "" ]]; then echo "Installing latest ansible version..." && sudo apt-add-repository --yes --update ppa:ansible/ansible && sudo apt update && sudo apt -y install software-properties-common ansible; fi
+}
+
 is_miminum_kernel_version(){
 #returning true or false if we have the minimum required kernel version for Ubuntu 20.04
     version=`uname -r` && currentver=${version%-*} 
@@ -58,16 +74,8 @@ if [[ ( "$(is_miminum_kernel_version)" = true && $os = "Ubuntu 20.04" ) || ( $(u
 then  
 	echo "The right kernel is running. Continuing setup..."
 	## check ansible 
-	echo "Check ansible version..." 
-	ANSIBLE_VERSION=`ansible --version 2> /dev/null || echo ""`
-	if [[ $ANSIBLE_VERSION = "" ]]; then echo "Installing latest ansible version..." && sudo apt-add-repository --yes --update ppa:ansible/ansible && sudo apt update && sudo apt -y install software-properties-common ansible; fi
-	if [ -f $configfile ]
-	then
-		echo "Config file found. "
-	else
-		echo "Config file not found. How would you like to continue?"
-		ubuntu_20_04_config_file_choice
-	fi
+	check_ansible
+	check_config_file
 	echo "Running ansible-playbook script..."	
 	HOME=/root
 	qemu_unhold
@@ -89,6 +97,7 @@ then
                 fi
 	fi
 else 
+	check_config_file
 	ubuntu_20_04_update_ansible
 fi
 }
@@ -97,8 +106,7 @@ ubuntu_20_04_config_file_choice(){
 #if the config file doesn't exist we offer the either generate one with random wallets or we get the wallets from input
 echo "1) Type wallets. "
 echo "2) Generate random wallets... "
-echo "3) Use existing config file... "
-echo "4) Exit. Rerun the script when config file exists..."
+echo "3) Exit. Rerun the script when config file exists..."
 echo -n "[Type your choice to continue]:" && read choice
 case "$choice" in 
 	1) 
@@ -159,11 +167,9 @@ case "$choice" in
 	;;
 	2) 
 		export FILE=generate
+		check_ansible
 		ubuntu_20_04_ansible_playbook;;
-	3) 
-		export FILE=existing
-		ubuntu_20_04_ansible_playbook;;
-	4) echo "Exiting..." && exit;;
+	3) echo "Exiting..." && exit;;
 	*) echo "Invalid choice. Please choose an option below..." && ubuntu_20_04_config_file_choice;;
 esac
 }

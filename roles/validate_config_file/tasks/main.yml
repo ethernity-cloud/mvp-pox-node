@@ -14,46 +14,70 @@
     _vals: "{{ _arr|map('regex_replace', '^(.*?)=(.*)$', '\\2')|map('trim')|list }}"
   failed_when: config_file_map.ADDRESS is undefined or config_file_map.RESULT_ADDRESS is undefined or config_file_map.PRIVATE_KEY is undefined or config_file_map.RESULT_PRIVATE_KEY is undefined
 
-- name: Post to bloxberg
+- name: Defining node address request
   uri:
     url: https://blockexplorer.bloxberg.org/api?module=account&action=balance&address={{ config_file_map.ADDRESS }}
     method: GET
     headers:
       Content-Type: "application/json"
-  register: result
+  register: addressbergs
   retries: 64
   delay: 3
 
+- name: Defining result address request
+  uri:
+    url: https://blockexplorer.bloxberg.org/api?module=account&action=balance&address={{ config_file_map.RESULT_ADDRESS }}
+    method: GET
+    headers:
+      Content-Type: "application/json"
+  register: resultbergs
+  retries: 64
+  delay: 3
 
-- name: Validate config file
+- name: Comparing ADDRESS with RESULT ADDRESS
   debug:
-    msg: "Result address must be different than the node address. Try a different address..."
-  when: config_file_map.ADDRESS == config_file_map.RESULT_ADDRESS
+    msg: "Result address must be different than node address."
+  failed_when: config_file_map.ADDRESS == config_file_map.RESULT_ADDRESS
 
-- name: Validate config file
+- name: Comparing PRIVATE KEY with RESULT PRIVATE KEY
   debug:
-    msg: "Result private key must be different than the node private key. Try a different private key..."
-  when: config_file_map.PRIVATE_KEY == config_file_map.RESULT_PRIVATE_KEY
+    msg: "Result private key must be different than node private key."
+  failed_when: config_file_map.PRIVATE_KEY == config_file_map.RESULT_PRIVATE_KEY
 
-- name: Get error message
+- name: Evaluate ADDRESS message
   debug:
-    msg: "{{ result.json.message }}"
-  failed_when: result.json.message != "OK"
-  when: result.json.message is defined
+    msg: "{{ addressbergs.json.message }}"
+  failed_when: addressbergs.json.message != "OK"
+  when: addressbergs.json.message is defined
 
-- name: Get account balance
+- name: Evaluate RESULT ADDRESS message
+  debug: 
+    msg: "{{ resultbergs.json.message }}" 
+  failed_when: resultbergs.json.message != "OK"
+  when: resultbergs.json.message is defined 
+
+
+- name: Get Node ADDRESS balance
   debug:
-    msg: "Balance: '{{ result.json.result|int / 1000000000000000000 }}' bergs. If balance is 0 then please get bergs from https://faucet.bloxberg.org/ and run the installer again."
+    msg: 
+      - "Node ADDRESS balance: '{{ addressbergs.json.result|int / 1000000000000000000 }}' bergs."
+      - "Please get bergs on {{ config_file_map.ADDRESS }} from https://faucet.bloxberg.org/ and try again."
   failed_when:
+    - addressbergs.json.result|int == 0
   when: 
-    - result.json.result is defined
-    - result.json.result == '0'
+    - addressbergs.json.result is defined
+    - addressbergs.json.result == '0'
+
+- name: Get RESULT ADDRESS balance
+  debug:
+    msg: 
+      - "Node RESULT ADDRESS balance: '{{ resultbergs.json.result|int / 1000000000000000000 }}' bergs."
+      - "Please get bergs on {{ config_file_map.RESULT_ADDRESS }} from https://faucet.bloxberg.org/ and try again."
+  failed_when:
+    - resultbergs.json.result|int == 0
+  when:
+    - resultbergs.json.result is defined
+    - resultbergs.json.result == '0'
 
 - meta: end_play
-  when: (result.json.result is defined and result.json.result == '0') or (config_file_map.PRIVATE_KEY == config_file_map.RESULT_PRIVATE_KEY) or (config_file_map.ADDRESS == config_file_map.RESULT_ADDRESS)
-
-
-
-
-
-
+  when: (resultbergs.json.result is defined and resultbergs.json.result == '0') or (addressbergs.json.result is defined and addressbergs.json.result == '0') or (config_file_map.PRIVATE_KEY == config_file_map.RESULT_PRIVATE_KEY) or (config_file_map.ADDRESS == config_file_map.RESULT_ADDRESS)
