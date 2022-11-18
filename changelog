@@ -1,3 +1,6 @@
+v0.7.1
+pinning ubuntu 20.04 packages
+
 v0.7.0
 added funds check for result wallet address
 fix installer logic
