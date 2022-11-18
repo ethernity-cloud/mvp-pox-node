@@ -74,8 +74,10 @@
   apt:
     pkg: "{{item}}"
   with_items:
-     - qemu-system-common
-     - qemu-system-x86
+    - qemu-system-data=1:6.2+dfsg-2ubuntu8~20.04.sav0.etny
+    - qemu-utils=1:6.2+dfsg-2ubuntu8~20.04.sav0.etny
+    - qemu-system-common=1:6.2+dfsg-2ubuntu8~20.04.sav0.etny
+    - qemu-system-x86=1:6.2+dfsg-2ubuntu8~20.04.sav0.etny
 - name: "Installing qemu-utils"
   apt:
     pkg:
