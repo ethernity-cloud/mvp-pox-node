@@ -65,7 +65,7 @@
       - "Node ADDRESS balance: '{{ addressbergs.json.result|int}}' bergs."
       - "Please get bergs on {{ config_file_map.ADDRESS }} from https://faucet.bloxberg.org/ and try again."
   failed_when:
-    - addressbergs.json.result|int == 0x0
+    - addressbergs.json.result|int == 0
   when:
     - addressbergs.json.result is defined
     - addressbergs.json.result == '0x0'
