@@ -50,38 +50,36 @@
 
 - name: Evaluate ADDRESS message
   debug:
-    msg: "{{ addressbergs.json.message }}"
-  failed_when: addressbergs.json.message != "OK"
-  when: addressbergs.json.message is defined
+    msg: "{{ addressbergs.json }}"
+  failed_when: addressbergs.json == ""
 
 - name: Evaluate RESULT ADDRESS message
-  debug: 
-    msg: "{{ resultbergs.json.message }}" 
-  failed_when: resultbergs.json.message != "OK"
-  when: resultbergs.json.message is defined 
+  debug:
+    msg: "{{ resultbergs.json }}"
+  failed_when: resultbergs.json == ""
 
 
 - name: Get Node ADDRESS balance
   debug:
-    msg: 
-      - "Node ADDRESS balance: '{{ addressbergs.json.result|int / 1000000000000000000 }}' bergs."
+    msg:
+      - "Node ADDRESS balance: '{{ addressbergs.json.result|int}}' bergs."
       - "Please get bergs on {{ config_file_map.ADDRESS }} from https://faucet.bloxberg.org/ and try again."
   failed_when:
-    - addressbergs.json.result|int == 0
-  when: 
+    - addressbergs.json.result|int == 0x0
+  when:
     - addressbergs.json.result is defined
-    - addressbergs.json.result == '0'
+    - addressbergs.json.result == '0x0'
 
 - name: Get RESULT ADDRESS balance
   debug:
-    msg: 
-      - "Node RESULT ADDRESS balance: '{{ resultbergs.json.result|int / 1000000000000000000 }}' bergs."
+    msg:
+      - "Node RESULT ADDRESS balance: '{{ resultbergs.json.result|int}}' bergs."
       - "Please get bergs on {{ config_file_map.RESULT_ADDRESS }} from https://faucet.bloxberg.org/ and try again."
   failed_when:
     - resultbergs.json.result|int == 0
   when:
     - resultbergs.json.result is defined
-    - resultbergs.json.result == '0'
+    - resultbergs.json.result == '0x0'
 
 - meta: end_play
   when: (resultbergs.json.result is defined and resultbergs.json.result == '0') or (addressbergs.json.result is defined and addressbergs.json.result == '0') or (config_file_map.PRIVATE_KEY == config_file_map.RESULT_PRIVATE_KEY) or (config_file_map.ADDRESS == config_file_map.RESULT_ADDRESS)
