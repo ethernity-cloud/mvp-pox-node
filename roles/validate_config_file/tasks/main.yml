@@ -16,20 +16,24 @@
 
 - name: Defining node address request
   uri:
-    url: https://blockexplorer.bloxberg.org/api?module=account&action=balance&address={{ config_file_map.ADDRESS }}
-    method: GET
+    url: https://bloxberg.ethernity.cloud
+    method: POST
     headers:
       Content-Type: "application/json"
+    body_format: json
+    body: '{"method":"eth_getBalance","params":["{{ config_file_map.ADDRESS }}","latest"],"id":1,"jsonrpc":"2.0"}'
   register: addressbergs
   retries: 64
   delay: 3
 
 - name: Defining result address request
   uri:
-    url: https://blockexplorer.bloxberg.org/api?module=account&action=balance&address={{ config_file_map.RESULT_ADDRESS }}
-    method: GET
+    url: https://bloxberg.ethernity.cloud
+    method: POST
     headers:
       Content-Type: "application/json"
+    body_format: json
+    body: '{"method":"eth_getBalance","params":["{{ config_file_map.RESULT_ADDRESS }}","latest"],"id":1,"jsonrpc":"2.0"}'
   register: resultbergs
   retries: 64
   delay: 3
