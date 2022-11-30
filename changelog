@@ -1,3 +1,6 @@
+v0.7.2
+changed balance wallet check from blockexplorer.bloxberg.org to bloxberg.ethernity.cloud
+
 v0.7.1
 pinning ubuntu 20.04 packages
 
