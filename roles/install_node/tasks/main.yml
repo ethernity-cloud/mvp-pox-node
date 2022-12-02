@@ -36,6 +36,8 @@
   copy:
     src: ubuntu/etc/apparmor.d/libvirt/TEMPLATE.qemu
     dest: /etc/apparmor.d/libvirt/TEMPLATE.qemu
+- name: fog-libvirt - install
+  shell: vagrant plugin install fog-libvirt --plugin-version=0.9.0
 - name: vagrant-libvirt - install
   shell: vagrant plugin install vagrant-libvirt --plugin-version=0.9.0
 - name: vagrant-preload - install
