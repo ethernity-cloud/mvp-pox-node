@@ -26,7 +26,6 @@
     pkg:
        - policycoreutils-python-utils
        - qemu-utils
-       - qemu-system
        - qemu-system-common
        - qemu-system-x86
        - libfdt1
