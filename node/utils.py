@@ -32,10 +32,9 @@ def run_subprocess(args, logger):
     for item in [stdout, stderr]:
         if item:
             logger.debug(item.decode())
-            
 
 
-def retry(func, *func_args, attempts, delay=0, callback = None):
+def retry(func, *func_args, attempts, delay=0, callback=None):
     for _ in range(attempts):
         try:
             if callback != None:
@@ -66,21 +65,34 @@ class Storage:
             self.bootstrap_client.get(data, compress=True, opts={"compression-level": 9}, timeout=120)
             self.cache.add(data)
         except Exception as e:
+            self.logger.info(f'error while downloading file {data}', e)
             self.logger.error(e)
             raise
 
-    def download_many(self, lst):
+    def download_many(self, lst, attempts=1, delay=0):
         for data in lst:
-            if retry(self.download, data, attempts=1, delay=0)[0] is False:
+            self.logger.info(f'Downloading {data}')
+            if retry(self.download, data, attempts=attempts, delay=delay)[0] is False:
                 return False
         return True
+
+    def upload(self, data):
+        try:
+            response = self.bootstrap_client.add(data, timeout=120)
+            self.logger.info(f'Uploaded response: {response}')
+            self.logger.info('Hash: ', response['Hash'])
+            return response['Hash']
+        except Exception as e:
+            self.logger.info(f'error while uploading')
+            self.logger.error(e)
+            raise
 
     def add(self, data):
         pass
 
 
 class Cache:
-    def __init__(self, items_limit, filepath, store_type = OrderedDict):
+    def __init__(self, items_limit, filepath, store_type=OrderedDict):
         self.items_limit = items_limit
         self.filepath = filepath
         try:
@@ -88,7 +100,7 @@ class Cache:
                 os.makedirs(os.path.dirname(filepath), exist_ok=True)
                 raise Exception
             with open(filepath, 'r') as f:
-                self.mem = store_type(json.load(f)) 
+                self.mem = store_type(json.load(f))
         except Exception as e:
             self.mem = store_type({})
             self._update_file()
@@ -117,7 +129,7 @@ class Cache:
 class ListCache(Cache):
     def __init__(self, items_limit, filepath, store_type=set):
         super().__init__(items_limit, filepath, store_type)
-        
+
     def add(self, value):
         if value not in self.mem:
             self.mem.add(value)
@@ -139,7 +151,7 @@ class MergedOrdersCache(Cache):
         super().__init__(items_limit, filepath, store_type)
 
     def add(self, do_req_id, dp_req_id, order_id):
-        self.mem.append(dict(do = do_req_id, dp = dp_req_id, order = order_id))
+        self.mem.append(dict(do=do_req_id, dp=dp_req_id, order=order_id))
         self._update_file()
 
 
@@ -150,8 +162,8 @@ class HardwareInfoProvider:
 
     @staticmethod
     def get_free_memory():
-        return math.ceil(psutil.virtual_memory()[1] / (2**30))  # in GB
+        return math.ceil(psutil.virtual_memory()[1] / (2 ** 30))  # in GB
 
     @staticmethod
     def get_free_storage():
-        return psutil.disk_usage("/")[2] // (2**30)  # in GB
+        return psutil.disk_usage("/")[2] // (2 ** 30)  # in GB
