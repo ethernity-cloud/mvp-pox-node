@@ -1,6 +1,7 @@
 #!/usr/bin/python3
 
 import os, time, json
+import shutil
 
 from eth_account import Account
 from web3 import Web3
@@ -46,7 +47,8 @@ class EtnyPoXNode:
         self.dpreq_cache = ListCache(config.dpreq_cache_limit, config.dpreq_filepath)
         self.doreq_cache = ListCache(config.doreq_cache_limit, config.doreq_filepath)
         self.ipfs_cache = ListCache(config.ipfs_cache_limit, config.ipfs_cache_filepath)
-        self.storage = Storage(config.ipfs_host, config.client_connect_url, config.client_bootstrap_url, self.ipfs_cache, config.logger)
+        self.storage = Storage(config.ipfs_host, config.client_connect_url, config.client_bootstrap_url,
+                               self.ipfs_cache, config.logger)
         self.merged_orders_cache = MergedOrdersCache(config.merged_orders_cache_limit, config.merged_orders_cache)
 
     def parse_arguments(self, arguments, parser):
@@ -73,20 +75,20 @@ class EtnyPoXNode:
                 self.cancel_dp_request(req_id)
             self.dpreq_cache.add(req_id)
 
-    def _limited_arg(self, item, allowed_max = 255):
+    def _limited_arg(self, item, allowed_max=255):
         return allowed_max if item > allowed_max else item
 
-    def add_dp_request(self, waiting_period_on_error = 15, beginning_of_recursion = None):
+    def add_dp_request(self, waiting_period_on_error=15, beginning_of_recursion=None):
         params = [
-            self._limited_arg(self.__cpu), 
-            self._limited_arg(self.__memory), 
-            self._limited_arg(self.__storage), 
+            self._limited_arg(self.__cpu),
+            self._limited_arg(self.__memory),
+            self._limited_arg(self.__storage),
             self._limited_arg(self.__bandwidth),
-            self.__duration, 
-            0, 
-            self.__uuid, 
-            "", 
-            "", 
+            self.__duration,
+            0,
+            self.__uuid,
+            "",
+            "",
             ""
         ]
 
@@ -115,8 +117,7 @@ class EtnyPoXNode:
 
                 logger.error('Node retried transaction too many times. Exiting!')
                 raise
-                
-            
+
         try:
             waiting_seconds = 120
             throw_error = False
@@ -124,7 +125,7 @@ class EtnyPoXNode:
                 waiting_seconds *= 7
                 throw_error = True
 
-            receipt = self.__w3.eth.waitForTransactionReceipt(transaction_hash = _hash, timeout = waiting_seconds)
+            receipt = self.__w3.eth.waitForTransactionReceipt(transaction_hash=_hash, timeout=waiting_seconds)
 
             processed_logs = self.__etny.events._addDPRequestEV().processReceipt(receipt)
             self.__dprequest = processed_logs[0].args._rowNumber
@@ -135,14 +136,13 @@ class EtnyPoXNode:
                 raise
             return
 
-            
         logger.info("DP request created successfully!")
         logger.info(f"TX Hash: {_hash}")
 
     def cancel_dp_request(self, req):
-        
+
         logger.info(f"Cancelling DP request {req}")
-        
+
         try:
             unicorn_txn = self.__etny.functions._cancelDPRequest(req).buildTransaction(self.get_transaction_build())
             _hash = self.send_transaction(unicorn_txn)
@@ -164,77 +164,259 @@ class EtnyPoXNode:
         try:
             _hash = self.send_transaction(unicorn_txn)
             self.__w3.eth.waitForTransactionReceipt(_hash)
-        except:
+        except Exception as ex:
             logger.error(f"Error while canceling IPFS Request, order: {order_id}, Error Message: {ex}")
             raise
         logger.info("Request has been cancelled")
 
-    def process_order(self, order_id, metadata = None):
+    def process_order(self, order_id, metadata=None):
         # this line should be checked later
         if not metadata:
             order = Order(self.__etny.caller()._getOrder(order_id))
             metadata = self.__etny.caller()._getDORequestMetadata(order.do_req)
 
         self.add_processor_to_order(order_id)
-        [enclaveImage, *etny_pinithy] = metadata[1].split(':')
+        version = 0
+        if metadata[1].startswith('v1:'):
+            version = 1
+            [v1, enclave_image_hash, etny_pinithy, docker_compose_hash, challenge_hash] = metadata[1].split(':')
+
+        logger.info(f'Running version v{version}')
+        if version == 0:
+            # before
+            [enclave_image_hash, *etny_pinithy] = metadata[1].split(':')
+            try:
+                logger.info(f"Downloading IPFS Image: {enclave_image_hash}")
+                logger.info(f"Downloading IPFS Payload Hash: {metadata[2]}")
+                logger.info(f"Downloading IPFS FileSet Hash: {metadata[3]}")
+            except Exception as e:
+                logger.info(str(e))
+            self.storage.download_many([enclave_image_hash])
+            if not self.storage.download_many([enclave_image_hash, metadata[2], metadata[3]]):
+                logger.info("Cannot download data from IPFS, cancelling processing")
+                self.ipfs_timeout_cancel(order_id)
+                return
+
+            logger.info("Stopping previous docker registry")
+
+            run_subprocess(['docker', 'stop', 'registry'], logger)
+            logger.info("Cleaning up docker registry")
+            run_subprocess(['docker', 'system', 'prune', '-a', '-f', '--volumes'], logger)
+            logger.info("Running new docker registry")
+            logger.debug(os.path.dirname(os.path.realpath(__file__)) + '/' + enclave_image_hash + ':/var/lib/registry')
+            run_subprocess([
+                'docker', 'run', '-d', '--restart=always', '-p', '5000:5000', '--name', 'registry', '-v',
+                os.path.dirname(os.path.realpath(__file__)) + '/' + enclave_image_hash + ':/var/lib/registry',
+                'registry:2'
+            ], logger)
+
+            logger.info("Cleaning up docker container")
+            run_subprocess(['docker', 'rm', '-f', 'etny-pynithy-' + str(order_id)], logger)
+
+            logger.info("Running docker-compose")
+
+            yaml_file = '-initial-image' if enclave_image_hash in [
+                'QmeQiSC1dLMKv4BvpvjWt1Zeak9zj6TWgWhN7LLiRznJqC'] else ''
+
+            run_subprocess([
+                'docker-compose', '-f', f'docker/docker-compose-etny-pynithy{yaml_file}.yml', 'run', '--rm', '-d',
+                '--name',
+                'etny-pynithy-' + str(order_id), 'etny-pynithy', str(order_id), metadata[2], metadata[3],
+                self.__resultaddress, self.__resultprivatekey, config.contract_address
+            ], logger)
+
+            '''new version'''
+            '''
+            logger.info("Running new docker registry - 4 ")
+            subprocess.call('docker rm -f $(sudo docker ps -aq)', shell=True)
+            run_subprocess(['docker', 'build', '-t', 'docker_etny-pynithy1', '-f', 'docker/etny-pynithy.Dockerfile', './docker'], logger)
+    
+            logger.info("Running docker-compose")
+            run_subprocess([
+                 'docker-compose', '-f', 'docker/docker-compose-without-registry.yaml', 'run', '--rm', '-d', '--name',
+                 'etny-pynithy-' + str(order_id), 'etny-pynithy', str(order_id), metadata[2], metadata[3],
+                 self.__resultaddress, self.__resultprivatekey, config.contract_address
+            ], logger)
+            '''
+            '''new version'''
+
+            time.sleep(10)
+            logger.info("Attaching to docker process")
+            run_subprocess(['docker', 'attach', 'etny-pynithy-' + str(order_id)], logger)
+            time.sleep(3)
+
+        if version == 1:
+            try:
+                logger.info(f"Downloading IPFS Image: {enclave_image_hash}")
+                logger.info(f"Downloading IPFS docker yml file: {docker_compose_hash}")
+                logger.info(f"Downloading IPFS Payload Hash: {metadata[2]}")
+                logger.info(f"Downloading IPFS FileSet Hash: {metadata[3]}")
+                logger.info(f"Downloading IPFS Challenge Hash: {challenge_hash}")
+            except Exception as e:
+                logger.info(str(e))
+
+            payload_hash = metadata[2].split(':')[1]
+            input_hash = metadata[3].split(':')[1]
+            list_of_ipfs_hashes = [enclave_image_hash, docker_compose_hash, challenge_hash, payload_hash]
+            if input_hash is not None and len(input_hash) > 0:
+                list_of_ipfs_hashes.append(input_hash)
+
+            self.storage.download_many(list_of_ipfs_hashes, attempts=5, delay=3)
+            if not self.storage.download_many(list_of_ipfs_hashes, attempts=5, delay=3):
+                logger.info("Cannot download data from IPFS, cancelling processing")
+                self.ipfs_timeout_cancel(order_id)
+                return
+
+            payload_file = f'{os.path.dirname(os.path.realpath(__file__))}/{payload_hash}'
+            if input_hash is not None and len(input_hash) > 0:
+                input_file = f'{os.path.dirname(os.path.realpath(__file__))}/{input_hash}'
+                logger.info('input hash is not none: ', input_file)
+            else:
+                input_file = None
+
+            docker_compose_file = f'{os.path.dirname(os.path.realpath(__file__))}/{docker_compose_hash}'
+            challenge_file = f'{os.path.dirname(os.path.realpath(__file__))}/{challenge_hash}'
+            challenge_content = self.read_file(challenge_file)
+            self.build_prerequisites_v1(order_id, payload_file, input_file, docker_compose_file, challenge_content)
+            logger.info("Stopping previous docker registry")
+
+            run_subprocess(['docker', 'stop', 'registry'], logger)
+            logger.info("Cleaning up docker registry")
+            run_subprocess(['docker', 'system', 'prune', '-a', '-f', '--volumes'], logger)
+            logger.info("Running new docker registry")
+            logger.debug(os.path.dirname(os.path.realpath(__file__)) + '/' + enclave_image_hash + ':/var/lib/registry')
+
+            logger.info("Stopping previous docker las")
+            run_subprocess(['docker', 'stop', 'las'], logger)
+            logger.info("Removing previous docker las")
+            run_subprocess(['docker', 'rm', 'las'], logger)
+            run_subprocess([
+                'docker', 'run', '-d', '--restart=always', '-p', '5000:5000', '--name', 'registry', '-v',
+                os.path.dirname(os.path.realpath(__file__)) + '/' + enclave_image_hash + ':/var/lib/registry',
+                'registry:2'
+            ], logger)
+
+            logger.info("Cleaning up docker container")
+            run_subprocess(['docker', 'rm', '-f', 'etny-pynithy-' + str(order_id)], logger)
+
+            logger.info("Running docker-compose")
+
+            run_subprocess([
+                'docker-compose', '-f', self.order_docker_compose_file, 'run',
+                '--rm', '-d',
+                '--name',
+                'etny-pynithy-' + str(order_id), 'etny-pynithy'
+            ], logger)
+
+            logger.info('waiting for result')
+            self.wait_for_enclave(120)
+            # todo docker-compose down after result
+            # todo handle empty input
+            logger.info('Uploading result to ipfs')
+            result_hash = self.upload_result_to_ipfs(f'{self.order_folder}/result.txt')
+            logger.info(f'Result ipfs hash is {result_hash}')
+            logger.info('Reading transaction from file')
+            transaction_hex = self.read_file(f'{self.order_folder}/transaction.txt')
+            logger.info('Transaction content is: ', transaction_hex)
+
+            logger.info('Building result ')
+            result = self.build_result_format_v1(result_hash, transaction_hex)
+            logger.info(f'Result is: {result}')
+            logger.info('Adding result to order')
+            self.add_result_to_order(order_id, result)
+
+    def wait_for_enclave(self, timeout=120):
+        i = 0
+        while True:
+            time.sleep(1)
+            i = i + 1
+            if i > timeout:
+                break
+            if os.path.exists(f'{self.order_folder}/result.txt'):
+                break
+
+        logger.info('enclave finished the execution')
+
+    def build_result_format_v1(self, result_hash, transaction_hex):
+        return f'v1:{transaction_hex}:{result_hash}'
+
+    def add_result_to_order(self, order_id, result):
+        logger.info('Adding result to order', order_id, result)
+        _nonce = self.__w3.eth.getTransactionCount(self.__address)
+        unicorn_txn = self.__etny.functions._addResultToOrder(
+            order_id, result
+        ).buildTransaction({
+            'chainId': config.chain_id,
+            'gas': config.gas_limit,
+            'nonce': _nonce,
+            'gasPrice': self.__w3.toWei(config.gas_price_value, config.gas_price_measure),
+        })
+
         try:
-            logger.info(f"Downloading IPFS Image: {enclaveImage}")
-            logger.info(f"Downloading IPFS Payload Hash: {metadata[2]}")
-            logger.info(f"Downloading IPFS FileSet Hash: {metadata[3]}")
-        except Exception as e: 
-            logger.info(str(e))
-        self.storage.download_many([enclaveImage])
-        if not self.storage.download_many([enclaveImage, metadata[2], metadata[3]]):
-            logger.info("Cannot download data from IPFS, cancelling processing")
-            self.ipfs_timeout_cancel(order_id)
-            return
+            _hash = self.send_transaction(unicorn_txn)
+            self.__w3.eth.waitForTransactionReceipt(_hash)
+        except Exception as ex:
+            logger.error(f"Error while adding result to Order, Error Message:{ex}")
+            raise
 
-        logger.info("Stopping previous docker registry")
-        
-        run_subprocess(['docker', 'stop', 'registry'], logger)
-        logger.info("Cleaning up docker registry")
-        run_subprocess(['docker', 'system', 'prune', '-a', '-f', '--volumes'], logger)
-        logger.info("Running new docker registry")
-        logger.debug(os.path.dirname(os.path.realpath(__file__)) + '/' + enclaveImage + ':/var/lib/registry')
-        run_subprocess([
-             'docker', 'run', '-d', '--restart=always', '-p', '5000:5000', '--name', 'registry', '-v',
-             os.path.dirname(os.path.realpath(__file__)) + '/' + enclaveImage + ':/var/lib/registry', 'registry:2'
-        ], logger)
+        logger.info(f"Added result to the order!")
+        logger.info(f"TX Hash: {_hash}")
 
-        logger.info("Cleaning up docker container")
-        run_subprocess(['docker', 'rm', '-f', 'etny-pynithy-' + str(order_id)], logger)
+    def upload_result_to_ipfs(self, result_file):
+        response = self.storage.upload(result_file)
+        return response
 
-        logger.info("Running docker-compose")
+    def create_folder_v1(self, order_directory):
+        if not os.path.exists(order_directory):
+            os.makedirs(order_directory)
 
-        yaml_file = '-initial-image' if enclaveImage in ['QmeQiSC1dLMKv4BvpvjWt1Zeak9zj6TWgWhN7LLiRznJqC'] else ''
+    def read_file(self, chanllenge_file):
+        with open(chanllenge_file, "r") as file:
+            contents = file.read()
 
-        run_subprocess([
-             'docker-compose', '-f', f'docker/docker-compose-etny-pynithy{yaml_file}.yml', 'run', '--rm', '-d', '--name',
-             'etny-pynithy-' + str(order_id), 'etny-pynithy', str(order_id), metadata[2], metadata[3],
-             self.__resultaddress, self.__resultprivatekey, config.contract_address
-        ], logger)
+        return contents
 
+    def build_prerequisites_v1(self, order_id, payload_file, input_file, docker_compose_file, challenge):
+        self.order_folder = f'./orders/{order_id}/etny-order-{order_id}'
+        self.create_folder_v1(self.order_folder)
+        self.copy_order_files(payload_file, f'{self.order_folder}/payload.py')
+        if input_file is not None:
+            self.copy_order_files(input_file, f'{self.order_folder}/input.txt')
+        self.order_docker_compose_file = f'./orders/{order_id}/docker-compose.yml'
+        self.copy_order_files(docker_compose_file, self.order_docker_compose_file)
+        self.update_enclave_docker_compose(self.order_docker_compose_file, order_id)
+        env_content = self.get_enclave_env_dictionary(order_id, challenge)
+        self.generate_enclave_env_file(f'{self.order_folder}/.env', env_content)
 
-        '''new version'''
-        '''
-        logger.info("Running new docker registry - 4 ")
-        subprocess.call('docker rm -f $(sudo docker ps -aq)', shell=True)
-        run_subprocess(['docker', 'build', '-t', 'docker_etny-pynithy1', '-f', 'docker/etny-pynithy.Dockerfile', './docker'], logger)
+    def copy_order_files(self, source, dest):
+        if os.path.isfile(source):
+            shutil.copy(source, dest)
+        else:
+            logger.info('The copied path is not a file')
 
-        logger.info("Running docker-compose")
-        run_subprocess([
-             'docker-compose', '-f', 'docker/docker-compose-without-registry.yaml', 'run', '--rm', '-d', '--name',
-             'etny-pynithy-' + str(order_id), 'etny-pynithy', str(order_id), metadata[2], metadata[3],
-             self.__resultaddress, self.__resultprivatekey, config.contract_address
-        ], logger)
-        '''
-        '''new version'''
+    def generate_enclave_env_file(self, env_file, env_dictionary):
+        with open(env_file, 'w') as f:
+            for key, value in env_dictionary.items():
+                f.write(f'{key}={value}\n')
+        f.close()
 
+    def get_enclave_env_dictionary(self, order_id, challenge):
+        env_vars = {
+            "ETNY_CHAIN_ID": config.chain_id,
+            "ETNY_SMART_CONTRACT_ADDRESS": config.contract_address,
+            "ETNY_WEB3_PROVIDER": config.http_provider,
+            "ETNY_CLIENT_CHALLENGE": challenge,
+            "ETNY_ORDER_ID": order_id
+        }
+        return env_vars
 
-        time.sleep(10)
-        logger.info("Attaching to docker process")
-        run_subprocess(['docker', 'attach', 'etny-pynithy-' + str(order_id)], logger)
-        time.sleep(3)
+    def update_enclave_docker_compose(self, docker_compose_file, order):
+        with open(docker_compose_file, 'r') as f:
+            contents = f.read()
+
+        contents = contents.replace('[ETNY_ORDER_ID]', str(order))
+        with open(docker_compose_file, 'w') as f:
+            f.write(contents)
 
     def _getOrder(self):
         order_id = self.find_order_by_dp_req()
@@ -272,16 +454,17 @@ class EtnyPoXNode:
                 time.sleep(5)
                 seconds += 5
                 continue
-            
+
             found = False
             cached_do_requests = self.doreq_cache.get_values
             for i in reversed(list(set(range(checked, count)) - set(cached_do_requests))):
                 _doreq = self.__etny.caller()._getDORequest(i)
                 doreq = DORequest(_doreq)
                 self.doreq_cache.add(i)
-                
+
                 if doreq.status != RequestStatus.AVAILABLE:
-                    logger.debug(f'''Skipping Order, DORequestId = {_doreq}, DPRequestId = {i}, Order has different status: '{RequestStatus._status_as_string(doreq.status)}' ''')
+                    logger.debug(
+                        f'''Skipping Order, DORequestId = {_doreq}, DPRequestId = {i}, Order has different status: '{RequestStatus._status_as_string(doreq.status)}' ''')
                     continue
 
                 logger.info(f"Checking DO request: {i}")
@@ -291,17 +474,17 @@ class EtnyPoXNode:
                     continue
 
                 metadata = self.__etny.caller()._getDORequestMetadata(i)
-                
+
                 if metadata[4] != '' and metadata[4] != self.__address:
                     logger.info(f'Skipping DO Request: {i}. Request is delegated to a different Node.')
                     continue
-                
+
                 logger.info("Placing order...")
                 try:
                     self.place_order(i)
 
                     # store merged log
-                    self.merged_orders_cache.add(do_req_id = i, dp_req_id = self.__dprequest, order_id = self.__order_id)
+                    self.merged_orders_cache.add(do_req_id=i, dp_req_id=self.__dprequest, order_id=self.__order_id)
 
                 except (exceptions.SolidityError, IndexError) as error:
                     logger.info(f"Order already created, skipping to next DO request")
@@ -314,14 +497,15 @@ class EtnyPoXNode:
                 # performance improvement, to avoid duplication
                 # self.process_order(self.__order_id, metadata=metadata)
                 self.process_order(self.__order_id)
-                logger.info(f"Order {self.__order_id}, with DO request {i} and DP request {self.__dprequest} processed successfully")
+                logger.info(
+                    f"Order {self.__order_id}, with DO request {i} and DP request {self.__dprequest} processed successfully")
                 break
             if found:
                 logger.info(f"Finished processing order {self.__order_id}")
                 return
             checked = count - 1
             time.sleep(5)
-            
+
             seconds += 5
             if seconds >= config.contract_call_frequency:
                 logger.info("DP request timed out!")
@@ -333,7 +517,8 @@ class EtnyPoXNode:
         # self.cancel_dp_request(self.__dprequest)
 
     def add_processor_to_order(self, order_id):
-        unicorn_txn = self.__etny.functions._addProcessorToOrder(order_id, self.__resultaddress).buildTransaction(self.get_transaction_build())
+        unicorn_txn = self.__etny.functions._addProcessorToOrder(order_id, self.__resultaddress).buildTransaction(
+            self.get_transaction_build())
 
         try:
             _hash = self.send_transaction(unicorn_txn)
@@ -371,7 +556,7 @@ class EtnyPoXNode:
 
     def place_order(self, doreq):
         unicorn_txn = self.__etny.functions._placeOrder(
-            int(doreq), 
+            int(doreq),
             int(self.__dprequest),
         ).buildTransaction(self.get_transaction_build())
         order_id = 0
@@ -382,14 +567,15 @@ class EtnyPoXNode:
             self.__order_id = processed_logs[0].args._orderNumber
             order_id = self.__order_id
         except Exception as e:
-            errorMessage = 'Already Taken by other Node' if type(e) == IndexError  else str(e)
-            logger.error(f'''Failed to place Order: {order_id}, DORequest_id: {doreq}, DPRequest_id: {self.__dprequest}, Error Message: {errorMessage}''')
+            errorMessage = 'Already Taken by other Node' if type(e) == IndexError else str(e)
+            logger.error(
+                f'''Failed to place Order: {order_id}, DORequest_id: {doreq}, DPRequest_id: {self.__dprequest}, Error Message: {errorMessage}''')
             raise
 
         logger.info("Order placed successfully!")
         logger.info(f"TX Hash: {_hash}")
 
-    def get_transaction_build(self, existing_nonce = None):
+    def get_transaction_build(self, existing_nonce=None):
         self.__nonce = existing_nonce if existing_nonce else self.__w3.eth.getTransactionCount(self.__address)
 
         return {
