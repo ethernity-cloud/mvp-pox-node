@@ -50,11 +50,10 @@ merged_orders_cache_limit = 10000000
 # logger
 logger = logging.getLogger("ETNY NODE")
 handler = logging.handlers.RotatingFileHandler('/var/log/etny-node.log', maxBytes=2048000, backupCount=5)
-log_level = os.environ.get('LOG_LEVEL')
-formatter = logging.Formatter('%(log_level) - %(asctime)s %(message)s')
+formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
 handler.setFormatter(formatter)
 logger.addHandler(handler)
-logger.setLevel(logging.DEBUG if log_level == 'debug' else logging.INFO)
+logger.setLevel(logging.DEBUG if os.environ.get('LOG_LEVEL') == 'debug' else logging.INFO)
 
 contract_call_frequency = int(os.environ.get('CONTRACT_CALL_FREQUENCY', 43200))
 
