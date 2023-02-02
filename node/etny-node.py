@@ -383,10 +383,20 @@ class EtnyPoXNode:
         if input_file is not None:
             self.copy_order_files(input_file, f'{self.order_folder}/input.txt')
         self.order_docker_compose_file = f'./orders/{order_id}/docker-compose.yml'
+
         self.copy_order_files(docker_compose_file, self.order_docker_compose_file)
+        self.set_retry_policy_on_fail_for_compose()
+        
         self.update_enclave_docker_compose(self.order_docker_compose_file, order_id)
         env_content = self.get_enclave_env_dictionary(order_id, challenge)
         self.generate_enclave_env_file(f'{self.order_folder}/.env', env_content)
+
+    def set_retry_policy_on_fail_for_compose(self):
+        with open(self.order_docker_compose_file, "r") as f:
+            content = f.read()
+        content = content.replace("restart: on-failure", "restart: on-failure:3")
+        with open(self.order_docker_compose_file, "w") as f:
+            f.write(content)
 
     def copy_order_files(self, source, dest):
         if os.path.isfile(source):
