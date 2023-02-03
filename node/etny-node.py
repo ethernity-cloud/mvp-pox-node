@@ -394,7 +394,7 @@ class EtnyPoXNode:
     def set_retry_policy_on_fail_for_compose(self):
         with open(self.order_docker_compose_file, "r") as f:
             content = f.read()
-        content = content.replace("restart: on-failure", "restart: on-failure:3")
+        content = content.replace("restart: on-failure", "restart: on-failure:20")
         with open(self.order_docker_compose_file, "w") as f:
             f.write(content)
 
