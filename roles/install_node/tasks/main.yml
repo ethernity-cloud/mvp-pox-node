@@ -72,7 +72,7 @@
     msg: "VTx enabled"
   when: vt_x_supported.rc == 0
 - name: Check if VT-d is enabled
-  command: dmesg | grep -i 'Intel-IOMMU'
+  shell: dmesg | grep DMAR
   register: vt_d_enabled
   ignore_errors: true
   no_log: true
