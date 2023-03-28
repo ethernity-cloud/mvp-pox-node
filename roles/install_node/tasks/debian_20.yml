@@ -39,6 +39,7 @@
        - virtinst
        - virt-top
        - genisoimage
+       - cpu-checker  
     state: present
 - name:  Ubuntu 20.04 | vagrant add key  
   apt_key:

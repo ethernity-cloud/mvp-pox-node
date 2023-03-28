@@ -55,12 +55,36 @@
     - vagrant_vm_name_running.stdout != ''
 - name: vagrant - cleanup VM
   shell: virsh undefine {{ vagrant_vm_name.stdout }}
-  when: vagrant_vm_name.stdout != ''
+  when: vagrant_vm_name.stdout != ''    
 - name: vagrant - cleanup VM
   shell: vagrant destroy -f
   #when: ansible_facts.services['etny-vagrant.service'].state != 'running'
+- name: Check if VT-x is enabled
+  command: kvm-ok
+  register: vt_x_supported
+  ignore_errors: true
+- name: Fail the playbook if VT-x is not enabled
+  fail:
+    msg: "VT-x is not enabled. Make sure to enable VT-x and VT-d from BIOS."
+  when: vt_x_supported.rc != 0
+- name: Print VTx  status
+  debug:
+    msg: |
+      VTx enabled
+  when: vt_x_supported.rc == 0
+- name: Check if VT-d is enabled
+  command: dmesg | grep -i 'Intel-IOMMU'
+  register: vt_d_enabled
+  ignore_errors: true
+  no_log: true
+  failed_when: false
+- name: Print message if VT-d is not enabled
+  debug:
+    msg: "Warning! VT-d is not enabled. Check BIOS settings."
+  when: vt_d_enabled.rc != 0      
 - name: vagrant - provision VM
   shell: vagrant up --provider=libvirt
+  when: vt_x_supported.rc == 0
   #when: ansible_facts.services['etny-vagrant.service'].state != 'running'
 - name: startup - set etny-vagrant configuration
   shell: echo "ETNY_PATH=${PWD}" > /etc/default/etny-vagrant
