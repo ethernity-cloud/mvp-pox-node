@@ -69,8 +69,7 @@
   when: vt_x_supported.rc != 0
 - name: Print VTx  status
   debug:
-    msg: |
-      VTx enabled
+    msg: "VTx enabled"
   when: vt_x_supported.rc == 0
 - name: Check if VT-d is enabled
   command: dmesg | grep -i 'Intel-IOMMU'
