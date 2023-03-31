@@ -12,6 +12,7 @@ import config
 from utils import get_or_generate_uuid, run_subprocess, retry, Storage, Cache, ListCache, MergedOrdersCache, subprocess
 from models import *
 from error_messages import errorMessages
+from file_service import FileService
 
 logger = config.logger
 
@@ -50,6 +51,7 @@ class EtnyPoXNode:
         self.storage = Storage(config.ipfs_host, config.client_connect_url, config.client_bootstrap_url,
                                self.ipfs_cache, config.logger)
         self.merged_orders_cache = MergedOrdersCache(config.merged_orders_cache_limit, config.merged_orders_cache)
+        self.file_service = FileService(config.endpoint, config.access_key, config.secret_key)
         self.process_order_data = {}
         self.generate_process_order_data()
 
@@ -372,6 +374,86 @@ class EtnyPoXNode:
             logger.info('Adding result to order')
             self.add_result_to_order(order_id, result)
 
+        if version == 2:
+            try:
+                logger.info(f"Downloading IPFS Image: {enclave_image_hash}")
+                logger.info(f"Downloading IPFS docker yml file: {docker_compose_hash}")
+                logger.info(f"Downloading IPFS Payload Hash: {metadata[2]}")
+                logger.info(f"Downloading IPFS FileSet Hash: {metadata[3]}")
+                logger.info(f"Downloading IPFS Challenge Hash: {challenge_hash}")
+            except Exception as e:
+                logger.info(str(e))
+
+            payload_hash = metadata[2].split(':')[1]
+            input_hash = metadata[3].split(':')[1]
+            list_of_ipfs_hashes = [enclave_image_hash, docker_compose_hash, challenge_hash, payload_hash]
+            if input_hash is not None and len(input_hash) > 0:
+                list_of_ipfs_hashes.append(input_hash)
+
+            self.storage.download_many(list_of_ipfs_hashes, attempts=5, delay=3)
+            if not self.storage.download_many(list_of_ipfs_hashes, attempts=5, delay=3):
+                logger.info("Cannot download data from IPFS, cancelling processing")
+                self.ipfs_timeout_cancel(order_id)
+                return
+
+            payload_file = f'{os.path.dirname(os.path.realpath(__file__))}/{payload_hash}'
+            if input_hash is not None and len(input_hash) > 0:
+                input_file = f'{os.path.dirname(os.path.realpath(__file__))}/{input_hash}'
+                logger.info('input hash is not none: ', input_file)
+            else:
+                input_file = None
+
+            docker_compose_file = f'{os.path.dirname(os.path.realpath(__file__))}/{docker_compose_hash}'
+            challenge_file = f'{os.path.dirname(os.path.realpath(__file__))}/{challenge_hash}'
+            challenge_content = self.read_file(challenge_file)
+            self.build_prerequisites_v2(order_id, payload_file, input_file, docker_compose_file, challenge_content)
+            logger.info("Stopping previous docker registry")
+
+            run_subprocess(['docker', 'stop', 'registry'], logger)
+            logger.info("Cleaning up docker registry")
+            run_subprocess(['docker', 'system', 'prune', '-a', '-f', '--volumes'], logger)
+            logger.info("Running new docker registry")
+            logger.debug(os.path.dirname(os.path.realpath(__file__)) + '/' + enclave_image_hash + ':/var/lib/registry')
+
+            logger.info("Stopping previous docker las")
+            run_subprocess(['docker', 'stop', 'las'], logger)
+            logger.info("Removing previous docker las")
+            run_subprocess(['docker', 'rm', 'las'], logger)
+            run_subprocess([
+                'docker', 'run', '-d', '--restart=always', '-p', '5000:5000', '--name', 'registry', '-v',
+                os.path.dirname(os.path.realpath(__file__)) + '/' + enclave_image_hash + ':/var/lib/registry',
+                'registry:2'
+            ], logger)
+
+            logger.info("Cleaning up docker container")
+            run_subprocess(['docker', 'rm', '-f', 'etny-pynithy-' + str(order_id)], logger)
+
+            logger.info("Running docker-compose")
+
+            run_subprocess([
+                'docker-compose', '-f', self.order_docker_compose_file, 'run',
+                '--rm', '-d',
+                '--name',
+                'etny-pynithy-' + str(order_id), 'etny-pynithy'
+            ], logger)
+
+            logger.info('waiting for result')
+            self.wait_for_enclave(120)
+            # todo docker-compose down after result
+            # todo handle empty input
+            logger.info('Uploading result to ipfs')
+            result_hash = self.upload_result_to_ipfs(f'{self.order_folder}/result.txt')
+            logger.info(f'Result ipfs hash is {result_hash}')
+            logger.info('Reading transaction from file')
+            transaction_hex = self.read_file(f'{self.order_folder}/transaction.txt')
+            logger.info('Transaction content is: ', transaction_hex)
+
+            logger.info('Building result ')
+            result = self.build_result_format_v1(result_hash, transaction_hex)
+            logger.info(f'Result is: {result}')
+            logger.info('Adding result to order')
+            self.add_result_to_order(order_id, result)
+
     def wait_for_enclave(self, timeout=120):
         i = 0
         while True:
@@ -437,6 +519,38 @@ class EtnyPoXNode:
         self.update_enclave_docker_compose(self.order_docker_compose_file, order_id)
         env_content = self.get_enclave_env_dictionary(order_id, challenge)
         self.generate_enclave_env_file(f'{self.order_folder}/.env', env_content)
+
+    def build_prerequisites_v2(self, order_id, payload_file, input_file, docker_compose_file, challenge):
+        self.order_folder = f'./orders/{order_id}/etny-order-{order_id}'
+        (status, msg) = self.file_service.create_bucket(self.order_folder)
+        if (not status):
+            logger.error(msg)
+
+        self.payload_file_name = "payload.py"
+        self.payload_file_path = f'{self.order_folder}/payload.py'
+        (status, msg) = self.file_service.upload_file(self.order_folder,
+                                                      self.payload_file_name,
+                                                      self.payload_file_path)
+        if (not status):
+            logger.error(msg)
+
+        self.input_file_name = "input.txt"
+        self.input_file_path = f'{self.order_folder}/input.txt'
+        (status, msg) = self.file_service.upload_file(self.order_folder,
+                                                      self.input_file_name,
+                                                      self.input_file_path)
+        if (not status):
+            logger.error(msg)
+
+        self.order_docker_compose_file = f'./orders/{order_id}/docker-compose.yml'
+        self.copy_order_files(docker_compose_file, self.order_docker_compose_file)
+
+        self.set_retry_policy_on_fail_for_compose()
+
+        self.update_enclave_docker_compose(self.order_docker_compose_file, order_id)
+        env_content = self.get_enclave_env_dictionary(order_id, challenge)
+        self.generate_enclave_env_file(f'{self.order_folder}/.env', env_content)
+
 
     def set_retry_policy_on_fail_for_compose(self):
         with open(self.order_docker_compose_file, "r") as f:
