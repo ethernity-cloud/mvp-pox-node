@@ -7,7 +7,8 @@ class SwiftStreamService:
     def __init__(self, endpoint: str, access_key: str, secret_key: str):
         self.client = Minio(endpoint=endpoint,
                             access_key=access_key,
-                            secret_key=secret_key)
+                            secret_key=secret_key,
+                            secure=False)
 
     def create_bucket(self, bucket_name: str) -> (bool, str):
         try:
