@@ -12,7 +12,7 @@ import config
 from utils import get_or_generate_uuid, run_subprocess, retry, Storage, Cache, ListCache, MergedOrdersCache, subprocess
 from models import *
 from error_messages import errorMessages
-from file_service import FileService
+from swift_stream_service import SwiftStreamService
 
 logger = config.logger
 
@@ -51,7 +51,7 @@ class EtnyPoXNode:
         self.storage = Storage(config.ipfs_host, config.client_connect_url, config.client_bootstrap_url,
                                self.ipfs_cache, config.logger)
         self.merged_orders_cache = MergedOrdersCache(config.merged_orders_cache_limit, config.merged_orders_cache)
-        self.file_service = FileService(config.endpoint, config.access_key, config.secret_key)
+        self.file_service = SwiftStreamService(config.endpoint, config.access_key, config.secret_key)
         self.process_order_data = {}
         self.generate_process_order_data()
 
@@ -442,6 +442,9 @@ class EtnyPoXNode:
             # todo docker-compose down after result
             # todo handle empty input
             logger.info('Uploading result to ipfs')
+            # todo download result from local_storage (result.txt) and copy to order_folder
+            # todo download transaction from local_storage(transaction.txt) and copy to order_folder
+
             result_hash = self.upload_result_to_ipfs(f'{self.order_folder}/result.txt')
             logger.info(f'Result ipfs hash is {result_hash}')
             logger.info('Reading transaction from file')
@@ -449,7 +452,7 @@ class EtnyPoXNode:
             logger.info('Transaction content is: ', transaction_hex)
 
             logger.info('Building result ')
-            result = self.build_result_format_v1(result_hash, transaction_hex)
+            result = self.build_result_format_v2(result_hash, transaction_hex)
             logger.info(f'Result is: {result}')
             logger.info('Adding result to order')
             self.add_result_to_order(order_id, result)
@@ -468,6 +471,9 @@ class EtnyPoXNode:
 
     def build_result_format_v1(self, result_hash, transaction_hex):
         return f'v1:{transaction_hex}:{result_hash}'
+
+    def build_result_format_v2(self, result_hash, transaction_hex):
+        return f'v2:{transaction_hex}:{result_hash}'
 
     def add_result_to_order(self, order_id, result):
         logger.info('Adding result to order', order_id, result)
@@ -522,23 +528,22 @@ class EtnyPoXNode:
 
     def build_prerequisites_v2(self, order_id, payload_file, input_file, docker_compose_file, challenge):
         self.order_folder = f'./orders/{order_id}/etny-order-{order_id}'
-        (status, msg) = self.file_service.create_bucket(self.order_folder)
-        if (not status):
+        self.create_folder_v1(self.order_folder)
+        (status, msg) = self.file_service.create_bucket("etny-pynithy")
+        if not status:
             logger.error(msg)
 
         self.payload_file_name = "payload.py"
-        self.payload_file_path = f'{self.order_folder}/payload.py'
-        (status, msg) = self.file_service.upload_file(self.order_folder,
+        (status, msg) = self.file_service.upload_file("etny-pynithy",
                                                       self.payload_file_name,
-                                                      self.payload_file_path)
-        if (not status):
+                                                      payload_file)
+        if not status:
             logger.error(msg)
 
         self.input_file_name = "input.txt"
-        self.input_file_path = f'{self.order_folder}/input.txt'
-        (status, msg) = self.file_service.upload_file(self.order_folder,
+        (status, msg) = self.file_service.upload_file("etny-pynithy",
                                                       self.input_file_name,
-                                                      self.input_file_path)
+                                                      input_file)
         if (not status):
             logger.error(msg)
 
@@ -546,11 +551,16 @@ class EtnyPoXNode:
         self.copy_order_files(docker_compose_file, self.order_docker_compose_file)
 
         self.set_retry_policy_on_fail_for_compose()
-
         self.update_enclave_docker_compose(self.order_docker_compose_file, order_id)
+
         env_content = self.get_enclave_env_dictionary(order_id, challenge)
         self.generate_enclave_env_file(f'{self.order_folder}/.env', env_content)
 
+        (status, msg) = self.file_service.upload_file("etny-pynithy",
+                                                      ".env",
+                                                      f'{self.order_folder}/.env')
+        if not status:
+            logger.error(msg)
 
     def set_retry_policy_on_fail_for_compose(self):
         with open(self.order_docker_compose_file, "r") as f:

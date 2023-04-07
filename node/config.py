@@ -7,6 +7,7 @@ from os.path import expanduser
 def onImportError():
     os.system("pip3 install psutil==5.9.2")
     os.system("pip3 install python-dotenv==0.21.0")
+    os.system("pip3 install minio==7.1.13")
     os.killpg(os.getpgid(), signal.SIGCHLD)
     sys.exit()
 

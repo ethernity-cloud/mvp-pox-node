@@ -1,2 +1,0 @@
-File Service using Minio
-========================
