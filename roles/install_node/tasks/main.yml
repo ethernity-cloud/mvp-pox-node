@@ -55,7 +55,7 @@
     - vagrant_vm_name_running.stdout != ''
 - name: vagrant - cleanup VM
   shell: virsh undefine {{ vagrant_vm_name.stdout }}
-  when: vagrant_vm_name.stdout != ''    
+  when: vagrant_vm_name.stdout != ''
 - name: vagrant - cleanup VM
   shell: vagrant destroy -f
   #when: ansible_facts.services['etny-vagrant.service'].state != 'running'
@@ -67,7 +67,7 @@
   fail:
     msg: "VT-x is not enabled. Make sure to enable VT-x and VT-d from BIOS."
   when: vt_x_supported.rc != 0
-- name: Print VTx  status
+- name: Print VTx status
   debug:
     msg: "VTx enabled"
   when: vt_x_supported.rc == 0
