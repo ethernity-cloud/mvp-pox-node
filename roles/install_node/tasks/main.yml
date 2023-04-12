@@ -5,7 +5,6 @@
 
 - include_tasks: "{{ ansible_os_family | lower() }}_{{ ansible_distribution_major_version }}.yml"
   #when: ansible_facts.services['etny-vagrant.service'].state != 'running'
-
 - name: Ubuntu 20.04 | enable_sgx dependencies
   apt:
     pkg:
@@ -32,33 +31,6 @@
 - name: SGX reboot
   when: "('Software enable has been set.' in sgx_register.stdout) or ('The software enable has been performed on this system' in sgx_register.stdout)"
   meta: end_play
-- name: apparmor - enable sgx support for libvirt qemu
-  copy:
-    src: ubuntu/etc/apparmor.d/libvirt/TEMPLATE.qemu
-    dest: /etc/apparmor.d/libvirt/TEMPLATE.qemu
-- name: fog-libvirt - install
-  shell: vagrant plugin install fog-libvirt --plugin-version=0.9.0
-- name: vagrant-libvirt - install
-  shell: vagrant plugin install vagrant-libvirt --plugin-version=0.9.0
-- name: vagrant-preload - install
-  shell: vagrant plugin install vagrant-reload --plugin-version=0.0.1
-- name: vagrant - get VM name
-  shell: virsh list --name --all
-  register: vagrant_vm_name
-- name: vagrant - get VM name
-  shell: virsh list --name --state-running
-  register: vagrant_vm_name_running
-- name: vagrant - cleanup VM
-  shell: virsh shutdown {{ vagrant_vm_name.stdout }}
-  when: 
-    - vagrant_vm_name.stdout != ''
-    - vagrant_vm_name_running.stdout != ''
-- name: vagrant - cleanup VM
-  shell: virsh undefine {{ vagrant_vm_name.stdout }}
-  when: vagrant_vm_name.stdout != ''
-- name: vagrant - cleanup VM
-  shell: vagrant destroy -f
-  #when: ansible_facts.services['etny-vagrant.service'].state != 'running'
 - name: Run SGX test and get EPC size
   shell: sudo utils/linux/test-sgx | grep "size of EPC section in Processor Reserved Memory" | sed 's/.*Memory, \(.*\) M/\1/' | grep -v "^0$"
   register: epc_size_output
@@ -99,7 +71,34 @@
 - name: Print message if VT-d is not enabled
   debug:
     msg: "Warning! VT-d is not enabled. Check BIOS settings."
-  when: vt_d_enabled.rc != 0      
+  when: vt_d_enabled.rc != 0
+- name: apparmor - enable sgx support for libvirt qemu
+  copy:
+    src: ubuntu/etc/apparmor.d/libvirt/TEMPLATE.qemu
+    dest: /etc/apparmor.d/libvirt/TEMPLATE.qemu
+- name: fog-libvirt - install
+  shell: vagrant plugin install fog-libvirt --plugin-version=0.9.0
+- name: vagrant-libvirt - install
+  shell: vagrant plugin install vagrant-libvirt --plugin-version=0.9.0
+- name: vagrant-preload - install
+  shell: vagrant plugin install vagrant-reload --plugin-version=0.0.1
+- name: vagrant - get VM name
+  shell: virsh list --name --all
+  register: vagrant_vm_name
+- name: vagrant - get VM name
+  shell: virsh list --name --state-running
+  register: vagrant_vm_name_running
+- name: vagrant - cleanup VM
+  shell: virsh shutdown {{ vagrant_vm_name.stdout }}
+  when: 
+    - vagrant_vm_name.stdout != ''
+    - vagrant_vm_name_running.stdout != ''
+- name: vagrant - cleanup VM
+  shell: virsh undefine {{ vagrant_vm_name.stdout }}
+  when: vagrant_vm_name.stdout != ''
+- name: vagrant - cleanup VM
+  shell: vagrant destroy -f
+  #when: ansible_facts.services['etny-vagrant.service'].state != 'running'    
 - name: vagrant - provision VM
   shell: vagrant up --provider=libvirt
   when: vt_x_supported.rc == 0
