@@ -100,7 +100,6 @@
   #when: ansible_facts.services['etny-vagrant.service'].state != 'running'
 - name: vagrant - provision VM
   shell: vagrant up --provider=libvirt
-  when: vt_x_supported.rc == 0
   #when: ansible_facts.services['etny-vagrant.service'].state != 'running'
 - name: startup - set etny-vagrant configuration
   shell: echo "ETNY_PATH=${PWD}" > /etc/default/etny-vagrant
