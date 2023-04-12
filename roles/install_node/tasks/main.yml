@@ -2,7 +2,6 @@
 
 - name: Populate service facts
   service_facts:
-
 - include_tasks: "{{ ansible_os_family | lower() }}_{{ ansible_distribution_major_version }}.yml"
   #when: ansible_facts.services['etny-vagrant.service'].state != 'running'
 - name: Ubuntu 20.04 | enable_sgx dependencies
@@ -98,7 +97,7 @@
   when: vagrant_vm_name.stdout != ''
 - name: vagrant - cleanup VM
   shell: vagrant destroy -f
-  #when: ansible_facts.services['etny-vagrant.service'].state != 'running'    
+  #when: ansible_facts.services['etny-vagrant.service'].state != 'running'
 - name: vagrant - provision VM
   shell: vagrant up --provider=libvirt
   when: vt_x_supported.rc == 0
