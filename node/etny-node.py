@@ -27,6 +27,9 @@ class EtnyPoXNode:
     __storage = None
     __bandwidth = None
     __duration = None
+    __endpoint = None
+    __access_key = None
+    __secret_key = None
 
     def __init__(self):
         self.parse_arguments(config.arguments, config.parser)
@@ -51,7 +54,9 @@ class EtnyPoXNode:
         self.storage = Storage(config.ipfs_host, config.client_connect_url, config.client_bootstrap_url,
                                self.ipfs_cache, config.logger)
         self.merged_orders_cache = MergedOrdersCache(config.merged_orders_cache_limit, config.merged_orders_cache)
-        self.file_service = SwiftStreamService(config.endpoint, config.access_key, config.secret_key)
+        self.swift_stream_service = SwiftStreamService(self.__endpoint,
+                                                       self.__access_key,
+                                                       self.__secret_key)
         self.process_order_data = {}
         self.generate_process_order_data()
 
@@ -529,21 +534,21 @@ class EtnyPoXNode:
     def build_prerequisites_v2(self, order_id, payload_file, input_file, docker_compose_file, challenge):
         self.order_folder = f'./orders/{order_id}/etny-order-{order_id}'
         self.create_folder_v1(self.order_folder)
-        (status, msg) = self.file_service.create_bucket("etny-pynithy")
+        (status, msg) = self.swift_stream_service.create_bucket("etny-pynithy")
         if not status:
             logger.error(msg)
 
         self.payload_file_name = "payload.py"
-        (status, msg) = self.file_service.upload_file("etny-pynithy",
-                                                      self.payload_file_name,
-                                                      payload_file)
+        (status, msg) = self.swift_stream_service.upload_file("etny-pynithy",
+                                                              self.payload_file_name,
+                                                              payload_file)
         if not status:
             logger.error(msg)
 
         self.input_file_name = "input.txt"
-        (status, msg) = self.file_service.upload_file("etny-pynithy",
-                                                      self.input_file_name,
-                                                      input_file)
+        (status, msg) = self.swift_stream_service.upload_file("etny-pynithy",
+                                                              self.input_file_name,
+                                                              input_file)
         if (not status):
             logger.error(msg)
 
@@ -556,9 +561,9 @@ class EtnyPoXNode:
         env_content = self.get_enclave_env_dictionary(order_id, challenge)
         self.generate_enclave_env_file(f'{self.order_folder}/.env', env_content)
 
-        (status, msg) = self.file_service.upload_file("etny-pynithy",
-                                                      ".env",
-                                                      f'{self.order_folder}/.env')
+        (status, msg) = self.swift_stream_service.upload_file("etny-pynithy",
+                                                              ".env",
+                                                              f'{self.order_folder}/.env')
         if not status:
             logger.error(msg)
 

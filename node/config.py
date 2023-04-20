@@ -83,15 +83,15 @@ parser.add_argument("-s", "--storage", help="Amount of storage (GB)", required=F
 parser.add_argument("-b", "--bandwidth", help="Amount of bandwidth (GB)", required=False, default="1")
 parser.add_argument("-t", "--duration", help="Amount of time allocated for task (minutes)", required=False,
                     default="60")
-parser.add_argument("--endpoint", help="Hostname of a S3 service", required=True, default="localhost:9000")
+parser.add_argument("--endpoint", help="Hostname of a S3 service", required=True, default="etny-swift-stream:9000")
 parser.add_argument("--access_key", help="Access key (aka user ID) of your account in S3 service.",
-                    default="minioadmin",
+                    default="swiftstreamadmin",
                     required=True)
 parser.add_argument("--secret_key", help="Secret Key (aka password) of your account in S3 service.",
-                    default="minioadmin",
+                    default="swiftstreamadmin",
                     required=True)
 
 arguments = {
-    str: ['address', 'privatekey', 'resultaddress', 'resultprivatekey'],
+    str: ['address', 'privatekey', 'resultaddress', 'resultprivatekey', 'endpoint'],
     int: ['cpu', 'memory', 'storage', 'storage', 'bandwidth', 'duration']
 }

@@ -98,6 +98,24 @@ class SwiftStreamService:
 
         return True, f"File, {file_name} from bucket {bucket_name} was downloaded in {file_path}."
 
+    def get_file_content(self, bucket_name: str, file_name: str) -> (bool, str):
+        response = None
+        try:
+            response = self.client.get_object(bucket_name, file_name)
+            _d = b''
+            for data in response.stream(amt=1024 * 1024):
+                _d = _d + data
+
+        except S3Error as err:
+            return False, err
+
+        finally:
+            if not response:
+                response.close()
+                response.release_conn()
+
+        return True, _d.decode('utf-8')
+
     def download_files(self, bucket_name: str, list_of_files: list[str],
                        download_file_paths: list[str]) -> (bool, str):
         try:
