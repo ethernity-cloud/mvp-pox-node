@@ -364,7 +364,9 @@ class EtnyPoXNode:
 
             logger.info('waiting for result')
             self.wait_for_enclave(120)
-            # todo docker-compose down after result
+            run_subprocess([
+                'docker-compose', 'down'
+            ], logger)
             # todo handle empty input
             logger.info('Uploading result to ipfs')
             result_hash = self.upload_result_to_ipfs(f'{self.order_folder}/result.txt')
@@ -411,7 +413,9 @@ class EtnyPoXNode:
             docker_compose_file = f'{os.path.dirname(os.path.realpath(__file__))}/{docker_compose_hash}'
             challenge_file = f'{os.path.dirname(os.path.realpath(__file__))}/{challenge_hash}'
             challenge_content = self.read_file(challenge_file)
-            self.build_prerequisites_v2(order_id, payload_file, input_file, docker_compose_file, challenge_content)
+            bucket_name = "etny-pynithy-v2"
+            self.build_prerequisites_v2(bucket_name, order_id, payload_file, input_file,
+                                        docker_compose_file, challenge_content)
             logger.info("Stopping previous docker registry")
 
             run_subprocess(['docker', 'stop', 'registry'], logger)
@@ -443,21 +447,32 @@ class EtnyPoXNode:
             ], logger)
 
             logger.info('waiting for result')
-            self.wait_for_enclave(120)
-            # todo docker-compose down after result
+            object_name = f'{self.order_folder}/result.txt'
+            self.wait_for_enclave_v2(bucket_name, object_name, 120)
+            run_subprocess([
+                'docker-compose', 'down'
+            ], logger)
             # todo handle empty input
-            logger.info('Uploading result to ipfs')
-            # todo download result from local_storage (result.txt) and copy to order_folder
-            # todo download transaction from local_storage(transaction.txt) and copy to order_folder
+            logger.info('Uploading result to enty-pynity-v2 bucket')
+            status, result_data = self.swift_stream_service.get_file_content(bucket_name, "result.txt")
+            if status:
+                self.swift_stream_service.put_file_content(bucket_name,
+                                                           'result.txt',
+                                                           f'{self.order_folder}/result.txt',
+                                                           result_data)
+                logger.info(f'Result file successfully uploaded to enty-pynity-v2 bucket')
 
-            result_hash = self.upload_result_to_ipfs(f'{self.order_folder}/result.txt')
-            logger.info(f'Result ipfs hash is {result_hash}')
             logger.info('Reading transaction from file')
-            transaction_hex = self.read_file(f'{self.order_folder}/transaction.txt')
-            logger.info('Transaction content is: ', transaction_hex)
+            status, transaction_data = self.swift_stream_service.get_file_content(bucket_name, "transaction.txt")
+            if status:
+                self.swift_stream_service.put_file_content(bucket_name,
+                                                           'transaction.txt',
+                                                            f'{self.order_folder}/transaction.txt',
+                                                           transaction_data)
+                logger.info('Transaction file successfully uploaded to enty-pynity-v2 bucket')
 
             logger.info('Building result ')
-            result = self.build_result_format_v2(result_hash, transaction_hex)
+            result = self.build_result_format_v2(result_data, transaction_data) # TODO: Is it correct to put result_data or I need to hash it?
             logger.info(f'Result is: {result}')
             logger.info('Adding result to order')
             self.add_result_to_order(order_id, result)
@@ -470,6 +485,19 @@ class EtnyPoXNode:
             if i > timeout:
                 break
             if os.path.exists(f'{self.order_folder}/result.txt'):
+                break
+
+        logger.info('enclave finished the execution')
+
+    def wait_for_enclave_v2(self, bucket_name, object_name, timeout=120):
+        i = 0
+        while True:
+            time.sleep(1)
+            i = i + 1
+            if i > timeout:
+                break
+            if self.swift_stream_service.is_object_in_bucket(bucket_name,
+                                                             object_name):
                 break
 
         logger.info('enclave finished the execution')
@@ -531,22 +559,22 @@ class EtnyPoXNode:
         env_content = self.get_enclave_env_dictionary(order_id, challenge)
         self.generate_enclave_env_file(f'{self.order_folder}/.env', env_content)
 
-    def build_prerequisites_v2(self, order_id, payload_file, input_file, docker_compose_file, challenge):
+    def build_prerequisites_v2(self, bucket_name, order_id, payload_file, input_file, docker_compose_file, challenge):
         self.order_folder = f'./orders/{order_id}/etny-order-{order_id}'
         self.create_folder_v1(self.order_folder)
-        (status, msg) = self.swift_stream_service.create_bucket("etny-pynithy")
+        (status, msg) = self.swift_stream_service.create_bucket(bucket_name)
         if not status:
             logger.error(msg)
 
         self.payload_file_name = "payload.py"
-        (status, msg) = self.swift_stream_service.upload_file("etny-pynithy",
+        (status, msg) = self.swift_stream_service.upload_file(bucket_name,
                                                               self.payload_file_name,
                                                               payload_file)
         if not status:
             logger.error(msg)
 
         self.input_file_name = "input.txt"
-        (status, msg) = self.swift_stream_service.upload_file("etny-pynithy",
+        (status, msg) = self.swift_stream_service.upload_file(bucket_name,
                                                               self.input_file_name,
                                                               input_file)
         if (not status):
@@ -561,7 +589,7 @@ class EtnyPoXNode:
         env_content = self.get_enclave_env_dictionary(order_id, challenge)
         self.generate_enclave_env_file(f'{self.order_folder}/.env', env_content)
 
-        (status, msg) = self.swift_stream_service.upload_file("etny-pynithy",
+        (status, msg) = self.swift_stream_service.upload_file(bucket_name,
                                                               ".env",
                                                               f'{self.order_folder}/.env')
         if not status:

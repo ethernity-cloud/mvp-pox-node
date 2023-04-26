@@ -131,6 +131,63 @@ class SwiftStreamService:
 
         return True, f"{download_file_paths} are successfully uploaded to bucket {bucket_name}."
 
+    def get_file_content_bytes(self, bucket_name: str, file_name: str) -> (bool, bytes):
+        response = None
+        try:
+            response = self.client.get_object(bucket_name, file_name)
+            _d = b''
+            for data in response.stream(amt=1024 * 1024):
+                _d = _d + data
+
+        except S3Error as err:
+            return False, err
+        finally:
+            if not response:
+                response.close()
+                response.release_conn()
+        return True, _d
+
+    def get_file_content(self, bucket_name: str, file_name: str) -> (bool, str):
+        status, content = self.get_file_content_bytes(bucket_name, file_name)
+        if status:
+            return True, content.decode('utf-8')
+        return status, content
+
+    def put_file_content(self, bucket_name: str, object_name: str, object_path: str,
+                         object_data: object = None) -> (bool, str):
+        try:
+            if object_data is not None:
+                self.client.put_object(bucket_name,
+                                       object_name,
+                                       object_data,
+                                       len(object_data.getbuffer()))
+            else:
+                object_stat = os.stat(object_path)
+                with open(object_path, 'rb') as file_data:
+                    self.client.put_object(bucket_name,
+                                           object_name,
+                                           file_data,
+                                           object_stat.st_size)
+                file_data.close()
+        except S3Error as err:
+            return False, err
+
+        return True, f"{object_name} is successfully uploaded to bucket {bucket_name}."
+
+    def is_object_in_bucket(self, bucket_name: str, object_name: str) -> (bool, str):
+        found = False
+        try:
+            result = self.client.stat_object(bucket_name, object_name)
+            if result:
+                found = True
+        except S3Error as err:
+            return False, err
+
+        if found:
+            return found, f"{object_name} exists inside {bucket_name}."
+        else:
+            return found, f"{object_name} doesn't exists inside {bucket_name}."
+
     def _list_buckets(self) -> None:
         buckets = self.client.list_buckets()
         for bucket in buckets:
