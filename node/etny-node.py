@@ -470,7 +470,7 @@ class EtnyPoXNode:
             logger.info('Adding result to order')
             self.add_result_to_order(order_id, result)
 
-    def wait_for_enclave(self, timeout=120):
+    def wait_for_enclave(self, timeout=120): 
         i = 0
         while True:
             time.sleep(1)
