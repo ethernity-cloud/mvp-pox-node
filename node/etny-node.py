@@ -446,33 +446,26 @@ class EtnyPoXNode:
                 'etny-pynithy-' + str(order_id), 'etny-pynithy'
             ], logger)
 
-            logger.info('waiting for result')
-            object_name = f'{self.order_folder}/result.txt'
-            self.wait_for_enclave_v2(bucket_name, object_name, 120)
+            logger.info('Waiting for result')
+            self.wait_for_enclave_v2(bucket_name, 'result.txt', 120)
             run_subprocess([
                 'docker-compose', 'down'
             ], logger)
             # todo handle empty input
             logger.info('Uploading result to enty-pynity-v2 bucket')
             status, result_data = self.swift_stream_service.get_file_content(bucket_name, "result.txt")
-            if status:
-                self.swift_stream_service.put_file_content(bucket_name,
-                                                           'result.txt',
-                                                           f'{self.order_folder}/result.txt',
-                                                           result_data)
-                logger.info(f'Result file successfully uploaded to enty-pynity-v2 bucket')
-
+            if not status:
+                logger.info(result_data)
+            result_hash = self.upload_result_to_ipfs(result_data)
+            logger.info(f'Result file successfully uploaded to enty-pynity-v2 bucket')
             logger.info('Reading transaction from file')
             status, transaction_data = self.swift_stream_service.get_file_content(bucket_name, "transaction.txt")
-            if status:
-                self.swift_stream_service.put_file_content(bucket_name,
-                                                           'transaction.txt',
-                                                            f'{self.order_folder}/transaction.txt',
-                                                           transaction_data)
-                logger.info('Transaction file successfully uploaded to enty-pynity-v2 bucket')
-
+            if not status:
+                logger.info(transaction_data)
+            transaction_hex = self.upload_result_to_ipfs(transaction_data)
+            logger.info('Transaction file successfully uploaded to enty-pynity-v2 bucket')
             logger.info('Building result ')
-            result = self.build_result_format_v2(result_data, transaction_data) # TODO: Is it correct to put result_data or I need to hash it?
+            result = self.build_result_format_v2(result_hash, transaction_hex)
             logger.info(f'Result is: {result}')
             logger.info('Adding result to order')
             self.add_result_to_order(order_id, result)
