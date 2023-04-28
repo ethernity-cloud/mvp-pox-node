@@ -332,8 +332,8 @@ class EtnyPoXNode:
             challenge_file = f'{os.path.dirname(os.path.realpath(__file__))}/{challenge_hash}'
             challenge_content = self.read_file(challenge_file)
             self.build_prerequisites_v1(order_id, payload_file, input_file, docker_compose_file, challenge_content)
-            logger.info("Stopping previous docker registry")
 
+            logger.info("Stopping previous docker registry")
             run_subprocess(['docker', 'stop', 'registry'], logger)
             logger.info("Cleaning up docker registry")
             run_subprocess(['docker', 'system', 'prune', '-a', '-f', '--volumes'], logger)
@@ -354,7 +354,6 @@ class EtnyPoXNode:
             run_subprocess(['docker', 'rm', '-f', 'etny-pynithy-' + str(order_id)], logger)
 
             logger.info("Running docker-compose")
-
             run_subprocess([
                 'docker-compose', '-f', self.order_docker_compose_file, 'run',
                 '--rm', '-d',
@@ -410,14 +409,18 @@ class EtnyPoXNode:
             else:
                 input_file = None
 
+            logger.info("Running docker swift-stream")
+            run_subprocess(['docker-compose', '-f', f'docker/docker-compose-swift-stream.yml', 'up', 'minio'],
+                           logger)
+
             docker_compose_file = f'{os.path.dirname(os.path.realpath(__file__))}/{docker_compose_hash}'
             challenge_file = f'{os.path.dirname(os.path.realpath(__file__))}/{challenge_hash}'
             challenge_content = self.read_file(challenge_file)
             bucket_name = "etny-pynithy-v2"
             self.build_prerequisites_v2(bucket_name, order_id, payload_file, input_file,
                                         docker_compose_file, challenge_content)
-            logger.info("Stopping previous docker registry")
 
+            logger.info("Stopping previous docker registry")
             run_subprocess(['docker', 'stop', 'registry'], logger)
             logger.info("Cleaning up docker registry")
             run_subprocess(['docker', 'system', 'prune', '-a', '-f', '--volumes'], logger)
@@ -438,7 +441,6 @@ class EtnyPoXNode:
             run_subprocess(['docker', 'rm', '-f', 'etny-pynithy-' + str(order_id)], logger)
 
             logger.info("Running docker-compose")
-
             run_subprocess([
                 'docker-compose', '-f', self.order_docker_compose_file, 'run',
                 '--rm', '-d',
@@ -469,6 +471,10 @@ class EtnyPoXNode:
             logger.info(f'Result is: {result}')
             logger.info('Adding result to order')
             self.add_result_to_order(order_id, result)
+
+            logger.info('Cleaning up swift-stream docker container.')
+            run_subprocess(['docker-compose', '-f', f'docker/docker-compose-swift-stream.yml', 'down', 'minio'],
+                           logger)
 
     def wait_for_enclave(self, timeout=120): 
         i = 0
