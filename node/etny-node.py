@@ -366,7 +366,6 @@ class EtnyPoXNode:
             run_subprocess([
                 'docker-compose', '-f', self.order_docker_compose_file, 'down'
             ], logger)
-            # todo handle empty input
             logger.info('Uploading result to ipfs')
             result_hash = self.upload_result_to_ipfs(f'{self.order_folder}/result.txt')
             logger.info(f'Result ipfs hash is {result_hash}')
@@ -453,7 +452,6 @@ class EtnyPoXNode:
             run_subprocess([
                 'docker-compose', '-f', self.order_docker_compose_file, 'down'
             ], logger)
-            # todo handle empty input
             logger.info('Uploading result to enty-pynity-v2 bucket')
             status, result_data = self.swift_stream_service.get_file_content(bucket_name, "result.txt")
             if not status:
@@ -544,12 +542,27 @@ class EtnyPoXNode:
 
         return contents
 
+    def __create_empty_file(self, file_path: str) -> bool:
+        try:
+            open(file_path, 'w').close()
+        except OSError:
+            logger.error('Failed creating the file')
+            return False
+
+        logger.info('File created')
+        return True
+
     def build_prerequisites_v1(self, order_id, payload_file, input_file, docker_compose_file, challenge):
         self.order_folder = f'./orders/{order_id}/etny-order-{order_id}'
         self.create_folder_v1(self.order_folder)
         self.copy_order_files(payload_file, f'{self.order_folder}/payload.py')
         if input_file is not None:
             self.copy_order_files(input_file, f'{self.order_folder}/input.txt')
+        else:
+            status = self.__create_empty_file(f'{self.order_folder}/input.txt')
+            if not status:
+                raise "Could not create context."
+
         self.order_docker_compose_file = f'./orders/{order_id}/docker-compose.yml'
 
         self.copy_order_files(docker_compose_file, self.order_docker_compose_file)
@@ -574,9 +587,15 @@ class EtnyPoXNode:
             logger.error(msg)
 
         self.input_file_name = "input.txt"
-        (status, msg) = self.swift_stream_service.upload_file(bucket_name,
-                                                              self.input_file_name,
-                                                              input_file)
+        if input_file is None:
+            (status, msg) = self.swift_stream_service.put_file_content(bucket_name,
+                                                                       self.input_file_name,
+                                                                       "",
+                                                                       "")
+        else:
+            (status, msg) = self.swift_stream_service.upload_file(bucket_name,
+                                                                  self.input_file_name,
+                                                                  input_file)
         if (not status):
             logger.error(msg)
 
