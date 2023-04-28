@@ -364,7 +364,7 @@ class EtnyPoXNode:
             logger.info('waiting for result')
             self.wait_for_enclave(120)
             run_subprocess([
-                'docker-compose', 'down'
+                'docker-compose', '-f', self.order_docker_compose_file, 'down'
             ], logger)
             # todo handle empty input
             logger.info('Uploading result to ipfs')
@@ -410,7 +410,7 @@ class EtnyPoXNode:
                 input_file = None
 
             logger.info("Running docker swift-stream")
-            run_subprocess(['docker-compose', '-f', f'docker/docker-compose-swift-stream.yml', 'up', 'minio'],
+            run_subprocess(['docker-compose', '-f', f'docker/docker-compose-swift-stream.yml', 'up', 'swift-stream'],
                            logger)
 
             docker_compose_file = f'{os.path.dirname(os.path.realpath(__file__))}/{docker_compose_hash}'
@@ -451,7 +451,7 @@ class EtnyPoXNode:
             logger.info('Waiting for result')
             self.wait_for_enclave_v2(bucket_name, 'result.txt', 120)
             run_subprocess([
-                'docker-compose', 'down'
+                'docker-compose', '-f', self.order_docker_compose_file, 'down'
             ], logger)
             # todo handle empty input
             logger.info('Uploading result to enty-pynity-v2 bucket')
@@ -473,8 +473,9 @@ class EtnyPoXNode:
             self.add_result_to_order(order_id, result)
 
             logger.info('Cleaning up swift-stream docker container.')
-            run_subprocess(['docker-compose', '-f', f'docker/docker-compose-swift-stream.yml', 'down', 'minio'],
-                           logger)
+            run_subprocess([
+                'docker-compose', '-f', f'docker/docker-compose-swift-stream.yml', 'down', 'swift-stream'
+            ], logger)
 
     def wait_for_enclave(self, timeout=120): 
         i = 0
