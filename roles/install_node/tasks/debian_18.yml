@@ -1,5 +1,7 @@
 ---
-
+- name: Update package lists
+  apt:
+    update_cache: yes
 - name: Ubuntu 18.04 | kernel SGX 
   when: (ansible_kernel is version('5.0.0-050000-generic','!='))
   apt: deb={{item}}
