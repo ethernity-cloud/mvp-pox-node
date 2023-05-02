@@ -103,10 +103,6 @@
     - libvirt-dev
     - zlib1g-dev
     - ruby-dev
-- name: Install vagrant-libvirt plugin
-  ansible.builtin.command: vagrant plugin install vagrant-libvirt
-- name: Install vagrant-reload plugin
-  ansible.builtin.command: vagrant plugin install vagrant-reload
 - name: Ubuntu 18.04 | vagrant template
   copy:
     src: vagrant/qemu-3.1
