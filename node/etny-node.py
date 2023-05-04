@@ -14,7 +14,7 @@ from models import *
 from error_messages import errorMessages
 
 logger = config.logger
-
+process_order_retry_counter = 0
 
 class EtnyPoXNode:
     __address = None
@@ -50,6 +50,22 @@ class EtnyPoXNode:
         self.storage = Storage(config.ipfs_host, config.client_connect_url, config.client_bootstrap_url,
                                self.ipfs_cache, config.logger)
         self.merged_orders_cache = MergedOrdersCache(config.merged_orders_cache_limit, config.merged_orders_cache)
+        self.process_order_data = {"process_order_retry_counter": process_order_retry_counter,
+                                   "order_id": self.__order_id,
+                                   "dprequest": self.__dprequest,
+                                   "orders_cache": self.orders_cache,
+                                   "dpreq_cache": self.dpreq_cache,
+                                   "doreq_cache": self.doreq_cache,
+                                   "ipfs_cache": self.ipfs_cache}
+
+        if not os.path.exists("node/process_order_data.json"):
+            json_object = json.dumps(self.process_order_data, indent=4)
+
+            with open("process_order_retry_counter.json", "w") as outfile:
+                outfile.write(json_object)
+        else:
+            with open('process_order_retry_counter.json', 'r') as openfile:
+                self.process_order_data = json.load(openfile)
 
     def parse_arguments(self, arguments, parser):
         parser = parser.parse_args()
@@ -170,6 +186,23 @@ class EtnyPoXNode:
         logger.info("Request has been cancelled")
 
     def process_order(self, order_id, metadata=None):
+        with open('process_order_retry_counter.json', 'r') as openfile:
+            self.process_order_data = json.load(openfile)
+
+        if self.process_order_data['process_order_retry_counter'] > 10:
+            logger.info('Building result ')
+            result = self.build_result_format_v1("[Warn]", f'Too many retries to for the current order_id: {order_id}')
+            logger.info(f'Result is: {result}')
+            logger.info('Adding result to order')
+            self.add_result_to_order(order_id, result)
+            return
+
+        process_order_retry_counter += 1
+        self.process_order_data['process_order_retry_counter'] = process_order_retry_counter
+        json_object = json.dumps(self.process_order_data, indent=4)
+        with open("process_order_retry_counter.json", "w") as outfile:
+            outfile.write(json_object)
+
         # this line should be checked later
         if not metadata:
             order = Order(self.__etny.caller()._getOrder(order_id))
