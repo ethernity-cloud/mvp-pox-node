@@ -50,6 +50,10 @@ class EtnyPoXNode:
         self.storage = Storage(config.ipfs_host, config.client_connect_url, config.client_bootstrap_url,
                                self.ipfs_cache, config.logger)
         self.merged_orders_cache = MergedOrdersCache(config.merged_orders_cache_limit, config.merged_orders_cache)
+        self.process_order_data = {}
+        self.generate_process_order_data()
+
+    def generate_process_order_data(self):
         self.process_order_data = {"process_order_retry_counter": process_order_retry_counter,
                                    "order_id": self.__order_id,
                                    "dprequest": self.__dprequest,

@@ -1,9 +1,0 @@
-{
-  "process_order_retry_counter": 0,
-  "order": -1,
-  "dprequest": -1,
-  "orders_cache": -1,
-  "dpreq_cache": -1,
-  "doreq_cache": -1,
-  "ipfs_cache": -1
-}
