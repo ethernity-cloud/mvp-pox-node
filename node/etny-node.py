@@ -201,6 +201,11 @@ class EtnyPoXNode:
             self.process_order_data["order_id"] = order_id
             self.process_order_data["process_order_retry_counter"] = 0
 
+        # this line should be checked later
+        if not metadata:
+            order = Order(self.__etny.caller()._getOrder(order_id))
+            metadata = self.__etny.caller()._getDORequestMetadata(order.do_req)
+
         if self.process_order_data['process_order_retry_counter'] > 10:
             if metadata[1].startswith('v1:') == 1:
                 logger.info('Building result ')
@@ -223,11 +228,6 @@ class EtnyPoXNode:
         json_object = json.dumps(self.process_order_data, indent=4)
         with open(config.process_orders_cache_filepath, "w") as outfile:
             outfile.write(json_object)
-
-        # this line should be checked later
-        if not metadata:
-            order = Order(self.__etny.caller()._getOrder(order_id))
-            metadata = self.__etny.caller()._getDORequestMetadata(order.do_req)
 
         self.add_processor_to_order(order_id)
         version = 0
