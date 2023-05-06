@@ -45,8 +45,11 @@ class EtnyPoXNode:
         self.__uuid = get_or_generate_uuid(config.uuid_filepath)
         logger.info("reading cache files")
         self.orders_cache = Cache(config.orders_cache_limit, config.orders_cache_filepath)
+        logger.info("orders cache file read")
         self.dpreq_cache = ListCache(config.dpreq_cache_limit, config.dpreq_filepath)
+        logger.info("dpreq cache file read")
         self.doreq_cache = ListCache(config.doreq_cache_limit, config.doreq_filepath)
+        logger.info("ipfs cache file read")
         self.ipfs_cache = ListCache(config.ipfs_cache_limit, config.ipfs_cache_filepath)
         self.storage = Storage(config.ipfs_host, config.client_connect_url, config.client_bootstrap_url,
                                self.ipfs_cache, config.logger)
