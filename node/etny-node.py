@@ -65,11 +65,8 @@ class EtnyPoXNode:
                                        "dprequest": self.__dprequest,
                                        "order_id": self.__order_id,
                                        "uuid": self.__uuid}
-            try:
-                json_object = json.dumps(self.process_order_data, indent=4)
-            except TypeError as e:
-                logger.error("Error while dumping process order data to json")
-                logger.error(e)
+
+            json_object = json.dumps(self.process_order_data, indent=4)
 
             with open(config.process_orders_cache_filepath, "w") as outfile:
                 outfile.write(json_object)
