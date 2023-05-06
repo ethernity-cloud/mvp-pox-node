@@ -49,11 +49,13 @@ class EtnyPoXNode:
         self.dpreq_cache = ListCache(config.dpreq_cache_limit, config.dpreq_filepath)
         logger.info("dpreq cache file read")
         self.doreq_cache = ListCache(config.doreq_cache_limit, config.doreq_filepath)
-        logger.info("ipfs cache file read")
+        logger.info("doreq cache file read")
         self.ipfs_cache = ListCache(config.ipfs_cache_limit, config.ipfs_cache_filepath)
+        logger.info("ipfs cache file read")
         self.storage = Storage(config.ipfs_host, config.client_connect_url, config.client_bootstrap_url,
                                self.ipfs_cache, config.logger)
         self.merged_orders_cache = MergedOrdersCache(config.merged_orders_cache_limit, config.merged_orders_cache)
+        logger.info("merged orders cache file read")
         self.process_order_data = {}
         self.generate_process_order_data()
 
