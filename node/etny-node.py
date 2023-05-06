@@ -15,6 +15,7 @@ from error_messages import errorMessages
 
 logger = config.logger
 
+
 class EtnyPoXNode:
     __address = None
     __privatekey = None
@@ -53,7 +54,7 @@ class EtnyPoXNode:
         self.generate_process_order_data()
 
     def generate_process_order_data(self):
-        if not os.path.exists("node/process_order_data.json"):
+        if not os.path.exists(config.process_orders_cache_filepath):
             self.process_order_data = {"process_order_retry_counter": 0,
                                        "dprequest": self.__dprequest,
                                        "order_id": self.__order_id,
@@ -64,11 +65,11 @@ class EtnyPoXNode:
                                        "ipfs_cache": self.ipfs_cache}
             json_object = json.dumps(self.process_order_data, indent=4)
 
-            with open("process_order_retry_counter.json", "w") as outfile:
+            with open(config.process_orders_cache_filepath, "w") as outfile:
                 outfile.write(json_object)
 
         else:
-            with open('process_order_retry_counter.json', 'r') as openfile:
+            with open(config.process_orders_cache_filepath, 'r') as openfile:
                 self.process_order_data = json.load(openfile)
 
     def parse_arguments(self, arguments, parser):
@@ -190,7 +191,7 @@ class EtnyPoXNode:
         logger.info("Request has been cancelled")
 
     def process_order(self, order_id, metadata=None):
-        with open('process_order_retry_counter.json', 'r') as openfile:
+        with open(config.process_orders_cache_filepath, 'r') as openfile:
             self.process_order_data = json.load(openfile)
 
         if self.process_order_data["order_id"] != order_id:
@@ -217,7 +218,7 @@ class EtnyPoXNode:
 
         self.process_order_data['process_order_retry_counter'] += 1
         json_object = json.dumps(self.process_order_data, indent=4)
-        with open("process_order_retry_counter.json", "w") as outfile:
+        with open(config.process_orders_cache_filepath, "w") as outfile:
             outfile.write(json_object)
 
         # this line should be checked later
@@ -436,7 +437,7 @@ class EtnyPoXNode:
 
         self.copy_order_files(docker_compose_file, self.order_docker_compose_file)
         self.set_retry_policy_on_fail_for_compose()
-        
+
         self.update_enclave_docker_compose(self.order_docker_compose_file, order_id)
         env_content = self.get_enclave_env_dictionary(order_id, challenge)
         self.generate_enclave_env_file(f'{self.order_folder}/.env', env_content)
