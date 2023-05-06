@@ -43,6 +43,7 @@ class EtnyPoXNode:
         self.__order_id = 0
 
         self.__uuid = get_or_generate_uuid(config.uuid_filepath)
+        logger.info("reading cache files")
         self.orders_cache = Cache(config.orders_cache_limit, config.orders_cache_filepath)
         self.dpreq_cache = ListCache(config.dpreq_cache_limit, config.dpreq_filepath)
         self.doreq_cache = ListCache(config.doreq_cache_limit, config.doreq_filepath)
