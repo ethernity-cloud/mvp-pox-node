@@ -64,11 +64,7 @@ class EtnyPoXNode:
             self.process_order_data = {"process_order_retry_counter": 0,
                                        "dprequest": self.__dprequest,
                                        "order_id": self.__order_id,
-                                       "uuid": self.__uuid,
-                                       "orders_cache": self.orders_cache,
-                                       "dpreq_cache": self.dpreq_cache,
-                                       "doreq_cache": self.doreq_cache,
-                                       "ipfs_cache": self.ipfs_cache}
+                                       "uuid": self.__uuid}
             try:
                 json_object = json.dumps(self.process_order_data, indent=4)
             except TypeError as e:
