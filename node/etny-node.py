@@ -324,7 +324,7 @@ class EtnyPoXNode:
             payload_file = f'{os.path.dirname(os.path.realpath(__file__))}/{payload_hash}'
             if input_hash is not None and len(input_hash) > 0:
                 input_file = f'{os.path.dirname(os.path.realpath(__file__))}/{input_hash}'
-                logger.info('input hash is not none: ', input_file)
+                logger.info(f'input hash is not none: {input_file}')
             else:
                 input_file = None
 
@@ -475,7 +475,7 @@ class EtnyPoXNode:
                 'docker-compose', '-f', f'docker/docker-compose-swift-stream.yml', 'down', 'swift-stream'
             ], logger)
 
-    def wait_for_enclave(self, timeout=120): 
+    def wait_for_enclave(self, timeout=120):
         i = 0
         while True:
             time.sleep(1)
