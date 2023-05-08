@@ -482,6 +482,11 @@ class EtnyPoXNode:
             return [order_id, order]
         return None
 
+    def __can_place_order(self, dp_req_id: int, do_req_id: int) -> bool:
+        if dp_req_id % 10 != do_req_id % 10:
+            return False
+        return True
+
     def process_dp_request(self):
         order_details = self._getOrder()
         if order_details is not None:
@@ -535,6 +540,11 @@ class EtnyPoXNode:
                 if metadata[4] != '' and metadata[4] != self.__address:
                     logger.info(f'Skipping DO Request: {i}. Request is delegated to a different Node.')
                     continue
+
+                if metadata[4] == '':
+                    status = self.__can_place_order(self.__dprequest, i)
+                    if not status:
+                        continue
 
                 logger.info("Placing order...")
                 try:
