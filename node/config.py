@@ -47,6 +47,8 @@ doreq_filepath = os.path.dirname(os.path.realpath(__file__)) + '/doreq_cache.txt
 merged_orders_cache = os.path.dirname(os.path.realpath(__file__)) + '/merged_orders_cache.json'
 merged_orders_cache_limit = 10000000
 
+process_orders_cache_filepath = os.path.dirname(os.path.realpath(__file__)) + '/process_order_data.json'
+
 # logger
 logger = logging.getLogger("ETNY NODE")
 handler = logging.handlers.RotatingFileHandler('/var/log/etny-node.log', maxBytes=2048000, backupCount=5)

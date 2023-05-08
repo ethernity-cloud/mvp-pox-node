@@ -13,3 +13,4 @@ Vagrantfile
 .idea/
 log/
 *_cache.*
+node/process_order_data.json

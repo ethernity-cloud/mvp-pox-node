@@ -50,6 +50,23 @@ class EtnyPoXNode:
         self.storage = Storage(config.ipfs_host, config.client_connect_url, config.client_bootstrap_url,
                                self.ipfs_cache, config.logger)
         self.merged_orders_cache = MergedOrdersCache(config.merged_orders_cache_limit, config.merged_orders_cache)
+        self.process_order_data = {}
+        self.generate_process_order_data()
+
+    def generate_process_order_data(self):
+        if not os.path.exists(config.process_orders_cache_filepath):
+            self.process_order_data = {"process_order_retry_counter": 0,
+                                       "order_id": self.__order_id,
+                                       "uuid": self.__uuid}
+
+            json_object = json.dumps(self.process_order_data, indent=4)
+
+            with open(config.process_orders_cache_filepath, "w") as outfile:
+                outfile.write(json_object)
+
+        else:
+            with open(config.process_orders_cache_filepath, 'r') as openfile:
+                self.process_order_data = json.load(openfile)
 
     def parse_arguments(self, arguments, parser):
         parser = parser.parse_args()
@@ -170,10 +187,40 @@ class EtnyPoXNode:
         logger.info("Request has been cancelled")
 
     def process_order(self, order_id, metadata=None):
+        with open(config.process_orders_cache_filepath, 'r') as openfile:
+            self.process_order_data = json.load(openfile)
+
+        if self.process_order_data["order_id"] != order_id:
+            self.process_order_data["order_id"] = order_id
+            self.process_order_data["process_order_retry_counter"] = 0
+
         # this line should be checked later
         if not metadata:
             order = Order(self.__etny.caller()._getOrder(order_id))
             metadata = self.__etny.caller()._getDORequestMetadata(order.do_req)
+
+        if self.process_order_data['process_order_retry_counter'] > 10:
+            if metadata[1].startswith('v1:') == 1:
+                logger.info('Building result ')
+                result = self.build_result_format_v1("[Warn]",
+                                                     f'Too many retries for the current order_id: {order_id}')
+                logger.info(f'Result is: {result}')
+                logger.info('Adding result to order')
+                self.add_result_to_order(order_id, result)
+                return
+
+            else:
+                logger.info('Building result ')
+                result_msg = f'Too many retires for the current order_id: {order_id}'
+                logger.warn(result_msg)
+                logger.info('Adding result to order')
+                self.add_result_to_order(order_id, result_msg)
+                return
+
+        self.process_order_data['process_order_retry_counter'] += 1
+        json_object = json.dumps(self.process_order_data, indent=4)
+        with open(config.process_orders_cache_filepath, "w") as outfile:
+            outfile.write(json_object)
 
         self.add_processor_to_order(order_id)
         version = 0
@@ -386,7 +433,7 @@ class EtnyPoXNode:
 
         self.copy_order_files(docker_compose_file, self.order_docker_compose_file)
         self.set_retry_policy_on_fail_for_compose()
-        
+
         self.update_enclave_docker_compose(self.order_docker_compose_file, order_id)
         env_content = self.get_enclave_env_dictionary(order_id, challenge)
         self.generate_enclave_env_file(f'{self.order_folder}/.env', env_content)
