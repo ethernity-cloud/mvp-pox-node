@@ -1,14 +1,21 @@
 ---
-
-- name: Ubuntu 18.04 | kernel SGX 
+- name: Ubuntu 18.04 | kernel SGX step 1
+  when: (ansible_kernel is version('5.0.0-050000-generic','!='))
+  apt: deb={{item}}
+  register: _apt_install
+  with_items:
+     - https://github.com/ethernity-cloud/ubuntu18-packages/releases/download/v0.0.1/linux-headers-5.0.0-050000_5.0.0-050000.201903032031_all.deb
+     - https://github.com/ethernity-cloud/ubuntu18-packages/releases/download/v0.0.1/linux-modules-5.0.0-050000-generic_5.0.0-050000.201903032031_amd64.deb
+- name: Update package lists
+  apt:
+    update_cache: yes
+- name: Ubuntu 18.04 | kernel SGX step 2
   when: (ansible_kernel is version('5.0.0-050000-generic','!='))
   apt: deb={{item}}
   register: _apt_install
   with_items:
      - https://github.com/ethernity-cloud/ubuntu18-packages/releases/download/v0.0.1/linux-headers-5.0.0-050000-generic_5.0.0-050000.201903032031_amd64.deb
-     - https://github.com/ethernity-cloud/ubuntu18-packages/releases/download/v0.0.1/linux-headers-5.0.0-050000_5.0.0-050000.201903032031_all.deb
      - https://github.com/ethernity-cloud/ubuntu18-packages/releases/download/v0.0.1/linux-image-unsigned-5.0.0-050000-generic_5.0.0-050000.201903032031_amd64.deb
-     - https://github.com/ethernity-cloud/ubuntu18-packages/releases/download/v0.0.1/linux-modules-5.0.0-050000-generic_5.0.0-050000.201903032031_amd64.deb
      - https://github.com/ethernity-cloud/ubuntu18-packages/releases/download/v0.0.1/linux-modules-extra-5.0.0-050000-generic_5.0.0-050000.201903032031_amd64.deb
 - name: Change default grub menu
   lineinfile:
