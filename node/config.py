@@ -7,12 +7,14 @@ from os.path import expanduser
 def onImportError():
     os.system("pip3 install psutil==5.9.2")
     os.system("pip3 install python-dotenv==0.21.0")
+    os.system("pip3 install minio==7.1.13")
     os.killpg(os.getpgid(), signal.SIGCHLD)
     sys.exit()
 
 
 try:
     import psutil
+    from minio import Minio
     from dotenv import load_dotenv
 except ImportError as e:
     onImportError()
@@ -82,7 +84,15 @@ parser.add_argument("-s", "--storage", help="Amount of storage (GB)", required=F
 parser.add_argument("-b", "--bandwidth", help="Amount of bandwidth (GB)", required=False, default="1")
 parser.add_argument("-t", "--duration", help="Amount of time allocated for task (minutes)", required=False,
                     default="60")
+parser.add_argument("--endpoint", help="Hostname of a S3 service", required=False, default="localhost:9000")
+parser.add_argument("--access_key", help="Access key (aka user ID) of your account in S3 service.",
+                    default="swiftstreamadmin",
+                    required=False)
+parser.add_argument("--secret_key", help="Secret Key (aka password) of your account in S3 service.",
+                    default="swiftstreamadmin",
+                    required=False)
+
 arguments = {
-    str: ['address', 'privatekey', 'resultaddress', 'resultprivatekey'],
+    str: ['address', 'privatekey', 'resultaddress', 'resultprivatekey', 'endpoint'],
     int: ['cpu', 'memory', 'storage', 'storage', 'bandwidth', 'duration']
 }
