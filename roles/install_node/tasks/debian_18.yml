@@ -58,6 +58,7 @@
       - libwayland-server0
       - qemu-slof
       - binfmt-support
+      - cpu-checker 
     state: present
 - name:  Ubuntu 18.04 | vagrant add key  
   apt_key:

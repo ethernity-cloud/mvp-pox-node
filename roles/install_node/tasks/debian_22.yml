@@ -31,6 +31,7 @@
        - virtinst
        - virt-top
        - genisoimage
+       - cpu-checker  
     state: present
     allow_downgrade: true
 - name:  Ubuntu 22.04 | vagrant add key  
