@@ -234,6 +234,10 @@ class EtnyPoXNode:
         if metadata[1].startswith('v1:'):
             version = 1
             [v1, enclave_image_hash, etny_pinithy, docker_compose_hash, challenge_hash] = metadata[1].split(':')
+        
+        if metadata[1].startswith('v2:'):
+            version = 2
+            [v2, enclave_image_hash, etny_pinithy, docker_compose_hash, challenge_hash] = metadata[1].split(':')
 
         logger.info(f'Running version v{version}')
         if version == 0:
