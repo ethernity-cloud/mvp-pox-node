@@ -422,7 +422,7 @@ class EtnyPoXNode:
             challenge_content = self.read_file(challenge_file)
             bucket_name = "etny-pynithy-v2"
             logger.info('Preparing prerequisites for v2')
-            logger.info(self.__access_key, self.__secret_key, self.__endpoint_url, bucket_name)
+            logger.info(self.__access_key, self.__secret_key, self.__endpoint, bucket_name)
             self.build_prerequisites_v2(bucket_name, order_id, payload_file, input_file,
                                         docker_compose_file, challenge_content)
 
