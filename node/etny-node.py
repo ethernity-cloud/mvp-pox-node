@@ -234,7 +234,7 @@ class EtnyPoXNode:
         if metadata[1].startswith('v1:'):
             version = 1
             [v1, enclave_image_hash, etny_pinithy, docker_compose_hash, challenge_hash] = metadata[1].split(':')
-        
+
         if metadata[1].startswith('v2:'):
             version = 2
             [v2, enclave_image_hash, etny_pinithy, docker_compose_hash, challenge_hash] = metadata[1].split(':')
@@ -413,13 +413,16 @@ class EtnyPoXNode:
                 input_file = None
 
             logger.info("Running docker swift-stream")
-            run_subprocess(['docker-compose', '-f', f'docker/docker-compose-swift-stream.yml', 'up', '-d', 'swift-stream'],
-                           logger)
+            run_subprocess(
+                ['docker-compose', '-f', f'docker/docker-compose-swift-stream.yml', 'up', '-d', 'swift-stream'],
+                logger)
 
             docker_compose_file = f'{os.path.dirname(os.path.realpath(__file__))}/{docker_compose_hash}'
             challenge_file = f'{os.path.dirname(os.path.realpath(__file__))}/{challenge_hash}'
             challenge_content = self.read_file(challenge_file)
             bucket_name = "etny-pynithy-v2"
+            logger.info('Preparing prerequisites for v2')
+            logger.info(self.__access_key, self.__secret_key, self.__endpoint_url, bucket_name)
             self.build_prerequisites_v2(bucket_name, order_id, payload_file, input_file,
                                         docker_compose_file, challenge_content)
 
