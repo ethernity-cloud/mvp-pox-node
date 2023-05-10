@@ -502,8 +502,9 @@ class EtnyPoXNode:
             if i > timeout:
                 break
             logger.info(f'Checking if object {object_name} exists in bucket {bucket_name}')
-            if self.swift_stream_service.is_object_in_bucket(bucket_name,
-                                                             object_name):
+            (status, result) = self.swift_stream_service.is_object_in_bucket(bucket_name, object_name)
+            logger.info(result)
+            if status:
                 break
 
         logger.info('enclave finished the execution')
