@@ -84,15 +84,15 @@ parser.add_argument("-s", "--storage", help="Amount of storage (GB)", required=F
 parser.add_argument("-b", "--bandwidth", help="Amount of bandwidth (GB)", required=False, default="1")
 parser.add_argument("-t", "--duration", help="Amount of time allocated for task (minutes)", required=False,
                     default="60")
-parser.add_argument("--endpoint", help="Hostname of a S3 service", required=False, default="localhost:9000")
-parser.add_argument("--access_key", help="Access key (aka user ID) of your account in S3 service.",
+parser.add_argument("-e", "--endpoint", help="Hostname of a S3 service", required=False, default="localhost:9000")
+parser.add_argument("-u", "--access_key", help="Access key (aka user ID) of your account in S3 service.",
                     default="swiftstreamadmin",
                     required=False)
-parser.add_argument("--secret_key", help="Secret Key (aka password) of your account in S3 service.",
+parser.add_argument("-p", "--secret_key", help="Secret Key (aka password) of your account in S3 service.",
                     default="swiftstreamadmin",
                     required=False)
 
 arguments = {
-    str: ['address', 'privatekey', 'resultaddress', 'resultprivatekey', 'endpoint'],
+    str: ['address', 'privatekey', 'resultaddress', 'resultprivatekey', 'endpoint', 'access_key', 'secret_key'],
     int: ['cpu', 'memory', 'storage', 'storage', 'bandwidth', 'duration']
 }

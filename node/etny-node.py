@@ -57,7 +57,6 @@ class EtnyPoXNode:
         self.swift_stream_service = SwiftStreamService(self.__endpoint,
                                                        self.__access_key,
                                                        self.__secret_key)
-        logger.info(self.__access_key, self.__secret_key)
         self.process_order_data = {}
         self.generate_process_order_data()
 
