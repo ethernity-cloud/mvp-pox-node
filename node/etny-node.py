@@ -496,14 +496,13 @@ class EtnyPoXNode:
 
     def wait_for_enclave_v2(self, bucket_name, object_name, timeout=120):
         i = 0
+        logger.info(f'Checking if object {object_name} exists in bucket {bucket_name}')
         while True:
             time.sleep(1)
             i = i + 1
             if i > timeout:
                 break
-            logger.info(f'Checking if object {object_name} exists in bucket {bucket_name}')
             (status, result) = self.swift_stream_service.is_object_in_bucket(bucket_name, object_name)
-            logger.info(result)
             if status:
                 break
 
