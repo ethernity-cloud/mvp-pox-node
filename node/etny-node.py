@@ -413,7 +413,7 @@ class EtnyPoXNode:
                 input_file = None
 
             logger.info("Running docker swift-stream")
-            run_subprocess(['docker-compose', '-f', f'docker/docker-compose-swift-stream.yml', 'up', 'swift-stream'],
+            run_subprocess(['docker-compose', '-f', f'docker/docker-compose-swift-stream.yml', 'up', '-d', 'swift-stream'],
                            logger)
 
             docker_compose_file = f'{os.path.dirname(os.path.realpath(__file__))}/{docker_compose_hash}'
