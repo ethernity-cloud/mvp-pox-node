@@ -218,7 +218,7 @@ class EtnyPoXNode:
 
             else:
                 logger.info('Building result ')
-                result_msg = f'Too many retires for the current order_id: {order_id}'
+                result_msg = f'Too many retries for the current order_id: {order_id}'
                 logger.warn(result_msg)
                 logger.info('Adding result to order')
                 self.add_result_to_order(order_id, result_msg)
@@ -422,7 +422,6 @@ class EtnyPoXNode:
             challenge_content = self.read_file(challenge_file)
             bucket_name = "etny-pynithy-v2"
             logger.info('Preparing prerequisites for v2')
-            logger.info(self.__access_key, self.__secret_key, self.__endpoint, bucket_name)
             self.build_prerequisites_v2(bucket_name, order_id, payload_file, input_file,
                                         docker_compose_file, challenge_content)
 
