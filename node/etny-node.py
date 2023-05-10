@@ -454,7 +454,7 @@ class EtnyPoXNode:
                 'etny-pynithy-' + str(order_id), 'etny-pynithy'
             ], logger)
 
-            logger.info('Waiting for result')
+            logger.info('Waiting for execution of v2')
             self.wait_for_enclave_v2(bucket_name, 'result.txt', 120)
             run_subprocess([
                 'docker-compose', '-f', self.order_docker_compose_file, 'down'
@@ -501,6 +501,7 @@ class EtnyPoXNode:
             i = i + 1
             if i > timeout:
                 break
+            logger.info(f'Checking if object {object_name} exists in bucket {bucket_name}')
             if self.swift_stream_service.is_object_in_bucket(bucket_name,
                                                              object_name):
                 break
