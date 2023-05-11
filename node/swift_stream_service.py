@@ -25,12 +25,9 @@ class SwiftStreamService:
         try:
             if self.client.bucket_exists(bucket_name):
                 file_objects = self.client.list_objects(bucket_name)
-                if file_objects.size() == 0:
-                    self.client.remove_bucket(bucket_name)
-                else:
-                    for file_object in file_objects:
-                        self.delete_file(bucket_name, file_object)
-                    self.client.remove_bucket(bucket_name)
+                for file_object in file_objects:
+                    self.delete_file(bucket_name, file_object)
+                self.client.remove_bucket(bucket_name)
             else:
                 return False, f"Bucket, {bucket_name} does not exists!"
         except S3Error as err:
