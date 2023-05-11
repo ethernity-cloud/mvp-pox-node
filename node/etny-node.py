@@ -583,6 +583,9 @@ class EtnyPoXNode:
         self.generate_enclave_env_file(f'{self.order_folder}/.env', env_content)
 
     def build_prerequisites_v2(self, bucket_name, order_id, payload_file, input_file, docker_compose_file, challenge):
+        logger.info('Cleaning up swift-stream bucket.')
+        self.swift_stream_service.delete_bucket(bucket_name)
+        logger.info('Creating new bucket.')
         self.order_folder = f'./orders/{order_id}/etny-order-{order_id}'
         self.create_folder_v1(self.order_folder)
         (status, msg) = self.swift_stream_service.create_bucket(bucket_name)
