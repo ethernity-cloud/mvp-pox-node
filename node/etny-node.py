@@ -462,16 +462,19 @@ class EtnyPoXNode:
             status, result_data = self.swift_stream_service.get_file_content(bucket_name, "result.txt")
             if not status:
                 logger.info(result_data)
-            result_hash = self.upload_result_to_ipfs(result_data)
+
+            with open(f'{self.order_folder}/result.txt', 'w') as f:
+                f.write(result_data)
+            logger.info(f'[2] Result file successfully downloaded to {self.order_folder}/result.txt')
+            result_hash = self.upload_result_to_ipfs(f'{self.order_folder}/result.txt')
+            logger.info(f'[v2] Result file successfully uploaded to IPFS with hash: {result_hash}')
             logger.info(f'Result file successfully uploaded to enty-pynity-v2 bucket')
             logger.info('Reading transaction from file')
             status, transaction_data = self.swift_stream_service.get_file_content(bucket_name, "transaction.txt")
             if not status:
                 logger.info(transaction_data)
-            transaction_hex = self.upload_result_to_ipfs(transaction_data)
-            logger.info('Transaction file successfully uploaded to enty-pynity-v2 bucket')
-            logger.info('Building result ')
-            result = self.build_result_format_v2(result_hash, transaction_hex)
+            logger.info('Building result for v2')
+            result = self.build_result_format_v2(result_hash, transaction_data)
             logger.info(f'Result is: {result}')
             logger.info('Adding result to order')
             self.add_result_to_order(order_id, result)
