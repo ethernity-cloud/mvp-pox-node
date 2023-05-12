@@ -35,7 +35,7 @@ class EtnyPoXNode:
         self.parse_arguments(config.arguments, config.parser)
         with open(config.abi_filepath) as f:
             self.__contract_abi = f.read()
-        self.__w3 = Web3(Web3.HTTPProvider(config.http_provider))
+        self.__w3 = Web3(Web3.HTTPProvider(config.http_provider, request_kwargs={'timeout': 120}))
         self.__w3.middleware_onion.inject(geth_poa_middleware, layer=0)
         self.__acct = Account.privateKeyToAccount(self.__privatekey)
         self.__etny = self.__w3.eth.contract(
@@ -218,7 +218,7 @@ class EtnyPoXNode:
 
             else:
                 logger.info('Building result ')
-                result_msg = f'Too many retires for the current order_id: {order_id}'
+                result_msg = f'Too many retries for the current order_id: {order_id}'
                 logger.warn(result_msg)
                 logger.info('Adding result to order')
                 self.add_result_to_order(order_id, result_msg)
@@ -234,6 +234,10 @@ class EtnyPoXNode:
         if metadata[1].startswith('v1:'):
             version = 1
             [v1, enclave_image_hash, etny_pinithy, docker_compose_hash, challenge_hash] = metadata[1].split(':')
+
+        if metadata[1].startswith('v2:'):
+            version = 2
+            [v2, enclave_image_hash, etny_pinithy, docker_compose_hash, challenge_hash] = metadata[1].split(':')
 
         logger.info(f'Running version v{version}')
         if version == 0:
@@ -409,13 +413,15 @@ class EtnyPoXNode:
                 input_file = None
 
             logger.info("Running docker swift-stream")
-            run_subprocess(['docker-compose', '-f', f'docker/docker-compose-swift-stream.yml', 'up', 'swift-stream'],
-                           logger)
+            run_subprocess(
+                ['docker-compose', '-f', f'docker/docker-compose-swift-stream.yml', 'up', '-d', 'swift-stream'],
+                logger)
 
             docker_compose_file = f'{os.path.dirname(os.path.realpath(__file__))}/{docker_compose_hash}'
             challenge_file = f'{os.path.dirname(os.path.realpath(__file__))}/{challenge_hash}'
             challenge_content = self.read_file(challenge_file)
             bucket_name = "etny-pynithy-v2"
+            logger.info('Preparing prerequisites for v2')
             self.build_prerequisites_v2(bucket_name, order_id, payload_file, input_file,
                                         docker_compose_file, challenge_content)
 
@@ -447,7 +453,7 @@ class EtnyPoXNode:
                 'etny-pynithy-' + str(order_id), 'etny-pynithy'
             ], logger)
 
-            logger.info('Waiting for result')
+            logger.info('Waiting for execution of v2')
             self.wait_for_enclave_v2(bucket_name, 'result.txt', 120)
             run_subprocess([
                 'docker-compose', '-f', self.order_docker_compose_file, 'down'
@@ -456,16 +462,19 @@ class EtnyPoXNode:
             status, result_data = self.swift_stream_service.get_file_content(bucket_name, "result.txt")
             if not status:
                 logger.info(result_data)
-            result_hash = self.upload_result_to_ipfs(result_data)
+
+            with open(f'{self.order_folder}/result.txt', 'w') as f:
+                f.write(result_data)
+            logger.info(f'[2] Result file successfully downloaded to {self.order_folder}/result.txt')
+            result_hash = self.upload_result_to_ipfs(f'{self.order_folder}/result.txt')
+            logger.info(f'[v2] Result file successfully uploaded to IPFS with hash: {result_hash}')
             logger.info(f'Result file successfully uploaded to enty-pynity-v2 bucket')
             logger.info('Reading transaction from file')
             status, transaction_data = self.swift_stream_service.get_file_content(bucket_name, "transaction.txt")
             if not status:
                 logger.info(transaction_data)
-            transaction_hex = self.upload_result_to_ipfs(transaction_data)
-            logger.info('Transaction file successfully uploaded to enty-pynity-v2 bucket')
-            logger.info('Building result ')
-            result = self.build_result_format_v2(result_hash, transaction_hex)
+            logger.info('Building result for v2')
+            result = self.build_result_format_v2(result_hash, transaction_data)
             logger.info(f'Result is: {result}')
             logger.info('Adding result to order')
             self.add_result_to_order(order_id, result)
@@ -489,13 +498,14 @@ class EtnyPoXNode:
 
     def wait_for_enclave_v2(self, bucket_name, object_name, timeout=120):
         i = 0
+        logger.info(f'Checking if object {object_name} exists in bucket {bucket_name}')
         while True:
             time.sleep(1)
             i = i + 1
             if i > timeout:
                 break
-            if self.swift_stream_service.is_object_in_bucket(bucket_name,
-                                                             object_name):
+            (status, result) = self.swift_stream_service.is_object_in_bucket(bucket_name, object_name)
+            if status:
                 break
 
         logger.info('enclave finished the execution')
@@ -573,6 +583,9 @@ class EtnyPoXNode:
         self.generate_enclave_env_file(f'{self.order_folder}/.env', env_content)
 
     def build_prerequisites_v2(self, bucket_name, order_id, payload_file, input_file, docker_compose_file, challenge):
+        logger.info('Cleaning up swift-stream bucket.')
+        self.swift_stream_service.delete_bucket(bucket_name)
+        logger.info('Creating new bucket.')
         self.order_folder = f'./orders/{order_id}/etny-order-{order_id}'
         self.create_folder_v1(self.order_folder)
         (status, msg) = self.swift_stream_service.create_bucket(bucket_name)
