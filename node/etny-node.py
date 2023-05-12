@@ -35,7 +35,7 @@ class EtnyPoXNode:
         self.parse_arguments(config.arguments, config.parser)
         with open(config.abi_filepath) as f:
             self.__contract_abi = f.read()
-        self.__w3 = Web3(Web3.HTTPProvider(config.http_provider, request_kwargs={'timeout': 60}))
+        self.__w3 = Web3(Web3.HTTPProvider(config.http_provider, request_kwargs={'timeout': 120}))
         self.__w3.middleware_onion.inject(geth_poa_middleware, layer=0)
         self.__acct = Account.privateKeyToAccount(self.__privatekey)
         self.__etny = self.__w3.eth.contract(
