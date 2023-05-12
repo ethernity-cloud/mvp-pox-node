@@ -697,13 +697,14 @@ class EtnyPoXNode:
         req = DPRequest(req)
         checked = 0
         seconds = 0
+        timeout_in_seconds = 10
         while seconds < config.contract_call_frequency:
             try:
                 count = self.__etny.caller()._getDORequestsCount()
             except Exception as e:
-                logger.error(f"Error while tring to get DORequestCount, errorMessage: {e}")
-                time.sleep(5)
-                seconds += 5
+                logger.error(f"Error while trying to get DORequestCount, errorMessage: {e}")
+                time.sleep(timeout_in_seconds)
+                seconds += timeout_in_seconds
                 continue
 
             found = False
@@ -760,9 +761,9 @@ class EtnyPoXNode:
                 logger.info(f"Finished processing order {self.__order_id}")
                 return
             checked = count - 1
-            time.sleep(5)
+            time.sleep(timeout_in_seconds)
 
-            seconds += 5
+            seconds += timeout_in_seconds
             if seconds >= config.contract_call_frequency:
                 logger.info("DP request timed out!")
                 self.cancel_dp_request(self.__dprequest)
