@@ -75,13 +75,19 @@
   copy:
     src: ubuntu/etc/apparmor.d/libvirt/TEMPLATE.qemu
     dest: /etc/apparmor.d/libvirt/TEMPLATE.qemu
+- name: Check installed Vagrant plugins
+command: vagrant plugin list
+register: plugin_output
+changed_when: false
 - name: vagrant-libvirt - install
-  shell: vagrant plugin install vagrant-libvirt --plugin-version=0.9.0
-- name: vagrant-preload - install
-  shell: vagrant plugin install vagrant-reload --plugin-version=0.0.1
+shell: vagrant plugin install vagrant-libvirt --plugin-version=0.9.0 --plugin-clean-sources --plugin-source https://rubygems.org/
+when: "'vagrant-libvirt (0.9.0)' not in plugin_output.stdout"
+- name: vagrant-reload - install
+shell: vagrant plugin install vagrant-reload --plugin-version=0.0.1 --plugin-clean-sources --plugin-source https://rubygems.org/
+when: "'vagrant-reload (0.0.1)' not in plugin_output.stdout"
 - name: fog-libvirt - install
-  shell: vagrant plugin install fog-libvirt --plugin-version=0.9.0
-  ignore_errors: true
+shell: vagrant plugin install fog-libvirt --plugin-version=0.9.0 --plugin-clean-sources --plugin-source https://rubygems.org/
+when: "'fog-libvirt (0.9.0)' not in plugin_output.stdout"
 - name: vagrant - get VM name
   shell: virsh list --name --all
   register: vagrant_vm_name
