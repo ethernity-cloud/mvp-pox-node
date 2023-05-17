@@ -79,6 +79,7 @@
   command: vagrant plugin list
   register: plugin_list_output
   changed_when: false
+  ignore_errors: true
 - name: Repair Vagrant plugins
   command: sudo vagrant plugin repair
   changed_when: false
