@@ -22,6 +22,14 @@
   connection: local
   become: yes
   gather_facts: yes
+  vars:
+    vagrant_plugins:
+      - name: vagrant-libvirt
+        version: 0.9.0
+      - name: vagrant-reload
+        version: 0.0.1
+      - name: fog-libvirt
+        version: 0.9.0
   pre_tasks:
   - name: "Сheck config file"
     stat: 
