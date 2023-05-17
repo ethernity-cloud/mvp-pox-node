@@ -77,28 +77,26 @@
     dest: /etc/apparmor.d/libvirt/TEMPLATE.qemu
 - name: Check installed Vagrant plugins
   command: vagrant plugin list
-  register: plugin_output
+  register: plugin_list_output
   changed_when: false
+- name: Repair Vagrant plugins
+  command: sudo vagrant plugin repair
+  changed_when: false
+  when: plugin_list_output is failed
+  register: plugin_repair_result
   ignore_errors: true
-- name: Inform user about error
-  fail:
-        msg: >
-          The command to list Vagrant plugins has failed. This could be due to an issue with the plugins themselves. Please consider the following options to troubleshoot this issue:
-
-          1. Repair the plugins by running: '$ sudo vagrant plugin repair'
-
-          2. If Vagrant was recently updated, the error may be due to incompatible versions of dependencies. To fix this, remove and re-install all plugins by running: '$ sudo vagrant plugin expunge --reinstall'
-
-          Please follow the instructions corresponding to the chosen option carefully.
-  when: plugin_output is failed
+- name: Remove and reinstall Vagrant plugins
+  command: sudo vagrant plugin expunge --force
+  changed_when: false
+  when: plugin_repair_result.failed
 - name: Print Vagrant plugins
   debug:
-          var: plugin_output.stdout_lines
-  when: plugin_output is succeeded
+          var: plugin_list_output.stdout_lines
+  when: plugin_list_output is succeeded
 - name: Install Vagrant plugins
   command: "vagrant plugin install {{ item.name }} --plugin-version {{ item.version }}"
   loop: "{{ vagrant_plugins }}"
-  when: "(item.name + ' (' + item.version|string + ', global)') not in plugin_output.stdout_lines"
+  when: "(item.name + ' (' + item.version|string + ', global)') not in plugin_list_output.stdout_lines"
 - name: vagrant - get VM name
   shell: virsh list --name --all
   register: vagrant_vm_name
