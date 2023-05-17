@@ -79,18 +79,26 @@
   command: vagrant plugin list
   register: plugin_output
   changed_when: false
-- name: Print installed Vagrant plugins
+  ignore_errors: true
+- name: Inform user about error
+  fail:
+        msg: >
+          The command to list Vagrant plugins has failed. This could be due to an issue with the plugins themselves. Please consider the following options to troubleshoot this issue:
+
+          1. Repair the plugins by running: '$ sudo vagrant plugin repair'
+
+          2. If Vagrant was recently updated, the error may be due to incompatible versions of dependencies. To fix this, remove and re-install all plugins by running: '$ sudo vagrant plugin expunge --reinstall'
+
+          Please follow the instructions corresponding to the chosen option carefully.
+  when: plugin_output is failed
+- name: Print Vagrant plugins
   debug:
-    var: plugin_output.stdout_lines
-- name: vagrant-libvirt - install
-  shell: vagrant plugin install vagrant-libvirt --plugin-version=0.9.0 --plugin-clean-sources --plugin-source https://rubygems.org/
-  when: "'vagrant-libvirt (0.9.0)' not in plugin_output.stdout"
-- name: vagrant-reload - install
-  shell: vagrant plugin install vagrant-reload --plugin-version=0.0.1 --plugin-clean-sources --plugin-source https://rubygems.org/
-  when: "'vagrant-reload (0.0.1)' not in plugin_output.stdout"
-- name: fog-libvirt - install
-  shell: vagrant plugin install fog-libvirt --plugin-version=0.9.0 --plugin-clean-sources --plugin-source https://rubygems.org/
-  when: "'fog-libvirt (0.9.0)' not in plugin_output.stdout"
+          var: plugin_output.stdout_lines
+  when: plugin_output is succeeded
+- name: Install Vagrant plugins
+  command: "vagrant plugin install {{ item.name }} --plugin-version {{ item.version }}"
+  loop: "{{ vagrant_plugins }}"
+  when: "(item.name + ' (' + item.version|string + ', global)') not in plugin_output.stdout_lines"
 - name: vagrant - get VM name
   shell: virsh list --name --all
   register: vagrant_vm_name
