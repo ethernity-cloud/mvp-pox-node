@@ -80,6 +80,8 @@
   register: plugin_list_output
   changed_when: false
   ignore_errors: true
+  failed_when: false
+  no_log: true
 - name: Repair Vagrant plugins
   command: sudo vagrant plugin repair
   changed_when: false
