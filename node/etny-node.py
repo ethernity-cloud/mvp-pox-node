@@ -13,6 +13,7 @@ from utils import get_or_generate_uuid, run_subprocess, retry, Storage, Cache, L
 from models import *
 from error_messages import errorMessages
 from swift_stream_service import SwiftStreamService
+import io
 
 logger = config.logger
 
@@ -605,7 +606,7 @@ class EtnyPoXNode:
             (status, msg) = self.swift_stream_service.put_file_content(bucket_name,
                                                                        self.input_file_name,
                                                                        "",
-                                                                       b"")
+                                                                       io.BytesIO(b""))
         else:
             (status, msg) = self.swift_stream_service.upload_file(bucket_name,
                                                                   self.input_file_name,
