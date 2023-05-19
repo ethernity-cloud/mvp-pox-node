@@ -237,7 +237,8 @@ class EtnyPoXNode:
 
         if metadata[1].startswith('v2:'):
             version = 2
-            [v2, enclave_image_hash, etny_pinithy, docker_compose_hash, challenge_hash, public_cert] = metadata[1].split(':')
+            [v2, enclave_image_hash, etny_pinithy, docker_compose_hash, challenge_hash, public_cert] = metadata[
+                1].split(':')
 
         logger.info(f'Running version v{version}')
         if version == 0:
@@ -604,7 +605,7 @@ class EtnyPoXNode:
             (status, msg) = self.swift_stream_service.put_file_content(bucket_name,
                                                                        self.input_file_name,
                                                                        "",
-                                                                       "")
+                                                                       b"")
         else:
             (status, msg) = self.swift_stream_service.upload_file(bucket_name,
                                                                   self.input_file_name,
