@@ -674,7 +674,8 @@ class EtnyPoXNode:
         return None
 
     def __can_place_order(self, dp_req_id: int, do_req_id: int) -> bool:
-        if dp_req_id % 10 != do_req_id % 10:
+        dispersion_factor = 40
+        if dp_req_id % dispersion_factor != do_req_id % dispersion_factor:
             return False
         return True
 
