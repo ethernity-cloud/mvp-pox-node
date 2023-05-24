@@ -1,0 +1,24 @@
+version: '3.2'
+
+services:
+  payload-service:
+    container_name: etny-payload-service
+    image: localhost:5000/iosif/etny-pynithy-payload-service
+    stdin_open: true
+    tty: true
+    volumes:
+      - .:/myapp
+    devices:
+      - /dev/isgx
+    environment:
+      - SCONE_HEAP=256M
+      - SCONE_MODE=HW
+      - SCONE_ALLOW_DLOPEN=2
+      - SCONE_ALPINE=0
+      - SCONE_VERSION=1
+      - SCONE_LOG=0
+    working_dir: /myapp
+
+networks:
+  ethernity:
+    driver: bridge

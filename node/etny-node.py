@@ -484,6 +484,122 @@ class EtnyPoXNode:
                 'docker-compose', '-f', f'docker/docker-compose-swift-stream.yml', 'down', 'swift-stream'
             ], logger)
 
+        if version == 3:
+            try:
+                logger.info(f"Downloading IPFS Image: {enclave_image_hash}")
+                logger.info(f"Downloading IPFS docker yml file: {docker_compose_hash}")
+                logger.info(f"Downloading IPFS Payload Hash: {metadata[2]}")
+                logger.info(f"Downloading IPFS FileSet Hash: {metadata[3]}")
+                logger.info(f"Downloading IPFS Challenge Hash: {challenge_hash}")
+            except Exception as ex:
+                logger.info(str(ex))
+
+            payload_hash = metadata[2].split(':')[1]
+            input_hash = metadata[3].split(':')[1]
+            list_of_ipfs_hashes = [enclave_image_hash, docker_compose_hash, challenge_hash]
+            if input_hash is not None and len(input_hash) > 0:
+                list_of_ipfs_hashes.append(input_hash)
+
+            self.storage.download_many(list_of_ipfs_hashes, attempts=5, delay=3)
+            if not self.storage.download_many(list_of_ipfs_hashes, attempts=5, delay=3):
+                logger.info("Cannot download data from IPFS, cancelling processing")
+                self.ipfs_timeout_cancel(order_id)
+                return
+
+            payload_file = f'{os.path.dirname(os.path.realpath(__file__))}/{payload_hash}'
+            if input_hash is not None and len(input_hash) > 0:
+                input_file = f'{os.path.dirname(os.path.realpath(__file__))}/{input_hash}'
+                logger.info('input hash is not none: ', input_file)
+            else:
+                input_file = None
+
+            logger.info("Running docker swift-stream")
+            run_subprocess(
+                ['docker-compose', '-f', f'docker/docker-compose-swift-stream.yml', 'up', '-d', 'swift-stream'],
+                logger)
+
+            logger.info("Running docker payload-service")
+            run_subprocess(
+                ['docker-compose', '-f', f'docker/docker-compose-payload-service.yml', 'up', '-d', 'payload-service'],
+                logger)
+
+            payload_service_id = run_subprocess(
+                ['docker-compose', '-f', 'docker-compose-payload-service.yml', 'ps', '-q'],
+                logger
+            )
+
+            run_subprocess(
+                ['docker', 'cp', f'{payload_service_id}:/payload.py', 'minio-bucket-v3'],
+                logger
+            )
+
+            docker_compose_file = f'{os.path.dirname(os.path.realpath(__file__))}/{docker_compose_hash}'
+            challenge_file = f'{os.path.dirname(os.path.realpath(__file__))}/{challenge_hash}'
+            challenge_content = self.read_file(challenge_file)
+            bucket_name = "etny-pynithy-v3"
+            self.build_prerequisites_v3(bucket_name, order_id, payload_file, input_file,
+                                        docker_compose_file, challenge_content)
+
+            logger.info("Stopping previous docker registry")
+            run_subprocess(['docker', 'stop', 'registry'], logger)
+            logger.info("Cleaning up docker registry")
+            run_subprocess(['docker', 'system', 'prune', '-a', '-f', '--volumes'], logger)
+            logger.info("Running new docker registry")
+            logger.debug(os.path.dirname(os.path.realpath(__file__)) + '/' + enclave_image_hash + ':/var/lib/registry')
+
+            logger.info("Stopping previous docker las")
+            run_subprocess(['docker', 'stop', 'las'], logger)
+            logger.info("Removing previous docker las")
+            run_subprocess(['docker', 'rm', 'las'], logger)
+            run_subprocess([
+                'docker', 'run', '-d', '--restart=always', '-p', '5000:5000', '--name', 'registry', '-v',
+                os.path.dirname(os.path.realpath(__file__)) + '/' + enclave_image_hash + ':/var/lib/registry',
+                'registry:2'
+            ], logger)
+
+            logger.info("Cleaning up docker container")
+            run_subprocess(['docker', 'rm', '-f', 'etny-pynithy-' + str(order_id)], logger)
+
+            logger.info("Running docker-compose")
+            run_subprocess([
+                'docker-compose', '-f', self.order_docker_compose_file, 'run',
+                '--rm', '-d',
+                '--name',
+                'etny-pynithy-' + str(order_id), 'etny-pynithy'
+            ], logger)
+
+            logger.info('Waiting for execution of v3')
+            self.wait_for_enclave_v3(bucket_name, 'result.txt', 120)
+            run_subprocess([
+                'docker-compose', '-f', self.order_docker_compose_file, 'down'
+            ], logger)
+            logger.info('Uploading result to enty-pynity-v3 bucket')
+            status, result_data = self.swift_stream_service.get_file_content(bucket_name, "result.txt")
+            if not status:
+                logger.info(result_data)
+
+            with open(f'{self.order_folder}/result.txt', 'w') as f:
+                f.write(result_data)
+            logger.info(f'[v3] Result file successfully downloaded to {self.order_folder}/result.txt')
+            result_hash = self.upload_result_to_ipfs(f'{self.order_folder}/result.txt')
+            logger.info(f'[v3] Result file successfully uploaded to IPFS with hash: {result_hash}')
+            logger.info(f'Result file successfully uploaded to enty-pynity-v3 bucket')
+            logger.info('Reading transaction from file')
+            status, transaction_data = self.swift_stream_service.get_file_content(bucket_name, "transaction.txt")
+            if not status:
+                logger.info(transaction_data)
+            logger.info('Building result for v3')
+            transaction_hex = self.upload_result_to_ipfs(transaction_data)
+            result = self.build_result_format_v3(result_hash, transaction_hex)
+            logger.info(f'Result is: {result}')
+            logger.info('Adding result to order')
+            self.add_result_to_order(order_id, result)
+
+            logger.info('Cleaning up swift-stream docker container.')
+            run_subprocess([
+                'docker-compose', '-f', f'docker/docker-compose-swift-stream.yml', 'down', 'swift-stream'
+            ], logger)
+
     def wait_for_enclave(self, timeout=120):
         i = 0
         while True:
@@ -498,14 +614,26 @@ class EtnyPoXNode:
 
     def wait_for_enclave_v2(self, bucket_name, object_name, timeout=120):
         i = 0
-        logger.info(f'Checking if object {object_name} exists in bucket {bucket_name}')
         while True:
             time.sleep(1)
             i = i + 1
             if i > timeout:
                 break
-            (status, result) = self.swift_stream_service.is_object_in_bucket(bucket_name, object_name)
-            if status:
+            if self.swift_stream_service.is_object_in_bucket(bucket_name,
+                                                             object_name):
+                break
+
+        logger.info('enclave finished the execution')
+
+    def wait_for_enclave_v3(self, bucket_name, object_name, timeout=120):
+        i = 0
+        while True:
+            time.sleep(1)
+            i = i + 1
+            if i > timeout:
+                break
+            if self.swift_stream_service.is_object_in_bucket(bucket_name,
+                                                             object_name):
                 break
 
         logger.info('enclave finished the execution')
@@ -515,6 +643,9 @@ class EtnyPoXNode:
 
     def build_result_format_v2(self, result_hash, transaction_hex):
         return f'v2:{transaction_hex}:{result_hash}'
+
+    def build_result_format_v3(self, result_hash, transaction_hex):
+        return f'v3:{transaction_hex}:{result_hash}'
 
     def add_result_to_order(self, order_id, result):
         logger.info('Adding result to order', order_id, result)
@@ -583,9 +714,48 @@ class EtnyPoXNode:
         self.generate_enclave_env_file(f'{self.order_folder}/.env', env_content)
 
     def build_prerequisites_v2(self, bucket_name, order_id, payload_file, input_file, docker_compose_file, challenge):
-        logger.info('Cleaning up swift-stream bucket.')
-        self.swift_stream_service.delete_bucket(bucket_name)
-        logger.info('Creating new bucket.')
+        self.order_folder = f'./orders/{order_id}/etny-order-{order_id}'
+        self.create_folder_v1(self.order_folder)
+        (status, msg) = self.swift_stream_service.create_bucket(bucket_name)
+        if not status:
+            logger.error(msg)
+
+        self.payload_file_name = "payload.py"
+        (status, msg) = self.swift_stream_service.upload_file(bucket_name,
+                                                              self.payload_file_name,
+                                                              payload_file)
+        if not status:
+            logger.error(msg)
+
+        self.input_file_name = "input.txt"
+        if input_file is None:
+            (status, msg) = self.swift_stream_service.put_file_content(bucket_name,
+                                                                       self.input_file_name,
+                                                                       "",
+                                                                       "")
+        else:
+            (status, msg) = self.swift_stream_service.upload_file(bucket_name,
+                                                                  self.input_file_name,
+                                                                  input_file)
+        if (not status):
+            logger.error(msg)
+
+        self.order_docker_compose_file = f'./orders/{order_id}/docker-compose.yml'
+        self.copy_order_files(docker_compose_file, self.order_docker_compose_file)
+
+        self.set_retry_policy_on_fail_for_compose()
+        self.update_enclave_docker_compose(self.order_docker_compose_file, order_id)
+
+        env_content = self.get_enclave_env_dictionary(order_id, challenge)
+        self.generate_enclave_env_file(f'{self.order_folder}/.env', env_content)
+
+        (status, msg) = self.swift_stream_service.upload_file(bucket_name,
+                                                              ".env",
+                                                              f'{self.order_folder}/.env')
+        if not status:
+            logger.error(msg)
+
+    def build_prerequisites_v3(self, bucket_name, order_id, payload_file, input_file, docker_compose_file, challenge):
         self.order_folder = f'./orders/{order_id}/etny-order-{order_id}'
         self.create_folder_v1(self.order_folder)
         (status, msg) = self.swift_stream_service.create_bucket(bucket_name)
