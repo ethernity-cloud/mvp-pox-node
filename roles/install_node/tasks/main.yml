@@ -31,7 +31,7 @@
   when: "('Software enable has been set.' in sgx_register.stdout) or ('The software enable has been performed on this system' in sgx_register.stdout)"
   meta: end_play
 - name: Run SGX test and get EPC size
-  shell: sudo ~/mvp-pox-node/utils/linux/test-sgx | grep "size of EPC section in Processor Reserved Memory" | sed 's/.*Memory, \(.*\) M/\1/' | grep -v "^0$" | sort -nr | head -1
+  shell: sudo utils/linux/test-sgx | grep "size of EPC section in Processor Reserved Memory" | sed 's/.*Memory, \(.*\) M/\1/' | grep -v "^0$" | sort -nr | head -1
   register: epc_size_output
   changed_when: false
 - name: Print EPC size if available
@@ -43,7 +43,7 @@
     msg: "EPC size for SGX is too low"
   when: epc_size_output.stdout|int < 64
 - name: Determine SGX version support
-  shell: sudo sudo utils/linux/test-sgx | awk '/sgx 1 supported/{sgx1=$NF} /sgx 2 supported/{sgx2=$NF} END {if (sgx1==1 && sgx2==0) {print "SGX version 1"} else if (sgx2==1) {print "SGX version 2"} else {print "SGX not available"}}'
+  shell: sudo utils/linux/test-sgx | awk '/sgx 1 supported/{sgx1=$NF} /sgx 2 supported/{sgx2=$NF} END {if (sgx1==1 && sgx2==0) {print "SGX version 1"} else if (sgx2==1) {print "SGX version 2"} else {print "SGX not available"}}'
   register: sgx_version_output
   changed_when: false
 - name: Print SGX version support
