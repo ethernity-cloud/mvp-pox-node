@@ -2,7 +2,7 @@
 
 - name: Populate service facts
   service_facts:
-- name updated apt cache
+- name: updated apt cache
   apt:
     update_cache: yes
 - include_tasks: "{{ ansible_os_family | lower() }}_{{ ansible_distribution_major_version }}.yml"
