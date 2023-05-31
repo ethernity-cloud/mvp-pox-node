@@ -736,6 +736,10 @@ class EtnyPoXNode:
                     if not status:
                         continue
 
+                if self._check_installed_drivers():
+                    logger.error('SGX configuration error. Both isgx drivers are installed. Skipping order placing ...')
+                    continue
+
                 logger.info("Placing order...")
                 try:
                     self.place_order(i)
@@ -856,6 +860,10 @@ class EtnyPoXNode:
         while True:
             self.add_dp_request()
             self.process_dp_request()
+
+    def _check_installed_drivers(self):
+        driver_list = os.listdir('/dev')
+        return 'isgx' in driver_list and 'sgx_enclave' in driver_list
 
 
 if __name__ == '__main__':
