@@ -81,11 +81,9 @@ class HeartBeat:
         return last_call_time
 
     def _update_last_call_time(self, timestamp):
-        try:
-            with open(config.heartbeat_timestamp_filepath, "w") as file:
-                file.write(str(timestamp))
-        except (FileNotFoundError, ValueError) as exp:
-            logger.exception(exp)
+        with open(config.heartbeat_timestamp_filepath, "w") as file:
+            file.write(str(timestamp))
+
 
     def _get_transaction_build(self, existing_nonce=None):
         self.nonce = existing_nonce if existing_nonce else self.w3.eth.getTransactionCount(self.address)
