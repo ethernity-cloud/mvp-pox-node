@@ -737,7 +737,7 @@ class EtnyPoXNode:
                         continue
 
                 if self._check_installed_drivers():
-                    logger.error('Both isgx and sgx_enclave drivers are installed. Skipping order placing ...')
+                    logger.error('SGX configuration error. Both isgx drivers are installed. Skipping order placing ...')
                     continue
 
                 logger.info("Placing order...")
