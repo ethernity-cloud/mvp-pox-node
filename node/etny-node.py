@@ -2,6 +2,7 @@
 
 import os, time, json
 import shutil
+import schedule
 
 from eth_account import Account
 from web3 import Web3
@@ -30,17 +31,24 @@ class EtnyPoXNode:
     __endpoint = None
     __access_key = None
     __secret_key = None
+    __heartbeat_interval = None
 
     def __init__(self):
         self.parse_arguments(config.arguments, config.parser)
         with open(config.abi_filepath) as f:
             self.__contract_abi = f.read()
+        with open(config.heartbeat_abi_filepath) as f_in:
+            self.__contract_heartbeat = f_in.read()
         self.__w3 = Web3(Web3.HTTPProvider(config.http_provider, request_kwargs={'timeout': 120}))
         self.__w3.middleware_onion.inject(geth_poa_middleware, layer=0)
         self.__acct = Account.privateKeyToAccount(self.__privatekey)
         self.__etny = self.__w3.eth.contract(
             address=self.__w3.toChecksumAddress(config.contract_address),
             abi=self.__contract_abi
+        )
+        self.__heartbeat = self.__w3.eth.contract(
+            address=self.__w3.to_checksum_address(config.heartbeat_contract_address),
+            abi=self.__contract_heartbeat
         )
         self.__nonce = self.__w3.eth.getTransactionCount(self.__address)
         self.__dprequest = 0
@@ -59,6 +67,7 @@ class EtnyPoXNode:
                                                        self.__secret_key)
         self.process_order_data = {}
         self.generate_process_order_data()
+        self.benchmark_results = {}
 
     def generate_process_order_data(self):
         if not os.path.exists(config.process_orders_cache_filepath):
@@ -857,6 +866,59 @@ class EtnyPoXNode:
             self.add_dp_request()
             self.process_dp_request()
 
+    def heartbeat_start(self):
+        self.schedule_heartbeat_smart_contract_call()
+        self.run_heartbeat_scheduler()
+
+    def schedule_heartbeat_smart_contract_call(self):
+        schedule.every(self.__heartbeat_interval).minutes.do(self.call_heartbeat_smart_contract)
+
+    def run_heartbeat_scheduler(self):
+        while True:
+            schedule.run_pending()
+            time.sleep(1)
+
+    def call_heartbeat_smart_contract(self):
+        current_time = int(time.time())
+        last_call_time = self._get_last_call_time()
+
+        # Check if enough time has passed since the last call
+        if current_time - last_call_time >= self.__heartbeat_interval:
+            logger.info("Calling heartbeat smart contract...")
+            unicorn_txn = self.__heartbeat.functions._heartbeatCall(self.benchmark_results).buildTransaction(
+                self.get_transaction_build())
+
+            try:
+                _hash = self.send_transaction(unicorn_txn)
+                self.__w3.eth.wait_for_transaction_receipt(_hash)
+            except Exception as exp:
+                logger.error(f"Error while sending heartbeat call:{exp}")
+                raise
+
+            logger.info(f"Added result to the order!")
+            logger.info(f"TX Hash: {_hash}")
+
+            self._update_last_call_time(current_time)
+        else:
+            logger.info("Skipping smart contract call. Not enough time has passed.")
+
+    def _get_last_call_time(self):
+        try:
+            with open(config.heartbeat_timestamp_filepath, "r") as file:
+                last_call_time = int(file.read())
+        except (FileNotFoundError, ValueError) as exp:
+            last_call_time = 0
+            logger.exception(exp)
+
+        return last_call_time
+
+    def _update_last_call_time(self, timestamp):
+        try:
+            with open(config.heartbeat_timestamp_filepath, "w") as file:
+                file.write(str(timestamp))
+        except (FileNotFoundError, ValueError) as exp:
+            logger.exception(exp)
+
 
 if __name__ == '__main__':
     try:
@@ -865,6 +927,8 @@ if __name__ == '__main__':
         app.cleanup_dp_requests()
         logger.info("[DONE]")
         app.resume_processing()
+        logger.info("Starting agent heartbeat ...")
+        app.heartbeat_start()
     except Exception as e:
         logger.error(e)
         raise

@@ -26,6 +26,7 @@ load_dotenv('.env' if os.path.exists('.env') else '.env.config')  # take environ
 # env variables
 http_provider = os.environ.get('HTTP_PROVIDER')
 contract_address = os.environ.get('CONTRACT_ADDRESS')
+heartbeat_contract_address = os.environ.get('HEARTBEAT_CONTRACT_ADDRESS')
 ipfs_host = os.environ.get('IPFS_HOST')
 client_connect_url = os.environ.get('CLIENT_CONNECT_URL')
 client_bootstrap_url = os.environ.get('CLIENT_BOOTSTRAP_URL')
@@ -36,6 +37,8 @@ gas_price_measure = os.environ.get('GAS_PRICE_MEASURE')
 
 # constants
 abi_filepath = os.path.dirname(os.path.realpath(__file__)) + '/docker/pox.abi'
+heartbeat_abi_filepath = os.path.dirname(os.path.realpath(__file__)) + '/docker/heartbeat.abi'
+heartbeat_timestamp_filepath = os.path.dirname(os.path.realpath(__file__)) + 'docker/heartbeat_timestamp.txt'
 uuid_filepath = expanduser("~") + "/opt/etny/node/UUID"
 orders_cache_limit = 10000000
 orders_cache_filepath = os.path.dirname(os.path.realpath(__file__)) + '/orders_cache.txt'
@@ -90,6 +93,9 @@ parser.add_argument("-u", "--access_key", help="Access key (aka user ID) of your
                     required=False)
 parser.add_argument("-p", "--secret_key", help="Secret Key (aka password) of your account in S3 service.",
                     default="swiftstreamadmin",
+                    required=False)
+parser.add_argument("-hi", "--heartbeat_interval", help="Amount of time between two heartbeats (minutes).",
+                    default="720",
                     required=False)
 
 arguments = {
