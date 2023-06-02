@@ -582,7 +582,7 @@ class EtnyPoXNode:
             if not status:
                 logger.info(transaction_data)
             logger.info('Building result for v3')
-            result = self.build_result_format_v2(result_hash, transaction_data)
+            result = self.build_result_format_v3(result_hash, transaction_data)
             logger.info(f'Result is: {result}')
             logger.info('Adding result to order')
             self.add_result_to_order(order_id, result)
