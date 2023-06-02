@@ -13,6 +13,7 @@ from utils import get_or_generate_uuid, run_subprocess, retry, Storage, Cache, L
 from models import *
 from error_messages import errorMessages
 from swift_stream_service import SwiftStreamService
+import io
 
 logger = config.logger
 
@@ -237,7 +238,8 @@ class EtnyPoXNode:
 
         if metadata[1].startswith('v2:'):
             version = 2
-            [v2, enclave_image_hash, etny_pinithy, docker_compose_hash, challenge_hash] = metadata[1].split(':')
+            [v2, enclave_image_hash, etny_pinithy, docker_compose_hash, challenge_hash, public_cert] = metadata[
+                1].split(':')
 
         logger.info(f'Running version v{version}')
         if version == 0:
@@ -604,7 +606,7 @@ class EtnyPoXNode:
             (status, msg) = self.swift_stream_service.put_file_content(bucket_name,
                                                                        self.input_file_name,
                                                                        "",
-                                                                       "")
+                                                                       io.BytesIO(b""))
         else:
             (status, msg) = self.swift_stream_service.upload_file(bucket_name,
                                                                   self.input_file_name,
@@ -672,7 +674,8 @@ class EtnyPoXNode:
         return None
 
     def __can_place_order(self, dp_req_id: int, do_req_id: int) -> bool:
-        if dp_req_id % 10 != do_req_id % 10:
+        dispersion_factor = 40
+        if dp_req_id % dispersion_factor != do_req_id % dispersion_factor:
             return False
         return True
 
