@@ -551,14 +551,15 @@ class EtnyPoXNode:
             ], logger)
 
             logger.info("Cleaning up docker container")
-            run_subprocess(['docker', 'rm', '-f', 'etny-pynithy-' + str(order_id)], logger)
+            # run_subprocess(['docker', 'rm', '-f', 'etny-pynithy-' + str(order_id)], logger)
+
+            run_subprocess([
+                'docker-compose', '-f', self.order_docker_compose_file, 'down', '-d'
+            ], logger)
 
             logger.info("Running docker-compose")
             run_subprocess([
-                'docker-compose', '-f', self.order_docker_compose_file, 'run',
-                '--rm', '-d',
-                '--name',
-                'etny-pynithy-' + str(order_id), 'etny-pynithy'
+                'docker-compose', '-f', self.order_docker_compose_file, 'up', '-d'
             ], logger)
 
             logger.info('Waiting for execution of v3')
