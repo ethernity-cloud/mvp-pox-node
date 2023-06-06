@@ -5,6 +5,15 @@
 - name: updated apt cache
   apt:
     update_cache: yes
+  failed_when: false
+  register: apt_cache_result
+- name: Copy trusted.gpg file on failure
+  shell: sudo cp /etc/apt/trusted.gpg /etc/apt/trusted.gpg.d
+  when: apt_cache_result is failed
+- name: Retry updated apt cache
+  apt:
+    update_cache: yes
+  when: apt_cache_result is failed
 - include_tasks: "{{ ansible_os_family | lower() }}_{{ ansible_distribution_major_version }}.yml"
   #when: ansible_facts.services['etny-vagrant.service'].state != 'running'
 - name: Ubuntu 20.04 | enable_sgx dependencies
