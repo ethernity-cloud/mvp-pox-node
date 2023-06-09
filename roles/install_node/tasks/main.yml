@@ -87,12 +87,33 @@
   copy:
     src: ubuntu/etc/apparmor.d/libvirt/TEMPLATE.qemu
     dest: /etc/apparmor.d/libvirt/TEMPLATE.qemu
-- name: fog-libvirt - install
-  shell: vagrant plugin install fog-libvirt --plugin-version=0.9.0
-- name: vagrant-libvirt - install
-  shell: vagrant plugin install vagrant-libvirt --plugin-version=0.9.0
-- name: vagrant-preload - install
-  shell: vagrant plugin install vagrant-reload --plugin-version=0.0.1
+- name: Check installed Vagrant plugins
+  command: vagrant plugin list
+  register: plugin_list_output
+  changed_when: false
+  ignore_errors: true
+  failed_when: false
+  no_log: true
+- name: Print Vagrant plugins
+  debug:
+    var: plugin_list_output.stdout_lines
+  when: plugin_list_output is succeeded
+- name: Repair Vagrant plugins
+  command: sudo vagrant plugin repair
+  changed_when: false
+  when: plugin_list_output is failed
+  register: plugin_repair_result
+  ignore_errors: true
+  failed_when: false
+  no_log: true
+- name: Remove and reinstall Vagrant plugins
+  command: sudo vagrant plugin expunge --force
+  changed_when: false
+  when: plugin_repair_result is failed
+- name: Install Vagrant plugins
+  command: "vagrant plugin install {{ item.name }} --plugin-version {{ item.version }}"
+  loop: "{{ vagrant_plugins }}"
+  when: "(item.name + ' (' + item.version|string + ', global)') not in plugin_list_output.stdout_lines"
 - name: vagrant - get VM name
   shell: virsh list --name --all
   register: vagrant_vm_name
