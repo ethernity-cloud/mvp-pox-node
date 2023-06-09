@@ -2,17 +2,13 @@
 
 - name: Populate service facts
   service_facts:
-
-- name: Create a symbolic link to trusted.gpg
-  ansible.builtin.file:
-    src: /etc/apt/trusted.gpg 
-    dest: /etc/apt/trusted.gpg.d/trusted.gpg
-    state: link
-
-- name: updated apt cache
+  
+- name: update apt cache
   apt:
     update_cache: yes
-
+  register: update_result
+  failed_when: "update_result.failed and 'unknown reason' not in update_result.msg|lower"
+  
 - include_tasks: "{{ ansible_os_family | lower() }}_{{ ansible_distribution_major_version }}.yml"
   #when: ansible_facts.services['etny-vagrant.service'].state != 'running'
 
