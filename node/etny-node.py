@@ -2,6 +2,7 @@
 
 import os, time, json
 import shutil
+import threading
 
 from eth_account import Account
 from web3 import Web3
@@ -61,12 +62,14 @@ class EtnyPoXNode:
                                                        self.__secret_key)
         self.process_order_data = {}
         self.generate_process_order_data()
+        self.nonce_lock = threading.Lock()
         self.benchmark_results = ""
         self.heartbeat_w3_data = {
             'w3': self.__w3,
             'nonce': self.__nonce,
             'address': self.__address,
-            'account': self.__acct
+            'account': self.__acct,
+            'nonce_lock': self.nonce_lock
         }
         self.heartbeat = HeartBeat(self.__heartbeat_interval, self.benchmark_results, **self.heartbeat_w3_data)
         logger.info("Starting agent heartbeat ...")
@@ -128,31 +131,32 @@ class EtnyPoXNode:
             ""
         ]
 
-        unicorn_txn = self.__etny.functions._addDPRequest(*params).buildTransaction(self.get_transaction_build())
-        _hash = ''
-        error = ''
-        try:
-            _hash = self.send_transaction(unicorn_txn)
-        except ValueError as e:
-            error = [key for key, value in errorMessages.items() if (str(e) in value or value in str(e))][0]
-        except Exception as e:
-            logger.info(f'error = {e}, type = {type(e)}')
+        with self.nonce_lock:
+            unicorn_txn = self.__etny.functions._addDPRequest(*params).buildTransaction(self.get_transaction_build())
+            _hash = ''
+            error = ''
+            try:
+                _hash = self.send_transaction(unicorn_txn)
+            except ValueError as e:
+                error = [key for key, value in errorMessages.items() if (str(e) in value or value in str(e))][0]
+            except Exception as e:
+                logger.info(f'error = {e}, type = {type(e)}')
 
-        if error:
-            logger.info(f'error: {error}')
+            if error:
+                logger.info(f'error: {error}')
 
-            # to trigger this error nonce should be duplicated
-            if error and error == 'low_nonce':
-                t = beginning_of_recursion if beginning_of_recursion else int(time.time())
-                while int(time.time()) - t < (waiting_period_on_error * 60):
-                    time.sleep(10)
-                    logger.info(f'waiting for: {time.time() - t}')
-                    nonce = self.__w3.eth.getTransactionCount(self.__address)
-                    if nonce != self.__nonce:
-                        return self.add_dp_request(beginning_of_recursion=t)
+                # to trigger this error nonce should be duplicated
+                if error and error == 'low_nonce':
+                    t = beginning_of_recursion if beginning_of_recursion else int(time.time())
+                    while int(time.time()) - t < (waiting_period_on_error * 60):
+                        time.sleep(10)
+                        logger.info(f'waiting for: {time.time() - t}')
+                        nonce = self.__w3.eth.getTransactionCount(self.__address)
+                        if nonce != self.__nonce:
+                            return self.add_dp_request(beginning_of_recursion=t)
 
-                logger.error('Node retried transaction too many times. Exiting!')
-                raise
+                    logger.error('Node retried transaction too many times. Exiting!')
+                    raise
 
         try:
             waiting_seconds = 120
@@ -179,31 +183,33 @@ class EtnyPoXNode:
 
         logger.info(f"Cancelling DP request {req}")
 
-        try:
-            unicorn_txn = self.__etny.functions._cancelDPRequest(req).buildTransaction(self.get_transaction_build())
-            _hash = self.send_transaction(unicorn_txn)
+        with self.nonce_lock:
+            try:
+                unicorn_txn = self.__etny.functions._cancelDPRequest(req).buildTransaction(self.get_transaction_build())
+                _hash = self.send_transaction(unicorn_txn)
 
-            self.__w3.eth.waitForTransactionReceipt(_hash)
-        except Exception as ex:
-            logger.error(f"Error while canceling DP request - {req}: Error Message: {ex}")
-            raise
+                self.__w3.eth.waitForTransactionReceipt(_hash)
+            except Exception as ex:
+                logger.error(f"Error while canceling DP request - {req}: Error Message: {ex}")
+                raise
 
-        logger.info(f"DP request {req} cancelled successfully!")
-        logger.info(f"TX Hash: {_hash}")
-        time.sleep(5)
+            logger.info(f"DP request {req} cancelled successfully!")
+            logger.info(f"TX Hash: {_hash}")
+            time.sleep(5)
 
     def ipfs_timeout_cancel(self, order_id):
-        error_hash = self.storage.add("Error: cannot download files from IPFS")
-        unicorn_txn = self.__etny.functions._addResultToOrder(
-            order_id, error_hash
-        ).buildTransaction(self.get_transaction_build())
-        try:
-            _hash = self.send_transaction(unicorn_txn)
-            self.__w3.eth.waitForTransactionReceipt(_hash)
-        except Exception as ex:
-            logger.error(f"Error while canceling IPFS Request, order: {order_id}, Error Message: {ex}")
-            raise
-        logger.info("Request has been cancelled")
+        with self.nonce_lock:
+            error_hash = self.storage.add("Error: cannot download files from IPFS")
+            unicorn_txn = self.__etny.functions._addResultToOrder(
+                order_id, error_hash
+            ).buildTransaction(self.get_transaction_build())
+            try:
+                _hash = self.send_transaction(unicorn_txn)
+                self.__w3.eth.waitForTransactionReceipt(_hash)
+            except Exception as ex:
+                logger.error(f"Error while canceling IPFS Request, order: {order_id}, Error Message: {ex}")
+                raise
+            logger.info("Request has been cancelled")
 
     def process_order(self, order_id, metadata=None):
         with open(config.process_orders_cache_filepath, 'r') as openfile:
@@ -786,18 +792,19 @@ class EtnyPoXNode:
         # self.cancel_dp_request(self.__dprequest)
 
     def add_processor_to_order(self, order_id):
-        unicorn_txn = self.__etny.functions._addProcessorToOrder(order_id, self.__resultaddress).buildTransaction(
-            self.get_transaction_build())
+        with self.nonce_lock:
+            unicorn_txn = self.__etny.functions._addProcessorToOrder(order_id, self.__resultaddress).buildTransaction(
+                self.get_transaction_build())
 
-        try:
-            _hash = self.send_transaction(unicorn_txn)
-            self.__w3.eth.waitForTransactionReceipt(_hash)
-        except Exception as ex:
-            logger.error(f"Error while adding Processor to Order, Error Message:{ex}")
-            raise
+            try:
+                _hash = self.send_transaction(unicorn_txn)
+                self.__w3.eth.waitForTransactionReceipt(_hash)
+            except Exception as ex:
+                logger.error(f"Error while adding Processor to Order, Error Message:{ex}")
+                raise
 
-        logger.info(f"Added the enclave processor to the order!")
-        logger.info(f"TX Hash: {_hash}")
+            logger.info(f"Added the enclave processor to the order!")
+            logger.info(f"TX Hash: {_hash}")
 
     def wait_for_order_approval(self):
         _order = self.__etny.caller()._getOrder(self.__order_id)
@@ -824,25 +831,26 @@ class EtnyPoXNode:
         return None
 
     def place_order(self, doreq):
-        unicorn_txn = self.__etny.functions._placeOrder(
-            int(doreq),
-            int(self.__dprequest),
-        ).buildTransaction(self.get_transaction_build())
-        order_id = 0
-        try:
-            _hash = self.send_transaction(unicorn_txn)
-            receipt = self.__w3.eth.waitForTransactionReceipt(_hash)
-            processed_logs = self.__etny.events._placeOrderEV().processReceipt(receipt)
-            self.__order_id = processed_logs[0].args._orderNumber
-            order_id = self.__order_id
-        except Exception as e:
-            errorMessage = 'Already Taken by other Node' if type(e) == IndexError else str(e)
-            logger.error(
-                f'''Failed to place Order: {order_id}, DORequest_id: {doreq}, DPRequest_id: {self.__dprequest}, Error Message: {errorMessage}''')
-            raise
+        with self.nonce_lock:
+            unicorn_txn = self.__etny.functions._placeOrder(
+                int(doreq),
+                int(self.__dprequest),
+            ).buildTransaction(self.get_transaction_build())
+            order_id = 0
+            try:
+                _hash = self.send_transaction(unicorn_txn)
+                receipt = self.__w3.eth.waitForTransactionReceipt(_hash)
+                processed_logs = self.__etny.events._placeOrderEV().processReceipt(receipt)
+                self.__order_id = processed_logs[0].args._orderNumber
+                order_id = self.__order_id
+            except Exception as e:
+                errorMessage = 'Already Taken by other Node' if type(e) == IndexError else str(e)
+                logger.error(
+                    f'''Failed to place Order: {order_id}, DORequest_id: {doreq}, DPRequest_id: {self.__dprequest}, Error Message: {errorMessage}''')
+                raise
 
-        logger.info("Order placed successfully!")
-        logger.info(f"TX Hash: {_hash}")
+            logger.info("Order placed successfully!")
+            logger.info(f"TX Hash: {_hash}")
 
     def get_transaction_build(self, existing_nonce=None):
         self.__nonce = existing_nonce if existing_nonce else self.__w3.eth.getTransactionCount(self.__address)

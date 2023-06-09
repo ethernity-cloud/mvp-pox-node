@@ -28,6 +28,7 @@ class HeartBeat:
         self.address = w3_data['address']
         self.account = w3_data['account']
         self.loop = None
+        self.nonce_lock = w3_data['nonce_lock']
 
     def heartbeat_start(self):
         self.loop = asyncio.get_event_loop()
@@ -53,20 +54,22 @@ class HeartBeat:
         # Check if enough time has passed since the last call.
         if current_time - last_call_time >= self.heartbeat_interval:
             logger.info("Calling heartbeat smart contract...")
-            unicorn_txn = self.heartbeat.functions.logCall(self.benchmark_results).buildTransaction(
-                self._get_transaction_build())
 
-            try:
-                _hash = self._send_transaction(unicorn_txn)
-                self.w3.eth.wait_for_transaction_receipt(_hash)
-            except Exception as exp:
-                logger.error(f"Error while sending heartbeat call:{exp}")
-                raise
+            with self.nonce_lock:
+                unicorn_txn = self.heartbeat.functions.logCall(self.benchmark_results).buildTransaction(
+                    self._get_transaction_build())
 
-            logger.info(f"Added result to the order!")
-            logger.info(f"TX Hash: {_hash}")
+                try:
+                    _hash = self._send_transaction(unicorn_txn)
+                    self.w3.eth.wait_for_transaction_receipt(_hash)
+                except Exception as exp:
+                    logger.error(f"Error while sending heartbeat call:{exp}")
+                    raise
 
-            self._update_last_call_time(current_time)
+                logger.info(f"Added result to the order!")
+                logger.info(f"TX Hash: {_hash}")
+
+                self._update_last_call_time(current_time)
         else:
             logger.info("Skipping smart contract call. Not enough time has passed.")
 
