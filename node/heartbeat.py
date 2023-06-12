@@ -5,9 +5,9 @@ import threading
 
 import config
 
+from eth_account import Account
 from web3 import Web3
 from web3.middleware import geth_poa_middleware
-from eth_account import Account
 
 logger = config.logger
 
@@ -119,7 +119,8 @@ if __name__ == '__main__':
         'w3': w3,
         'nonce': nonce,
         'address': address,
-        'account': acct
+        'account': acct,
+        'nonce_lock': threading.Lock()
     }
     heartbeat_interval = 720
     heartbeat_benchmark = ""
