@@ -125,5 +125,5 @@ if __name__ == '__main__':
     heartbeat_interval = 720
     heartbeat_benchmark = ""
     heartbeat = HeartBeat(heartbeat_interval, heartbeat_benchmark, **heartbeat_w3_data)
-    print("Starting heartbeat ... ")
+    logger.info("Starting heartbeat ... ")
     heartbeat.heartbeat_start()

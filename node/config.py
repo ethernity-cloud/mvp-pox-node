@@ -8,13 +8,14 @@ def onImportError():
     os.system("pip3 install psutil==5.9.2")
     os.system("pip3 install python-dotenv==0.21.0")
     os.system("pip3 install minio==7.1.13")
-    os.system("pip3 install schedule==1.2.0")
+    os.system("pip install schedule==1.2.0")
     os.killpg(os.getpgid(), signal.SIGCHLD)
     sys.exit()
 
 
 try:
     import psutil
+    import schedule
     from minio import Minio
     from dotenv import load_dotenv
 except ImportError as e:
@@ -57,10 +58,10 @@ process_orders_cache_filepath = os.path.dirname(os.path.realpath(__file__)) + '/
 
 # logger
 logger = logging.getLogger("ETNY NODE")
-# handler = logging.handlers.RotatingFileHandler('/var/log/etny-node.log', maxBytes=2048000, backupCount=5)
+handler = logging.handlers.RotatingFileHandler('/var/log/etny-node.log', maxBytes=2048000, backupCount=5)
 formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
-# handler.setFormatter(formatter)
-# logger.addHandler(handler)
+handler.setFormatter(formatter)
+logger.addHandler(handler)
 logger.setLevel(logging.DEBUG if os.environ.get('LOG_LEVEL') == 'debug' else logging.INFO)
 
 contract_call_frequency = int(os.environ.get('CONTRACT_CALL_FREQUENCY', 43200))

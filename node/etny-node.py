@@ -32,7 +32,7 @@ class EtnyPoXNode:
     __endpoint = None
     __access_key = None
     __secret_key = None
-    __heartbeat_interval = None
+    __heartbeat_interval = 720
 
     def __init__(self):
         self.parse_arguments(config.arguments, config.parser)
@@ -71,6 +71,7 @@ class EtnyPoXNode:
             'account': self.__acct,
             'nonce_lock': self.nonce_lock
         }
+        logger.info("Initialize heartbeat")
         self.heartbeat = HeartBeat(self.__heartbeat_interval, self.benchmark_results, **self.heartbeat_w3_data)
         logger.info("Starting agent heartbeat ...")
         self.heartbeat.heartbeat_start()
