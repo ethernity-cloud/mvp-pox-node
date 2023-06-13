@@ -107,23 +107,3 @@ class HeartBeat:
         except Exception as ex:
             logger.error(f"Error sending Transaction, Error Message: {ex}")
             raise
-
-
-if __name__ == '__main__':
-    w3 = Web3(Web3.HTTPProvider(config.http_provider, request_kwargs={'timeout': 120}))
-    w3.middleware_onion.inject(geth_poa_middleware, layer=0)
-    acct = Account.privateKeyToAccount("AE6AE8E5CCBFB04590405997EE2D52D2B330726137B875053C36D94E974D162F")
-    nonce = w3.eth.getTransactionCount("0xf17f52151EbEF6C7334FAD080c5704D77216b732")
-    address = "0xf17f52151EbEF6C7334FAD080c5704D77216b732"
-    heartbeat_w3_data = {
-        'w3': w3,
-        'nonce': nonce,
-        'address': address,
-        'account': acct,
-        'nonce_lock': threading.Lock()
-    }
-    heartbeat_interval = 720
-    heartbeat_benchmark = ""
-    heartbeat = HeartBeat(heartbeat_interval, heartbeat_benchmark, **heartbeat_w3_data)
-    logger.info("Starting heartbeat ... ")
-    heartbeat.heartbeat_start()
