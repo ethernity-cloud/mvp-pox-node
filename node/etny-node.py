@@ -3,6 +3,7 @@
 import os, time, json
 import shutil
 import threading
+import schedule
 
 from eth_account import Account
 from web3 import Web3
@@ -32,7 +33,7 @@ class EtnyPoXNode:
     __endpoint = None
     __access_key = None
     __secret_key = None
-    __heartbeat_interval = 720
+    __heartbeat_interval = 1
 
     def __init__(self):
         self.parse_arguments(config.arguments, config.parser)
@@ -69,12 +70,22 @@ class EtnyPoXNode:
             'nonce': self.__nonce,
             'address': self.__address,
             'account': self.__acct,
-            'nonce_lock': self.nonce_lock
+            # 'nonce_lock': self.nonce_lock
         }
         logger.info("Initialize heartbeat")
         self.heartbeat = HeartBeat(self.__heartbeat_interval, self.benchmark_results, **self.heartbeat_w3_data)
         logger.info("Starting agent heartbeat ...")
-        self.heartbeat.heartbeat_start()
+        # self.heartbeat.heartbeat_start()
+        self.schedule_heartbeat_smart_contract_call()
+
+    def schedule_heartbeat_smart_contract_call(self):
+        logger.info("Call heartbeat smart contract")
+        def call_heartbeat_smart_contract():
+            with self.nonce_lock:
+                self.heartbeat.call_heartbeat_smart_contract()
+
+        logger.info("Schedule heartbeat smart contract")
+        schedule.every(self.__heartbeat_interval).minutes.do(call_heartbeat_smart_contract)
 
     def generate_process_order_data(self):
         if not os.path.exists(config.process_orders_cache_filepath):
@@ -98,6 +109,7 @@ class EtnyPoXNode:
                 setattr(self, "_" + self.__class__.__name__ + "__" + arg, args_type(getattr(parser, arg)))
 
     def cleanup_dp_requests(self):
+        logger.info("Call cleanup dp request")
         my_dp_requests = self.__etny.functions._getMyDPRequests().call({'from': self.__address})
         cached_ids = self.dpreq_cache.get_values
         for req_id in set(my_dp_requests) - set(cached_ids):
@@ -874,6 +886,7 @@ class EtnyPoXNode:
             raise
 
     def resume_processing(self):
+        logger.info("Call resume_processing")
         while True:
             self.add_dp_request()
             self.process_dp_request()
