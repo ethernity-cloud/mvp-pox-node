@@ -70,12 +70,10 @@ class EtnyPoXNode:
             'nonce': self.__nonce,
             'address': self.__address,
             'account': self.__acct,
-            # 'nonce_lock': self.nonce_lock
         }
         logger.info("Initialize heartbeat")
         self.heartbeat = HeartBeat(self.__heartbeat_interval, self.benchmark_results, **self.heartbeat_w3_data)
         logger.info("Starting agent heartbeat ...")
-        # self.heartbeat.heartbeat_start()
         self.schedule_heartbeat_smart_contract_call()
 
     def schedule_heartbeat_smart_contract_call(self):

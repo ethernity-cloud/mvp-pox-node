@@ -1,13 +1,5 @@
-import asyncio
 import time
-import schedule
-import threading
-
 import config
-
-from eth_account import Account
-from web3 import Web3
-from web3.middleware import geth_poa_middleware
 
 logger = config.logger
 
@@ -28,24 +20,6 @@ class HeartBeat:
         self.address = w3_data['address']
         self.account = w3_data['account']
         self.loop = None
-        # self.nonce_lock = w3_data['nonce_lock']
-
-    # def heartbeat_start(self):
-    #     self.loop = asyncio.get_event_loop()
-        # self.schedule_heartbeat_smart_contract_call()
-        # self.run_heartbeat_scheduler()
-
-    # def schedule_heartbeat_smart_contract_call(self):
-    #     schedule.every(self.heartbeat_interval).minutes.do(self.call_heartbeat_smart_contract)
-
-    # def run_heartbeat_scheduler(self):
-    #     def heartbeat_scheduler_thread():
-    #         while True:
-    #             schedule.run_pending()
-    #             time.sleep(1)
-    #
-    #     threading.Thread(target=heartbeat_scheduler_thread, daemon=True).start()
-    #     self.loop.run_forever()
 
     def call_heartbeat_smart_contract(self):
         current_time = int(time.time())
