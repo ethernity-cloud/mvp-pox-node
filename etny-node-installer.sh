@@ -13,18 +13,28 @@ else
 	ansible_cmd="ansible-playbook"
 fi
 
-ubuntu_20_04(){
-#determining if the etny-vagrant service is running. If yes we stop the script as we don't need to run the setup process
-echo $os "found. Continuing..."
-echo "Finding out if etny-vagrant service is already running"...
-systemctl status $service 2>/dev/null | grep "active (running)" > /dev/null
-if [ $? -eq 0 ]
-then 
-	echo "ETNY service already running. Nothing to do. Exiting..."; 
-else
-	echo "Service not found. Continuing setup..."
-	ubuntu_20_04_kernel_check
-fi
+ubuntu_20_04() {
+  # Determining if the etny-vagrant service is running
+  echo "$os found. Continuing..."
+  echo "Finding out if etny-vagrant service is already running..."
+  systemctl status "$service" 2>/dev/null | grep "active (running)" >/dev/null
+  if [ $? -eq 0 ]; then
+    echo "The service is currently running."
+    read -p "Would you like to stop the service? (Y/n) " choice
+    choice="${choice:-Y}"  # Set the default value to "Y" if the input is empty
+    if [[ "$choice" =~ ^[Yy]$ ]]; then
+      echo "Stopping the service..."
+      # Stop the service here
+      systemctl stop "$service"
+      ubuntu_20_04_kernel_check
+    else
+      echo "The service is currently running. Setup aborted."
+      exit 1
+    fi
+  else
+    echo "The service is not running."
+    ubuntu_20_04_kernel_check
+  fi
 }
 
 qemu_hold(){
