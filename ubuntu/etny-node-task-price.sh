@@ -30,3 +30,8 @@ set_task_price() {
     sed -i "/TASK_EXECUTION_PRICE/d" "$nodefolder/$configfile"
     echo "TASK_EXECUTION_PRICE=$taskprice" >> "$nodefolder/$configfile"
 }
+
+start(){
+        task_price_prompt
+        }
+start
