@@ -13,6 +13,34 @@ else
 	ansible_cmd="ansible-playbook"
 fi
 
+task_price_check() {
+    if grep -q "TASK_EXECUTION_PRICE" "$nodefolder/$configfile"; then
+        current_price=$(grep "TASK_EXECUTION_PRICE" "$nodefolder/$configfile" | cut -d'=' -f2)
+        echo "Task execution price already exists in the config file and is currently set to $current_price ETNY/hour."
+        echo "Would you like to modify it? (Y/n)"
+        read modify
+        if [[ "$modify" =~ ^[Yy]$ ]]; then
+            set_task_price
+        fi
+    else
+        set_task_price
+    fi
+}
+
+set_task_price() {
+    while true; do
+        echo -n "Enter the Task Execution Price (Recommended price for executing a task/hour: 0.001 ETNY - 10.00 ETNY): "
+        read taskprice
+        if [[ $taskprice =~ ^[0-9]+(\.[0-9]+)?$ ]] && (( $(echo "$taskprice >= 0.001 && $taskprice <= 10" | bc -l) )); then
+            break
+        else
+            echo "Invalid task execution price. Please enter a valid price within the recommended range (0.001 ETNY - 10.00 ETNY per hour)..."
+        fi
+    done
+    sed -i "/TASK_EXECUTION_PRICE/d" "$nodefolder/$configfile"
+    echo "TASK_EXECUTION_PRICE=$taskprice" >> "$nodefolder/$configfile"
+}
+
 ubuntu_20_04() {
   # Determining if the etny-vagrant service is running
   echo "$os found. Continuing..."
@@ -59,6 +87,7 @@ check_config_file(){
         if [ -f $configfile ]
         then
                 echo "Config file found. "
+		task_price_check
         else
                 echo "Config file not found. How would you like to continue?"
                 ubuntu_20_04_config_file_choice
@@ -173,7 +202,7 @@ case "$choice" in
 		echo "PRIVATE_KEY="$nodeprivatekey >> $nodefolder/$configfile
 		echo "RESULT_ADDRESS="$resultaddress >> $nodefolder/$configfile
 		echo "RESULT_PRIVATE_KEY="$resultprivatekey >> $nodefolder/$configfile
-		if [ -f $nodefolder/$configfile ]; then echo "Config file generated successfully. Continuing..." && ubuntu_20_04_kernel_check; else echo "Something went wrong. Seek Help!" && exit; fi
+		if [ -f $nodefolder/$configfile ]; then echo "Config file generated successfully. Continuing..." && task_price_check; else echo "Something went wrong. Seek Help!" && exit; fi
 	;;
 	2) 
 		export FILE=generate
