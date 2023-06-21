@@ -33,7 +33,7 @@ class EtnyPoXNode:
     __endpoint = None
     __access_key = None
     __secret_key = None
-    __heartbeat_interval = 1
+    __heartbeat_interval = 720
 
     def __init__(self):
         self.parse_arguments(config.arguments, config.parser)
@@ -78,8 +78,10 @@ class EtnyPoXNode:
 
     def schedule_heartbeat_smart_contract_call(self):
         logger.info("Call heartbeat smart contract")
+
         def call_heartbeat_smart_contract():
             with self.nonce_lock:
+                logger.info("Calling heartbeat smart contract")
                 self.heartbeat.call_heartbeat_smart_contract()
 
         logger.info("Schedule heartbeat smart contract")
@@ -169,26 +171,26 @@ class EtnyPoXNode:
                     logger.error('Node retried transaction too many times. Exiting!')
                     raise
 
-        try:
-            waiting_seconds = 120
-            throw_error = False
-            if error and error == 'duplicated':
-                waiting_seconds *= 7
-                throw_error = True
+            try:
+                waiting_seconds = 120
+                throw_error = False
+                if error and error == 'duplicated':
+                    waiting_seconds *= 7
+                    throw_error = True
 
-            receipt = self.__w3.eth.waitForTransactionReceipt(transaction_hash=_hash, timeout=waiting_seconds)
+                receipt = self.__w3.eth.waitForTransactionReceipt(transaction_hash=_hash, timeout=waiting_seconds)
 
-            processed_logs = self.__etny.events._addDPRequestEV().processReceipt(receipt)
-            self.__dprequest = processed_logs[0].args._rowNumber
+                processed_logs = self.__etny.events._addDPRequestEV().processReceipt(receipt)
+                self.__dprequest = processed_logs[0].args._rowNumber
 
-        except Exception as e:
-            logger.error(f"{e} f- {type(e)}")
-            if throw_error:
-                raise
-            return
+            except Exception as e:
+                logger.error(f"{e} f- {type(e)}")
+                if throw_error:
+                    raise
+                return
 
-        logger.info("DP request created successfully!")
-        logger.info(f"TX Hash: {_hash}")
+            logger.info("DP request created successfully!")
+            logger.info(f"TX Hash: {_hash}")
 
     def cancel_dp_request(self, req):
 
@@ -886,6 +888,8 @@ class EtnyPoXNode:
     def resume_processing(self):
         logger.info("Call resume_processing")
         while True:
+            logger.info(f"Scheduled jobs {schedule.jobs}")
+            schedule.run_pending()
             self.add_dp_request()
             self.process_dp_request()
 

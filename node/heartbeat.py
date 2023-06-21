@@ -19,7 +19,6 @@ class HeartBeat:
         self.nonce = w3_data['nonce']
         self.address = w3_data['address']
         self.account = w3_data['account']
-        self.loop = None
 
     def call_heartbeat_smart_contract(self):
         current_time = int(time.time())
@@ -29,7 +28,6 @@ class HeartBeat:
         if current_time - last_call_time >= self.heartbeat_interval:
             logger.info("Calling heartbeat smart contract...")
 
-            # with self.nonce_lock:
             unicorn_txn = self.heartbeat.functions.logCall(self.benchmark_results).buildTransaction(
                 self._get_transaction_build())
 
