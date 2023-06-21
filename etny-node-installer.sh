@@ -83,15 +83,48 @@ apt-mark unhold qemu-utils
 
 }
 
-check_config_file(){
-        if [ -f $configfile ]
-        then
-                echo "Config file found. "
-		task_price_check
-        else
-                echo "Config file not found. How would you like to continue?"
-                ubuntu_20_04_config_file_choice
+check_config_file() {
+    if [ -f "$configfile" ]; then
+        echo "Config file found."
+        missing_informations=()
+        if ! grep -q "^ADDRESS=0x[[:xdigit:]]\{40\}$" "$configfile"; then
+            missing_informations+=("ADDRESS")
         fi
+        if ! grep -q "^PRIVATE_KEY=.\{64\}$" "$configfile"; then
+            missing_informations+=("PRIVATE_KEY")
+        fi
+        if ! grep -q "^RESULT_PRIVATE_KEY=.\{64\}$" "$configfile"; then
+            missing_informations+=("RESULT_PRIVATE_KEY")
+        fi
+        if ! grep -q "^RESULT_ADDRESS=0x[[:xdigit:]]\{40\}$" "$configfile"; then
+            missing_informations+=("RESULT_ADDRESS")
+        fi
+
+        if [ ${#missing_informations[@]} -eq 0 ]; then
+            address=$(grep "^ADDRESS=" "$configfile" | cut -d'=' -f2)
+            private_key=$(grep "^PRIVATE_KEY=" "$configfile" | cut -d'=' -f2)
+            result_private_key=$(grep "^RESULT_PRIVATE_KEY=" "$configfile" | cut -d'=' -f2)
+            result_address=$(grep "^RESULT_ADDRESS=" "$configfile" | cut -d'=' -f2)
+
+            if [[ $address =~ ^0x[[:xdigit:]]{40}$ && $result_address =~ ^0x[[:xdigit:]]{40}$ && ${#private_key} -eq 64 && ${#result_private_key} -eq 64 ]]; then
+                task_price_check
+            else
+                echo "Invalid ADDRESS, RESULT_ADDRESS, PRIVATE_KEY, or RESULT_PRIVATE_KEY format or length in the config file."
+                echo "Please update the config file with valid information."
+                exit 1
+            fi
+        else
+            echo "The following informations are missing or not valid in the config file:"
+            for info in "${missing_informations[@]}"; do
+                echo "$info"
+            done
+            echo "Please update or check the config file."
+            exit 1
+        fi
+    else
+        echo "Config file not found. How would you like to continue?"
+        ubuntu_20_04_config_file_choice
+    fi
 }
 
 check_ansible(){
