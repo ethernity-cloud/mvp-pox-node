@@ -406,7 +406,7 @@ class EtnyPoXNode:
             if input_hash is not None and len(input_hash) > 0:
                 list_of_ipfs_hashes.append(input_hash)
 
-            if self.process_order_data['process_order_retry_counter'] < 1:
+            if self.process_order_data['process_order_retry_counter'] < 2:
                 logger.info("Downloading data from IPFS")
                 self.storage.download_many(list_of_ipfs_hashes, attempts=5, delay=3)
                 if not self.storage.download_many(list_of_ipfs_hashes, attempts=5, delay=3):
@@ -509,7 +509,7 @@ class EtnyPoXNode:
             if input_hash is not None and len(input_hash) > 0:
                 list_of_ipfs_hashes.append(input_hash)
 
-            if self.process_order_data['process_order_retry_counter'] < 1:
+            if self.process_order_data['process_order_retry_counter'] < 2:
                 logger.info("Downloading data from IPFS")
                 self.storage.download_many(list_of_ipfs_hashes, attempts=5, delay=3)
                 if not self.storage.download_many(list_of_ipfs_hashes, attempts=5, delay=3):
