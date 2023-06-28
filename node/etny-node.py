@@ -477,7 +477,7 @@ class EtnyPoXNode:
             logger.info(f'[2] Result file successfully downloaded to {self.order_folder}/result.txt')
             result_hash = self.upload_result_to_ipfs(f'{self.order_folder}/result.txt')
             logger.info(f'[v2] Result file successfully uploaded to IPFS with hash: {result_hash}')
-            logger.info(f'Result file successfully uploaded to enty-pynity-v2 bucket')
+            logger.info(f'Result file successfully uploaded to {enclave_image_name}-{v2} bucket')
             logger.info('Reading transaction from file')
             status, transaction_data = self.swift_stream_service.get_file_content(bucket_name, "transaction.txt")
             if not status:
@@ -569,7 +569,7 @@ class EtnyPoXNode:
             run_subprocess([
                 'docker-compose', '-f', self.order_docker_compose_file, 'down'
             ], logger)
-            logger.info('Uploading result to enty-pynity-v3 bucket')
+            logger.info(f'Uploading result to {enclave_image_name}-{v3} bucket')
             status, result_data = self.swift_stream_service.get_file_content(bucket_name, "result.txt")
             if not status:
                 logger.info(result_data)
