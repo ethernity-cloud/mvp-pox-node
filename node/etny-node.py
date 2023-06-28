@@ -963,7 +963,7 @@ class EtnyPoXNode:
             self.orders_cache.add(order.dp_req, _order_id)
             if order.dp_req == self.__dprequest:
                 return _order_id
-        logger.info(f"Could't find order with DP request {self.__dprequest}")
+        logger.info(f"Couldn't find order with DP request {self.__dprequest}")
         return None
 
     def place_order(self, doreq):
@@ -981,7 +981,8 @@ class EtnyPoXNode:
         except Exception as e:
             errorMessage = 'Already Taken by other Node' if type(e) == IndexError else str(e)
             logger.error(
-                f'''Failed to place Order: {order_id}, DORequest_id: {doreq}, DPRequest_id: {self.__dprequest}, Error Message: {errorMessage}''')
+                f'''Failed to place Order: {order_id}, DORequest_id: {doreq}, DPRequest_id: {self.__dprequest}, Error 
+                Message: {errorMessage}''')
             raise
 
         logger.info("Order placed successfully!")
