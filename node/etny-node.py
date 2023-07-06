@@ -556,10 +556,7 @@ class EtnyPoXNode:
             ], logger)
 
             logger.info('Waiting for execution of v3')
-            self.wait_for_enclave_v2(bucket_name, 'result.txt', 120)
-            run_subprocess([
-                'docker-compose', '-f', self.order_docker_compose_file, 'down'
-            ], logger)
+            self.wait_for_enclave_v2(bucket_name, 'result.txt', 120)           
             logger.info(f'Uploading result to {enclave_image_name}-{v3} bucket')
             status, result_data = self.swift_stream_service.get_file_content(bucket_name, "result.txt")
             if not status:
@@ -581,6 +578,10 @@ class EtnyPoXNode:
             logger.info('Adding result to order')
             self.add_result_to_order(order_id, result)
 
+            logger.info('Cleaning up SecureLock and TrustedZone containers.')
+            run_subprocess([
+                'docker-compose', '-f', self.order_docker_compose_file, 'down'
+            ], logger)
             logger.info('Cleaning up swift-stream docker container.')
             run_subprocess([
                 'docker-compose', '-f', f'docker/docker-compose-swift-stream.yml', 'down', 'swift-stream'
