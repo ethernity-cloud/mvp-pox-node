@@ -528,22 +528,22 @@ class EtnyPoXNode:
             self.build_prerequisites_v3(bucket_name, order_id, payload_file, input_file,
                                         docker_compose_file, challenge_content)
 
-            #logger.info("Stopping previous docker registry")
-            #run_subprocess(['docker', 'stop', 'registry'], logger)
-            #logger.info("Cleaning up docker registry")
+            logger.info("Stopping previous docker registry")
+            run_subprocess(['docker', 'stop', 'registry'], logger)
+            logger.info("Cleaning up docker registry")
             run_subprocess(['docker', 'system', 'prune', '-a', '-f', '--volumes'], logger)
-            #logger.info("Running new docker registry")
-            #logger.debug(os.path.dirname(os.path.realpath(__file__)) + '/' + enclave_image_hash + ':/var/lib/registry')
+            logger.info("Running new docker registry")
+            logger.debug(os.path.dirname(os.path.realpath(__file__)) + '/' + enclave_image_hash + ':/var/lib/registry')
 
             #logger.info("Stopping previous docker las")
             #run_subprocess(['docker', 'stop', 'las'], logger)
             #logger.info("Removing previous docker las")
             #run_subprocess(['docker', 'rm', 'las'], logger)
-            #run_subprocess([
-            #    'docker', 'run', '-d', '--restart=always', '-p', '5000:5000', '--name', 'registry', '-v',
-            #    os.path.dirname(os.path.realpath(__file__)) + '/' + enclave_image_hash + ':/var/lib/registry',
-            #    'registry:2'
-            #], logger)
+            run_subprocess([
+                'docker', 'run', '-d', '--restart=always', '-p', '5000:5000', '--name', 'registry', '-v',
+                os.path.dirname(os.path.realpath(__file__)) + '/' + enclave_image_hash + ':/var/lib/registry',
+                'registry:2'
+            ], logger)
 
             #logger.info("Cleaning up docker container")
             #run_subprocess([
