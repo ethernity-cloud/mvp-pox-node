@@ -53,5 +53,9 @@
     path: "{{ config_file_name }}"
     line: "RESULT_ADDRESS={{ ethkey_second_map.address }}"
     insertbefore: BOE
-
-
+    
+- name: Write TASK_EXECUTION_PRICE to config file
+  lineinfile:
+    path: "{{ config_file_name }}"
+    line: "TASK_EXECUTION_PRICE=3.0"
+    insertafter: EOF
