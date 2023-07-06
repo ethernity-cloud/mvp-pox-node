@@ -535,10 +535,10 @@ class EtnyPoXNode:
             logger.info("Running new docker registry")
             logger.debug(os.path.dirname(os.path.realpath(__file__)) + '/' + enclave_image_hash + ':/var/lib/registry')
 
-            #logger.info("Stopping previous docker las")
-            #run_subprocess(['docker', 'stop', 'las'], logger)
-            #logger.info("Removing previous docker las")
-            #run_subprocess(['docker', 'rm', 'las'], logger)
+            logger.info("Stopping previous docker las")
+            run_subprocess(['docker', 'stop', 'las'], logger)
+            logger.info("Removing previous docker las")
+            run_subprocess(['docker', 'rm', 'las'], logger)
             run_subprocess([
                 'docker', 'run', '-d', '--restart=always', '-p', '5000:5000', '--name', 'registry', '-v',
                 os.path.dirname(os.path.realpath(__file__)) + '/' + enclave_image_hash + ':/var/lib/registry',
