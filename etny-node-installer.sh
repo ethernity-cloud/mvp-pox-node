@@ -23,7 +23,16 @@ task_price_check() {
             set_task_price
         fi
     else
-        set_task_price
+        echo "The TASK_EXECUTION_PRICE is not set in the config file."
+        echo "Do you want to use the default value of 3.0 ETNY/hour? (Y/n)"
+        read -r use_default
+        if [[ -z "$use_default" ]] || [[ "$use_default" =~ ^[Yy]$ ]]; then
+            default_price=3.0
+            echo "TASK_EXECUTION_PRICE=$default_price" >> "$nodefolder/$configfile"
+            echo "Task execution price set to default value $default_price ETNY/hour."
+        else
+            set_task_price
+        fi
     fi
 }
 
