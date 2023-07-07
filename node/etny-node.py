@@ -68,9 +68,6 @@ class EtnyPoXNode:
         self.process_order_data = {}
         self.generate_process_order_data()
         self.__run_integration_test()
-        # cleaing integration bucket
-        logger.info('Cleaning integration bucket')
-        # self.swift_stream_service.delete_bucket(self.integration_bucket_name)
 
     def generate_process_order_data(self):
         if not os.path.exists(config.process_orders_cache_filepath):
@@ -1068,6 +1065,18 @@ class EtnyPoXNode:
         if not status:
             logger.error(msg)
 
+    def __clean_up_integration_test(self):
+        logger.info('Cleaning up containers after integration test.')
+        run_subprocess([
+            'docker-compose', '-f', self.order_docker_compose_file, 'down'
+        ], logger)
+        logger.info('Cleaning up swift-stream docker container.')
+        run_subprocess([
+            'docker-compose', '-f', f'docker/docker-compose-swift-stream.yml', 'down', 'swift-stream'
+        ], logger)
+        logger.info('Cleaning up swift-stream integration bucket.')
+        self.swift_stream_service.delete_bucket(self.integration_bucket_name)
+
     def __run_integration_test(self):
         logger.info('Running integration test.')
         [enclave_image_hash, _,
@@ -1127,20 +1136,13 @@ class EtnyPoXNode:
             logger.info('could not download the integration test result file')
             logger.error('The node is not properly running under SGX. Please check the configuration.')
             self.can_run_under_sgx = False
+            self.__clean_up_integration_test()
             return
 
         self.can_run_under_sgx = True
         logger.info('Integration test result file successfully downloaded', result_data)
-        logger.info('Node can run under SGX')
-
-        logger.info('Cleaning up containers after integration test.')
-        run_subprocess([
-            'docker-compose', '-f', self.order_docker_compose_file, 'down'
-        ], logger)
-        logger.info('Cleaning up swift-stream docker container.')
-        run_subprocess([
-            'docker-compose', '-f', f'docker/docker-compose-swift-stream.yml', 'down', 'swift-stream'
-        ], logger)
+        logger.info('Node is properly configured to run confidential tasks using SGX')
+        self.__clean_up_integration_test()
 
 
 if __name__ == '__main__':
