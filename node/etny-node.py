@@ -1067,6 +1067,7 @@ class EtnyPoXNode:
                                                                                                       'v3')
         bucket_name = 'etny-bucket'
         order_id = 'integration_test'
+        integration_test_file = 'context_test.etny'
 
         try:
             logger.info(f"Downloading IPFS Image: {enclave_image_hash}")
@@ -1075,10 +1076,9 @@ class EtnyPoXNode:
             logger.info(str(e))
 
         list_of_ipfs_hashes = [enclave_image_hash, docker_compose_hash]
-        logger.info("Downloading data from IPFS")
         self.storage.download_many(list_of_ipfs_hashes, attempts=5, delay=3)
         if not self.storage.download_many(list_of_ipfs_hashes, attempts=5, delay=3):
-            logger.info("Cannot download data from IPFS, cancelling processing")
+            logger.info("Cannot download data from IPFS, stopping test")
             return
 
         logger.info("Running docker swift-stream")
@@ -1112,9 +1112,9 @@ class EtnyPoXNode:
             'docker-compose', '-f', self.order_docker_compose_file, 'up', '-d'
         ], logger)
 
-        logger.info('Waiting for execution of v3 enclave')
-        self.wait_for_enclave_v2(bucket_name, 'result.txt', 120)
-        status, result_data = self.swift_stream_service.get_file_content(bucket_name, 'context_test.etny')
+        logger.info('Waiting for execution of integration test enclave')
+        self.wait_for_enclave_v2(bucket_name, integration_test_file, 120)
+        status, result_data = self.swift_stream_service.get_file_content(bucket_name, integration_test_file)
         if not status:
             logger.info('could not download the integration test result file')
             logger.error('The node is not properly running under SGX. Please check the configuration.')
