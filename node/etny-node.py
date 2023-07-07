@@ -68,6 +68,9 @@ class EtnyPoXNode:
         self.process_order_data = {}
         self.generate_process_order_data()
         self.__run_integration_test()
+        # cleaing integration bucket
+        logger.info('Cleaning integration bucket')
+        self.swift_stream_service.delete_bucket(self.integration_bucket_name)
 
     def generate_process_order_data(self):
         if not os.path.exists(config.process_orders_cache_filepath):
@@ -1069,7 +1072,7 @@ class EtnyPoXNode:
         [enclave_image_hash, _,
          docker_compose_hash] = self.__image_registry.caller().getLatestTrustedZoneImageCertPublicKey('etny-pynithy',
                                                                                                       'v3')
-        bucket_name = 'etny-bucket'
+        self.integration_bucket_name = 'etny-bucket-integration'
         order_id = 'integration_test'
         integration_test_file = 'context_test.etny'
 
@@ -1091,7 +1094,7 @@ class EtnyPoXNode:
 
         docker_compose_file = f'{os.path.dirname(os.path.realpath(__file__))}/{docker_compose_hash}'
         logger.info(f'Preparing prerequisites for integration test')
-        self.build_prerequisites_integration_test(bucket_name, order_id, docker_compose_file)
+        self.build_prerequisites_integration_test(self.integration_bucket_name, order_id, docker_compose_file)
 
         logger.info("Stopping previous docker registry")
         run_subprocess(['docker', 'stop', 'registry'], logger)
@@ -1116,8 +1119,9 @@ class EtnyPoXNode:
         ], logger)
 
         logger.info('Waiting for execution of integration test enclave')
-        self.wait_for_enclave_v2(bucket_name, integration_test_file, 120)
-        status, result_data = self.swift_stream_service.get_file_content(bucket_name, integration_test_file)
+        self.wait_for_enclave_v2(self.integration_bucket_name, integration_test_file, 120)
+        status, result_data = self.swift_stream_service.get_file_content(self.integration_bucket_name,
+                                                                         integration_test_file)
         if not status:
             logger.info('could not download the integration test result file')
             logger.error('The node is not properly running under SGX. Please check the configuration.')
