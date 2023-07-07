@@ -1080,8 +1080,7 @@ class EtnyPoXNode:
             logger.info(str(e))
 
         list_of_ipfs_hashes = [enclave_image_hash, docker_compose_hash]
-        self.storage.download_many(list_of_ipfs_hashes, attempts=5, delay=3)
-        if not self.storage.download_many(list_of_ipfs_hashes, attempts=5, delay=3):
+        if not self.storage.download_many(list_of_ipfs_hashes, attempts=10, delay=3):
             logger.info("Cannot download data from IPFS, stopping test")
             return
 
