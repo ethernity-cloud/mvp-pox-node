@@ -70,7 +70,7 @@ class EtnyPoXNode:
         self.__run_integration_test()
         # cleaing integration bucket
         logger.info('Cleaning integration bucket')
-        self.swift_stream_service.delete_bucket(self.integration_bucket_name)
+        # self.swift_stream_service.delete_bucket(self.integration_bucket_name)
 
     def generate_process_order_data(self):
         if not os.path.exists(config.process_orders_cache_filepath):
