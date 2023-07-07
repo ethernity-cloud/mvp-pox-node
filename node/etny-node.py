@@ -874,6 +874,10 @@ class EtnyPoXNode:
                 doreq = DORequest(_doreq)
                 self.doreq_cache.add(i)
 
+                if not self.can_run_under_sgx:
+                    logger.error('SGX is not enabled or correctly configured, skipping DO request')
+                    continue
+
                 if doreq.status != RequestStatus.AVAILABLE:
                     logger.debug(
                         f'''Skipping Order, DORequestId = {_doreq}, DPRequestId = {i}, Order has different status: '{RequestStatus._status_as_string(doreq.status)}' ''')
