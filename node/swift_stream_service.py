@@ -122,7 +122,7 @@ class SwiftStreamService:
         except S3Error as err:
             return False, err
         finally:
-            if not response:
+            if response is not None:
                 response.close()
                 response.release_conn()
         return True, _d
@@ -148,7 +148,6 @@ class SwiftStreamService:
                                            object_name,
                                            file_data,
                                            object_stat.st_size)
-                file_data.close()
         except S3Error as err:
             return False, err
 
