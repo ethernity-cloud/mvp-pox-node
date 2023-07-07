@@ -67,6 +67,7 @@ class EtnyPoXNode:
                                                        self.__secret_key)
         self.process_order_data = {}
         self.generate_process_order_data()
+        self.__run_integration_test()
 
     def generate_process_order_data(self):
         if not os.path.exists(config.process_orders_cache_filepath):
