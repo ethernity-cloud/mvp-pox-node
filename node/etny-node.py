@@ -510,7 +510,7 @@ class EtnyPoXNode:
 
             if self.process_order_data['process_order_retry_counter'] < 2:
                 logger.info("Downloading data from IPFS")
-                self.storage.download_many(list_of_ipfs_hashes, attempts=5, delay=3)
+                # self.storage.download_many(list_of_ipfs_hashes, attempts=5, delay=3)
                 if not self.storage.download_many(list_of_ipfs_hashes, attempts=5, delay=3):
                     logger.info("Cannot download data from IPFS, cancelling processing")
                     self.ipfs_timeout_cancel(order_id)
@@ -553,10 +553,10 @@ class EtnyPoXNode:
                 'registry:2'
             ], logger)
 
-            # logger.info("Cleaning up docker container")
-            # run_subprocess([
-            #    'docker-compose', '-f', self.order_docker_compose_file, 'down', '-d'
-            # ], logger)
+            logger.info("Cleaning up docker container")
+            run_subprocess([
+                'docker-compose', '-f', self.order_docker_compose_file, 'down', '-d'
+            ], logger)
 
             logger.info("Started enclaves by running ETNY docker-compose")
             run_subprocess([
