@@ -1038,7 +1038,8 @@ class EtnyPoXNode:
             "ETNY_CHAIN_ID": config.chain_id,
             "ETNY_SMART_CONTRACT_ADDRESS": config.contract_address,
             "ETNY_WEB3_PROVIDER": config.http_provider,
-            "ETNY_RUN_INTEGRATION_TEST": 1
+            "ETNY_RUN_INTEGRATION_TEST": 1,
+            "ETNY_ORDER_ID": 0
         }
         return env_vars
 
