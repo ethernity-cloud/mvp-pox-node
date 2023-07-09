@@ -120,7 +120,7 @@ class EtnyPoXNode:
             self.__duration,
             0,
             self.__uuid,
-            "",
+            "v3",
             "",
             ""
         ]
