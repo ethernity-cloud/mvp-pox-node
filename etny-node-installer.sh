@@ -24,10 +24,10 @@ task_price_check() {
         fi
     else
         echo "The TASK_EXECUTION_PRICE is not set in the config file."
-        echo "Do you want to use the default value of 3.0 ETNY/hour? (Y/n)"
+        echo "Do you want to use the default value of 3 ETNY/hour? (Y/n)"
         read -r use_default
         if [[ -z "$use_default" ]] || [[ "$use_default" =~ ^[Yy]$ ]]; then
-            default_price=3.0
+            default_price=3
             echo "TASK_EXECUTION_PRICE=$default_price" >> "$nodefolder/$configfile"
             echo "Task execution price set to default value $default_price ETNY/hour."
         else
@@ -38,12 +38,12 @@ task_price_check() {
 
 set_task_price() {
     while true; do
-        echo -n "Enter the Task Execution Price (Recommended price for executing a task/hour: 0.001 ETNY - 10.00 ETNY): "
+        echo -n "Enter the Task Execution Price (Recommended price for executing a task/hour: 1 - 10 ETNY): "
         read taskprice
-        if [[ $taskprice =~ ^[0-9]+(\.[0-9]+)?$ ]] && (( $(echo "$taskprice >= 0.001 && $taskprice <= 10" | bc -l) )); then
+        if [[ $taskprice =~ ^[1-9]$|^10$ ]]; then
             break
         else
-            echo "Invalid task execution price. Please enter a valid price within the recommended range (0.001 ETNY - 10.00 ETNY per hour)..."
+            echo "Invalid task execution price. Please enter a valid integer price within the recommended range (1 - 10 ETNY)..."
         fi
     done
     sed -i "/TASK_EXECUTION_PRICE/d" "$nodefolder/$configfile"
