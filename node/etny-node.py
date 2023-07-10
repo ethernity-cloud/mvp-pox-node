@@ -840,7 +840,7 @@ class EtnyPoXNode:
 
                 logger.info(f"Checking DO request: {i}")
                 if not (doreq.cpu <= req.cpu and doreq.memory <= req.memory and
-                        doreq.storage <= req.storage and doreq.bandwidth <= req.bandwidth):
+                        doreq.storage <= req.storage and doreq.bandwidth <= req.bandwidth and doreq.price >= req.price):
                     logger.info("Order doesn't meet requirements, skipping to next request")
                     continue
 
