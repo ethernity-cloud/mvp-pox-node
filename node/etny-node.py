@@ -1168,7 +1168,7 @@ class EtnyPoXNode:
             return True
         
     def __enforce_update(self):
-        logger.info('Checking if the auto update can be performed...')
+        logger.info('Checking if the auto update can be performed...[1]')
         if self.__can_run_auto_update():
             logger.info('Exiting the agent. Performing auto update...')
             exit(1)
