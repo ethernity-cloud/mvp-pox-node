@@ -1155,7 +1155,7 @@ class EtnyPoXNode:
                 else:
                     saved_timestamp = int(value)
 
-            if current_timestamp - saved_timestamp >= 60:  # 24 * 60 * 60:
+            if current_timestamp - saved_timestamp >= 24 * 60 * 60:
                 with open(config.auto_update_file_path, 'w') as file:
                     file.write(str(current_timestamp))
                 return True
@@ -1166,9 +1166,9 @@ class EtnyPoXNode:
                 file.write(str(current_timestamp))
 
             return True
-        
+
     def __enforce_update(self):
-        logger.info('Checking if the auto update can be performed...[1]')
+        logger.info('Checking if the auto update can be performed...')
         if self.__can_run_auto_update():
             logger.info('Exiting the agent. Performing auto update...')
             exit(1)
