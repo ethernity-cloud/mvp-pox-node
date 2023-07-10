@@ -31,6 +31,7 @@ class EtnyPoXNode:
     __endpoint = None
     __access_key = None
     __secret_key = None
+    __price = 3
 
     def __init__(self):
         self.parse_arguments(config.arguments, config.parser)
@@ -104,18 +105,23 @@ class EtnyPoXNode:
         return allowed_max if item > allowed_max else item
 
     def add_dp_request(self, waiting_period_on_error=15, beginning_of_recursion=None):
+        if self.__price is None:
+            self.__price = 0
+
         params = [
             self._limited_arg(self.__cpu),
             self._limited_arg(self.__memory),
             self._limited_arg(self.__storage),
             self._limited_arg(self.__bandwidth),
             self.__duration,
-            0,
+            self.__price,
             self.__uuid,
             "",
             "",
             ""
         ]
+
+        logger.info('params: {}'.format(params))
 
         unicorn_txn = self.__etny.functions._addDPRequest(*params).buildTransaction(self.get_transaction_build())
         _hash = ''

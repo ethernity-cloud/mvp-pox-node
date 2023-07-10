@@ -91,8 +91,11 @@ parser.add_argument("-u", "--access_key", help="Access key (aka user ID) of your
 parser.add_argument("-p", "--secret_key", help="Secret Key (aka password) of your account in S3 service.",
                     default="swiftstreamadmin",
                     required=False)
+parser.add_argument("-v", "--price", help="Task price(per hour).",
+                    default="3",
+                    required=False)
 
 arguments = {
     str: ['address', 'privatekey', 'resultaddress', 'resultprivatekey', 'endpoint', 'access_key', 'secret_key'],
-    int: ['cpu', 'memory', 'storage', 'storage', 'bandwidth', 'duration']
+    int: ['cpu', 'memory', 'storage', 'storage', 'bandwidth', 'duration', 'price']
 }
