@@ -12,6 +12,26 @@
 - include_tasks: "{{ ansible_os_family | lower() }}_{{ ansible_distribution_major_version }}.yml"
   #when: ansible_facts.services['etny-vagrant.service'].state != 'running'
 
+- name: Check if isgx driver is installed
+  command: lsmod | grep isgx
+  register: isgx_driver
+  changed_when: false
+  failed_when: false
+  
+- name: Check if sgx_enclave driver is installed
+  command: ls /dev/ | grep sgx_enclave
+  register: sgx_enclave_driver
+  changed_when: false
+  failed_when: false
+
+- name: Run script if both drivers are found
+  script: ubuntu/etny-node-provision-sgx.sh
+  when: "isgx_driver.rc == 0 and sgx_enclave_driver.rc == 0"
+
+- name: Run script if both drivers are not installed
+  script: ubuntu/etny-node-provision-sgx.sh
+  when: "isgx_driver.rc != 0 and sgx_enclave_driver.rc != 0"
+
 - name: Ubuntu 20.04 | enable_sgx dependencies
   apt:
     pkg:
