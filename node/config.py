@@ -36,9 +36,12 @@ gas_price_measure = os.environ.get('GAS_PRICE_MEASURE')
 
 # constants
 image_registry_address = '0x6ca77d7C997b0873b2Ba0361387e56E2C5c0FEE8'
+heart_beat_address = '0x5c190f7253930C473822AcDED40B2eF1936B4075'
 abi_filepath = os.path.dirname(os.path.realpath(__file__)) + '/docker/pox.abi'
 image_registry_abi_filepath = os.path.dirname(os.path.realpath(__file__)) + '/image_registry.abi'
+heart_beat_abi_filepath = os.path.dirname(os.path.realpath(__file__)) + '/heart_beat.abi'
 auto_update_file_path = os.path.dirname(os.path.realpath(__file__)) + '/auto_update.etny'
+heart_beat_log_file_path = os.path.dirname(os.path.realpath(__file__)) + '/heartbeat.etny'
 uuid_filepath = expanduser("~") + "/opt/etny/node/UUID"
 orders_cache_limit = 10000000
 orders_cache_filepath = os.path.dirname(os.path.realpath(__file__)) + '/orders_cache.txt'
