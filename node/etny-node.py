@@ -1181,8 +1181,8 @@ class EtnyPoXNode:
             exit(1)
 
     def __call_heart_beat(self):
-        logger.info('Calling heart beat...')
-        if self.__can_run_auto_update(config.heart_beat_log_file_path, 60):
+        logger.info('Checking if heart call is necessary...')
+        if self.__can_run_auto_update(config.heart_beat_log_file_path, 12 * 60 * 60):
             logger.info('Heart beat can be called...')
             params = [
                 "v3"
@@ -1199,7 +1199,7 @@ class EtnyPoXNode:
                 logger.info(f'error = {e}, type = {type(e)}')
                 raise
 
-        logger.info('Heart beat successfully  called...')
+        logger.info('Heart beat successfully called...')
 
 
 if __name__ == '__main__':
