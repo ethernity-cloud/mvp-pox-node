@@ -58,4 +58,4 @@ else
     fi
 fi
 
-echo "Operation completed successfully!
+echo "Operation completed successfully!"
