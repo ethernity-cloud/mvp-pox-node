@@ -33,6 +33,7 @@ chain_id = int(os.environ.get('CHAIN_ID'))
 gas_limit = int(os.environ.get('GAS_LIMIT'))
 gas_price_value = os.environ.get('GAS_PRICE_VALUE')
 gas_price_measure = os.environ.get('GAS_PRICE_MEASURE')
+task_price_default = os.environ.get('TASK_EXECUTION_PRICE_DEFAULT')
 
 # constants
 abi_filepath = os.path.dirname(os.path.realpath(__file__)) + '/docker/pox.abi'
@@ -92,7 +93,7 @@ parser.add_argument("-p", "--secret_key", help="Secret Key (aka password) of you
                     default="swiftstreamadmin",
                     required=False)
 parser.add_argument("-v", "--price", help="Task price(per hour).",
-                    default="3",
+                    default=str(task_price_default),
                     required=False)
 
 arguments = {
