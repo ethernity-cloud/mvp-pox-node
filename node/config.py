@@ -33,6 +33,7 @@ chain_id = int(os.environ.get('CHAIN_ID'))
 gas_limit = int(os.environ.get('GAS_LIMIT'))
 gas_price_value = os.environ.get('GAS_PRICE_VALUE')
 gas_price_measure = os.environ.get('GAS_PRICE_MEASURE')
+task_price_default = os.environ.get('TASK_EXECUTION_PRICE_DEFAULT')
 
 # constants
 image_registry_address = '0x6ca77d7C997b0873b2Ba0361387e56E2C5c0FEE8'
@@ -97,8 +98,11 @@ parser.add_argument("-u", "--access_key", help="Access key (aka user ID) of your
 parser.add_argument("-p", "--secret_key", help="Secret Key (aka password) of your account in S3 service.",
                     default="swiftstreamadmin",
                     required=False)
+parser.add_argument("-v", "--price", help="Task price(per hour).",
+                    default=str(task_price_default),
+                    required=False)
 
 arguments = {
     str: ['address', 'privatekey', 'resultaddress', 'resultprivatekey', 'endpoint', 'access_key', 'secret_key'],
-    int: ['cpu', 'memory', 'storage', 'storage', 'bandwidth', 'duration']
+    int: ['cpu', 'memory', 'storage', 'storage', 'bandwidth', 'duration', 'price']
 }

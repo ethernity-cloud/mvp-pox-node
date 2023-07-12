@@ -31,6 +31,7 @@ class EtnyPoXNode:
     __endpoint = None
     __access_key = None
     __secret_key = None
+    __price = 3
 
     def __init__(self):
         self.parse_arguments(config.arguments, config.parser)
@@ -118,18 +119,23 @@ class EtnyPoXNode:
         return allowed_max if item > allowed_max else item
 
     def add_dp_request(self, waiting_period_on_error=15, beginning_of_recursion=None):
+        if self.__price is None:
+            self.__price = 0
+
         params = [
             self._limited_arg(self.__cpu),
             self._limited_arg(self.__memory),
             self._limited_arg(self.__storage),
             self._limited_arg(self.__bandwidth),
             self.__duration,
-            0,
+            self.__price,
             self.__uuid,
             "v3",
             "",
             ""
         ]
+
+        logger.info('params: {}'.format(params))
 
         unicorn_txn = self.__etny.functions._addDPRequest(*params).buildTransaction(self.get_transaction_build())
         _hash = ''
@@ -891,7 +897,7 @@ class EtnyPoXNode:
 
                 logger.info(f"Checking DO request: {i}")
                 if not (doreq.cpu <= req.cpu and doreq.memory <= req.memory and
-                        doreq.storage <= req.storage and doreq.bandwidth <= req.bandwidth):
+                        doreq.storage <= req.storage and doreq.bandwidth <= req.bandwidth and doreq.price >= req.price):
                     logger.info("Order doesn't meet requirements, skipping to next request")
                     continue
 

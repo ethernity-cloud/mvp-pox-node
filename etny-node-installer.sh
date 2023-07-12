@@ -13,6 +13,43 @@ else
 	ansible_cmd="ansible-playbook"
 fi
 
+task_price_check() {
+    if grep -q "TASK_EXECUTION_PRICE" "$nodefolder/$configfile"; then
+        current_price=$(grep "TASK_EXECUTION_PRICE" "$nodefolder/$configfile" | cut -d'=' -f2)
+        echo "Task execution price already exists in the config file and is currently set to $current_price ETNY/hour."
+        echo "Would you like to modify it? (Y/n)"
+        read modify
+	if [[ -z "$modify" ]] || [[ "$modify" =~ ^[Yy]$ ]]; then
+            set_task_price
+        fi
+    else
+        echo "The TASK_EXECUTION_PRICE is not set in the config file."
+        echo "Do you want to use the default value of 3 ETNY/hour? (Y/n)"
+        read -r use_default
+        if [[ -z "$use_default" ]] || [[ "$use_default" =~ ^[Yy]$ ]]; then
+            default_price=3
+            echo "TASK_EXECUTION_PRICE=$default_price" >> "$nodefolder/$configfile"
+            echo "Task execution price set to default value $default_price ETNY/hour."
+        else
+            set_task_price
+        fi
+    fi
+}
+
+set_task_price() {
+    while true; do
+        echo -n "Enter the Task Execution Price (Recommended price for executing a task/hour: 1 - 10 ETNY): "
+        read taskprice
+        if [[ $taskprice =~ ^[1-9]$|^10$ ]]; then
+            break
+        else
+            echo "Invalid task execution price. Please enter a valid integer price within the recommended range (1 - 10 ETNY)..."
+        fi
+    done
+    sed -i "/TASK_EXECUTION_PRICE/d" "$nodefolder/$configfile"
+    echo "TASK_EXECUTION_PRICE=$taskprice" >> "$nodefolder/$configfile"
+}
+
 ubuntu_20_04() {
   # Determining if the etny-vagrant service is running
   echo "$os found. Continuing..."
@@ -55,14 +92,48 @@ apt-mark unhold qemu-utils
 
 }
 
-check_config_file(){
-        if [ -f $configfile ]
-        then
-                echo "Config file found. "
-        else
-                echo "Config file not found. How would you like to continue?"
-                ubuntu_20_04_config_file_choice
+check_config_file() {
+    if [ -f "$configfile" ]; then
+        echo "Config file found."
+        missing_informations=()
+        if ! grep -q "^ADDRESS=0x[[:xdigit:]]\{40\}$" "$configfile"; then
+            missing_informations+=("ADDRESS")
         fi
+        if ! grep -q "^PRIVATE_KEY=.\{64\}$" "$configfile"; then
+            missing_informations+=("PRIVATE_KEY")
+        fi
+        if ! grep -q "^RESULT_PRIVATE_KEY=.\{64\}$" "$configfile"; then
+            missing_informations+=("RESULT_PRIVATE_KEY")
+        fi
+        if ! grep -q "^RESULT_ADDRESS=0x[[:xdigit:]]\{40\}$" "$configfile"; then
+            missing_informations+=("RESULT_ADDRESS")
+        fi
+
+        if [ ${#missing_informations[@]} -eq 0 ]; then
+            address=$(grep "^ADDRESS=" "$configfile" | cut -d'=' -f2)
+            private_key=$(grep "^PRIVATE_KEY=" "$configfile" | cut -d'=' -f2)
+            result_private_key=$(grep "^RESULT_PRIVATE_KEY=" "$configfile" | cut -d'=' -f2)
+            result_address=$(grep "^RESULT_ADDRESS=" "$configfile" | cut -d'=' -f2)
+
+            if [[ $address =~ ^0x[[:xdigit:]]{40}$ && $result_address =~ ^0x[[:xdigit:]]{40}$ && ${#private_key} -eq 64 && ${#result_private_key} -eq 64 ]]; then
+                task_price_check
+            else
+                echo "Invalid ADDRESS, RESULT_ADDRESS, PRIVATE_KEY, or RESULT_PRIVATE_KEY format or length in the config file."
+                echo "Please update the config file with valid information."
+                exit 1
+            fi
+        else
+            echo "The following informations are missing or not valid in the config file:"
+            for info in "${missing_informations[@]}"; do
+                echo "$info"
+            done
+            echo "Please update or check the config file."
+            exit 1
+        fi
+    else
+        echo "Config file not found. How would you like to continue?"
+        ubuntu_20_04_config_file_choice
+    fi
 }
 
 check_ansible(){
@@ -173,7 +244,7 @@ case "$choice" in
 		echo "PRIVATE_KEY="$nodeprivatekey >> $nodefolder/$configfile
 		echo "RESULT_ADDRESS="$resultaddress >> $nodefolder/$configfile
 		echo "RESULT_PRIVATE_KEY="$resultprivatekey >> $nodefolder/$configfile
-		if [ -f $nodefolder/$configfile ]; then echo "Config file generated successfully. Continuing..." && ubuntu_20_04_kernel_check; else echo "Something went wrong. Seek Help!" && exit; fi
+		if [ -f $nodefolder/$configfile ]; then echo "Config file generated successfully. Continuing..." && task_price_check; else echo "Something went wrong. Seek Help!" && exit; fi
 	;;
 	2) 
 		export FILE=generate
