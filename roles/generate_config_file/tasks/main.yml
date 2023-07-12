@@ -57,5 +57,5 @@
 - name: Write TASK_EXECUTION_PRICE to config file
   lineinfile:
     path: "{{ config_file_name }}"
-    line: "TASK_EXECUTION_PRICE=3.0"
+    line: "TASK_EXECUTION_PRICE=3"
     insertafter: EOF
