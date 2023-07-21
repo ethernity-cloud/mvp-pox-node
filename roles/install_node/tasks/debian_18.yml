@@ -110,3 +110,4 @@
   copy:
     src: vagrant/qemu-3.1
     dest: Vagrantfile
+    force: yes
