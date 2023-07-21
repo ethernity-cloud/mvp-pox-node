@@ -22,8 +22,6 @@ function print_network_menu {
     echo "#############################################"
 }
 
-nodefolder="path/to/your/nodefolder" # replace this with your actual path
-
 while true; do
     print_network_menu
     read -p "Enter your choice: " choice
