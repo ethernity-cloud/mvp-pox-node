@@ -31,19 +31,19 @@ while true; do
         1)
             echo "You selected Open Beta."
             # Extract CONTRACT_ADDRESS from existing .env.config
-            CONTRACT_ADDRESS=$(grep "^CONTRACT_ADDRESS" $nodefolder/node/.env.config | cut -d '=' -f2)
+            CONTRACT_ADDRESS=$(grep "^CONTRACT_ADDRESS" $nodefolder/node/.env | cut -d '=' -f2)
             # Write CONTRACT_ADDRESS to new .env.config
             echo "NETWORK_CONTRACT_ADDRESS=${CONTRACT_ADDRESS}" > $nodefolder/.env.config
-            echo "Set NETWORK_CONTRACT_ADDRESS in $nodefolder/.env.config."
+            echo "Set NETWORK_CONTRACT_ADDRESS in $nodefolder/.env.config"
             break
             ;;
         2)
             echo "You selected Testnet."
             # Extract TESTNET_CONTRACT_ADDRESS from existing .env.config
-            TESTNET_CONTRACT_ADDRESS=$(grep "^TESTNET_CONTRACT_ADDRESS" $nodefolder/node/.env.config | cut -d '=' -f2)
+            TESTNET_CONTRACT_ADDRESS=$(grep "^TESTNET_CONTRACT_ADDRESS" $nodefolder/node/.env | cut -d '=' -f2)
             # Write TESTNET_CONTRACT_ADDRESS to new .env.config
             echo "NETWORK_CONTRACT_ADDRESS=${TESTNET_CONTRACT_ADDRESS}" > $nodefolder/.env.config
-            echo "Set NETWORK_CONTRACT_ADDRESS to TESTNET_CONTRACT_ADDRESS in $nodefolder/.env.config."
+            echo "Set NETWORK_CONTRACT_ADDRESS to TESTNET_CONTRACT_ADDRESS in $nodefolder/.env.config"
             break
             ;;
         3)
