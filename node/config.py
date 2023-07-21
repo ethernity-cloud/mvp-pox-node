@@ -25,7 +25,6 @@ load_dotenv('.env' if os.path.exists('.env') else '.env.config')  # take environ
 
 # env variables
 http_provider = os.environ.get('HTTP_PROVIDER')
-contract_address = os.environ.get('CONTRACT_ADDRESS')
 ipfs_host = os.environ.get('IPFS_HOST')
 client_connect_url = os.environ.get('CLIENT_CONNECT_URL')
 client_bootstrap_url = os.environ.get('CLIENT_BOOTSTRAP_URL')
@@ -34,6 +33,17 @@ gas_limit = int(os.environ.get('GAS_LIMIT'))
 gas_price_value = os.environ.get('GAS_PRICE_VALUE')
 gas_price_measure = os.environ.get('GAS_PRICE_MEASURE')
 task_price_default = os.environ.get('TASK_EXECUTION_PRICE_DEFAULT')
+
+# specify the path to your .env.config file in the parent directory
+dotenv_path = '../.env.config'
+
+# load CONTRACT_ADDRESS from .env.config in the parent directory
+load_dotenv(dotenv_path=dotenv_path, override=True)
+
+# get contract_address from the parent directory's .env.config
+contract_address = os.environ.get('NETWORK_CONTRACT_ADDRESS')
+
+print(contract_address)  # just for testing, you may want to remove this in your actual script
 
 # constants
 image_registry_address = '0x6ca77d7C997b0873b2Ba0361387e56E2C5c0FEE8'
