@@ -34,4 +34,4 @@ for IP in `dig production.cloudflare.docker.com a | grep ^production | awk '{pri
     ufw allow out from any to $IP port 443
 done
 
-sudo ufw enable -y
+sudo ufw enable
