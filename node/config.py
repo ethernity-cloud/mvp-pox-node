@@ -21,14 +21,13 @@ except ImportError as e:
 
 from utils import HardwareInfoProvider
 
-# Load variables from .env if it exists
+# Load variables from .env and .env.conf if it exists
 if os.path.exists('.env'):
     load_dotenv('.env')
 
-# Load variables from .env.config if it exists
-if os.path.exists('.env.config'):
-    load_dotenv('.env.config')
-    
+env_config_path = '/home/vagrant/etny/node/.env.config'
+if os.path.exists(env_config_path):
+    load_dotenv(env_config_path)    
 # env variables
 http_provider = os.environ.get('HTTP_PROVIDER')
 contract_address = os.environ.get('NETWORK_CONTRACT_ADDRESS')
