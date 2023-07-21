@@ -54,7 +54,6 @@ Vagrant.configure("2") do |config|
     etnyvm1.vm.provision "file", source: "./.env.config", destination: "~/etny/node/.env.config"
     etnyvm1.vm.provision "shell",
       inline: "/bin/bash /home/vagrant/etny/node/etny-node-provision-docker.sh"
-    etnyvm1.vm.provision :reload
     etnyvm1.vm.provision "shell",
       inline: "/bin/bash /home/vagrant/etny/node/etny-node-disable-upgrades.sh" 
     etnyvm1.vm.provision "shell",
