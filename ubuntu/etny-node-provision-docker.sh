@@ -10,13 +10,11 @@ apt-get -yq  install docker-ce
 sudo curl -L "https://github.com/docker/compose/releases/download/1.25.5/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
 chmod +x /usr/local/bin/docker-compose
 
-ufw enable
+ufw --force enable
 
-ufw allow in from 127.0.0.1/8
-ufw allow out to 127.0.0.1/8
-ufw allow out from any to 4.2.2.1 port 53
-ufw allow out from any to 4.2.2.2 port 53
-ufw allow out from any to 127.0.0.53 port 53
+ufw allow from 127.0.0.1/8
+ufw allow to 127.0.0.1/8
+ufw allow out to any port 53
 ufw allow in 22/tcp
 
 IP=`getent hosts ipfs.ethernity.cloud | awk '{print $1}'`
