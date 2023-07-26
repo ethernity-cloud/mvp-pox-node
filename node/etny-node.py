@@ -843,7 +843,10 @@ class EtnyPoXNode:
         return None
 
     def __can_place_order(self, dp_req_id: int, do_req_id: int) -> bool:
-        dispersion_factor = 40
+        if config.is_main_net:
+            dispersion_factor = 40
+        else:
+            dispersion_factor = 1
         if dp_req_id % dispersion_factor != do_req_id % dispersion_factor:
             return False
         return True
