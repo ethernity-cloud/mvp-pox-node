@@ -18,10 +18,10 @@ else
     cd "$vagrant_dir"
     sudo vagrant ssh -c "
         echo 'Checking for sgx_enclave and isgx drivers...'
-        # Check for sgx_enclave driver
-        if ls /dev/ | grep -q 'sgx_enclave'; then
-            echo '/dev/sgx_enclave driver is present on the Vagrant VM.'
-            echo 'Uninstalling isgx driver...'
+        # Check for sgx_enclave driver and isgx
+     if ls /dev/ | grep -q 'sgx_enclave' && ls /dev/ | grep -q 'isgx'; then
+        echo '/dev/sgx_enclave and /dev/isgx drivers are present on the Vagrant VM.'
+        echo 'Uninstalling isgx driver...'
 
             # Check if the AESM service is running
             if sudo service aesmd status 2>/dev/null | grep 'Active: active (running)'; then
@@ -80,10 +80,10 @@ fi
 echo "Checking host for sgx_enclave and isgx..."
 echo "Host:"
 # Commands executed on the host
-# Check for sgx_enclave driver
-if ls /dev/ | grep -q 'sgx_enclave'; then
-    echo '/dev/sgx_enclave driver is present on the host.'
-    echo 'Uninstalling isgx driver...'
+# Check for sgx_enclave driver and isgx
+     if ls /dev/ | grep -q 'sgx_enclave' && ls /dev/ | grep -q 'isgx'; then
+        echo '/dev/sgx_enclave and /dev/isgx drivers are present on the Vagrant VM.'
+        echo 'Uninstalling isgx driver...'
 
     # Check if the AESM service is running
     if sudo service aesmd status 2>/dev/null | grep 'Active: active (running)'; then
