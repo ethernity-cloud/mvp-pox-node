@@ -58,7 +58,7 @@ task_price_check() {
     if grep -q "TASK_EXECUTION_PRICE" "$nodefolder/$configfile"; then
         current_price=$(grep "TASK_EXECUTION_PRICE" "$nodefolder/$configfile" | cut -d'=' -f2)
         echo "Task execution price already exists in the config file and is currently set to $current_price ETNY/hour."
-        echo "Would you like to modify it? (Y/n)"
+        echo "Would you like to modify it? (y/N)"
         read modify
 	if [[ -z "$modify" ]] || [[ "$modify" =~ ^[Yy]$ ]]; then
             set_task_price
