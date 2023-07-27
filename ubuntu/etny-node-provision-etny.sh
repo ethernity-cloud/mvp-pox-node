@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-trap 'echo "Installer error: \"${BASH_COMMAND}\"command filed with exit code $?."' SIGINT SIGTERM ERR EXIT
+trap 'echo "Installer status: \"${BASH_COMMAND}\"command filed with exit code $?."' SIGINT SIGTERM ERR EXIT
 
 cd /home/vagrant/etny/node/
 git config --global http.postBuffer 524288000
