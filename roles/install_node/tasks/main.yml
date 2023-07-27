@@ -17,20 +17,16 @@
   register: isgx_driver
   changed_when: false
   failed_when: false
+  debug:
+    var: isgx_driver.rc
   
 - name: Check if sgx_enclave driver is installed
   shell: ls /dev/ | grep sgx_enclave
   register: sgx_enclave_driver
   changed_when: false
   failed_when: false
-
-- name: Debug sgx_enclave_driver.rc
   debug:
     var: sgx_enclave_driver.rc
-    
-- name: Debug sgx_enclave_driver.rc
-  debug:
-    var: isgx_driver.rc
     
 - name: Run script if both drivers are found
   script: ubuntu/etny-node-isgx-removal-tool.sh
