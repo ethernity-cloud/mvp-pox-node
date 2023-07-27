@@ -13,13 +13,13 @@
   #when: ansible_facts.services['etny-vagrant.service'].state != 'running'
 
 - name: Check if isgx driver is installed
-  command: ls /dev/ | grep isgx
+  command: ls /dev/ | grep -F isgx
   register: isgx_driver
   changed_when: false
   failed_when: false
   
 - name: Check if sgx_enclave driver is installed
-  command: ls /dev/ | grep "sgx_enclave"
+  command: ls /dev/ | grep -F sgx_enclave
   register: sgx_enclave_driver
   changed_when: false
   failed_when: false
