@@ -6,7 +6,7 @@ trap 'echo "Installer status: \"${BASH_COMMAND}\"command filed with exit code $?
 echo "Checking host for sgx_enclave and isgx..."
 
 # Check for sgx_enclave driver
-if ls /dev/ | grep -q 'sgx_enclave'; then
+if ls /dev/ | grep 'sgx_enclave'; then
    echo 'Skiping isgx'
 else
     echo 'sgx_enclave driver is not present on the host.'
