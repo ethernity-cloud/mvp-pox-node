@@ -19,7 +19,7 @@
   failed_when: false
   
 - name: Check if sgx_enclave driver is installed
-  command: ls /dev/ | grep sgx_enclave
+  command: ls /dev/ | grep "sgx_enclave"
   register: sgx_enclave_driver
   changed_when: false
   failed_when: false
