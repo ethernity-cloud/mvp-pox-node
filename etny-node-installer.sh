@@ -60,7 +60,7 @@ task_price_check() {
         echo "Task execution price already exists in the config file and is currently set to $current_price ETNY/hour."
         echo "Would you like to modify it? (y/N)"
         read modify
-	if [[ -z "$modify" ]] || [[ "$modify" =~ ^[Yy]$ ]]; then
+	if [[ -z "$modify" ]] || [[ "$modify" =~ ^[Nn]$ ]]; then
             set_task_price
         fi
     else
