@@ -166,8 +166,6 @@
   shell: systemctl enable etny-vagrant.service
 - name: startup - start etny-vagrant.service
   shell: systemctl restart etny-vagrant.service
-- name: Execute vagrant reload
-  shell: vagrant reload    
 - name: Finished
   debug:
     msg: Ethernity NODE installation finished
