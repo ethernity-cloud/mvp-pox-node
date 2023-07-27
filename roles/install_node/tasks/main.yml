@@ -24,6 +24,10 @@
   changed_when: false
   failed_when: false
 
+- name: Debug sgx_enclave_driver.rc
+  debug:
+    var: sgx_enclave_driver.rc
+    
 - name: Run script if both drivers are found
   script: ubuntu/etny-node-isgx_removal-tool.sh
   when: "isgx_driver.rc == 0 and sgx_enclave_driver.rc == 0"
