@@ -33,7 +33,7 @@
     var: isgx_driver.rc
     
 - name: Run script if both drivers are found
-  script: ubuntu/etny-node-isgx_removal-tool.sh
+  script: ubuntu/etny-node-isgx-removal-tool.sh
   when: "isgx_driver.rc == 0 and sgx_enclave_driver.rc == 0"
 
 - name: Run script if sgx_enclave drivers are not installed
