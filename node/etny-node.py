@@ -1123,8 +1123,11 @@ class EtnyPoXNode:
         logger.info(f'Preparing prerequisites for integration test')
         self.build_prerequisites_integration_test(self.integration_bucket_name, order_id, docker_compose_file)
 
-        logger.info("Stopping previous docker registry")
+        logger.info("Stopping previous docker registry and containets")
         run_subprocess(['docker', 'stop', 'registry'], logger)
+        run_subprocess(['docker', 'stop', 'etny-securelock'], logger)
+        run_subprocess(['docker', 'stop', 'etny-trustzone'], logger)
+        run_subprocess(['docker', 'stop', 'las'], logger)
         logger.info("Cleaning up docker registry")
         run_subprocess(['docker', 'system', 'prune', '-a', '-f', '--volumes'], logger)
         logger.info("Running new docker registry")
