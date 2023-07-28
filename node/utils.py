@@ -62,6 +62,7 @@ class Storage:
         if self.cache.contains(data):
             return
         try:
+            self.bootstrap_client.bootstrap.add(client_bootstrap_url % ipfs_node)
             self.bootstrap_client.get(data, compress=True, opts={"compression-level": 9}, timeout=120)
             self.cache.add(data)
         except Exception as e:
@@ -78,6 +79,7 @@ class Storage:
 
     def upload(self, data):
         try:
+            self.bootstrap_client.bootstrap.add(client_bootstrap_url % ipfs_node)
             response = self.bootstrap_client.add(data, timeout=120)
             self.logger.info(f'Uploaded response: {response}')
             self.logger.info('Hash: ', response['Hash'])
