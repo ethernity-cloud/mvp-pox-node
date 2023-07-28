@@ -31,6 +31,10 @@ if os.path.exists(env_config_path):
 # env variables
 http_provider = os.environ.get('HTTP_PROVIDER')
 contract_address = os.environ.get('NETWORK_CONTRACT_ADDRESS')
+
+if contract_address == None:
+   contract_address = os.environ.get('CONTRACT_ADDRESS')
+
 is_main_net = True
 if contract_address == '0x549A6E06BB2084100148D50F51CF77a3436C3Ae7':
     is_main_net = True
