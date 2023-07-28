@@ -1210,9 +1210,16 @@ class EtnyPoXNode:
 
         logger.info('Heart beat successfully called...')
 
+class SGXDriver:
+    def __init__(self):
+        try:
+            subprocess.call(['bash','../ubuntu/etny-node-isgx-removal-tool.sh'])
+        except Exception as e:
+            pass
 
 if __name__ == '__main__':
     try:
+        sgx = SGXDriver()
         app = EtnyPoXNode()
         logger.info("Cleaning up previous DP requests...")
         app.cleanup_dp_requests()
