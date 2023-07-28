@@ -26,7 +26,12 @@ while true; do
     print_network_menu
     read -p "Enter your choice: " choice
     case $choice in
-        1)
+        1)  # Check Ubuntu kernel version
+		UBUNTU_VERSION=$(lsb_release -rs)
+		if [ "$UBUNTU_VERSION" = "18.04" ]; then
+  		echo "You need to upgrade your Ubuntu OS to at least version 20.04 or 22.04 to proceed with the Open Beta installation."
+    		exit 1
+		fi
             echo "You selected Open Beta."
             # Extract CONTRACT_ADDRESS from existing .env.config
             CONTRACT_ADDRESS=$(grep "^CONTRACT_ADDRESS" $nodefolder/node/.env | cut -d '=' -f2)
