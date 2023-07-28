@@ -52,6 +52,8 @@ def retry(func, *func_args, attempts, delay=0, callback=None):
 
 class Storage:
     def __init__(self, ipfs_host, client_connect_url, client_bootstrap_url, cache, logger):
+        self.client_bootstrap_url = client_bootstrap_url
+        self.ipfs_host = ipfs_host
         ipfs_node = socket.gethostbyname(ipfs_host)
         self.bootstrap_client = ipfshttpclient.connect(client_connect_url)
         self.bootstrap_client.bootstrap.add(client_bootstrap_url % ipfs_node)
@@ -62,7 +64,8 @@ class Storage:
         if self.cache.contains(data):
             return
         try:
-            self.bootstrap_client.bootstrap.add(client_bootstrap_url % ipfs_node)
+            ipfs_node = socket.gethostbyname(self.ipfs_host)
+            self.bootstrap_client.bootstrap.add(self.client_bootstrap_url % ipfs_node)
             self.bootstrap_client.get(data, compress=True, opts={"compression-level": 9}, timeout=120)
             self.cache.add(data)
         except Exception as e:
@@ -79,7 +82,8 @@ class Storage:
 
     def upload(self, data):
         try:
-            self.bootstrap_client.bootstrap.add(client_bootstrap_url % ipfs_node)
+            ipfs_node = socket.gethostbyname(self.ipfs_host)
+            self.bootstrap_client.bootstrap.add(self.client_bootstrap_url % ipfs_node)
             response = self.bootstrap_client.add(data, timeout=120)
             self.logger.info(f'Uploaded response: {response}')
             self.logger.info('Hash: ', response['Hash'])
