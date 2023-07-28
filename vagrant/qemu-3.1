@@ -43,6 +43,7 @@ Vagrant.configure("2") do |config|
       :type => 'direct'
     etnyvm1.vm.provision "file", source: "./ubuntu/etny-node-provision-docker.sh", destination: "~/etny/node/etny-node-provision-docker.sh"
     etnyvm1.vm.provision "file", source: "./ubuntu/etny-node-isgx-removal-tool.sh", destination: "~/etny/node/etny-node-isgx-removal-tool.sh"
+    etnyvm1.vm.provision "file", source: "./ubuntu/etny-node-provision-sgx.sh", destination: "~/etny/node/etny-node-provision-sgx.sh"
     etnyvm1.vm.provision "file", source: "./ubuntu/etny-node-disable-upgrades.sh", destination: "~/etny/node/etny-node-disable-upgrades.sh"
     etnyvm1.vm.provision "file", source: "./ubuntu/etny-node-provision-python.sh", destination: "~/etny/node/etny-node-provision-python.sh"
     etnyvm1.vm.provision "file", source: "./ubuntu/etny-node-provision-ipfs.sh", destination: "~/etny/node/etny-node-provision-ipfs.sh"
@@ -51,15 +52,13 @@ Vagrant.configure("2") do |config|
     etnyvm1.vm.provision "file", source: "./ubuntu/etc/systemd/system/etny-node.service", destination: "~/etny/node/etny-node.service"
     etnyvm1.vm.provision "file", source: "./ubuntu/etc/systemd/system/ipfs.service", destination: "~/etny/node/ipfs.service"
     etnyvm1.vm.provision "file", source: "./config", destination: "~/etny/node/config"
+    etnyvm1.vm.provision "file", source: "./.env.config", destination: "~/etny/node/.env.config"
+    etnyvm1.vm.provision "shell",
+      inline: "/bin/bash /home/vagrant/etny/node/etny-node-provision-sgx.sh"
     etnyvm1.vm.provision "shell",
       inline: "/bin/bash /home/vagrant/etny/node/etny-node-provision-docker.sh"
-    etnyvm1.vm.provision :reload
-    etnyvm1.vm.provision "shell",
-      inline: "/bin/bash /home/vagrant/etny/node/etny-node-isgx-removal-tool.sh"
-    etnyvm1.vm.provision :reload
     etnyvm1.vm.provision "shell",
       inline: "/bin/bash /home/vagrant/etny/node/etny-node-disable-upgrades.sh" 
-    etnyvm1.vm.provision :reload
     etnyvm1.vm.provision "shell",
       inline: "/bin/bash /home/vagrant/etny/node/etny-node-provision-python.sh"
     etnyvm1.vm.provision "shell",
@@ -78,6 +77,7 @@ Vagrant.configure("2") do |config|
       inline: "/bin/systemctl start etny-node.service"
     etnyvm1.vm.provision "shell",
       inline: "/bin/systemctl enable etny-node.service"
+    etnyvm1.vm.provision :reload
+      
   end
-
 end

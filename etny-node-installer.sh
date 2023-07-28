@@ -13,15 +13,56 @@ else
 	ansible_cmd="ansible-playbook"
 fi
 
+function print_network_menu {
+    echo "#############################################"
+    echo "Please select the network:"
+    echo "1. Open Beta"
+    echo "2. Testnet"
+    echo "3. Quit"
+    echo "#############################################"
+}
+
+while true; do
+    print_network_menu
+    read -p "Enter your choice: " choice
+    case $choice in
+        1)
+            echo "You selected Open Beta."
+            # Extract CONTRACT_ADDRESS from existing .env.config
+            CONTRACT_ADDRESS=$(grep "^CONTRACT_ADDRESS" $nodefolder/node/.env | cut -d '=' -f2)
+            # Write CONTRACT_ADDRESS to new .env.config
+            echo "NETWORK_CONTRACT_ADDRESS=${CONTRACT_ADDRESS}" > $nodefolder/.env.config
+            echo "Set NETWORK_CONTRACT_ADDRESS in $nodefolder/.env.config"
+            break
+            ;;
+        2)
+            echo "You selected Testnet."
+            # Extract TESTNET_CONTRACT_ADDRESS from existing .env.config
+            TESTNET_CONTRACT_ADDRESS=$(grep "^TESTNET_CONTRACT_ADDRESS" $nodefolder/node/.env | cut -d '=' -f2)
+            # Write TESTNET_CONTRACT_ADDRESS to new .env.config
+            echo "NETWORK_CONTRACT_ADDRESS=${TESTNET_CONTRACT_ADDRESS}" > $nodefolder/.env.config
+            echo "Set NETWORK_CONTRACT_ADDRESS to TESTNET_CONTRACT_ADDRESS in $nodefolder/.env.config"
+            break
+            ;;
+        3)
+            echo "Quitting..."
+            exit 0
+            ;;
+        *)
+            echo "Invalid choice. Please select a valid option."
+            ;;
+    esac
+done
+
 task_price_check() {
     if grep -q "TASK_EXECUTION_PRICE" "$nodefolder/$configfile"; then
         current_price=$(grep "TASK_EXECUTION_PRICE" "$nodefolder/$configfile" | cut -d'=' -f2)
         echo "Task execution price already exists in the config file and is currently set to $current_price ETNY/hour."
-        echo "Would you like to modify it? (Y/n)"
+        echo "Would you like to modify it? (y/N)"
         read modify
-	if [[ -z "$modify" ]] || [[ "$modify" =~ ^[Yy]$ ]]; then
-            set_task_price
-        fi
+	if [[ "$modify" =~ ^[Yy]$ ]]; then
+        set_task_price
+    	fi
     else
         echo "The TASK_EXECUTION_PRICE is not set in the config file."
         echo "Do you want to use the default value of 3 ETNY/hour? (Y/n)"

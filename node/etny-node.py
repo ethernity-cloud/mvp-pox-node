@@ -843,7 +843,10 @@ class EtnyPoXNode:
         return None
 
     def __can_place_order(self, dp_req_id: int, do_req_id: int) -> bool:
-        dispersion_factor = 40
+        if config.is_main_net:
+            dispersion_factor = 40
+        else:
+            dispersion_factor = 1
         if dp_req_id % dispersion_factor != do_req_id % dispersion_factor:
             return False
         return True
@@ -1207,9 +1210,16 @@ class EtnyPoXNode:
 
         logger.info('Heart beat successfully called...')
 
+class SGXDriver:
+    def __init__(self):
+        try:
+            subprocess.call(['bash','../ubuntu/etny-node-isgx-removal-tool.sh'])
+        except Exception as e:
+            pass
 
 if __name__ == '__main__':
     try:
+        sgx = SGXDriver()
         app = EtnyPoXNode()
         logger.info("Cleaning up previous DP requests...")
         app.cleanup_dp_requests()

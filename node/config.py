@@ -21,11 +21,22 @@ except ImportError as e:
 
 from utils import HardwareInfoProvider
 
-load_dotenv('.env' if os.path.exists('.env') else '.env.config')  # take environment variables from .env.
+# Load variables from .env and .env.conf if it exists
+if os.path.exists('.env'):
+    load_dotenv('.env')
 
+env_config_path = '/home/vagrant/etny/node/.env.config'
+if os.path.exists(env_config_path):
+    load_dotenv(env_config_path)    
 # env variables
 http_provider = os.environ.get('HTTP_PROVIDER')
-contract_address = os.environ.get('CONTRACT_ADDRESS')
+contract_address = os.environ.get('NETWORK_CONTRACT_ADDRESS')
+is_main_net = True
+if contract_address == '0x549A6E06BB2084100148D50F51CF77a3436C3Ae7':
+    is_main_net = True
+else:
+    is_main_net = False
+
 ipfs_host = os.environ.get('IPFS_HOST')
 client_connect_url = os.environ.get('CLIENT_CONNECT_URL')
 client_bootstrap_url = os.environ.get('CLIENT_BOOTSTRAP_URL')

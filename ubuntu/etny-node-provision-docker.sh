@@ -1,7 +1,7 @@
 #!/bin/bash
-set -e 
+set -e
 
-trap 'echo "Installer error: \"${BASH_COMMAND}\"command filed with exit code $?."' SIGINT SIGTERM ERR EXIT
+trap 'echo "Installer status: \"${BASH_COMMAND}\"command end with exit code $?."' SIGINT SIGTERM ERR EXIT
 
 export DEBIAN_FRONTEND=noninteractive
 apt-get -yq update
@@ -13,11 +13,11 @@ apt-get -yq  install docker-ce
 sudo curl -L "https://github.com/docker/compose/releases/download/1.25.5/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
 chmod +x /usr/local/bin/docker-compose
 
-ufw allow in from 127.0.0.1/8
-ufw allow out to 127.0.0.1/8
-ufw allow out from any to 4.2.2.1 port 53
-ufw allow out from any to 4.2.2.2 port 53
-ufw allow out from any to 127.0.0.53 port 53
+ufw --force enable
+
+ufw allow from 127.0.0.1/8
+ufw allow to 127.0.0.1/8
+ufw allow out to any port 53
 ufw allow in 22/tcp
 
 IP=`getent hosts ipfs.ethernity.cloud | awk '{print $1}'`
@@ -34,4 +34,4 @@ for IP in `dig production.cloudflare.docker.com a | grep ^production | awk '{pri
     ufw allow out from any to $IP port 443
 done
 
-ufw enable
+ufw reload

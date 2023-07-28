@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-trap 'echo "etny-node-start error: \"${BASH_COMMAND}\"command filed with exit code $?."' SIGINT SIGTERM ERR EXIT
+trap 'echo "Installer status: \"${BASH_COMMAND}\"command end with exit code $?."' SIGINT SIGTERM ERR EXIT
 
 . /home/vagrant/etny/node/config
 
