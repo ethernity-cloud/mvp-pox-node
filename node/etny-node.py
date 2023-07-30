@@ -31,15 +31,16 @@ class EtnyPoXNode:
     __endpoint = None
     __access_key = None
     __secret_key = None
+    __network = None
     __price = 3
 
     def __init__(self):
         self.parse_arguments(config.arguments, config.parser)
 
-        if config.network == None:
-            config.network = 'OPENBETA';
+        if self.__network == None:
+            self.__network = 'OPENBETA';
 
-        if config.network == 'TESTNET':
+        if self.__network == 'TESTNET':
             config.contract_address = config.testnet_contract_address;
             config.heart_beat_address = config.testnet_heartbeat_address;
             config.gas_price_measure = config.testnet_gas_price_measure;
@@ -57,6 +58,11 @@ class EtnyPoXNode:
         if config.gas_price_measure == None:
             config.gas_price_measure = 'mwei';
 
+        logger.info("Initialized with settings below!");
+        logger.info("Network: %s", self.__network);
+        logger.info("Contract Address: %s", config.contract_address);
+        logger.info("Heartbeat Contract Address: %s", config.heart_beat_address);
+        logger.info("Gas Price Measure: %s", config.gas_price_measure);
 
         with open(config.abi_filepath) as f:
             self.__contract_abi = f.read()
@@ -97,6 +103,7 @@ class EtnyPoXNode:
                                                        self.__secret_key)
         self.process_order_data = {}
         self.generate_process_order_data()
+
         self.__run_integration_test()
 
     def generate_process_order_data(self):
@@ -866,7 +873,7 @@ class EtnyPoXNode:
         return None
 
     def __can_place_order(self, dp_req_id: int, do_req_id: int) -> bool:
-        if config.network == 'TESTNET':
+        if self.__network == 'TESTNET':
             dispersion_factor = 1
         else:
             dispersion_factor = 40
@@ -1218,7 +1225,7 @@ class EtnyPoXNode:
     def __call_heart_beat(self):
         logger.info('Checking if heart call is necessary...')
 
-        if config.network == 'TESTNET':
+        if self.__network == 'TESTNET':
             heartbeat_frequency = 1 * 60 * 60 - 60;
         else:
             heartbeat_frequency = 12 * 60 * 60 - 60;

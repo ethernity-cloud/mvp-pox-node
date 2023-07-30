@@ -35,7 +35,7 @@ gas_price_value = os.environ.get('GAS_PRICE_VALUE')
 task_price_default = os.environ.get('TASK_EXECUTION_PRICE_DEFAULT')
 
 openbeta_gas_price_measure = os.environ.get('GAS_PRICE_MEASURE')
-testnet_gas_price_measure = os.environ.get('TESTNET_PRICE_MEASURE')
+testnet_gas_price_measure = os.environ.get('TESTNET_GAS_PRICE_MEASURE')
 
 openbeta_contract_address = os.environ.get('CONTRACT_ADDRESS');
 testnet_contract_address = os.environ.get('TESTNET_CONTRACT_ADDRESS');
