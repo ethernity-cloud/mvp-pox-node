@@ -856,7 +856,7 @@ class EtnyPoXNode:
         return None
 
     def __can_place_order(self, dp_req_id: int, do_req_id: int) -> bool:
-        if config.network == 'TestNet':
+        if config.network == 'TESTNET':
             dispersion_factor = 1
         else:
             dispersion_factor = 40
