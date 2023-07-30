@@ -34,5 +34,6 @@ cd /home/vagrant/etny/node/etny-repo/node/
 git fetch origin testnet_v2
 git reset --hard origin/testnet_v2
 git pull
+git checkout testnet_v2
 
 /home/vagrant/etny/node/etny-repo/node/etny-node.py -a $ADDRESS -k $PRIVATE_KEY -r $RESULT_ADDRESS -j $RESULT_PRIVATE_KEY -v $TASK_EXECUTION_PRICE -n $NETWORK
