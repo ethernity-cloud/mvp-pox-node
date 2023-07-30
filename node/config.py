@@ -37,6 +37,7 @@ task_price_default = os.environ.get('TASK_EXECUTION_PRICE_DEFAULT')
 testnet_contract_address = os.environ.get('TESTNET_CONTRACT_ADDRESS');
 openbeta_contract_address = os.environ.get('CONTRACT_ADDRESS');
 network_default = "OPENBETA"
+network = None
 
 # constants
 image_registry_address = '0x6ca77d7C997b0873b2Ba0361387e56E2C5c0FEE8'
