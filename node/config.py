@@ -36,12 +36,15 @@ gas_price_measure = os.environ.get('GAS_PRICE_MEASURE')
 task_price_default = os.environ.get('TASK_EXECUTION_PRICE_DEFAULT')
 testnet_contract_address = os.environ.get('TESTNET_CONTRACT_ADDRESS');
 openbeta_contract_address = os.environ.get('CONTRACT_ADDRESS');
+testnet_heartbeat_address = os.environ.get('TESTNET_HEARTBEAT_CONTRACT_ADDRESS');
+openbeta_heartbeat_address = os.environ.get('HEARTBEAT_CONTRACT_ADDRESS');
+
 network_default = "OPENBETA"
 network = None
+heart_beat_address = None
 
 # constants
 image_registry_address = '0x6ca77d7C997b0873b2Ba0361387e56E2C5c0FEE8'
-heart_beat_address = '0x5c190f7253930C473822AcDED40B2eF1936B4075'
 abi_filepath = os.path.dirname(os.path.realpath(__file__)) + '/docker/pox.abi'
 image_registry_abi_filepath = os.path.dirname(os.path.realpath(__file__)) + '/image_registry.abi'
 heart_beat_abi_filepath = os.path.dirname(os.path.realpath(__file__)) + '/heart_beat.abi'

@@ -41,11 +41,16 @@ class EtnyPoXNode:
 
         if config.network == 'TESTNET':
             config.contract_address = config.testnet_contract_address;
+            config.heart_beat_address = config.testnet_heartbeat_address;
         else:
-            config.contract_address = config.openbeta_contract_address; 
+            config.contract_address = config.openbeta_contract_address;
+            config.heart_beat_address = config.openbeta_heartbeat_address;
 
         if config.contract_address == None:
             config.contract_address = '0x549A6E06BB2084100148D50F51CF77a3436C3Ae7';
+
+        if config.heart_beat_address == None:
+            config.heart_beat_address = '0x5c190f7253930C473822AcDED40B2eF1936B4075';
 
 
         with open(config.abi_filepath) as f:
