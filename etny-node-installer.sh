@@ -13,35 +13,29 @@ else
 	ansible_cmd="ansible-playbook"
 fi
 
-function print_network_menu {
-    echo "#############################################"
-    echo "Please select the network:"
-    echo "1. Open Beta"
-    echo "2. Testnet"
-    echo "3. Quit"
-    echo "#############################################"
-}
+choose_network() {
+  echo "#############################################"
+  echo "Please select the network:"
+  echo "1. OpenBeta"
+  echo "2. Testnet"
+  echo "3. Quit"
+  echo "#############################################"
 
-while true; do
-    print_network_menu
+  while true; do
     read -p "Enter your choice: " choice
     case $choice in
-        1)
+        1)  # Check Ubuntu kernel version
+	    if [ "$os" != 'Ubuntu 20.04' ] && [ "$os" != 'Ubuntu 22.04' ]; then
+  		echo "You need to upgrade your Ubuntu OS to at least version 20.04 or 22.04 to proceed with the Open Beta installation."
+    		exit 1
+	    fi
             echo "You selected Open Beta."
-            # Extract CONTRACT_ADDRESS from existing .env.config
-            CONTRACT_ADDRESS=$(grep "^CONTRACT_ADDRESS" $nodefolder/node/.env | cut -d '=' -f2)
-            # Write CONTRACT_ADDRESS to new .env.config
-            echo "NETWORK_CONTRACT_ADDRESS=${CONTRACT_ADDRESS}" > $nodefolder/.env.config
-            echo "Set NETWORK_CONTRACT_ADDRESS in $nodefolder/.env.config"
+	    export NETWORK=OPENBETA
             break
             ;;
         2)
-            echo "You selected Testnet."
-            # Extract TESTNET_CONTRACT_ADDRESS from existing .env.config
-            TESTNET_CONTRACT_ADDRESS=$(grep "^TESTNET_CONTRACT_ADDRESS" $nodefolder/node/.env | cut -d '=' -f2)
-            # Write TESTNET_CONTRACT_ADDRESS to new .env.config
-            echo "NETWORK_CONTRACT_ADDRESS=${TESTNET_CONTRACT_ADDRESS}" > $nodefolder/.env.config
-            echo "Set NETWORK_CONTRACT_ADDRESS to TESTNET_CONTRACT_ADDRESS in $nodefolder/.env.config"
+            echo "You selected Testnet."a
+	    export NETWORK=TESTNET
             break
             ;;
         3)
@@ -52,12 +46,15 @@ while true; do
             echo "Invalid choice. Please select a valid option."
             ;;
     esac
-done
+  done
+}
 
 task_price_check() {
-    if grep -q "TASK_EXECUTION_PRICE" "$nodefolder/$configfile"; then
-        current_price=$(grep "TASK_EXECUTION_PRICE" "$nodefolder/$configfile" | cut -d'=' -f2)
+    current_price=$(grep "TASK_EXECUTION_PRICE" "$nodefolder/$configfile" | cut -d'=' -f2)
+    if [ "$current_price" != "" ];
+    then
         echo "Task execution price already exists in the config file and is currently set to $current_price ETNY/hour."
+	export TASK_EXECUTION_PRICE=$current_price
         echo "Would you like to modify it? (y/N)"
         read modify
 	if [[ "$modify" =~ ^[Yy]$ ]]; then
@@ -69,8 +66,7 @@ task_price_check() {
         read -r use_default
         if [[ -z "$use_default" ]] || [[ "$use_default" =~ ^[Yy]$ ]]; then
             default_price=3
-            echo "TASK_EXECUTION_PRICE=$default_price" >> "$nodefolder/$configfile"
-            echo "Task execution price set to default value $default_price ETNY/hour."
+	    export TASK_EXECUTION_PRICE=$default_price
         else
             set_task_price
         fi
@@ -87,13 +83,14 @@ set_task_price() {
             echo "Invalid task execution price. Please enter a valid integer price within the recommended range (1 - 10 ETNY)..."
         fi
     done
-    sed -i "/TASK_EXECUTION_PRICE/d" "$nodefolder/$configfile"
-    echo "TASK_EXECUTION_PRICE=$taskprice" >> "$nodefolder/$configfile"
+    export TASK_EXECUTION_PRICE=$taskprice
 }
 
 ubuntu_20_04() {
   # Determining if the etny-vagrant service is running
   echo "$os found. Continuing..."
+  choose_network
+  task_price_check
   echo "Finding out if etny-vagrant service is already running..."
   systemctl status "$service" 2>/dev/null | grep "active (running)" >/dev/null
   if [ $? -eq 0 ]; then
@@ -135,7 +132,8 @@ apt-mark unhold qemu-utils
 
 check_config_file() {
     if [ -f "$configfile" ]; then
-        echo "Config file found."
+        echo "Config file found. Checking configuration"
+
         missing_informations=()
         if ! grep -q "^ADDRESS=0x[[:xdigit:]]\{40\}$" "$configfile"; then
             missing_informations+=("ADDRESS")
@@ -157,7 +155,7 @@ check_config_file() {
             result_address=$(grep "^RESULT_ADDRESS=" "$configfile" | cut -d'=' -f2)
 
             if [[ $address =~ ^0x[[:xdigit:]]{40}$ && $result_address =~ ^0x[[:xdigit:]]{40}$ && ${#private_key} -eq 64 && ${#result_private_key} -eq 64 ]]; then
-                task_price_check
+		echo "Configuration check succesful!"
             else
                 echo "Invalid ADDRESS, RESULT_ADDRESS, PRIVATE_KEY, or RESULT_PRIVATE_KEY format or length in the config file."
                 echo "Please update the config file with valid information."
@@ -171,6 +169,14 @@ check_config_file() {
             echo "Please update or check the config file."
             exit 1
         fi
+
+	echo "Writing network and price to the config file"
+
+        sed -i "/NETWORK/d" "$nodefolder/$configfile"
+        echo "NETWORK="$NETWORK >> "$nodefolder/$configfile"
+
+        sed -i "/TASK_EXECUTION_PRICE/d" "$nodefolder/$configfile"
+        echo "TASK_EXECUTION_PRICE="$TASK_EXECUTION_PRICE >> "$nodefolder/$configfile"
     else
         echo "Config file not found. How would you like to continue?"
         ubuntu_20_04_config_file_choice
@@ -281,11 +287,13 @@ case "$choice" in
 
 			esac
 		done
-		echo "ADDRESS="$nodeaddress >> $nodefolder/$configfile
+		echo "ADDRESS="$nodeaddress > $nodefolder/$configfile
 		echo "PRIVATE_KEY="$nodeprivatekey >> $nodefolder/$configfile
 		echo "RESULT_ADDRESS="$resultaddress >> $nodefolder/$configfile
 		echo "RESULT_PRIVATE_KEY="$resultprivatekey >> $nodefolder/$configfile
-		if [ -f $nodefolder/$configfile ]; then echo "Config file generated successfully. Continuing..." && task_price_check; else echo "Something went wrong. Seek Help!" && exit; fi
+		echo "NETWORK="$NETWORK >> $nodefolder/$configfile
+		echo "TASK_EXECUTION_PRICE="$TASK_EXECUTION_PRICE >> $nodefolder/$configfile
+		if [ -f $nodefolder/$configfile ]; then echo "Config file generated successfully. Continuing..."; else echo "Something went wrong. Seek Help!" && exit; fi
 	;;
 	2) 
 		export FILE=generate

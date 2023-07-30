@@ -25,34 +25,32 @@ from utils import HardwareInfoProvider
 if os.path.exists('.env'):
     load_dotenv('.env')
 
-env_config_path = '/home/vagrant/etny/node/.env.config'
-if os.path.exists(env_config_path):
-    load_dotenv(env_config_path)    
-# env variables
 http_provider = os.environ.get('HTTP_PROVIDER')
-contract_address = os.environ.get('NETWORK_CONTRACT_ADDRESS')
-
-if contract_address == None:
-   contract_address = os.environ.get('CONTRACT_ADDRESS')
-
-is_main_net = True
-if contract_address == '0x549A6E06BB2084100148D50F51CF77a3436C3Ae7':
-    is_main_net = True
-else:
-    is_main_net = False
-
 ipfs_host = os.environ.get('IPFS_HOST')
 client_connect_url = os.environ.get('CLIENT_CONNECT_URL')
 client_bootstrap_url = os.environ.get('CLIENT_BOOTSTRAP_URL')
 chain_id = int(os.environ.get('CHAIN_ID'))
 gas_limit = int(os.environ.get('GAS_LIMIT'))
 gas_price_value = os.environ.get('GAS_PRICE_VALUE')
-gas_price_measure = os.environ.get('GAS_PRICE_MEASURE')
 task_price_default = os.environ.get('TASK_EXECUTION_PRICE_DEFAULT')
+
+openbeta_gas_price_measure = os.environ.get('GAS_PRICE_MEASURE')
+testnet_gas_price_measure = os.environ.get('TESTNET_GAS_PRICE_MEASURE')
+
+openbeta_contract_address = os.environ.get('CONTRACT_ADDRESS');
+testnet_contract_address = os.environ.get('TESTNET_CONTRACT_ADDRESS');
+
+openbeta_heartbeat_address = os.environ.get('HEARTBEAT_CONTRACT_ADDRESS');
+testnet_heartbeat_address = os.environ.get('TESTNET_HEARTBEAT_CONTRACT_ADDRESS');
+
+network_default = "OPENBETA"
+network = None
+heart_beat_address = None
+gas_price_measure = None
+
 
 # constants
 image_registry_address = '0x6ca77d7C997b0873b2Ba0361387e56E2C5c0FEE8'
-heart_beat_address = '0x5c190f7253930C473822AcDED40B2eF1936B4075'
 abi_filepath = os.path.dirname(os.path.realpath(__file__)) + '/docker/pox.abi'
 image_registry_abi_filepath = os.path.dirname(os.path.realpath(__file__)) + '/image_registry.abi'
 heart_beat_abi_filepath = os.path.dirname(os.path.realpath(__file__)) + '/heart_beat.abi'
@@ -116,8 +114,12 @@ parser.add_argument("-p", "--secret_key", help="Secret Key (aka password) of you
 parser.add_argument("-v", "--price", help="Task price(per hour).",
                     default=str(task_price_default),
                     required=False)
+parser.add_argument("-n", "--network", help="Network the node runs on.",
+                    default=str(network_default),
+                    required=False)
 
 arguments = {
-    str: ['address', 'privatekey', 'resultaddress', 'resultprivatekey', 'endpoint', 'access_key', 'secret_key'],
+    str: ['address', 'privatekey', 'resultaddress', 'resultprivatekey', 'endpoint', 'access_key', 'secret_key', 'network'],
     int: ['cpu', 'memory', 'storage', 'storage', 'bandwidth', 'duration', 'price']
 }
+

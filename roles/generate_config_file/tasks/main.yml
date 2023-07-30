@@ -57,5 +57,12 @@
 - name: Write TASK_EXECUTION_PRICE to config file
   lineinfile:
     path: "{{ config_file_name }}"
-    line: "TASK_EXECUTION_PRICE=3"
+    line: "{{ 'TASK_EXECUTION_PRICE=' + lookup('ansible.builtin.env', 'TASK_EXECUTION_PRICE') }}"
     insertafter: EOF
+
+- name: Write NETWORK to config file
+  lineinfile:
+    path: "{{ config_file_name }}"
+    line: "{{ 'NETWORK=' + lookup('ansible.builtin.env', 'NETWORK') }}"
+    insertafter: EOF
+

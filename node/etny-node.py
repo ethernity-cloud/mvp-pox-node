@@ -31,10 +31,39 @@ class EtnyPoXNode:
     __endpoint = None
     __access_key = None
     __secret_key = None
+    __network = None
     __price = 3
 
     def __init__(self):
         self.parse_arguments(config.arguments, config.parser)
+
+        if self.__network == None:
+            self.__network = 'OPENBETA';
+
+        if self.__network == 'TESTNET':
+            config.contract_address = config.testnet_contract_address;
+            config.heart_beat_address = config.testnet_heartbeat_address;
+            config.gas_price_measure = config.testnet_gas_price_measure;
+        else:
+            config.contract_address = config.openbeta_contract_address;
+            config.heart_beat_address = config.openbeta_heartbeat_address;
+            config.gas_price_measure = config.openbeta_gas_price_measure;
+
+        if config.contract_address == None:
+            config.contract_address = '0x549A6E06BB2084100148D50F51CF77a3436C3Ae7';
+
+        if config.heart_beat_address == None:
+            config.heart_beat_address = '0x5c190f7253930C473822AcDED40B2eF1936B4075';
+
+        if config.gas_price_measure == None:
+            config.gas_price_measure = 'mwei';
+
+        logger.info("Initialized with settings below!");
+        logger.info("Network: %s", self.__network);
+        logger.info("Contract Address: %s", config.contract_address);
+        logger.info("Heartbeat Contract Address: %s", config.heart_beat_address);
+        logger.info("Gas Price Measure: %s", config.gas_price_measure);
+
         with open(config.abi_filepath) as f:
             self.__contract_abi = f.read()
         self.__w3 = Web3(Web3.HTTPProvider(config.http_provider, request_kwargs={'timeout': 120}))
@@ -74,6 +103,7 @@ class EtnyPoXNode:
                                                        self.__secret_key)
         self.process_order_data = {}
         self.generate_process_order_data()
+
         self.__run_integration_test()
 
     def generate_process_order_data(self):
@@ -417,7 +447,7 @@ class EtnyPoXNode:
             if input_hash is not None and len(input_hash) > 0:
                 list_of_ipfs_hashes.append(input_hash)
 
-            if self.process_order_data['process_order_retry_counter'] < 2:
+            if self.process_order_data['process_order_retry_counter'] <= 10:
                 logger.info("Downloading data from IPFS")
                 self.storage.download_many(list_of_ipfs_hashes, attempts=5, delay=3)
                 if not self.storage.download_many(list_of_ipfs_hashes, attempts=5, delay=3):
@@ -520,7 +550,7 @@ class EtnyPoXNode:
             if input_hash is not None and len(input_hash) > 0:
                 list_of_ipfs_hashes.append(input_hash)
 
-            if self.process_order_data['process_order_retry_counter'] < 2:
+            if self.process_order_data['process_order_retry_counter'] <= 10:
                 logger.info("Downloading data from IPFS")
                 # self.storage.download_many(list_of_ipfs_hashes, attempts=5, delay=3)
                 if not self.storage.download_many(list_of_ipfs_hashes, attempts=5, delay=3):
@@ -843,10 +873,10 @@ class EtnyPoXNode:
         return None
 
     def __can_place_order(self, dp_req_id: int, do_req_id: int) -> bool:
-        if config.is_main_net:
-            dispersion_factor = 40
-        else:
+        if self.__network == 'TESTNET':
             dispersion_factor = 1
+        else:
+            dispersion_factor = 40
         if dp_req_id % dispersion_factor != do_req_id % dispersion_factor:
             return False
         return True
@@ -1123,8 +1153,11 @@ class EtnyPoXNode:
         logger.info(f'Preparing prerequisites for integration test')
         self.build_prerequisites_integration_test(self.integration_bucket_name, order_id, docker_compose_file)
 
-        logger.info("Stopping previous docker registry")
+        logger.info("Stopping previous docker registry and containets")
         run_subprocess(['docker', 'stop', 'registry'], logger)
+        run_subprocess(['docker', 'stop', 'etny-securelock'], logger)
+        run_subprocess(['docker', 'stop', 'etny-trustzone'], logger)
+        run_subprocess(['docker', 'stop', 'las'], logger)
         logger.info("Cleaning up docker registry")
         run_subprocess(['docker', 'system', 'prune', '-a', '-f', '--volumes'], logger)
         logger.info("Running new docker registry")
@@ -1191,7 +1224,13 @@ class EtnyPoXNode:
 
     def __call_heart_beat(self):
         logger.info('Checking if heart call is necessary...')
-        if self.__can_run_auto_update(config.heart_beat_log_file_path, 12 * 60 * 60):
+
+        if self.__network == 'TESTNET':
+            heartbeat_frequency = 1 * 60 * 60 - 60;
+        else:
+            heartbeat_frequency = 12 * 60 * 60 - 60;
+
+        if self.__can_run_auto_update(config.heart_beat_log_file_path, heartbeat_frequency):
             logger.info('Heart beat can be called...')
             params = [
                 "v3"
@@ -1208,7 +1247,7 @@ class EtnyPoXNode:
                 logger.info(f'error = {e}, type = {type(e)}')
                 raise
 
-        logger.info('Heart beat successfully called...')
+        logger.info('Heart beat called already within last %s seconds...', heartbeat_frequency)
 
 class SGXDriver:
     def __init__(self):

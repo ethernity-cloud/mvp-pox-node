@@ -35,4 +35,4 @@ git fetch origin
 git reset --hard origin/master
 git pull
 
-/home/vagrant/etny/node/etny-repo/node/etny-node.py -a $ADDRESS -k $PRIVATE_KEY -r $RESULT_ADDRESS -j $RESULT_PRIVATE_KEY -v $TASK_EXECUTION_PRICE
+/home/vagrant/etny/node/etny-repo/node/etny-node.py -a $ADDRESS -k $PRIVATE_KEY -r $RESULT_ADDRESS -j $RESULT_PRIVATE_KEY -v $TASK_EXECUTION_PRICE -n $NETWORK
