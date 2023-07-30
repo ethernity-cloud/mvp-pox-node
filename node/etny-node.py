@@ -35,6 +35,19 @@ class EtnyPoXNode:
 
     def __init__(self):
         self.parse_arguments(config.arguments, config.parser)
+
+        if config.network == None:
+            config.network = 'OPENBETA';
+
+        if config.network == 'TESTNET':
+            config.contract_address = config.testnet_contract_address;
+        else:
+            config.contract_address = config.openbeta_contract_address; 
+
+        if config.contract_address == None:
+            config.contract_address = '0x549A6E06BB2084100148D50F51CF77a3436C3Ae7';
+
+
         with open(config.abi_filepath) as f:
             self.__contract_abi = f.read()
         self.__w3 = Web3(Web3.HTTPProvider(config.http_provider, request_kwargs={'timeout': 120}))
@@ -843,10 +856,10 @@ class EtnyPoXNode:
         return None
 
     def __can_place_order(self, dp_req_id: int, do_req_id: int) -> bool:
-        if config.is_main_net:
-            dispersion_factor = 40
-        else:
+        if config.network == 'TestNet':
             dispersion_factor = 1
+        else:
+            dispersion_factor = 40
         if dp_req_id % dispersion_factor != do_req_id % dispersion_factor:
             return False
         return True
