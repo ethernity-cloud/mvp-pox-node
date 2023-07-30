@@ -1220,7 +1220,7 @@ class EtnyPoXNode:
 
         if config.network == 'TESTNET':
             heartbeat_frequency = 1 * 60 * 60 - 60;
-        else
+        else:
             heartbeat_frequency = 12 * 60 * 60 - 60;
 
         if self.__can_run_auto_update(config.heart_beat_log_file_path, heartbeat_frequency):
