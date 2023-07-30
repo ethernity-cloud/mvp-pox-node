@@ -40,7 +40,8 @@
         debug:
           msg: "Config file does not exist. Please create <config> file in this directory with your wallet values or generate a random one." 
       - meta: end_play
-    when: 
+    when:
+      - lookup('ansible.builtin.env', 'FILE') != 'generate'
       - config_file.stat.exists == false
   roles:
     - role: generate_config_file
