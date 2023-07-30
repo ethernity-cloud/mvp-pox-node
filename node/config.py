@@ -105,7 +105,7 @@ parser.add_argument("-v", "--price", help="Task price(per hour).",
                     default=str(task_price_default),
                     required=False)
 parser.add_argument("-n", "--network", help="Network the node runs on.",
-                    default=str(network_default)",
+                    default=str(network_default),
                     required=False)
 
 arguments = {
