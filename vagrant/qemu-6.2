@@ -52,6 +52,7 @@ Vagrant.configure("2") do |config|
     etnyvm1.vm.provision "file", source: "./ubuntu/etc/systemd/system/etny-node.service", destination: "~/etny/node/etny-node.service"
     etnyvm1.vm.provision "file", source: "./ubuntu/etc/systemd/system/ipfs.service", destination: "~/etny/node/ipfs.service"
     etnyvm1.vm.provision "file", source: "./config", destination: "~/etny/node/config"
+    etnyvm1.vm.provision "file", source: "./.env.config", destination: "~/etny/node/.env.config"
     etnyvm1.vm.provision "shell",
       inline: "/bin/bash /home/vagrant/etny/node/etny-node-provision-sgx.sh"
     etnyvm1.vm.provision "shell",
