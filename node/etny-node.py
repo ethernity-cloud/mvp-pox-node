@@ -42,15 +42,20 @@ class EtnyPoXNode:
         if config.network == 'TESTNET':
             config.contract_address = config.testnet_contract_address;
             config.heart_beat_address = config.testnet_heartbeat_address;
+            config.gas_price_measure = config.testnet_gas_price_measure;
         else:
             config.contract_address = config.openbeta_contract_address;
             config.heart_beat_address = config.openbeta_heartbeat_address;
+            config.gas_price_measure = config.openbeta_gas_price_measure;
 
         if config.contract_address == None:
             config.contract_address = '0x549A6E06BB2084100148D50F51CF77a3436C3Ae7';
 
         if config.heart_beat_address == None:
             config.heart_beat_address = '0x5c190f7253930C473822AcDED40B2eF1936B4075';
+
+        if config.gas_price_measure == None:
+            config.gas_price_measure = 'mwei';
 
 
         with open(config.abi_filepath) as f:
@@ -1212,7 +1217,13 @@ class EtnyPoXNode:
 
     def __call_heart_beat(self):
         logger.info('Checking if heart call is necessary...')
-        if self.__can_run_auto_update(config.heart_beat_log_file_path, 12 * 60 * 60):
+
+        if config.network == 'TESTNET':
+            heartbeat_frequency = 1 * 60 * 60 - 60;
+        else
+            heartbeat_frequency = 12 * 60 * 60 - 60;
+
+        if self.__can_run_auto_update(config.heart_beat_log_file_path, heartbeat_frequency):
             logger.info('Heart beat can be called...')
             params = [
                 "v3"
@@ -1229,7 +1240,7 @@ class EtnyPoXNode:
                 logger.info(f'error = {e}, type = {type(e)}')
                 raise
 
-        logger.info('Heart beat successfully called...')
+        logger.info('Heart beat called already within last %s seconds...', heartbeat_frequency)
 
 class SGXDriver:
     def __init__(self):

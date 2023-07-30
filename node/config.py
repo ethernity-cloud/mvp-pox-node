@@ -32,16 +32,22 @@ client_bootstrap_url = os.environ.get('CLIENT_BOOTSTRAP_URL')
 chain_id = int(os.environ.get('CHAIN_ID'))
 gas_limit = int(os.environ.get('GAS_LIMIT'))
 gas_price_value = os.environ.get('GAS_PRICE_VALUE')
-gas_price_measure = os.environ.get('GAS_PRICE_MEASURE')
 task_price_default = os.environ.get('TASK_EXECUTION_PRICE_DEFAULT')
-testnet_contract_address = os.environ.get('TESTNET_CONTRACT_ADDRESS');
+
+openbeta_gas_price_measure = os.environ.get('GAS_PRICE_MEASURE')
+testnet_gas_price_measure = os.environ.get('TESTNET_PRICE_MEASURE')
+
 openbeta_contract_address = os.environ.get('CONTRACT_ADDRESS');
-testnet_heartbeat_address = os.environ.get('TESTNET_HEARTBEAT_CONTRACT_ADDRESS');
+testnet_contract_address = os.environ.get('TESTNET_CONTRACT_ADDRESS');
+
 openbeta_heartbeat_address = os.environ.get('HEARTBEAT_CONTRACT_ADDRESS');
+testnet_heartbeat_address = os.environ.get('TESTNET_HEARTBEAT_CONTRACT_ADDRESS');
 
 network_default = "OPENBETA"
 network = None
 heart_beat_address = None
+gas_price_measure = None
+
 
 # constants
 image_registry_address = '0x6ca77d7C997b0873b2Ba0361387e56E2C5c0FEE8'
