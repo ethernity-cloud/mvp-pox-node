@@ -31,9 +31,8 @@ done
 ./ipfs bootstrap add /ip4/$IP/tcp/4001/ipfs/QmRBc1eBt4hpJQUqHqn6eA8ixQPD3LFcUDsn6coKBQtia5
 
 cd /home/vagrant/etny/node/etny-repo/node/
-git fetch origin testnet_v2
-git reset --hard origin/testnet_v2
+git fetch origin
+git reset --hard origin/master
 git pull
-git checkout testnet_v2
 
 /home/vagrant/etny/node/etny-repo/node/etny-node.py -a $ADDRESS -k $PRIVATE_KEY -r $RESULT_ADDRESS -j $RESULT_PRIVATE_KEY -v $TASK_EXECUTION_PRICE -n $NETWORK
