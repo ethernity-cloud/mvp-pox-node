@@ -34,7 +34,7 @@ choose_network() {
             break
             ;;
         2)
-            echo "You selected Testnet."a
+            echo "You selected Testnet."
 	    export NETWORK=TESTNET
             break
             ;;
