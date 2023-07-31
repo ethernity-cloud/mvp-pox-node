@@ -608,7 +608,7 @@ class EtnyPoXNode:
             logger.info('Waiting for execution of v3 enclave')
             status_enclave = self.wait_for_enclave_v2(bucket_name, 'result.txt', 3600)
             if status_enclave == True:
-    	        logger.info(f'Uploading result to {enclave_image_name}-{v3} bucket')
+                logger.info(f'Uploading result to {enclave_image_name}-{v3} bucket')
                 status, result_data = self.swift_stream_service.get_file_content(bucket_name, "result.txt")
                 if not status:
                     logger.info(result_data)
