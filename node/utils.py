@@ -57,6 +57,9 @@ class Storage:
         ipfs_node = socket.gethostbyname(ipfs_host)
         self.bootstrap_client = ipfshttpclient.connect(client_connect_url)
         self.bootstrap_client.bootstrap.add(client_bootstrap_url % ipfs_node)
+        self.bootstrap_client.client.config.set("Datastore.StorageMax", "2GB")
+        self.bootstrap_client.client.config.set("Swarm.ConnMgr.HighWater", 50)
+        self.bootstrap_client.client.config.set("Swarm.ConnMgr.LowWater", 25)
         self.logger = logger
         self.cache = cache
 
