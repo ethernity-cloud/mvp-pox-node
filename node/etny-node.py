@@ -1186,7 +1186,7 @@ class EtnyPoXNode:
         ], logger)
 
         logger.info('Waiting for execution of integration test enclave')
-        self.wait_for_enclave_v2(self.integration_bucket_name, integration_test_file, 120)
+        self.wait_for_enclave_v2(self.integration_bucket_name, integration_test_file, 300)
         status, result_data = self.swift_stream_service.get_file_content(self.integration_bucket_name,
                                                                          integration_test_file)
         if not status:
