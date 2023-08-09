@@ -1259,7 +1259,7 @@ class EtnyPoXNode:
 class SGXDriver:
     def __init__(self):
         try:
-            subprocess.call(['bash','../ubuntu/etny-node-isgx-removal-tool.sh'])
+            subprocess.call(['bash','../ubuntu/etny-node-provision-sgx.sh'])
         except Exception as e:
             pass
 

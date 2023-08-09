@@ -81,7 +81,7 @@ echo "Checking host for sgx_enclave and isgx..."
 echo "Host:"
 # Commands executed on the host
 # Check for sgx_enclave driver and isgx
-     if ls /dev/ | grep -q 'sgx_enclave' && ls /dev/ | grep -q 'isgx'; then
+if ls /dev/ | grep -q 'sgx_enclave' && ls /dev/ | grep -q 'isgx'; then
         echo '/dev/sgx_enclave and /dev/isgx drivers are present on the Vagrant VM.'
         echo 'Uninstalling isgx driver...'
 
