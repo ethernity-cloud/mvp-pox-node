@@ -6,8 +6,7 @@ trap 'echo "Installer status: \"${BASH_COMMAND}\"command end with exit code $?."
 # Add DNS settings to /etc/systemd/resolved.conf
 echo -e "[Resolve]\nDNS=8.8.8.8 8.8.4.4 1.1.1.1" | sudo tee -a /etc/systemd/resolved.conf
 
-# Reload systemd configuration and restart the resolver
-sudo systemctl daemon-reload
+# Restart the resolver
 sudo systemctl restart systemd-resolved
 
 # Array of domains to check
