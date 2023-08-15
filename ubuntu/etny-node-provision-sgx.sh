@@ -9,13 +9,12 @@ echo "Checking host for sgx_enclave and isgx..."
 if ls /dev/ | grep -q sgx_enclave; then
   if [ "`lsmod | grep isgx`" != "" ]
   then
-    	echo 'Uninstalling isgx driver...'
+    echo 'Uninstalling isgx driver...'
 
     # Check if the AESM service is running
     if sudo service aesmd status 2>/dev/null | grep 'Active: active (running)'; then
-        echo -e 'Uninstall failed on the host!'
-        echo -e '\nPlease stop the AESM service and uninstall the PSW package first on the host'
-        exit 1
+        echo -e 'Warning!'
+        echo -e '\nPlease stop the AESM service and uninstall the PSW package first on the host, otherwise the integration test might fail!'
     fi
 
     # Removing the kernel module if it is inserted
@@ -41,7 +40,7 @@ if ls /dev/ | grep -q sgx_enclave; then
     sudo rm -f /etc/modules-load.d/isgx.conf
 
     # Removing the current folder
-    sudo rm -fr /opt/intel/sgxdrivera
+    sudo rm -fr /opt/intel/sgxdriver
   fi
 
   echo 'Uninstall script executed successfully on the host.'
