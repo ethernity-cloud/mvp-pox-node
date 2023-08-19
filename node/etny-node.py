@@ -1134,7 +1134,7 @@ class EtnyPoXNode:
     def __run_integration_test(self):
         logger.info('Running integration test.')
         [enclave_image_hash, _,
-         docker_compose_hash] = self.__image_registry.caller().getLatestTrustedZoneImageCertPublicKey('etny-pynithy-testnet',
+         docker_compose_hash] = self.__image_registry.caller().getLatestTrustedZoneImageCertPublicKey('etny-pynithy',
                                                                                                       'v3')
         self.integration_bucket_name = 'etny-bucket-integration'
         order_id = 'integration_test'
