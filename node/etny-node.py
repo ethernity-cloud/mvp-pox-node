@@ -606,27 +606,32 @@ class EtnyPoXNode:
             ], logger)
 
             logger.info('Waiting for execution of v3 enclave')
-            self.wait_for_enclave_v2(bucket_name, 'result.txt', 120)
-            logger.info(f'Uploading result to {enclave_image_name}-{v3} bucket')
-            status, result_data = self.swift_stream_service.get_file_content(bucket_name, "result.txt")
-            if not status:
-                logger.info(result_data)
+            status_enclave = self.wait_for_enclave_v2(bucket_name, 'result.txt', 3600)
+            if status_enclave == True:
+                logger.info(f'Uploading result to {enclave_image_name}-{v3} bucket')
+                status, result_data = self.swift_stream_service.get_file_content(bucket_name, "result.txt")
+                if not status:
+                    logger.info(result_data)
 
-            with open(f'{self.order_folder}/result.txt', 'w') as f:
-                f.write(result_data)
-            logger.info(f'[v3] Result file successfully downloaded to {self.order_folder}/result.txt')
-            result_hash = self.upload_result_to_ipfs(f'{self.order_folder}/result.txt')
-            logger.info(f'[v3] Result file successfully uploaded to IPFS with hash: {result_hash}')
-            logger.info(f'Result file successfully uploaded to {enclave_image_name}-{v3} bucket')
-            logger.info('Reading transaction from file')
-            status, transaction_data = self.swift_stream_service.get_file_content(bucket_name, "transaction.txt")
-            if not status:
-                logger.info(transaction_data)
-            logger.info('Building result for v3')
-            result = self.build_result_format_v3(result_hash, transaction_data)
-            logger.info(f'Result is: {result}')
-            logger.info('Adding result to order')
-            self.add_result_to_order(order_id, result)
+                with open(f'{self.order_folder}/result.txt', 'w') as f:
+                    f.write(result_data)
+                logger.info(f'[v3] Result file successfully downloaded to {self.order_folder}/result.txt')
+                result_hash = self.upload_result_to_ipfs(f'{self.order_folder}/result.txt')
+                logger.info(f'[v3] Result file successfully uploaded to IPFS with hash: {result_hash}')
+                logger.info(f'Result file successfully uploaded to {enclave_image_name}-{v3} bucket')
+                logger.info('Reading transaction from file')
+                status, transaction_data = self.swift_stream_service.get_file_content(bucket_name, "transaction.txt")
+                if not status:
+                   logger.info(transaction_data)
+                logger.info('Building result for v3')
+                result = self.build_result_format_v3(result_hash, transaction_data)
+                logger.info(f'Result is: {result}')
+                logger.info('Adding result to order')
+                self.add_result_to_order(order_id, result)
+            else:
+                logger.info('Adding result to order')
+                result = self.build_result_format_v3("[WARN]","Task execution timed out");
+                self.add_result_to_order(order_id, result);
 
             logger.info('Cleaning up SecureLock and TrustedZone containers.')
             run_subprocess([
@@ -659,9 +664,11 @@ class EtnyPoXNode:
                 break
             (status, result) = self.swift_stream_service.is_object_in_bucket(bucket_name, object_name)
             if status:
-                break
-
-        logger.info('enclave finished the execution')
+                logger.info('Enclave finished the execution')
+                return True
+	
+        logger.info('Enclave execution timed out')
+        return False
 
     def build_result_format_v1(self, result_hash, transaction_hex):
         return f'v1:{transaction_hex}:{result_hash}'
@@ -1179,7 +1186,7 @@ class EtnyPoXNode:
         ], logger)
 
         logger.info('Waiting for execution of integration test enclave')
-        self.wait_for_enclave_v2(self.integration_bucket_name, integration_test_file, 120)
+        self.wait_for_enclave_v2(self.integration_bucket_name, integration_test_file, 300)
         status, result_data = self.swift_stream_service.get_file_content(self.integration_bucket_name,
                                                                          integration_test_file)
         if not status:
@@ -1252,7 +1259,7 @@ class EtnyPoXNode:
 class SGXDriver:
     def __init__(self):
         try:
-            subprocess.call(['bash','../ubuntu/etny-node-isgx-removal-tool.sh'])
+            subprocess.call(['bash','../ubuntu/etny-node-provision-sgx.sh'])
         except Exception as e:
             pass
 

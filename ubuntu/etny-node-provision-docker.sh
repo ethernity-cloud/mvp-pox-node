@@ -3,6 +3,23 @@ set -e
 
 trap 'echo "Installer status: \"${BASH_COMMAND}\"command end with exit code $?."' SIGINT SIGTERM ERR EXIT
 
+# Add DNS settings to /etc/systemd/resolved.conf
+echo -e "[Resolve]\nDNS=8.8.8.8 8.8.4.4 1.1.1.1" | sudo tee -a /etc/systemd/resolved.conf
+
+# Restart the resolver
+sudo systemctl restart systemd-resolved
+
+# Array of domains to check
+domains=("ipfs.ethernity.cloud" "core.bloxberg.org" "bloxberg.ethernity.cloud")
+
+# Loop through domains and check their resolution
+for domain in "${domains[@]}"; do
+    if ! dig +short "$domain" &> /dev/null; then
+        echo "Error: $domain does not resolve, check your DNS settings."
+        exit 1
+    fi
+done
+
 export DEBIAN_FRONTEND=noninteractive
 apt-get -yq update
 apt-get -yq dist-upgrade
