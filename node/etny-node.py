@@ -62,6 +62,9 @@ class EtnyPoXNode:
         if self.__ipfshost == None:
             self.__ipfshost = config.ipfs_default;
 
+        if self.__ipfslocal == None:
+            self.__ipfslocal = config.client_connect_url_default;
+
         logger.info("Initialized with settings below!");
         logger.info("Network: %s", self.__network);
         logger.info("Contract Address: %s", config.contract_address);
@@ -100,7 +103,7 @@ class EtnyPoXNode:
         self.dpreq_cache = ListCache(config.dpreq_cache_limit, config.dpreq_filepath)
         self.doreq_cache = ListCache(config.doreq_cache_limit, config.doreq_filepath)
         self.ipfs_cache = ListCache(config.ipfs_cache_limit, config.ipfs_cache_filepath)
-        self.storage = Storage(self.__ipfshost, config.client_connect_url, config.client_bootstrap_url,
+        self.storage = Storage(self.__ipfshost, self.__ipfslocal, config.client_bootstrap_url,
                                self.ipfs_cache, config.logger)
         self.merged_orders_cache = MergedOrdersCache(config.merged_orders_cache_limit, config.merged_orders_cache)
         self.swift_stream_service = SwiftStreamService(self.__endpoint,

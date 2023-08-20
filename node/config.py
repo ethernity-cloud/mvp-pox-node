@@ -27,7 +27,7 @@ if os.path.exists('.env'):
 
 http_provider = os.environ.get('HTTP_PROVIDER')
 ipfs_default = os.environ.get('IPFS_HOST')
-client_connect_url = os.environ.get('CLIENT_CONNECT_URL')
+client_connect_url_default = os.environ.get('CLIENT_CONNECT_URL')
 client_bootstrap_url = os.environ.get('CLIENT_BOOTSTRAP_URL')
 chain_id = int(os.environ.get('CHAIN_ID'))
 gas_limit = int(os.environ.get('GAS_LIMIT'))
@@ -119,11 +119,13 @@ parser.add_argument("-n", "--network", help="Network the node runs on.",
                     required=False)
 parser.add_argument("-i", "--ipfshost", help="Default ipfs gateway",
                     default=str(ipfs_default),
+parser.add_argument("-c", "--ipfslocal", help="Local ipfs connect url",
+                    default=str(ipfs_default),
                     required=False)
 
 
 arguments = {
-    str: ['address', 'privatekey', 'resultaddress', 'resultprivatekey', 'endpoint', 'access_key', 'secret_key', 'network', 'ipfshost'],
+    str: ['address', 'privatekey', 'resultaddress', 'resultprivatekey', 'endpoint', 'access_key', 'secret_key', 'network', 'ipfshost', 'ipfslocal'],
     int: ['cpu', 'memory', 'storage', 'storage', 'bandwidth', 'duration', 'price']
 }
 
