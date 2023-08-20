@@ -14,7 +14,7 @@ else
   IPFS_HOST="ipfs.ethernity.cloud";
 fi
 
-if [ -z IPFS_LOCAL_CONNECT_URL ]
+if [ -v IPFS_LOCAL_CONNECT_URL ]
 then
   IPFS_LOCAL=${IPFS_LOCAL_CONNECT_URL}
 else
