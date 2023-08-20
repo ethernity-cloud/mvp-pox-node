@@ -7,14 +7,14 @@ trap 'echo "Installer status: \"${BASH_COMMAND}\"command end with exit code $?."
 
 cd /home/vagrant/etny/node/go-ipfs
 
-if [ -z ${IPFS_HOSTNAME+x} ]
+if [ -v IPFS_HOSTNAME ]
 then
   IPFS_HOST=${IPFS_HOSTNAME}
 else
   IPFS_HOST="ipfs.ethernity.cloud";
 fi
 
-if [ -z ${IPFS_LOCAL_CONNECT_URL+x} ]
+if [ -z IPFS_LOCAL_CONNECT_URL ]
 then
   IPFS_LOCAL=${IPFS_LOCAL_CONNECT_URL}
 else
