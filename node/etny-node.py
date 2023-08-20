@@ -32,6 +32,7 @@ class EtnyPoXNode:
     __access_key = None
     __secret_key = None
     __network = None
+    __ipfshost = None
     __price = 3
 
     def __init__(self):
@@ -58,11 +59,15 @@ class EtnyPoXNode:
         if config.gas_price_measure == None:
             config.gas_price_measure = 'mwei';
 
+        if self.__ipfshost == None:
+            self.__ipfshost = config.ipfs_default;
+
         logger.info("Initialized with settings below!");
         logger.info("Network: %s", self.__network);
         logger.info("Contract Address: %s", config.contract_address);
         logger.info("Heartbeat Contract Address: %s", config.heart_beat_address);
         logger.info("Gas Price Measure: %s", config.gas_price_measure);
+        logger.info("IPFS Host: %s", self.__ipfshost);
 
         with open(config.abi_filepath) as f:
             self.__contract_abi = f.read()
@@ -95,7 +100,7 @@ class EtnyPoXNode:
         self.dpreq_cache = ListCache(config.dpreq_cache_limit, config.dpreq_filepath)
         self.doreq_cache = ListCache(config.doreq_cache_limit, config.doreq_filepath)
         self.ipfs_cache = ListCache(config.ipfs_cache_limit, config.ipfs_cache_filepath)
-        self.storage = Storage(config.ipfs_host, config.client_connect_url, config.client_bootstrap_url,
+        self.storage = Storage(self__ipfshost, config.client_connect_url, config.client_bootstrap_url,
                                self.ipfs_cache, config.logger)
         self.merged_orders_cache = MergedOrdersCache(config.merged_orders_cache_limit, config.merged_orders_cache)
         self.swift_stream_service = SwiftStreamService(self.__endpoint,

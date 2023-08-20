@@ -26,7 +26,7 @@ if os.path.exists('.env'):
     load_dotenv('.env')
 
 http_provider = os.environ.get('HTTP_PROVIDER')
-ipfs_host = os.environ.get('IPFS_HOST')
+ipfs_default = os.environ.get('IPFS_HOST')
 client_connect_url = os.environ.get('CLIENT_CONNECT_URL')
 client_bootstrap_url = os.environ.get('CLIENT_BOOTSTRAP_URL')
 chain_id = int(os.environ.get('CHAIN_ID'))
@@ -117,9 +117,13 @@ parser.add_argument("-v", "--price", help="Task price(per hour).",
 parser.add_argument("-n", "--network", help="Network the node runs on.",
                     default=str(network_default),
                     required=False)
+parser.add_argument("-i", "--ipfshost", help="Default ipfs gateway",
+                    default=str(ipfs_default),
+                    required=False)
+
 
 arguments = {
-    str: ['address', 'privatekey', 'resultaddress', 'resultprivatekey', 'endpoint', 'access_key', 'secret_key', 'network'],
+    str: ['address', 'privatekey', 'resultaddress', 'resultprivatekey', 'endpoint', 'access_key', 'secret_key', 'network', 'ipfshost'],
     int: ['cpu', 'memory', 'storage', 'storage', 'bandwidth', 'duration', 'price']
 }
 
