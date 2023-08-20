@@ -118,9 +118,9 @@ parser.add_argument("-n", "--network", help="Network the node runs on.",
                     default=str(network_default),
                     required=False)
 parser.add_argument("-i", "--ipfshost", help="Default ipfs gateway",
-                    default=str(ipfs_default),
+                    default=str(ipfs_default)
 parser.add_argument("-c", "--ipfslocal", help="Local ipfs connect url",
-                    default=str(ipfs_default),
+                    default=str(ipfs_default)
                     required=False)
 
 
