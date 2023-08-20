@@ -71,6 +71,7 @@ class EtnyPoXNode:
         logger.info("Heartbeat Contract Address: %s", config.heart_beat_address);
         logger.info("Gas Price Measure: %s", config.gas_price_measure);
         logger.info("IPFS Host: %s", self.__ipfshost);
+        logger.info("IPFS Local Connect URL: %s", self.__ipfslocal);
 
         with open(config.abi_filepath) as f:
             self.__contract_abi = f.read()
