@@ -26,7 +26,7 @@ connect_ipfs () {
 resolving=false
 while [ $resolving == false ]
 do
-        IPFS_IP=`getent hosts ${IPFS_HOST}`
+        IPFS_IP=`getent ahosts ${IPFS_HOST} | grep ${IPFS_HOST} | awk '{print $1}'`
         if [ $? == 0 ]
 	then
 		IPFS_IP=$(echo ${IPFS_IP} | awk 'NR==1{print $1}')
