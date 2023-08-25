@@ -44,14 +44,14 @@ done
 
 resolve_ipfs_host
 
-until timeout 10 ./ipfs swarm connect /ip4/${IPFS_IP}/tcp/4001/ipfs/QmRBc1eBt4hpJQUqHqn6eA8ixQPD3LFcUDsn6coKBQtia5
+until timeout 10 ./ipfs --api=${IPFS_LOCAL_CONNECT_URL} swarm connect /ip4/${IPFS_IP}/tcp/4001/ipfs/QmRBc1eBt4hpJQUqHqn6eA8ixQPD3LFcUDsn6coKBQtia5
 do
         echo "Unable to connect to IPFS gateway, please check IPFS configuration or restart the service"
 	resolve_ipfs_host
 	sleep 5
 done
 
-./ipfs bootstrap add /ip4/${IPFS_IP}/tcp/4001/ipfs/QmRBc1eBt4hpJQUqHqn6eA8ixQPD3LFcUDsn6coKBQtia5
+./ipfs --api=${IPFS_LOCAL_CONNECT_URL} bootstrap add /ip4/${IPFS_IP}/tcp/4001/ipfs/QmRBc1eBt4hpJQUqHqn6eA8ixQPD3LFcUDsn6coKBQtia5
 
 cd /home/vagrant/etny/node/etny-repo/node/
 git fetch origin testnet_v3_1
