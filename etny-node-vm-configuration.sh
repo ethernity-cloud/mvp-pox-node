@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Define minimum and recommended settings
-MIN_MEMORY_MB=2048
+MIN_MEMORY_MB=3072
 MIN_CPUS=2
 MIN_DISK=80
 
