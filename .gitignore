@@ -10,6 +10,7 @@ sgx/sgx_enable
 sgx/sgx_enable.o
 config
 Vagrantfile
+Vagrantfile.bak
 .idea/
 log/
 *_cache.*
