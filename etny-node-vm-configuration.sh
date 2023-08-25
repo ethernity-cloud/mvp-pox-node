@@ -14,11 +14,12 @@ get_available_resources() {
     total_memory=$(free -m | awk '/Mem:/ {print $2 - 1024}')
     available_memory=$((total_memory - 1))
     available_cpus=$(nproc)
-    
-    # Calculate available storage by adding the current Vagrant disk image size
-    vagrant_disk_size=$(sudo fdisk -l /var/lib/libvirt/images/mvp-pox-node_etnyvm1.img | awk '/Disk \/var/ {print $3}')
-    available_disk_size=$(df -BG / | awk '/\// {print $4}' | sed 's/G//')
-    available_disk_size=$(($available_disk_size + $vagrant_disk_size))
+
+# Calculate available storage by adding the current Vagrant disk image size
+vagrant_disk_size=$(sudo fdisk -l /var/lib/libvirt/images/mvp-pox-node_etnyvm1.img | awk '/Disk \/var/ {print $3}')
+available_disk_size=$(df -BG / | awk '/\// {print $4}' | sed 's/G//')
+available_disk_size=$(echo "$available_disk_size + $vagrant_disk_size" | bc)
+
 }
 
 # Function to modify the Vagrantfile
@@ -54,17 +55,19 @@ fi
 # Prompt for additional storage
 read -p "Enter additional allocated storage (GB) (minimum $MIN_DISK, recommended $REC_DISK): " additional_storage
 
-# Check storage
-new_total_storage=$((available_disk_size + additional_storage))
-if ((additional_storage < MIN_DISK || new_total_storage > available_disk_size)); then
-    echo "Error: Entered additional storage is invalid."
+# Calculate the new total storage size
+total_storage=$(echo "$available_disk_size + $additional_storage" | bc)
+
+# Compare storage sizes as strings
+if [[ $(echo "$additional_storage > $total_storage" | bc) -eq 1 ]]; then
+    echo "Error: Entered additional storage is greater than the available storage."
     exit 1
 fi
 
-# Provide feedback before modifying Vagrantfile
-echo "Calculating new storage configuration..."
-echo "New total storage: $new_total_storage GB"
-echo "Please wait, updating Vagrantfile..."
+if [[ $(echo "$additional_storage < $MIN_DISK" | bc) -eq 1 ]]; then
+    echo "Error: Entered additional storage is less than the minimum required."
+    exit 1
+fi
 
 # Modify Vagrantfile
 modify_vagrantfile
