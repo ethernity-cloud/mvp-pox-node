@@ -14,32 +14,40 @@ else
   IPFS_HOST="ipfs.ethernity.cloud";
 fi
 
+systemctl stop ipfs
+
 if [ -v IPFS_LOCAL_CONNECT_URL ]
 then
+  systemctl disable ipfs
   IPFS_LOCAL=${IPFS_LOCAL_CONNECT_URL}
 else
+  systemctl enable ipfs
+  systemctl start ipfs
   IPFS_LOCAL="/ip4/127.0.0.1/tcp/5001/http";
 fi
 
 
-connect_ipfs () {
+resolve_ipfs_host () {
 resolving=false
 while [ $resolving == false ]
 do
         IPFS_IP=`getent ahosts ${IPFS_HOST} | grep ${IPFS_HOST} | awk '{print $1}'`
-        if [ $? == 0 ]
+        if [ "$IPFS_IP" != "" ]
 	then
 		IPFS_IP=$(echo ${IPFS_IP} | awk 'NR==1{print $1}')
 		resolving=true
         else
-		resolving=false
+		echo "Unable to resolve IPFS gateway ${IPFS_HOST}, please check DNS configuration"
         fi
 done
 }
 
-until ./ipfs swarm connect /ip4/${IPFS_IP}/tcp/4001/ipfs/QmRBc1eBt4hpJQUqHqn6eA8ixQPD3LFcUDsn6coKBQtia5
+resolve_ipfs_host
+
+until timeout 10 ./ipfs swarm connect /ip4/${IPFS_IP}/tcp/4001/ipfs/QmRBc1eBt4hpJQUqHqn6eA8ixQPD3LFcUDsn6coKBQtia5
 do
-	connect_ipfs
+        echo "Unable to connect to IPFS gateway, please check IPFS configuration or restart the service"
+	resolve_ipfs_host
 	sleep 5
 done
 
