@@ -137,22 +137,28 @@ class EtnyPoXNode:
                 setattr(self, "_" + self.__class__.__name__ + "__" + arg, args_type(getattr(parser, arg)))
 
     def cleanup_dp_requests(self):
-        my_dp_requests = self.__etny.functions._getMyDPRequests().call({'from': self.__address})
-        cached_ids = self.dpreq_cache.get_values
-        for req_id in set(my_dp_requests) - set(cached_ids):
-            req_uuid = self.__etny.caller()._getDPRequestMetadata(req_id)[1]
-            if req_uuid != self.__uuid:
-                logger.info(f"Skipping DP request {req_id}, not mine")
-                self.dpreq_cache.add(req_id)
+        while True:
+	    try:
+                my_dp_requests = self.__etny.functions._getMyDPRequests().call({'from': self.__address})
+                        cached_ids = self.dpreq_cache.get_values
+                        for req_id in set(my_dp_requests) - set(cached_ids):
+                            req_uuid = self.__etny.caller()._getDPRequestMetadata(req_id)[1]
+                            if req_uuid != self.__uuid:
+                                logger.info(f"Skipping DP request {req_id}, not mine")
+                                self.dpreq_cache.add(req_id)
+                                continue
+                            req = DPRequest(self.__etny.caller()._getDPRequest(req_id))
+                            if req.status == RequestStatus.BOOKED:
+                                logger.info(f"Request {req_id} already assigned to order")
+                                self.__dprequest = req_id
+                                self.process_dp_request()
+                            if req.status == RequestStatus.AVAILABLE:
+                                self.cancel_dp_request(req_id)
+                            self.dpreq_cache.add(req_id)
+	    except Exception as e:
+                logger.info(f'error = {e}, type = {type(e)}')
                 continue
-            req = DPRequest(self.__etny.caller()._getDPRequest(req_id))
-            if req.status == RequestStatus.BOOKED:
-                logger.info(f"Request {req_id} already assigned to order")
-                self.__dprequest = req_id
-                self.process_dp_request()
-            if req.status == RequestStatus.AVAILABLE:
-                self.cancel_dp_request(req_id)
-            self.dpreq_cache.add(req_id)
+            break
 
     def _limited_arg(self, item, allowed_max=255):
         return allowed_max if item > allowed_max else item
