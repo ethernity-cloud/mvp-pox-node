@@ -138,7 +138,7 @@ class EtnyPoXNode:
 
     def cleanup_dp_requests(self):
         while True:
-	    try:
+            try:
                 my_dp_requests = self.__etny.functions._getMyDPRequests().call({'from': self.__address})
                         cached_ids = self.dpreq_cache.get_values
                         for req_id in set(my_dp_requests) - set(cached_ids):
@@ -155,7 +155,7 @@ class EtnyPoXNode:
                             if req.status == RequestStatus.AVAILABLE:
                                 self.cancel_dp_request(req_id)
                             self.dpreq_cache.add(req_id)
-	    except Exception as e:
+            except Exception as e:
                 logger.info(f'error = {e}, type = {type(e)}')
                 continue
             break
