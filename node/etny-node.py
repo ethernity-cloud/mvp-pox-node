@@ -32,6 +32,7 @@ class EtnyPoXNode:
     __access_key = None
     __secret_key = None
     __network = None
+    __ipfshost = None
     __price = 3
 
     def __init__(self):
@@ -58,11 +59,19 @@ class EtnyPoXNode:
         if config.gas_price_measure == None:
             config.gas_price_measure = 'mwei';
 
+        if self.__ipfshost == None:
+            self.__ipfshost = config.ipfs_default;
+
+        if self.__ipfslocal == None:
+            self.__ipfslocal = config.client_connect_url_default;
+
         logger.info("Initialized with settings below!");
         logger.info("Network: %s", self.__network);
         logger.info("Contract Address: %s", config.contract_address);
         logger.info("Heartbeat Contract Address: %s", config.heart_beat_address);
         logger.info("Gas Price Measure: %s", config.gas_price_measure);
+        logger.info("IPFS Host: %s", self.__ipfshost);
+        logger.info("IPFS Local Connect URL: %s", self.__ipfslocal);
 
         with open(config.abi_filepath) as f:
             self.__contract_abi = f.read()
@@ -95,7 +104,7 @@ class EtnyPoXNode:
         self.dpreq_cache = ListCache(config.dpreq_cache_limit, config.dpreq_filepath)
         self.doreq_cache = ListCache(config.doreq_cache_limit, config.doreq_filepath)
         self.ipfs_cache = ListCache(config.ipfs_cache_limit, config.ipfs_cache_filepath)
-        self.storage = Storage(config.ipfs_host, config.client_connect_url, config.client_bootstrap_url,
+        self.storage = Storage(self.__ipfshost, self.__ipfslocal, config.client_bootstrap_url,
                                self.ipfs_cache, config.logger)
         self.merged_orders_cache = MergedOrdersCache(config.merged_orders_cache_limit, config.merged_orders_cache)
         self.swift_stream_service = SwiftStreamService(self.__endpoint,
@@ -128,22 +137,28 @@ class EtnyPoXNode:
                 setattr(self, "_" + self.__class__.__name__ + "__" + arg, args_type(getattr(parser, arg)))
 
     def cleanup_dp_requests(self):
-        my_dp_requests = self.__etny.functions._getMyDPRequests().call({'from': self.__address})
-        cached_ids = self.dpreq_cache.get_values
-        for req_id in set(my_dp_requests) - set(cached_ids):
-            req_uuid = self.__etny.caller()._getDPRequestMetadata(req_id)[1]
-            if req_uuid != self.__uuid:
-                logger.info(f"Skipping DP request {req_id}, not mine")
-                self.dpreq_cache.add(req_id)
+        while True:
+            try:
+                my_dp_requests = self.__etny.functions._getMyDPRequests().call({'from': self.__address})
+                cached_ids = self.dpreq_cache.get_values
+                for req_id in set(my_dp_requests) - set(cached_ids):
+                    req_uuid = self.__etny.caller()._getDPRequestMetadata(req_id)[1]
+                    if req_uuid != self.__uuid:
+                        logger.info(f"Skipping DP request {req_id}, not mine")
+                        self.dpreq_cache.add(req_id)
+                        continue
+                    req = DPRequest(self.__etny.caller()._getDPRequest(req_id))
+                    if req.status == RequestStatus.BOOKED:
+                        logger.info(f"Request {req_id} already assigned to order")
+                        self.__dprequest = req_id
+                        self.process_dp_request()
+                    if req.status == RequestStatus.AVAILABLE:
+                        self.cancel_dp_request(req_id)
+                    self.dpreq_cache.add(req_id)
+            except Exception as e:
+                logger.info(f'error = {e}, type = {type(e)}')
                 continue
-            req = DPRequest(self.__etny.caller()._getDPRequest(req_id))
-            if req.status == RequestStatus.BOOKED:
-                logger.info(f"Request {req_id} already assigned to order")
-                self.__dprequest = req_id
-                self.process_dp_request()
-            if req.status == RequestStatus.AVAILABLE:
-                self.cancel_dp_request(req_id)
-            self.dpreq_cache.add(req_id)
+            break
 
     def _limited_arg(self, item, allowed_max=255):
         return allowed_max if item > allowed_max else item
@@ -607,6 +622,7 @@ class EtnyPoXNode:
 
             logger.info('Waiting for execution of v3 enclave')
             status_enclave = self.wait_for_enclave_v2(bucket_name, 'result.txt', 3600)
+            status_enclave = self.wait_for_enclave_v2(bucket_name, 'transaction.txt', 60)
             if status_enclave == True:
                 logger.info(f'Uploading result to {enclave_image_name}-{v3} bucket')
                 status, result_data = self.swift_stream_service.get_file_content(bucket_name, "result.txt")
@@ -1133,6 +1149,7 @@ class EtnyPoXNode:
 
     def __run_integration_test(self):
         logger.info('Running integration test.')
+
         [enclave_image_hash, _,
          docker_compose_hash] = self.__image_registry.caller().getLatestTrustedZoneImageCertPublicKey('etny-pynithy',
                                                                                                       'v3')

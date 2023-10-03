@@ -26,8 +26,8 @@ if os.path.exists('.env'):
     load_dotenv('.env')
 
 http_provider = os.environ.get('HTTP_PROVIDER')
-ipfs_host = os.environ.get('IPFS_HOST')
-client_connect_url = os.environ.get('CLIENT_CONNECT_URL')
+ipfs_default = os.environ.get('IPFS_HOST')
+client_connect_url_default = os.environ.get('CLIENT_CONNECT_URL')
 client_bootstrap_url = os.environ.get('CLIENT_BOOTSTRAP_URL')
 chain_id = int(os.environ.get('CHAIN_ID'))
 gas_limit = int(os.environ.get('GAS_LIMIT'))
@@ -50,7 +50,7 @@ gas_price_measure = None
 
 
 # constants
-image_registry_address = '0x6ca77d7C997b0873b2Ba0361387e56E2C5c0FEE8'
+image_registry_address = '0x15D73a742529C3fb11f3FA32EF7f0CC3870ACA31'
 abi_filepath = os.path.dirname(os.path.realpath(__file__)) + '/docker/pox.abi'
 image_registry_abi_filepath = os.path.dirname(os.path.realpath(__file__)) + '/image_registry.abi'
 heart_beat_abi_filepath = os.path.dirname(os.path.realpath(__file__)) + '/heart_beat.abi'
@@ -117,9 +117,16 @@ parser.add_argument("-v", "--price", help="Task price(per hour).",
 parser.add_argument("-n", "--network", help="Network the node runs on.",
                     default=str(network_default),
                     required=False)
+parser.add_argument("-i", "--ipfshost", help="Default ipfs gateway",
+                    default=str(ipfs_default),
+                    required=False)
+parser.add_argument("-l", "--ipfslocal", help="Local ipfs connect url",
+                    default=str(client_connect_url_default),
+                    required=False)
+
 
 arguments = {
-    str: ['address', 'privatekey', 'resultaddress', 'resultprivatekey', 'endpoint', 'access_key', 'secret_key', 'network'],
+    str: ['address', 'privatekey', 'resultaddress', 'resultprivatekey', 'endpoint', 'access_key', 'secret_key', 'network', 'ipfshost', 'ipfslocal'],
     int: ['cpu', 'memory', 'storage', 'storage', 'bandwidth', 'duration', 'price']
 }
 
