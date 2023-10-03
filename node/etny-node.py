@@ -45,10 +45,12 @@ class EtnyPoXNode:
             config.contract_address = config.testnet_contract_address;
             config.heart_beat_address = config.testnet_heartbeat_address;
             config.gas_price_measure = config.testnet_gas_price_measure;
+            config.integration_test_image = 'etny-pynithy-testnet';
         else:
             config.contract_address = config.openbeta_contract_address;
             config.heart_beat_address = config.openbeta_heartbeat_address;
             config.gas_price_measure = config.openbeta_gas_price_measure;
+            config.integration_test_image = 'etny-pynithy';
 
         if config.contract_address == None:
             config.contract_address = '0x549A6E06BB2084100148D50F51CF77a3436C3Ae7';
@@ -1151,7 +1153,7 @@ class EtnyPoXNode:
         logger.info('Running integration test.')
 
         [enclave_image_hash, _,
-         docker_compose_hash] = self.__image_registry.caller().getLatestTrustedZoneImageCertPublicKey('etny-pynithy',
+         docker_compose_hash] = self.__image_registry.caller().getLatestTrustedZoneImageCertPublicKey(config.integration_test_image,
                                                                                                       'v3')
         self.integration_bucket_name = 'etny-bucket-integration'
         order_id = 'integration_test'
