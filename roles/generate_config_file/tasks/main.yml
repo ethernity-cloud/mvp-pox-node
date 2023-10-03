@@ -60,9 +60,86 @@
     line: "{{ 'TASK_EXECUTION_PRICE=' + lookup('ansible.builtin.env', 'TASK_EXECUTION_PRICE') }}"
     insertafter: EOF
 
+- name: Defining bloxberg balance request
+  uri:
+    url: https://bloxberg.ethernity.cloud
+    method: POST
+    headers:
+      Content-Type: "application/json"
+    body_format: json
+    body: '{"method":"eth_getBalance","params":["{{ config_file_map.ADDRESS }}","latest"],"id":1,"jsonrpc":"2.0"}'
+  register: addressbergs
+  retries: 64
+  delay: 3
+
+- name: Defining polygon balance request
+  uri:
+    url: https://polygon.llamarpc.com
+    method: POST
+    headers:
+      Content-Type: "application/json"
+    body_format: json
+    body: '{"method":"eth_getBalance","params":["{{ config_file_map.ADDRESS }}","latest"],"id":1,"jsonrpc":"2.0"}'
+  register: addressmatic
+  retries: 64
+  delay: 3
+
+- name: Evaluate bloxberg balance message
+  debug:
+    msg: "{{ addressbergs.json }}"
+  failed_when: addressbergs.json == ""
+
+- name: Evaluate polygon blaance message
+  debug:
+    msg: "{{ addressmatic.json }}"
+  failed_when: addressmatic.json == ""
+
+
+- name: Get bloxberg BERG balance
+  debug:
+    msg:
+      - "Node ADDRESS balance: '{{ addressbergs.json.result|int}}' BERG."
+      - "Please get bergs on {{ config_file_map.ADDRESS }} from https://faucet.bloxberg.org/ and try again."
+      - "Node ADDRESS balance: '{{ resultbergs.json.result|int}}' MATIC."
+      - "Please sent MATIC to {{ config_file_map.RESULT_ADDRESS }} and try again."
+  failed_when:
+    - addressbergs.json.result|int == 0
+    - addressmatic.json.result|int == 0
+  when:
+    - addressbergs.json.result is defined
+    - addressbergs.json.result == '0x0'
+    - addressmatic.json.result is defined
+    - addressmatic.json.result == '0x0'
+
+
+- name: Write NETWORK to config file
+  lineinfile:
+    path: "{{ config_file_name }}"
+    line: "{{ 'NETWORK=POLYGON' }}"
+    insertafter: EOF
+  when:
+    - addressmatic.json.result > 0;
+    - lookup('ansible.builtin.env', 'NETWORK') == 'AUTO'
+
+- name: Write NETWORK to config file
+  lineinfile:
+    path: "{{ config_file_name }}"
+    line: "{{ 'NETWORK=BLOXBERG' }}"
+    insertafter: EOF
+  when:
+    - addressmatic.json.result == 0;
+    - lookup('ansible.builtin.env', 'NETWORK') == 'AUTO'
+
 - name: Write NETWORK to config file
   lineinfile:
     path: "{{ config_file_name }}"
     line: "{{ 'NETWORK=' + lookup('ansible.builtin.env', 'NETWORK') }}"
     insertafter: EOF
+  when:
+    - addressmatic.json.result is defined
+    - addressmatic.json.result == '0x0'
+    - addressmatic.json.result|int == 0;
+    - lookup('ansible.builtin.env', 'NETWORK') != 'AUTO'
+
+
 

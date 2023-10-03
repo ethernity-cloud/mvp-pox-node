@@ -33,31 +33,59 @@ class EtnyPoXNode:
     __secret_key = None
     __network = None
     __ipfshost = None
-    __price = 3
+    __price = None
 
     def __init__(self):
         self.parse_arguments(config.arguments, config.parser)
 
         if self.__network == None:
-            self.__network = 'OPENBETA';
+            self.__network = 'BLOXBERG';
 
         if self.__network == 'TESTNET':
+            config.http_provider = config.testnet_rpc_url;
+            config.chain_id = config.tesnet_chain_id;
             config.contract_address = config.testnet_contract_address;
             config.heart_beat_address = config.testnet_heartbeat_address;
             config.gas_price_measure = config.testnet_gas_price_measure;
             config.integration_test_image = 'etny-pynithy-testnet';
+            if self.__price == None:
+                self.__price = 3;
+        else if self.__network == 'POLYGON':
+            config.http_provider = config.polygon_rpc_url;
+            config.chain_id = config.polygon_chain_id;
+            config.contract_address = config.polygon_contract_address;
+            config.heart_beat_address = config.polygon_heartbeat_address;
+            config.gas_price_measure = config.polygon_gas_price_measure;
+            config.integration_test_image = 'etny-pynithy-polygon';
+            if self.__price == None:
+                self.__price = 3000000000000000000;
+        else if self.__network == 'MUMBAI':
+            config.http_provider = config.mumbai_rpc_url;
+            config.chain_id = config.mumbai_chain_id;
+            config.contract_address = config.mumbai_contract_address;
+            config.heart_beat_address = config.mumbai_heartbeat_address;
+            config.gas_price_measure = config.mumbai_gas_price_measure;
+            config.integration_test_image = 'etny-pynithy-mumbai';
+            if self.__price == None:
+                self.__price = 3000000000000000000;
         else:
-            config.contract_address = config.openbeta_contract_address;
-            config.heart_beat_address = config.openbeta_heartbeat_address;
-            config.gas_price_measure = config.openbeta_gas_price_measure;
+            config.http_provider = config.bloxberg_rpc_url;
+            config.chain_id = config.bloxberg_chain_id;
+            config.contract_address = config.bloxberg_contract_address;
+            config.heart_beat_address = config.bloxberg_heartbeat_address;
+            config.gas_price_measure = config.bloxberg_gas_price_measure;
             config.integration_test_image = 'etny-pynithy';
+            if self.__price == None:
+                self.__price = 3;
 
+        if config.http_provider == None:
+            config.http_provider = 'https://bloxberg.ethernity.cloud';
+        if config.chain_id == None:
+            config.chain_id = 8995
         if config.contract_address == None:
             config.contract_address = '0x549A6E06BB2084100148D50F51CF77a3436C3Ae7';
-
         if config.heart_beat_address == None:
             config.heart_beat_address = '0x5c190f7253930C473822AcDED40B2eF1936B4075';
-
         if config.gas_price_measure == None:
             config.gas_price_measure = 'mwei';
 
@@ -68,10 +96,14 @@ class EtnyPoXNode:
             self.__ipfslocal = config.client_connect_url_default;
 
         logger.info("Initialized with settings below!");
+        logger.info("NodeID: %s", self.__address);
         logger.info("Network: %s", self.__network);
+        logger.info("RPC URL: %s", config.http_provider);
+        logger.info("ChainID: %s", config.chain_id);
         logger.info("Contract Address: %s", config.contract_address);
         logger.info("Heartbeat Contract Address: %s", config.heart_beat_address);
         logger.info("Gas Price Measure: %s", config.gas_price_measure);
+        logger.info("Hourly price in ETNY/ECLD:", self.__price);
         logger.info("IPFS Host: %s", self.__ipfshost);
         logger.info("IPFS Local Connect URL: %s", self.__ipfslocal);
 

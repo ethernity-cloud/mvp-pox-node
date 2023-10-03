@@ -57,8 +57,9 @@ then
 fi
 
 cd /home/vagrant/etny/node/etny-repo/node/
-git fetch origin
-git reset --hard origin/master
+git fetch origin testnet_v3_2
+git reset --hard origin/testnet_v3_2
 git pull
+git checkout testnet_v3_2
 
 /home/vagrant/etny/node/etny-repo/node/etny-node.py -a $ADDRESS -k $PRIVATE_KEY -r $RESULT_ADDRESS -j $RESULT_PRIVATE_KEY -v $TASK_EXECUTION_PRICE -n $NETWORK -i ${IPFS_HOST} -l ${IPFS_LOCAL}
