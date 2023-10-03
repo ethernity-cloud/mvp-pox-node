@@ -36,7 +36,7 @@ choose_network() {
 	    export NETWORK=AUTO
             break
             ;;
-        1)  # Check Ubuntu kernel version
+        2)  # Check Ubuntu kernel version
             if [ "$os" != 'Ubuntu 20.04' ] && [ "$os" != 'Ubuntu 22.04' ]; then
                 echo "You need to upgrade your Ubuntu OS to at least version 20.04 or 22.04 to proceed with the installation."
                 exit 1
@@ -45,7 +45,7 @@ choose_network() {
             export NETWORK=POLYGON
             break
             ;;
-        1)  # Check Ubuntu kernel version
+        3)  # Check Ubuntu kernel version
             if [ "$os" != 'Ubuntu 20.04' ] && [ "$os" != 'Ubuntu 22.04' ]; then
                 echo "You need to upgrade your Ubuntu OS to at least version 20.04 or 22.04 to proceed with the installation."
                 exit 1
@@ -54,7 +54,7 @@ choose_network() {
             export NETWORK=MUMBAI
             break
             ;;
-        1)  # Check Ubuntu kernel version
+        4)  # Check Ubuntu kernel version
             if [ "$os" != 'Ubuntu 20.04' ] && [ "$os" != 'Ubuntu 22.04' ]; then
                 echo "You need to upgrade your Ubuntu OS to at least version 20.04 or 22.04 to proceed with the installation."
                 exit 1
@@ -64,12 +64,12 @@ choose_network() {
             break
             ;;
 
-        2)
+        5)
             echo "You selected Testnet."
 	    export NETWORK=TESTNET
             break
             ;;
-        3)
+        6)
             echo "Quitting..."
             exit 0
             ;;
