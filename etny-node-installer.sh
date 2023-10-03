@@ -16,8 +16,8 @@ fi
 choose_network() {
   echo "#############################################"
   echo "Please select the network:"
-  echo "1. OpenBeta"
-  echo "2. Testnet"
+  echo "1. bloxberg Mainnet"
+  echo "2. bloxberg Testnet"
   echo "3. Quit"
   echo "#############################################"
 
