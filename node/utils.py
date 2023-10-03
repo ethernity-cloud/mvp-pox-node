@@ -72,6 +72,10 @@ class Storage:
             return
         try:
             ipfs_node = socket.gethostbyname(self.ipfs_host)
+            address = (self.client_bootstrap_url % ipfs_node)
+            args = (address, address)
+            opts = {'json': 'true'}
+            self.bootstrap_client._client.request('/swarm/connect', args, opts=opts, decoder='json')
             self.bootstrap_client.bootstrap.add(self.client_bootstrap_url % ipfs_node)
             self.bootstrap_client.get(data, compress=True, opts={"compression-level": 9}, timeout=120)
             self.cache.add(data)

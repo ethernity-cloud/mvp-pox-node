@@ -622,6 +622,7 @@ class EtnyPoXNode:
 
             logger.info('Waiting for execution of v3 enclave')
             status_enclave = self.wait_for_enclave_v2(bucket_name, 'result.txt', 3600)
+            status_enclave = self.wait_for_enclave_v2(bucket_name, 'transaction.txt', 60)
             if status_enclave == True:
                 logger.info(f'Uploading result to {enclave_image_name}-{v3} bucket')
                 status, result_data = self.swift_stream_service.get_file_content(bucket_name, "result.txt")
@@ -1148,8 +1149,9 @@ class EtnyPoXNode:
 
     def __run_integration_test(self):
         logger.info('Running integration test.')
+
         [enclave_image_hash, _,
-         docker_compose_hash] = self.__image_registry.caller().getLatestTrustedZoneImageCertPublicKey('etny-pynithy-testnet',
+         docker_compose_hash] = self.__image_registry.caller().getLatestTrustedZoneImageCertPublicKey('etny-pynithy',
                                                                                                       'v3')
         self.integration_bucket_name = 'etny-bucket-integration'
         order_id = 'integration_test'

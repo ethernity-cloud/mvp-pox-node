@@ -50,7 +50,7 @@ gas_price_measure = None
 
 
 # constants
-image_registry_address = '0x6ca77d7C997b0873b2Ba0361387e56E2C5c0FEE8'
+image_registry_address = '0x15D73a742529C3fb11f3FA32EF7f0CC3870ACA31'
 abi_filepath = os.path.dirname(os.path.realpath(__file__)) + '/docker/pox.abi'
 image_registry_abi_filepath = os.path.dirname(os.path.realpath(__file__)) + '/image_registry.abi'
 heart_beat_abi_filepath = os.path.dirname(os.path.realpath(__file__)) + '/heart_beat.abi'
