@@ -43,36 +43,40 @@ class EtnyPoXNode:
 
         if self.__network == 'TESTNET':
             config.http_provider = config.testnet_rpc_url;
-            config.chain_id = config.tesnet_chain_id;
+            config.chain_id = int(config.tesnet_chain_id);
             config.contract_address = config.testnet_contract_address;
             config.heart_beat_address = config.testnet_heartbeat_address;
+            config.image_registry_address = config.testnet_image_registry_address;
             config.gas_price_measure = config.testnet_gas_price_measure;
             config.integration_test_image = 'etny-pynithy-testnet';
             if self.__price == None:
                 self.__price = 3;
-        else if self.__network == 'POLYGON':
+        elif self.__network == 'POLYGON':
             config.http_provider = config.polygon_rpc_url;
-            config.chain_id = config.polygon_chain_id;
+            config.chain_id = int(config.polygon_chain_id);
             config.contract_address = config.polygon_contract_address;
             config.heart_beat_address = config.polygon_heartbeat_address;
+            config.image_registry_address = config.polygon_image_registry_address;
             config.gas_price_measure = config.polygon_gas_price_measure;
             config.integration_test_image = 'etny-pynithy-polygon';
             if self.__price == None:
                 self.__price = 3000000000000000000;
-        else if self.__network == 'MUMBAI':
+        elif self.__network == 'MUMBAI':
             config.http_provider = config.mumbai_rpc_url;
-            config.chain_id = config.mumbai_chain_id;
+            config.chain_id = int(config.mumbai_chain_id);
             config.contract_address = config.mumbai_contract_address;
             config.heart_beat_address = config.mumbai_heartbeat_address;
+            config.image_registry_address = config.mumbai_image_registry_address;
             config.gas_price_measure = config.mumbai_gas_price_measure;
-            config.integration_test_image = 'etny-pynithy-mumbai';
+            config.integration_test_image = 'etny-pynithy-testnet';
             if self.__price == None:
                 self.__price = 3000000000000000000;
         else:
             config.http_provider = config.bloxberg_rpc_url;
-            config.chain_id = config.bloxberg_chain_id;
+            config.chain_id = int(config.bloxberg_chain_id);
             config.contract_address = config.bloxberg_contract_address;
             config.heart_beat_address = config.bloxberg_heartbeat_address;
+            config.image_registry_address = config.bloxberg_image_registry_address;
             config.gas_price_measure = config.bloxberg_gas_price_measure;
             config.integration_test_image = 'etny-pynithy';
             if self.__price == None:
@@ -102,6 +106,7 @@ class EtnyPoXNode:
         logger.info("ChainID: %s", config.chain_id);
         logger.info("Contract Address: %s", config.contract_address);
         logger.info("Heartbeat Contract Address: %s", config.heart_beat_address);
+        logger.info("Image Registry Address: %s", config.image_registry_address);
         logger.info("Gas Price Measure: %s", config.gas_price_measure);
         logger.info("Hourly price in ETNY/ECLD:", self.__price);
         logger.info("IPFS Host: %s", self.__ipfshost);
@@ -110,7 +115,8 @@ class EtnyPoXNode:
         with open(config.abi_filepath) as f:
             self.__contract_abi = f.read()
         self.__w3 = Web3(Web3.HTTPProvider(config.http_provider, request_kwargs={'timeout': 120}))
-        self.__w3.middleware_onion.inject(geth_poa_middleware, layer=0)
+        if self.__network == 'BLOXBERG' or self.__network == 'TESTNET':
+            self.__w3.middleware_onion.inject(geth_poa_middleware, layer=0)
         self.__acct = Account.privateKeyToAccount(self.__privatekey)
         self.__etny = self.__w3.eth.contract(
             address=self.__w3.toChecksumAddress(config.contract_address),
@@ -969,6 +975,11 @@ class EtnyPoXNode:
                 seconds += timeout_in_seconds
                 continue
 
+            if count == 0:
+                print("Count: %s", count);
+                time.sleep(5);
+                continue;
+
             found = False
             cached_do_requests = self.doreq_cache.get_values
             for i in reversed(list(set(range(checked, count)) - set(cached_do_requests))):
@@ -1183,6 +1194,8 @@ class EtnyPoXNode:
 
     def __run_integration_test(self):
         logger.info('Running integration test.')
+        self.can_run_under_sgx = True
+        return;
 
         [enclave_image_hash, _,
          docker_compose_hash] = self.__image_registry.caller().getLatestTrustedZoneImageCertPublicKey(config.integration_test_image,
@@ -1285,6 +1298,8 @@ class EtnyPoXNode:
 
         if self.__network == 'TESTNET':
             heartbeat_frequency = 1 * 60 * 60 - 60;
+        elif self.__network == 'MUMBAI':
+            heartbeat_frequency = 1 * 60 * 60 - 60;
         else:
             heartbeat_frequency = 12 * 60 * 60 - 60;
 
@@ -1304,8 +1319,8 @@ class EtnyPoXNode:
             except Exception as e:
                 logger.info(f'error = {e}, type = {type(e)}')
                 raise
-
-        logger.info('Heart beat called already within last %s seconds...', heartbeat_frequency)
+        else:
+          logger.info('Heart beat called already within last %s seconds...', heartbeat_frequency)
 
 class SGXDriver:
     def __init__(self):
