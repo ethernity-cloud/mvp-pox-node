@@ -37,9 +37,37 @@ class EtnyPoXNode:
 
     def __init__(self):
         self.parse_arguments(config.arguments, config.parser)
+       
+        polygonBalance = 0
 
-        if self.__network == None:
-            self.__network = 'BLOXBERG';
+        logger.info("Configuration network is: %s", self.__network)
+
+        if self.__network == None or self.__network == 'AUTO' or self.__network == "OPENBETA":
+          logger.info("Network is automatic, determining gas value for POLYGON");
+          try:
+            config.http_provider = config.mumbai_rpc_url;
+            config.chain_id = int(config.mumbai_chain_id);
+            config.contract_address = config.mumbai_contract_address;
+
+            with open(config.abi_filepath) as f:
+                self.__contract_abi = f.read()
+
+            self.__w3 = Web3(Web3.HTTPProvider(config.http_provider, request_kwargs={'timeout': 120}))
+            self.__acct = Account.privateKeyToAccount(self.__privatekey)
+            self.__etny = self.__w3.eth.contract(
+                address=self.__w3.toChecksumAddress(config.contract_address),
+                abi=self.__contract_abi
+            )
+
+            polygonBalance = self.__w3.eth.get_balance(self.__address)
+          except Exception as e:
+            logger.info(e)
+            pass
+
+          if polygonBalance > 1000000000000000:
+              self.__network = 'MUMBAI'
+          else:
+              self.__network = 'BLOXBERG'
 
         if self.__network == 'TESTNET':
             config.http_provider = config.testnet_rpc_url;
@@ -60,7 +88,7 @@ class EtnyPoXNode:
             config.gas_price_measure = config.polygon_gas_price_measure;
             config.integration_test_image = 'etny-pynithy-polygon';
             if self.__price == None:
-                self.__price = 3000000000000000000;
+                self.__price = 3;
         elif self.__network == 'MUMBAI':
             config.http_provider = config.mumbai_rpc_url;
             config.chain_id = int(config.mumbai_chain_id);
@@ -68,10 +96,10 @@ class EtnyPoXNode:
             config.heart_beat_address = config.mumbai_heartbeat_address;
             config.image_registry_address = config.mumbai_image_registry_address;
             config.gas_price_measure = config.mumbai_gas_price_measure;
-            config.integration_test_image = 'etny-pynithy-testnet';
+            config.integration_test_image = 'etny-pynithy-mumbai';
             if self.__price == None:
-                self.__price = 3000000000000000000;
-        else:
+                self.__price = 3;
+        elif self.__network == 'BLOXBERG':
             config.http_provider = config.bloxberg_rpc_url;
             config.chain_id = int(config.bloxberg_chain_id);
             config.contract_address = config.bloxberg_contract_address;
@@ -81,6 +109,10 @@ class EtnyPoXNode:
             config.integration_test_image = 'etny-pynithy';
             if self.__price == None:
                 self.__price = 3;
+        else:
+            logger.error("Network configuration is not supported: %s", self.__network);
+            exit()
+
 
         if config.http_provider == None:
             config.http_provider = 'https://bloxberg.ethernity.cloud';
@@ -108,7 +140,7 @@ class EtnyPoXNode:
         logger.info("Heartbeat Contract Address: %s", config.heart_beat_address);
         logger.info("Image Registry Address: %s", config.image_registry_address);
         logger.info("Gas Price Measure: %s", config.gas_price_measure);
-        logger.info("Hourly price in ETNY/ECLD:", self.__price);
+        logger.info("Hourly price in ETNY/ECLD: %d", self.__price);
         logger.info("IPFS Host: %s", self.__ipfshost);
         logger.info("IPFS Local Connect URL: %s", self.__ipfslocal);
 
@@ -140,6 +172,7 @@ class EtnyPoXNode:
         self.__order_id = 0
         self.can_run_under_sgx = False
         self.__uuid = get_or_generate_uuid(config.uuid_filepath)
+        self.network_cache = Cache(config.network_cache_limit, config.network_cache_filepath)
         self.orders_cache = Cache(config.orders_cache_limit, config.orders_cache_filepath)
         self.dpreq_cache = ListCache(config.dpreq_cache_limit, config.dpreq_filepath)
         self.doreq_cache = ListCache(config.doreq_cache_limit, config.doreq_filepath)
@@ -151,12 +184,40 @@ class EtnyPoXNode:
                                                        self.__access_key,
                                                        self.__secret_key)
         self.process_order_data = {}
-        self.generate_process_order_data()
+
+        self.__reset_cache() 
 
         self.__run_integration_test()
 
-    def generate_process_order_data(self):
-        if not os.path.exists(config.process_orders_cache_filepath):
+
+    def __reset_cache(self):
+        if self.network_cache.get("NETWORK") == self.__network:
+            self.generate_process_order_data()
+            return
+        else:
+            logger.info("Switching networks from %s to %s and resetting cache", self.network_cache.get("NETWORK"), self.__network)
+            self.network_cache.wipe()
+            self.orders_cache.wipe()
+            self.dpreq_cache.wipe()
+            self.doreq_cache.wipe()
+            self.merged_orders_cache.wipe()
+            self.process_orders_cache = Cache(config.orders_cache_limit,config.process_orders_cache_filepath)
+            self.process_orders_cache.wipe()
+            self.auto_update_cache = Cache(1, config.auto_update_file_path)
+            self.auto_update_cache.wipe()
+            self.network_cache = Cache(config.network_cache_limit, config.network_cache_filepath)
+            self.orders_cache = Cache(config.orders_cache_limit, config.orders_cache_filepath)
+            self.dpreq_cache = ListCache(config.dpreq_cache_limit, config.dpreq_filepath)
+            self.doreq_cache = ListCache(config.doreq_cache_limit, config.doreq_filepath)
+            self.ipfs_cache = ListCache(config.ipfs_cache_limit, config.ipfs_cache_filepath)
+            self.merged_orders_cache = MergedOrdersCache(config.merged_orders_cache_limit, config.merged_orders_cache)
+            self.network_cache.add("NETWORK", str(self.__network))
+            self.generate_process_order_data(True)
+
+
+
+    def generate_process_order_data(self, write=False):
+        if not os.path.exists(config.process_orders_cache_filepath) or write == True:
             self.process_order_data = {"process_order_retry_counter": 0,
                                        "order_id": self.__order_id,
                                        "uuid": self.__uuid}
@@ -315,8 +376,7 @@ class EtnyPoXNode:
 
             else:
                 logger.info('Building result ')
-                result_msg = f'Too many retries for the current order_id: {order_id}'
-                logger.warn(result_msg)
+                logger.warn('Too many retries for the current order_id: %d', order_id)
                 logger.info('Adding result to order')
                 self.add_result_to_order(order_id, result_msg)
                 return
@@ -982,6 +1042,8 @@ class EtnyPoXNode:
 
             found = False
             cached_do_requests = self.doreq_cache.get_values
+            if len(cached_do_requests) == 0:
+                logger.info("Building DO requests cache, this might take a while")
             for i in reversed(list(set(range(checked, count)) - set(cached_do_requests))):
                 _doreq = self.__etny.caller()._getDORequest(i)
                 doreq = DORequest(_doreq)
@@ -992,6 +1054,11 @@ class EtnyPoXNode:
                     continue
 
                 if doreq.status != RequestStatus.AVAILABLE:
+                    logger.debug(
+                        f'''Skipping Order, DORequestId = {_doreq}, DPRequestId = {i}, Order has different status: '{RequestStatus._status_as_string(doreq.status)}' ''')
+                    continue
+
+                if req.status != RequestStatus.AVAILABLE:
                     logger.debug(
                         f'''Skipping Order, DORequestId = {_doreq}, DPRequestId = {i}, Order has different status: '{RequestStatus._status_as_string(doreq.status)}' ''')
                     continue
@@ -1038,6 +1105,8 @@ class EtnyPoXNode:
                 logger.info(
                     f"Order {self.__order_id}, with DO request {i} and DP request {self.__dprequest} processed successfully")
                 break
+            if len(cached_do_requests) == 0:
+                logger.info("Finished building DO requests cache")
             if found:
                 logger.info(f"Finished processing order {self.__order_id}")
                 return
@@ -1083,11 +1152,13 @@ class EtnyPoXNode:
             return order_id
         my_orders = self.__etny.functions._getMyDOOrders().call({'from': self.__address})
         cached_order_ids = self.orders_cache.get_values
+
+
         for _order_id in reversed(list(set(my_orders) - set(cached_order_ids))):
             _order = self.__etny.caller()._getOrder(_order_id)
             order = Order(_order)
-            self.orders_cache.add(order.dp_req, _order_id)
             if order.dp_req == self.__dprequest:
+                self.orders_cache.add(order.dp_req, _order_id)
                 return _order_id
         logger.info(f"Couldn't find order with DP request {self.__dprequest}")
         return None
@@ -1116,6 +1187,7 @@ class EtnyPoXNode:
 
     def get_transaction_build(self, existing_nonce=None):
         self.__nonce = existing_nonce if existing_nonce else self.__w3.eth.getTransactionCount(self.__address)
+        print("Sending transaction using gas price, measure", config.gas_price_value, config.gas_price_measure);
 
         return {
             'chainId': config.chain_id,
