@@ -12,9 +12,9 @@
     _arr: "{{ config_file_output.stdout.split('\n')|map('trim')|select()|list }}"
     _keys: "{{ _arr|map('regex_replace', '^(.*?)=(.*)$', '\\1')|map('trim')|list }}"
     _vals: "{{ _arr|map('regex_replace', '^(.*?)=(.*)$', '\\2')|map('trim')|list }}"
-  failed_when: config_file_map.ADDRESS is undefined or config_file_map.RESULT_ADDRESS is undefined or config_file_map.PRIVATE_KEY is undefined or config_file_map.RESULT_PRIVATE_KEY is undefined
+  failed_when: config_file_map.ADDRESS is undefined or config_file_map.PRIVATE_KEY is undefined
 
-- name: Defining node address request
+- name: Defining bloxberg gas balance request
   uri:
     url: https://bloxberg.ethernity.cloud
     method: POST
@@ -26,60 +26,101 @@
   retries: 64
   delay: 3
 
-- name: Defining result address request
+- name: Defining polygon gas balance request
   uri:
-    url: https://bloxberg.ethernity.cloud
+    url: https://polygon.llamarpc.com
     method: POST
     headers:
       Content-Type: "application/json"
     body_format: json
-    body: '{"method":"eth_getBalance","params":["{{ config_file_map.RESULT_ADDRESS }}","latest"],"id":1,"jsonrpc":"2.0"}'
-  register: resultbergs
+    body: '{"method":"eth_getBalance","params":["{{ config_file_map.ADDRESS }}","latest"],"id":1,"jsonrpc":"2.0"}'
+  register: addressmatic
   retries: 64
   delay: 3
 
-- name: Comparing ADDRESS with RESULT ADDRESS
-  debug:
-    msg: "Result address must be different than node address."
-  failed_when: config_file_map.ADDRESS == config_file_map.RESULT_ADDRESS
+- name: Defining mumbai gas balance request
+  uri:
+    url: https://polygon-mumbai-bor.publicnode.com
+    method: POST
+    headers:
+      Content-Type: "application/json"
+    body_format: json
+    body: '{"method":"eth_getBalance","params":["{{ config_file_map.ADDRESS }}","latest"],"id":1,"jsonrpc":"2.0"}'
+  register: addressmumbaimatic
+  retries: 64
+  delay: 3
 
-- name: Comparing PRIVATE KEY with RESULT PRIVATE KEY
-  debug:
-    msg: "Result private key must be different than node private key."
-  failed_when: config_file_map.PRIVATE_KEY == config_file_map.RESULT_PRIVATE_KEY
 
-- name: Evaluate ADDRESS message
+- name: Evaluate bloxberg gas balance message
   debug:
     msg: "{{ addressbergs.json }}"
   failed_when: addressbergs.json == ""
 
-- name: Evaluate RESULT ADDRESS message
+- name: Evaluate polygon gas balance message
   debug:
-    msg: "{{ resultbergs.json }}"
-  failed_when: resultbergs.json == ""
+    msg: "{{ addressmatic.json }}"
+  failed_when: addressmatic.json == ""
+
+- name: Evaluate mumbai gas balance message
+  debug:
+    msg: "{{ addressmumbaimatic.json }}"
+  failed_when: addressmumbaimatic.json == ""
 
 
-- name: Get Node ADDRESS balance
+- name: Checking gas balance for AUTO
   debug:
     msg:
-      - "Node ADDRESS balance: '{{ addressbergs.json.result|int}}' bergs."
+      - "Node ADDRESS balance: '{{ addressbergs.json.result|int}}' BERG."
+      - "Please get bergs on {{ config_file_map.ADDRESS }} from https://faucet.bloxberg.org/ and try again."
+      - "OR"
+      - "Node ADDRESS balance: '{{ addressbergs.json.result|int}}' MATIC."
+      - "Please sent MATIC to {{ config_file_map.ADDRESS }} and try again."
+  failed_when:
+    - addressbergs.json.result == "0x0"
+    - addressmatic.json.result == "0x0"
+  when:
+    - lookup('ansible.builtin.env', 'NETWORK') == 'AUTO'
+
+
+- name: Checking gas balance for BLOXBERG
+  debug:
+    msg:
+      - "Node ADDRESS balance: '{{ addressbergs.json.result|int}}' BERG."
       - "Please get bergs on {{ config_file_map.ADDRESS }} from https://faucet.bloxberg.org/ and try again."
   failed_when:
-    - addressbergs.json.result|int == 0
+    - addressbergs.json.result == "0x0"
   when:
-    - addressbergs.json.result is defined
-    - addressbergs.json.result == '0x0'
+    - lookup('ansible.builtin.env', 'NETWORK') == 'BLOXBERG'
 
-- name: Get RESULT ADDRESS balance
+- name: Checking gas balance for TESTNET
   debug:
     msg:
-      - "Node RESULT ADDRESS balance: '{{ resultbergs.json.result|int}}' bergs."
-      - "Please get bergs on {{ config_file_map.RESULT_ADDRESS }} from https://faucet.bloxberg.org/ and try again."
+      - "Node ADDRESS balance: '{{ addressbergs.json.result|int}}' BERG."
+      - "Please get bergs on {{ config_file_map.ADDRESS }} from https://faucet.bloxberg.org/ and try again."
   failed_when:
-    - resultbergs.json.result|int == 0
+    - addressbergs.json.result == "0x0"
   when:
-    - resultbergs.json.result is defined
-    - resultbergs.json.result == '0x0'
+    - lookup('ansible.builtin.env', 'NETWORK') == 'TESTNET'
+
+- name: Checking gas balance for POLYGON
+  debug:
+    msg:
+      - "Node ADDRESS balance: '{{ addressmatic.json.result|int}}' MATIC."
+      - "Please sent MATIC to {{ config_file_map.ADDRESS }} and try again."
+  failed_when:
+    - addressmatic.json.result == "0x0"
+  when:
+    - lookup('ansible.builtin.env', 'NETWORK') == 'POLYGON'
+
+- name: Checking gas balance for MUMBAI
+  debug:
+    msg:
+      - "Node ADDRESS balance: '{{ addressmumbaimatic.json.result|int}}' MATIC."
+      - "Please sent MATIC to {{ config_file_map.ADDRESS }} using a mumbai faucet and try again."
+  failed_when:
+    - addressmumbaimatic.json.result == "0x0"
+  when:
+    - lookup('ansible.builtin.env', 'NETWORK') == 'MUMBAI'
 
 - meta: end_play
-  when: (resultbergs.json.result is defined and resultbergs.json.result == '0') or (addressbergs.json.result is defined and addressbergs.json.result == '0') or (config_file_map.PRIVATE_KEY == config_file_map.RESULT_PRIVATE_KEY) or (config_file_map.ADDRESS == config_file_map.RESULT_ADDRESS)
+  when: (addressmatic.json.result is defined and addressmatic.json.result == '0') and (addressbergs.json.result is defined and addressbergs.json.result == '0')

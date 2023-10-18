@@ -145,7 +145,7 @@
   shell: virsh undefine {{ vagrant_vm_name.stdout }}
   when: vagrant_vm_name.stdout != ''
 - name: vagrant - cleanup VM
-  shell: vagrant destroy -f
+  shell: vagrant destroy -f && sleep 60
   #when: ansible_facts.services['etny-vagrant.service'].state != 'running'
 - name: vagrant - provision VM
   shell: vagrant up --provider=libvirt

@@ -16,9 +16,14 @@ fi
 choose_network() {
   echo "#############################################"
   echo "Please select the network:"
-  echo "1. bloxberg Mainnet"
-  echo "2. bloxberg Testnet"
-  echo "3. Quit"
+  echo "1. Automatic"
+  echo "   The node will run only on one of the network where it has gas."
+  echo "   The priority order of the networks are: Polygon Mainnet, bloxberg Mainnet"
+  echo "2. Polygon Mainnet (ECLD)"
+  echo "3. Polygon Testnet (tECLD)"
+  echo "4. bloxberg Mainnet (ETNY)"
+  echo "5. bloxberg Testnet (tETNY)"
+  echo "6. Quit"
   echo "#############################################"
 
   while true; do
@@ -26,19 +31,47 @@ choose_network() {
     case $choice in
         1)  # Check Ubuntu kernel version
 	    if [ "$os" != 'Ubuntu 20.04' ] && [ "$os" != 'Ubuntu 22.04' ]; then
-  		echo "You need to upgrade your Ubuntu OS to at least version 20.04 or 22.04 to proceed with the Open Beta installation."
+  		echo "You need to upgrade your Ubuntu OS to at least version 20.04 or 22.04 to proceed with the installation."
     		exit 1
 	    fi
-            echo "You selected Open Beta."
-	    export NETWORK=OPENBETA
+            echo "You selected Automatic. This option will set polygon Mainnet if your wallet has MATIC, otherwise will set bloxberg Mainnet."
+	    export NETWORK=AUTO
             break
             ;;
-        2)
+        2)  # Check Ubuntu kernel version
+            if [ "$os" != 'Ubuntu 20.04' ] && [ "$os" != 'Ubuntu 22.04' ]; then
+                echo "You need to upgrade your Ubuntu OS to at least version 20.04 or 22.04 to proceed with the installation."
+                exit 1
+            fi
+            echo "You selected Open Beta."
+            export NETWORK=POLYGON
+            break
+            ;;
+        3)  # Check Ubuntu kernel version
+            if [ "$os" != 'Ubuntu 20.04' ] && [ "$os" != 'Ubuntu 22.04' ]; then
+                echo "You need to upgrade your Ubuntu OS to at least version 20.04 or 22.04 to proceed with the installation."
+                exit 1
+            fi
+            echo "You selected Open Beta."
+            export NETWORK=MUMBAI
+            break
+            ;;
+        4)  # Check Ubuntu kernel version
+            if [ "$os" != 'Ubuntu 20.04' ] && [ "$os" != 'Ubuntu 22.04' ]; then
+                echo "You need to upgrade your Ubuntu OS to at least version 20.04 or 22.04 to proceed with the installation."
+                exit 1
+            fi
+            echo "You selected Open Beta."
+            export NETWORK=BLOXBERG
+            break
+            ;;
+
+        5)
             echo "You selected Testnet."
 	    export NETWORK=TESTNET
             break
             ;;
-        3)
+        6)
             echo "Quitting..."
             exit 0
             ;;

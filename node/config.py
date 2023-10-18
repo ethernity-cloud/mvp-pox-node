@@ -25,38 +25,61 @@ from utils import HardwareInfoProvider
 if os.path.exists('.env'):
     load_dotenv('.env')
 
-http_provider = os.environ.get('HTTP_PROVIDER')
 ipfs_default = os.environ.get('IPFS_HOST')
 client_connect_url_default = os.environ.get('CLIENT_CONNECT_URL')
 client_bootstrap_url = os.environ.get('CLIENT_BOOTSTRAP_URL')
-chain_id = int(os.environ.get('CHAIN_ID'))
 gas_limit = int(os.environ.get('GAS_LIMIT'))
 gas_price_value = os.environ.get('GAS_PRICE_VALUE')
-task_price_default = os.environ.get('TASK_EXECUTION_PRICE_DEFAULT')
 
-openbeta_gas_price_measure = os.environ.get('GAS_PRICE_MEASURE')
-testnet_gas_price_measure = os.environ.get('TESTNET_GAS_PRICE_MEASURE')
+bloxberg_rpc_url = os.environ.get('BLOXBERG_RPC_URL');
+bloxberg_chain_id = os.environ.get('BLOXBERG_CHAIN_ID');
+bloxberg_contract_address = os.environ.get('BLOXBERG_CONTRACT_ADDRESS');
+bloxberg_heartbeat_address = os.environ.get('BLOXBERG_HEARTBEAT_CONTRACT_ADDRESS');
+bloxberg_image_registry_address = os.environ.get('BLOXBERG_IMAGE_REGISTRY');
+bloxberg_gas_price_measure = os.environ.get('BLOXBERG_GAS_PRICE_MEASURE')
+bloxberg_task_execution_price_default = os.environ.get('BLOXBERG_TASK_EXECUTION_PRICE_DEFAULT');
 
-openbeta_contract_address = os.environ.get('CONTRACT_ADDRESS');
+testnet_rpc_url = os.environ.get('TESTNET_RPC_URL');
+testnet_chain_id = os.environ.get('TESTNET_CHAIN_ID');
 testnet_contract_address = os.environ.get('TESTNET_CONTRACT_ADDRESS');
-
-openbeta_heartbeat_address = os.environ.get('HEARTBEAT_CONTRACT_ADDRESS');
 testnet_heartbeat_address = os.environ.get('TESTNET_HEARTBEAT_CONTRACT_ADDRESS');
+testnet_image_registry_address = os.environ.get('TESTNET_IMAGE_REGISTRY');
+testnet_gas_price_measure = os.environ.get('TESTNET_GAS_PRICE_MEASURE')
+testnet_task_execution_price_default = os.environ.get('TESTNET_TASK_EXECUTION_PRICE_DEFAULT');
 
-network_default = "OPENBETA"
+polygon_rpc_url = os.environ.get('POLYGON_RPC_URL');
+polygon_chain_id = os.environ.get('POLYGON_CHAIN_ID');
+polygon_contract_address = os.environ.get('POLYGON_CONTRACT_ADDRESS');
+polygon_heartbeat_address = os.environ.get('POLYGON_HEARTBEAT_CONTRACT_ADDRESS');
+polygon_image_registry_address = os.environ.get('POLYGON_IMAGE_REGISTRY');
+polygon_gas_price_measure = os.environ.get('POLYGON_GAS_PRICE_MEASURE')
+polygon_task_execution_price_default = os.environ.get('POLYGON_TASK_EXECUTION_PRICE_DEFAULT');
+
+mumbai_rpc_url = os.environ.get('MUMBAI_RPC_URL');
+mumbai_chain_id = os.environ.get('MUMBAI_CHAIN_ID');
+mumbai_contract_address = os.environ.get('MUMBAI_CONTRACT_ADDRESS');
+mumbai_heartbeat_address = os.environ.get('MUMBAI_HEARTBEAT_CONTRACT_ADDRESS');
+mumbai_image_registry_address = os.environ.get('MUMBAI_IMAGE_REGISTRY');
+mumbai_gas_price_measure = os.environ.get('MUMBAI_GAS_PRICE_MEASURE')
+mumbai_task_execution_price_default = os.environ.get('MUMBAI_TASK_EXECUTION_PRICE_DEFAULT');
+
+
+network_default = "BLOXBERG"
+task_price_default = 3
 network = None
 heart_beat_address = None
 gas_price_measure = None
-
+image_registry_address = None
 
 # constants
-image_registry_address = '0x15D73a742529C3fb11f3FA32EF7f0CC3870ACA31'
 abi_filepath = os.path.dirname(os.path.realpath(__file__)) + '/docker/pox.abi'
 image_registry_abi_filepath = os.path.dirname(os.path.realpath(__file__)) + '/image_registry.abi'
 heart_beat_abi_filepath = os.path.dirname(os.path.realpath(__file__)) + '/heart_beat.abi'
 auto_update_file_path = os.path.dirname(os.path.realpath(__file__)) + '/auto_update.etny'
 heart_beat_log_file_path = os.path.dirname(os.path.realpath(__file__)) + '/heartbeat.etny'
 uuid_filepath = expanduser("~") + "/opt/etny/node/UUID"
+network_cache_limit = 1
+network_cache_filepath = os.path.dirname(os.path.realpath(__file__)) + '/network_cache.txt'
 orders_cache_limit = 10000000
 orders_cache_filepath = os.path.dirname(os.path.realpath(__file__)) + '/orders_cache.txt'
 ipfs_cache_limit = 10000000

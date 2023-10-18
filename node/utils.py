@@ -138,6 +138,10 @@ class Cache:
     def get(self, key):
         return self.mem.get(key)
 
+    def wipe(self):
+        self.mem = None
+        self._update_file()
+
     @property
     def get_values(self):
         return self.mem.values()
