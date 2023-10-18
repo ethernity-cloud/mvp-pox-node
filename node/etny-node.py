@@ -381,6 +381,7 @@ class EtnyPoXNode:
                 logger.info('Building result ')
                 logger.warn('Too many retries for the current order_id: %d', order_id)
                 logger.info('Adding result to order')
+                result_msg='[Warn] Order execution failed more than 10 times'
                 self.add_result_to_order(order_id, result_msg)
                 return
 
@@ -800,6 +801,18 @@ class EtnyPoXNode:
 
     def add_result_to_order(self, order_id, result):
         logger.info('Adding result to order', order_id, result)
+
+
+        if self.__network == 'POLYGON':
+            self.__w3.eth.set_gas_price_strategy(rpc_gas_price_strategy)
+            #self.__w3.middleware_onion.add(middleware.time_based_cache_middleware)
+            #self.__w3.middleware_onion.add(middleware.latest_block_based_cache_middleware)
+            #self.__w3.middleware_onion.add(middleware.simple_cache_middleware)
+            config.gas_price_value = self.__w3.eth.generate_gas_price()
+            config.gas_price_measure = 'wei'
+
+        logger.info(f"Sending transaction using gas price, measure: {config.gas_price_value} {config.gas_price_measure}");
+
         _nonce = self.__w3.eth.getTransactionCount(self.__address)
         unicorn_txn = self.__etny.functions._addResultToOrder(
             order_id, result
@@ -1011,11 +1024,11 @@ class EtnyPoXNode:
         order_details = self._getOrder()
         if order_details is not None:
             [order_id, order] = order_details
-            if order.status == OrderStatus.CLOSED:
-                logger.info(f"DP request {self.__dprequest} completed successfully!")
             if order.status == OrderStatus.PROCESSING:
                 logger.info(f"DP request never finished, processing order {order_id}")
                 self.process_order(order_id)
+            if order.status == OrderStatus.CLOSED:
+                logger.info(f"DP request {self.__dprequest} completed successfully!")
             if order.status == OrderStatus.OPEN:
                 logger.info("Order was never approved, skipping")
             return
