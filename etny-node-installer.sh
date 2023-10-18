@@ -17,6 +17,8 @@ choose_network() {
   echo "#############################################"
   echo "Please select the network:"
   echo "1. Automatic"
+  echo "   The node will run only on one of the network where it has gas."
+  echo "   The priority order of the networks are: Polygon Mainnet, bloxberg Mainnet"
   echo "2. Polygon Mainnet (ECLD)"
   echo "3. Polygon Testnet (tECLD)"
   echo "4. bloxberg Mainnet (ETNY)"
