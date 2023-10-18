@@ -7,6 +7,9 @@ from eth_account import Account
 from web3 import Web3
 from web3 import exceptions
 from web3.middleware import geth_poa_middleware
+from web3 import middleware
+from web3.gas_strategies.time_based import fast_gas_price_strategy
+from web3.gas_strategies.rpc import rpc_gas_price_strategy
 
 import config
 from utils import get_or_generate_uuid, run_subprocess, retry, Storage, Cache, ListCache, MergedOrdersCache, subprocess
@@ -45,9 +48,9 @@ class EtnyPoXNode:
         if self.__network == None or self.__network == 'AUTO' or self.__network == "OPENBETA":
           logger.info("Network is automatic, determining gas value for POLYGON");
           try:
-            config.http_provider = config.mumbai_rpc_url;
-            config.chain_id = int(config.mumbai_chain_id);
-            config.contract_address = config.mumbai_contract_address;
+            config.http_provider = config.polygon_rpc_url;
+            config.chain_id = int(config.polygon_chain_id);
+            config.contract_address = config.polygon_contract_address;
 
             with open(config.abi_filepath) as f:
                 self.__contract_abi = f.read()
@@ -64,8 +67,8 @@ class EtnyPoXNode:
             logger.info(e)
             pass
 
-          if polygonBalance > 1000000000000000:
-              self.__network = 'MUMBAI'
+          if polygonBalance > 100000000000000000:
+              self.__network = 'POLYGON'
           else:
               self.__network = 'BLOXBERG'
 
@@ -281,7 +284,7 @@ class EtnyPoXNode:
             ""
         ]
 
-        logger.info('params: {}'.format(params))
+        #logger.info('params: {}'.format(params))
 
         unicorn_txn = self.__etny.functions._addDPRequest(*params).buildTransaction(self.get_transaction_build())
         _hash = ''
@@ -386,7 +389,7 @@ class EtnyPoXNode:
         with open(config.process_orders_cache_filepath, "w") as outfile:
             outfile.write(json_object)
 
-        self.add_processor_to_order(order_id)
+        #self.add_processor_to_order(order_id)
         version = 0
         if metadata[1].startswith('v1:'):
             version = 1
@@ -1026,6 +1029,9 @@ class EtnyPoXNode:
         checked = 0
         seconds = 0
         timeout_in_seconds = 10
+
+        self.__call_heart_beat()
+
         while seconds < config.contract_call_frequency:
             try:
                 count = self.__etny.caller()._getDORequestsCount()
@@ -1036,7 +1042,6 @@ class EtnyPoXNode:
                 continue
 
             if count == 0:
-                print("Count: %s", count);
                 time.sleep(5);
                 continue;
 
@@ -1115,11 +1120,8 @@ class EtnyPoXNode:
 
             seconds += timeout_in_seconds
             if seconds >= config.contract_call_frequency:
-                logger.info("DP request timed out!")
-                self.cancel_dp_request(self.__dprequest)
-                break
-
-        logger.info("DP request timed out!")
+                seconds = 0
+                self.__call_heart_beat()
 
         # self.cancel_dp_request(self.__dprequest)
 
@@ -1187,7 +1189,16 @@ class EtnyPoXNode:
 
     def get_transaction_build(self, existing_nonce=None):
         self.__nonce = existing_nonce if existing_nonce else self.__w3.eth.getTransactionCount(self.__address)
-        print("Sending transaction using gas price, measure", config.gas_price_value, config.gas_price_measure);
+
+        if self.__network == 'POLYGON':
+            self.__w3.eth.set_gas_price_strategy(rpc_gas_price_strategy)
+            #self.__w3.middleware_onion.add(middleware.time_based_cache_middleware)
+            #self.__w3.middleware_onion.add(middleware.latest_block_based_cache_middleware)
+            #self.__w3.middleware_onion.add(middleware.simple_cache_middleware)
+            config.gas_price_value = self.__w3.eth.generate_gas_price()
+            config.gas_price_measure = 'wei'
+       
+        logger.info(f"Sending transaction using gas price, measure: {config.gas_price_value} {config.gas_price_measure}");
 
         return {
             'chainId': config.chain_id,
@@ -1195,6 +1206,7 @@ class EtnyPoXNode:
             'nonce': self.__nonce,
             'gasPrice': self.__w3.toWei(config.gas_price_value, config.gas_price_measure),
         }
+
 
     def send_transaction(self, unicorn_txn):
         try:
@@ -1208,8 +1220,12 @@ class EtnyPoXNode:
 
     def resume_processing(self):
         while True:
-            self.__enforce_update()
-            self.__call_heart_beat()
+            polygonBalance = self.__w3.eth.get_balance(self.__address)
+            if self.__network == 'POLYGON':
+                if polygonBalance < 100000000000000000:
+                    self.__enforce_update()
+            else:
+                self.__enforce_update()
             self.add_dp_request()
             self.process_dp_request()
 
@@ -1366,17 +1382,15 @@ class EtnyPoXNode:
             exit(1)
 
     def __call_heart_beat(self):
-        logger.info('Checking if heart call is necessary...')
-
         if self.__network == 'TESTNET':
             heartbeat_frequency = 1 * 60 * 60 - 60;
-        elif self.__network == 'MUMBAI':
+        elif self.__network == 'POLYGON':
             heartbeat_frequency = 1 * 60 * 60 - 60;
         else:
             heartbeat_frequency = 12 * 60 * 60 - 60;
 
         if self.__can_run_auto_update(config.heart_beat_log_file_path, heartbeat_frequency):
-            logger.info('Heart beat can be called...')
+            logger.info('Calling hearbeat...')
             params = [
                 "v3"
             ]
@@ -1391,8 +1405,6 @@ class EtnyPoXNode:
             except Exception as e:
                 logger.info(f'error = {e}, type = {type(e)}')
                 raise
-        else:
-          logger.info('Heart beat called already within last %s seconds...', heartbeat_frequency)
 
 class SGXDriver:
     def __init__(self):
