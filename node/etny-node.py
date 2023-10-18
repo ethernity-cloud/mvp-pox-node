@@ -1282,8 +1282,6 @@ class EtnyPoXNode:
 
     def __run_integration_test(self):
         logger.info('Running integration test.')
-        self.can_run_under_sgx = True
-        return;
 
         [enclave_image_hash, _,
          docker_compose_hash] = self.__image_registry.caller().getLatestTrustedZoneImageCertPublicKey(config.integration_test_image,
