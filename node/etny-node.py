@@ -89,7 +89,7 @@ class EtnyPoXNode:
             config.heart_beat_address = config.polygon_heartbeat_address;
             config.image_registry_address = config.polygon_image_registry_address;
             config.gas_price_measure = config.polygon_gas_price_measure;
-            config.integration_test_image = 'etny-pynithy-polygon';
+            config.integration_test_image = 'ecld-pynithy';
             if self.__price == None:
                 self.__price = 3;
         elif self.__network == 'MUMBAI':
