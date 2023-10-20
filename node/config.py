@@ -64,7 +64,7 @@ mumbai_gas_price_measure = os.environ.get('MUMBAI_GAS_PRICE_MEASURE')
 mumbai_task_execution_price_default = os.environ.get('MUMBAI_TASK_EXECUTION_PRICE_DEFAULT');
 
 
-network_default = "BLOXBERG"
+network_default = "AUTO"
 task_price_default = 3
 network = None
 heart_beat_address = None
