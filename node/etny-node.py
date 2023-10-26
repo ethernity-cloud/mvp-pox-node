@@ -1132,11 +1132,15 @@ class EtnyPoXNode:
             time.sleep(timeout_in_seconds)
 
             seconds += timeout_in_seconds
-            if seconds >= config.contract_call_frequency:
-                seconds = 0
-                self.__call_heart_beat()
 
-        # self.cancel_dp_request(self.__dprequest)
+            self.__call_heart_beat()
+
+            if seconds >= config.contract_call_frequency:
+                if self.__network == 'POLYGON':
+                    seconds = 0;
+                else:
+                    self.cancel_dp_request(self.__dprequest)
+                    return;
 
     def add_processor_to_order(self, order_id):
         unicorn_txn = self.__etny.functions._addProcessorToOrder(order_id, self.__resultaddress).buildTransaction(
@@ -1375,6 +1379,24 @@ class EtnyPoXNode:
                     saved_timestamp = int(value)
 
             if current_timestamp - saved_timestamp >= interval:
+                return True
+            else:
+                return False
+        else:
+            return True
+
+
+    def __write_auto_update_cache(self, file_path, interval):
+        current_timestamp = int(time.time())
+        if os.path.exists(file_path):
+            with open(file_path, 'r') as file:
+                value = file.read().strip()
+                if not value.isdigit():
+                    saved_timestamp = 0
+                else:
+                    saved_timestamp = int(value)
+
+            if current_timestamp - saved_timestamp >= interval:
                 with open(file_path, 'w') as file:
                     file.write(str(current_timestamp))
                 return True
@@ -1385,6 +1407,7 @@ class EtnyPoXNode:
                 file.write(str(current_timestamp))
 
             return True
+
 
     def __enforce_update(self):
         logger.info('Checking if the auto update can be performed...')
@@ -1413,6 +1436,7 @@ class EtnyPoXNode:
                 receipt = self.__w3.eth.waitForTransactionReceipt(_hash)
                 if receipt.status == 1:
                     logger.info('Heart beat successfully called...')
+                    self.__write_auto_update_cache(config.heart_beat_log_file_path, heartbeat_frequency);
             except Exception as e:
                 logger.info(f'error = {e}, type = {type(e)}')
                 raise
