@@ -40,7 +40,7 @@ class EtnyPoXNode:
 
     def __init__(self):
         self.parse_arguments(config.arguments, config.parser)
-       
+
         polygonBalance = 0
 
         logger.info("Configuration network is: %s", self.__network)
@@ -74,7 +74,7 @@ class EtnyPoXNode:
 
         if self.__network == 'TESTNET':
             config.http_provider = config.testnet_rpc_url;
-            config.chain_id = int(config.tesnet_chain_id);
+            config.chain_id = int(config.testnet_chain_id);
             config.contract_address = config.testnet_contract_address;
             config.heart_beat_address = config.testnet_heartbeat_address;
             config.image_registry_address = config.testnet_image_registry_address;
@@ -188,7 +188,7 @@ class EtnyPoXNode:
                                                        self.__secret_key)
         self.process_order_data = {}
 
-        self.__reset_cache() 
+        self.__reset_cache()
 
         self.__run_integration_test()
 
@@ -455,7 +455,7 @@ class EtnyPoXNode:
             logger.info("Running new docker registry - 4 ")
             subprocess.call('docker rm -f $(sudo docker ps -aq)', shell=True)
             run_subprocess(['docker', 'build', '-t', 'docker_etny-pynithy1', '-f', 'docker/etny-pynithy.Dockerfile', './docker'], logger)
-    
+
             logger.info("Running docker-compose")
             run_subprocess([
                  'docker-compose', '-f', 'docker/docker-compose-without-registry.yaml', 'run', '--rm', '-d', '--name',
@@ -786,7 +786,7 @@ class EtnyPoXNode:
             if status:
                 logger.info('Enclave finished the execution')
                 return True
-	
+
         logger.info('Enclave execution timed out')
         return False
 
@@ -1197,7 +1197,7 @@ class EtnyPoXNode:
         except Exception as e:
             errorMessage = 'Already Taken by other Node' if type(e) == IndexError else str(e)
             logger.error(
-                f'''Failed to place Order: {order_id}, DORequest_id: {doreq}, DPRequest_id: {self.__dprequest}, Error 
+                f'''Failed to place Order: {order_id}, DORequest_id: {doreq}, DPRequest_id: {self.__dprequest}, Error
                 Message: {errorMessage}''')
             raise
 
@@ -1214,7 +1214,7 @@ class EtnyPoXNode:
             #self.__w3.middleware_onion.add(middleware.simple_cache_middleware)
             config.gas_price_value = self.__w3.eth.generate_gas_price()
             config.gas_price_measure = 'wei'
-       
+
         logger.info(f"Sending transaction using gas price, measure: {config.gas_price_value} {config.gas_price_measure}");
 
         return {
@@ -1413,6 +1413,7 @@ class EtnyPoXNode:
         logger.info('Checking if the auto update can be performed...')
         if self.__can_run_auto_update(config.auto_update_file_path, 24 * 60 * 60):
             logger.info('Exiting the agent. Performing auto update...')
+            self.__write_auto_update_cache(config.heart_beat_log_file_path, 24 * 60 * 60);
             exit(1)
 
     def __call_heart_beat(self):
