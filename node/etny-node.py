@@ -1413,7 +1413,7 @@ class EtnyPoXNode:
         logger.info('Checking if the auto update can be performed...')
         if self.__can_run_auto_update(config.auto_update_file_path, 24 * 60 * 60):
             logger.info('Exiting the agent. Performing auto update...')
-            self.__write_auto_update_cache(config.heart_beat_log_file_path, 24 * 60 * 60);
+            self.__write_auto_update_cache(config.auto_update_file_path, 24 * 60 * 60);
             exit(1)
 
     def __call_heart_beat(self):
