@@ -1420,7 +1420,7 @@ class EtnyPoXNode:
         if self.__network == 'TESTNET':
             heartbeat_frequency = 1 * 60 * 60 - 60;
         elif self.__network == 'POLYGON':
-            heartbeat_frequency = 1 * 60 * 60 - 60;
+            heartbeat_frequency = 12 * 60 * 60 - 60;
         else:
             heartbeat_frequency = 12 * 60 * 60 - 60;
 
