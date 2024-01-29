@@ -33,7 +33,6 @@
        - genisoimage
        - cpu-checker  
     state: present
-    allow_downgrade: true
 - name:  Ubuntu 22.04 | vagrant add key  
   apt_key:
     url: https://apt.releases.hashicorp.com/gpg
