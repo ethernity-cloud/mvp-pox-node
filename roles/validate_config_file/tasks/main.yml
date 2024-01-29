@@ -23,8 +23,9 @@
     body_format: json
     body: '{"method":"eth_getBalance","params":["{{ config_file_map.ADDRESS }}","latest"],"id":1,"jsonrpc":"2.0"}'
   register: addressbergs
-  retries: 64
-  delay: 3
+  retries: 5
+  delay: 5
+  timeout: 10
 
 - name: Defining polygon gas balance request
   uri:
@@ -35,8 +36,9 @@
     body_format: json
     body: '{"method":"eth_getBalance","params":["{{ config_file_map.ADDRESS }}","latest"],"id":1,"jsonrpc":"2.0"}'
   register: addressmatic
-  retries: 64
-  delay: 3
+  retries: 5
+  delay: 5
+  timeout: 10
 
 - name: Defining mumbai gas balance request
   uri:
@@ -47,8 +49,9 @@
     body_format: json
     body: '{"method":"eth_getBalance","params":["{{ config_file_map.ADDRESS }}","latest"],"id":1,"jsonrpc":"2.0"}'
   register: addressmumbaimatic
-  retries: 64
-  delay: 3
+  retries: 5
+  delay: 5
+  timeout: 10
 
 
 - name: Evaluate bloxberg gas balance message
