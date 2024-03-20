@@ -3,11 +3,11 @@ import argparse
 import logging.handlers
 from os.path import expanduser
 
-
 def onImportError():
     os.system("pip3 install psutil==5.9.2")
     os.system("pip3 install python-dotenv==0.21.0")
     os.system("pip3 install minio==7.1.13")
+    os.system("pip3 install configobj==5.0.6")
     os.killpg(os.getpgid(), signal.SIGCHLD)
     sys.exit()
 
@@ -16,6 +16,7 @@ try:
     import psutil
     from minio import Minio
     from dotenv import load_dotenv
+    from configobj import ConfigObj
 except ImportError as e:
     onImportError()
 
@@ -25,13 +26,23 @@ from utils import HardwareInfoProvider
 if os.path.exists('.env'):
     load_dotenv('.env')
 
+if os.path.exists('/home/vagrant/etny/node/config'):
+    custom_config = ConfigObj('/home/vagrant/etny/node/config')
+    custom_bloxberg_rpc_url = custom_config.get('BLOXBERG_RPC_URL')
+    custom_testnet_rpc_url = custom_config.get('TESTNET_RPC_URL')
+    custom_polygon_rpc_url = custom_config.get('POLYGON_RPC_URL')
+    custom_mumbai_rpc_url = custom_config.get('MUMBAI_RPC_URL')
+
 ipfs_default = os.environ.get('IPFS_HOST')
 client_connect_url_default = os.environ.get('CLIENT_CONNECT_URL')
 client_bootstrap_url = os.environ.get('CLIENT_BOOTSTRAP_URL')
 gas_limit = int(os.environ.get('GAS_LIMIT'))
 gas_price_value = os.environ.get('GAS_PRICE_VALUE')
 
-bloxberg_rpc_url = os.environ.get('BLOXBERG_RPC_URL');
+if custom_bloxberg_rpc_url:
+   bloxberg_rpc_url = custom_bloxberg_rpc_url;
+else:
+   bloxberg_rpc_url = os.environ.get('BLOXBERG_RPC_URL');
 bloxberg_chain_id = os.environ.get('BLOXBERG_CHAIN_ID');
 bloxberg_contract_address = os.environ.get('BLOXBERG_CONTRACT_ADDRESS');
 bloxberg_heartbeat_address = os.environ.get('BLOXBERG_HEARTBEAT_CONTRACT_ADDRESS');
@@ -39,7 +50,10 @@ bloxberg_image_registry_address = os.environ.get('BLOXBERG_IMAGE_REGISTRY');
 bloxberg_gas_price_measure = os.environ.get('BLOXBERG_GAS_PRICE_MEASURE')
 bloxberg_task_execution_price_default = os.environ.get('BLOXBERG_TASK_EXECUTION_PRICE_DEFAULT');
 
-testnet_rpc_url = os.environ.get('TESTNET_RPC_URL');
+if custom_testnet_rpc_url:
+   testnet_rpc_url = custom_testnet_rpc_url;
+else:
+   testnet_rpc_url = os.environ.get('TESTNET_RPC_URL');
 testnet_chain_id = os.environ.get('TESTNET_CHAIN_ID');
 testnet_contract_address = os.environ.get('TESTNET_CONTRACT_ADDRESS');
 testnet_heartbeat_address = os.environ.get('TESTNET_HEARTBEAT_CONTRACT_ADDRESS');
@@ -47,7 +61,10 @@ testnet_image_registry_address = os.environ.get('TESTNET_IMAGE_REGISTRY');
 testnet_gas_price_measure = os.environ.get('TESTNET_GAS_PRICE_MEASURE')
 testnet_task_execution_price_default = os.environ.get('TESTNET_TASK_EXECUTION_PRICE_DEFAULT');
 
-polygon_rpc_url = os.environ.get('POLYGON_RPC_URL');
+if custom_polygon_rpc_url:
+   polygon_rpc_url = custom_polygon_rpc_url;
+else:
+   polygon_rpc_url = os.environ.get('POLYGON_RPC_URL');
 polygon_chain_id = os.environ.get('POLYGON_CHAIN_ID');
 polygon_contract_address = os.environ.get('POLYGON_CONTRACT_ADDRESS');
 polygon_heartbeat_address = os.environ.get('POLYGON_HEARTBEAT_CONTRACT_ADDRESS');
@@ -55,7 +72,10 @@ polygon_image_registry_address = os.environ.get('POLYGON_IMAGE_REGISTRY');
 polygon_gas_price_measure = os.environ.get('POLYGON_GAS_PRICE_MEASURE')
 polygon_task_execution_price_default = os.environ.get('POLYGON_TASK_EXECUTION_PRICE_DEFAULT');
 
-mumbai_rpc_url = os.environ.get('MUMBAI_RPC_URL');
+if custom_mumbai_rpc_url:
+   mumbai_rpc_url = custom_mumbai_rpc_url;
+else:
+   mumbai_rpc_url = os.environ.get('MUMBAI_RPC_URL');
 mumbai_chain_id = os.environ.get('MUMBAI_CHAIN_ID');
 mumbai_contract_address = os.environ.get('MUMBAI_CONTRACT_ADDRESS');
 mumbai_heartbeat_address = os.environ.get('MUMBAI_HEARTBEAT_CONTRACT_ADDRESS');
