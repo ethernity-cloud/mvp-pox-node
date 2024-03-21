@@ -8,18 +8,18 @@
     - libvirt-install
     - libvirt-config
 
-- include: firewall.yml
+- include_tasks: firewall.yml
   when: libvirt_firewalld is defined and
         libvirt_firewalld
   tags: [ libvirt, libvirt-firewalld ]
 
-- include: selinux.yml
+- include_tasks: selinux.yml
   when: libvirt_selinux is defined and
         libvirt_selinux
   tags: [ libvirt, libvirt-selinux ]
 
-- include: install.yml
+- include_tasks: install.yml
   tags: [ libvirt, libvirt-install ]
 
-- include: config.yml
+- include_tasks: config.yml
   tags: [ libvirt, libvirt-config ]
