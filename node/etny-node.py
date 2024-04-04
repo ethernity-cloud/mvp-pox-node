@@ -1114,8 +1114,8 @@ class EtnyPoXNode:
                     continue
                 found = True
                 logger.info(f"Waiting for order {self.__order_id} approval...")
-                if retry(self.wait_for_order_approval, attempts=20, delay=2)[0] is False:
-                    logger.info("Order was not approved in the last ~20 blocks, skipping to next request")
+                if retry(self.wait_for_order_approval, attempts=50, delay=2)[0] is False:
+                    logger.info("Order was not approved in the last ~50 blocks, skipping to next request")
                     break
                 # performance improvement, to avoid duplication
                 # self.process_order(self.__order_id, metadata=metadata)
