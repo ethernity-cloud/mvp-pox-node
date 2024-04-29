@@ -40,7 +40,7 @@
 
 - name: Defining mumbai gas balance request
   uri:
-    url: https://polygon-mumbai-bor.publicnode.com
+    url: https://polygon-mumbai-pokt.nodies.app
     method: POST
     headers:
       Content-Type: "application/json"
