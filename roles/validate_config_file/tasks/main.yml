@@ -28,7 +28,7 @@
 
 - name: Defining polygon gas balance request
   uri:
-    url: https://polygon.llamarpc.com
+    url: https://polygon-rpc.com
     method: POST
     headers:
       Content-Type: "application/json"
@@ -40,7 +40,7 @@
 
 - name: Defining mumbai gas balance request
   uri:
-    url: https://polygon-testnet.public.blastapi.io
+    url: https://rpc-amoy.polygon.technology
     method: POST
     headers:
       Content-Type: "application/json"
