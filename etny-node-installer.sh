@@ -6,11 +6,13 @@ rebootfile="/tmp/reboot"
 service="etny-vagrant.service"
 os=""
 
+source custom_rpc.sh
+
 if [ "$1" == "-v" ]
 then
-	ansible_cmd="ansible-playbook -v"
+    ansible_cmd="ansible-playbook -v"
 else
-	ansible_cmd="ansible-playbook"
+    ansible_cmd="ansible-playbook"
 fi
 
 choose_network() {
@@ -30,12 +32,12 @@ choose_network() {
     read -p "Enter your choice: " choice
     case $choice in
         1)  # Check Ubuntu kernel version
-	    if [ "$os" != 'Ubuntu 20.04' ] && [ "$os" != 'Ubuntu 22.04' ]; then
-  		echo "You need to upgrade your Ubuntu OS to at least version 20.04 or 22.04 to proceed with the installation."
-    		exit 1
-	    fi
+        if [ "$os" != 'Ubuntu 20.04' ] && [ "$os" != 'Ubuntu 22.04' ]; then
+        echo "You need to upgrade your Ubuntu OS to at least version 20.04 or 22.04 to proceed with the installation."
+            exit 1
+        fi
             echo "You selected Automatic. This option will set polygon Mainnet if your wallet has MATIC, otherwise will set bloxberg Mainnet."
-	    export NETWORK=AUTO
+        export NETWORK=AUTO
             break
             ;;
         2)  # Check Ubuntu kernel version
@@ -68,7 +70,7 @@ choose_network() {
 
         5)
             echo "You selected Testnet."
-	    export NETWORK=TESTNET
+        export NETWORK=TESTNET
             break
             ;;
         6)
@@ -87,19 +89,19 @@ task_price_check() {
     if [ "$current_price" != "" ];
     then
         echo "Task execution price already exists in the config file and is currently set to $current_price ETNY/hour."
-	export TASK_EXECUTION_PRICE=$current_price
+    export TASK_EXECUTION_PRICE=$current_price
         echo "Would you like to modify it? (y/N)"
         read modify
-	if [[ "$modify" =~ ^[Yy]$ ]]; then
+    if [[ "$modify" =~ ^[Yy]$ ]]; then
         set_task_price
-    	fi
+        fi
     else
         echo "The TASK_EXECUTION_PRICE is not set in the config file."
         echo "Do you want to use the default value of 3 ETNY/hour? (Y/n)"
         read -r use_default
         if [[ -z "$use_default" ]] || [[ "$use_default" =~ ^[Yy]$ ]]; then
             default_price=3
-	    export TASK_EXECUTION_PRICE=$default_price
+        export TASK_EXECUTION_PRICE=$default_price
         else
             set_task_price
         fi
@@ -119,11 +121,14 @@ set_task_price() {
     export TASK_EXECUTION_PRICE=$taskprice
 }
 
+
 ubuntu_20_04() {
   # Determining if the etny-vagrant service is running
   echo "$os found. Continuing..."
+ 
   choose_network
   task_price_check
+  custom_rpc
   echo "Finding out if etny-vagrant service is already running..."
   systemctl status "$service" 2>/dev/null | grep "active (running)" >/dev/null
   if [ $? -eq 0 ]; then
@@ -188,7 +193,7 @@ check_config_file() {
             result_address=$(grep "^RESULT_ADDRESS=" "$configfile" | cut -d'=' -f2)
 
             if [[ $address =~ ^0x[[:xdigit:]]{40}$ && $result_address =~ ^0x[[:xdigit:]]{40}$ && ${#private_key} -eq 64 && ${#result_private_key} -eq 64 ]]; then
-		echo "Configuration check succesful!"
+        echo "Configuration check succesful!"
             else
                 echo "Invalid ADDRESS, RESULT_ADDRESS, PRIVATE_KEY, or RESULT_PRIVATE_KEY format or length in the config file."
                 echo "Please update the config file with valid information."
@@ -203,13 +208,34 @@ check_config_file() {
             exit 1
         fi
 
-	echo "Writing network and price to the config file"
+    echo "Writing network and price to the config file"
 
         sed -i "/NETWORK/d" "$nodefolder/$configfile"
         echo "NETWORK="$NETWORK >> "$nodefolder/$configfile"
 
         sed -i "/TASK_EXECUTION_PRICE/d" "$nodefolder/$configfile"
         echo "TASK_EXECUTION_PRICE="$TASK_EXECUTION_PRICE >> "$nodefolder/$configfile"
+
+    if [[ ! -z $BLOXBERG_RPC_URL ]]; then
+        sed -i "/BLOXBERG_RPC_URL/d" "$nodefolder/$configfile"
+        echo "BLOXBERG_RPC_URL="$BLOXBERG_RPC_URL >> "$nodefolder/$configfile"
+    fi
+
+    if [[ ! -z $TESTNET_RPC_URL ]]; then
+        sed -i "/TESTNET_RPC_URL/d" "$nodefolder/$configfile"
+        echo "TESTNET_RPC_URL="$TESTNET_RPC_URL >> "$nodefolder/$configfile"
+    fi
+
+    if [[ ! -z $POLYGON_RPC_URL ]]; then
+        sed -i "/POLYGON_RPC_URL/d" "$nodefolder/$configfile"
+        echo "POLYGON_RPC_URL="$POLYGON_RPC_URL >> "$nodefolder/$configfile"
+    fi
+
+    if [[ ! -z $MUMBAI_RPC_URL ]]; then
+        sed -i "/MUMBAI_RPC_URL/d" "$nodefolder/$configfile"
+        echo "MUMBAI_RPC_URL="$MUMBAI_RPC_URL >> "$nodefolder/$configfile"
+    fi
+
     else
         echo "Config file not found. How would you like to continue?"
         ubuntu_20_04_config_file_choice
@@ -233,33 +259,33 @@ ubuntu_20_04_kernel_check(){
 echo "Determining if the right kernel is running..."
 if [[ ( "$(is_miminum_kernel_version)" = true && $os = "Ubuntu 20.04" ) || ( $(uname -r) = "5.0.0-050000-generic"  && $os = "Ubuntu 18.04") || ( "$(is_miminum_kernel_version)" = true && $os = "Ubuntu 22.04" )]]
 then  
-	echo "The right kernel is running. Continuing setup..."
-	## check ansible 
-	check_ansible
-	check_config_file
-	echo "Running ansible-playbook script..."	
-	HOME=/root
-	qemu_unhold
-	sudo -E $ansible_cmd -i localhost, playbook.yml -e "ansible_python_interpreter=/usr/bin/python3"
-	install_result=$?
-	if [ -f $rebootfile ]
-	then 
-		echo "Restarting system. Please run the installer script afterwards to continue the setup."
-		sec=30
-		while [ $sec -ge 0 ]; do echo -n "Restarting system in [CTRL+C to cancel]: " && echo -ne "$sec\033[0K\r" && let "sec=sec-1" && sleep 1; done
-		sudo reboot
-	else
+    echo "The right kernel is running. Continuing setup..."
+    ## check ansible 
+    check_ansible
+    check_config_file
+    echo "Running ansible-playbook script..."   
+    HOME=/root
+    qemu_unhold
+    sudo -E $ansible_cmd -i localhost, playbook.yml -e "ansible_python_interpreter=/usr/bin/python3"
+    install_result=$?
+    if [ -f $rebootfile ]
+    then 
+        echo "Restarting system. Please run the installer script afterwards to continue the setup."
+        sec=30
+        while [ $sec -ge 0 ]; do echo -n "Restarting system in [CTRL+C to cancel]: " && echo -ne "$sec\033[0K\r" && let "sec=sec-1" && sleep 1; done
+        sudo reboot
+    else
                 if [ $install_result == 0 ]
                 then
-			qemu_hold
-			echo "Node installation completed successfully. Please allow up to 24h to see transactions on the blockchain. " && exit
+            qemu_hold
+            echo "Node installation completed successfully. Please allow up to 24h to see transactions on the blockchain. " && exit
                 else
-                	echo "Node installation failed! Please check error messages above." && exit
+                    echo "Node installation failed! Please check error messages above." && exit
                 fi
-	fi
+    fi
 else 
-	check_config_file
-	ubuntu_20_04_update_ansible
+    check_config_file
+    ubuntu_20_04_update_ansible
 fi
 }
 
@@ -270,70 +296,70 @@ echo "2) Generate random wallets... "
 echo "3) Exit. Rerun the script when config file exists..."
 echo -n "[Type your choice to continue]:" && read choice
 case "$choice" in 
-	1) 
-		echo "Type/Paste wallet details below..."
-		nodeaddr=("Node Address: " "Node Private Key: " "Result Address: " "Result Private Key: ")
-		IFS=""
-		for address in ${nodeaddr[@]}; do
-			case $address in
-				${nodeaddr[0]})
-				while true
-				do
-					echo -n $address && read nodeaddress
-					if [[ $nodeaddress = "" ]]; then echo "Node address cannot be empty."; else break; fi
-				done;;
-				${nodeaddr[2]})
-					while true
-					do
-						echo -n $address && read resultaddress
-						if [[ $nodeaddress = $resultaddress ]]
-						then 
-							echo "Result address must be different than the node address. Try a different address..."
-						else break
-						fi
-					done;;
-				${nodeaddr[1]})
-					while true
-					do
-						echo -n $address && read nodeprivatekey
-						if [[ ${#nodeprivatekey} = 64 && $nodeprivatekey =~ ^[a-zA-Z0-9]*$ ]]
-						then
-							break
-						else echo "Invalid result private key. Please try again..."
-						fi
-					done;;
-				${nodeaddr[3]})
-					while true
-					do
-						echo -n $address && read resultprivatekey
-						if [[ ${#resultprivatekey} = 64 && $resultprivatekey =~ ^[a-zA-Z0-9]*$ ]]
-						then
-							if [[ $nodeprivatekey = $resultprivatekey ]]
-							then
-								echo "Result private key must be different than the node private key. Try a different private key..."
-							else
-								break
-							fi
-						else echo "Invalid result private key. Please try again..."
-						fi
-					done;;
+    1) 
+        echo "Type/Paste wallet details below..."
+        nodeaddr=("Node Address: " "Node Private Key: " "Result Address: " "Result Private Key: ")
+        IFS=""
+        for address in ${nodeaddr[@]}; do
+            case $address in
+                ${nodeaddr[0]})
+                while true
+                do
+                    echo -n $address && read nodeaddress
+                    if [[ $nodeaddress = "" ]]; then echo "Node address cannot be empty."; else break; fi
+                done;;
+                ${nodeaddr[2]})
+                    while true
+                    do
+                        echo -n $address && read resultaddress
+                        if [[ $nodeaddress = $resultaddress ]]
+                        then 
+                            echo "Result address must be different than the node address. Try a different address..."
+                        else break
+                        fi
+                    done;;
+                ${nodeaddr[1]})
+                    while true
+                    do
+                        echo -n $address && read nodeprivatekey
+                        if [[ ${#nodeprivatekey} = 64 && $nodeprivatekey =~ ^[a-zA-Z0-9]*$ ]]
+                        then
+                            break
+                        else echo "Invalid result private key. Please try again..."
+                        fi
+                    done;;
+                ${nodeaddr[3]})
+                    while true
+                    do
+                        echo -n $address && read resultprivatekey
+                        if [[ ${#resultprivatekey} = 64 && $resultprivatekey =~ ^[a-zA-Z0-9]*$ ]]
+                        then
+                            if [[ $nodeprivatekey = $resultprivatekey ]]
+                            then
+                                echo "Result private key must be different than the node private key. Try a different private key..."
+                            else
+                                break
+                            fi
+                        else echo "Invalid result private key. Please try again..."
+                        fi
+                    done;;
 
-			esac
-		done
-		echo "ADDRESS="$nodeaddress > $nodefolder/$configfile
-		echo "PRIVATE_KEY="$nodeprivatekey >> $nodefolder/$configfile
-		echo "RESULT_ADDRESS="$resultaddress >> $nodefolder/$configfile
-		echo "RESULT_PRIVATE_KEY="$resultprivatekey >> $nodefolder/$configfile
-		echo "NETWORK="$NETWORK >> $nodefolder/$configfile
-		echo "TASK_EXECUTION_PRICE="$TASK_EXECUTION_PRICE >> $nodefolder/$configfile
-		if [ -f $nodefolder/$configfile ]; then echo "Config file generated successfully. Continuing..."; else echo "Something went wrong. Seek Help!" && exit; fi
-	;;
-	2) 
-		export FILE=generate
-		check_ansible
-		ubuntu_20_04_ansible_playbook;;
-	3) echo "Exiting..." && exit;;
-	*) echo "Invalid choice. Please choose an option below..." && ubuntu_20_04_config_file_choice;;
+            esac
+        done
+        echo "ADDRESS="$nodeaddress > $nodefolder/$configfile
+        echo "PRIVATE_KEY="$nodeprivatekey >> $nodefolder/$configfile
+        echo "RESULT_ADDRESS="$resultaddress >> $nodefolder/$configfile
+        echo "RESULT_PRIVATE_KEY="$resultprivatekey >> $nodefolder/$configfile
+        echo "NETWORK="$NETWORK >> $nodefolder/$configfile
+        echo "TASK_EXECUTION_PRICE="$TASK_EXECUTION_PRICE >> $nodefolder/$configfile
+        if [ -f $nodefolder/$configfile ]; then echo "Config file generated successfully. Continuing..."; else echo "Something went wrong. Seek Help!" && exit; fi
+    ;;
+    2) 
+        export FILE=generate
+        check_ansible
+        ubuntu_20_04_ansible_playbook;;
+    3) echo "Exiting..." && exit;;
+    *) echo "Invalid choice. Please choose an option below..." && ubuntu_20_04_config_file_choice;;
 esac
 }
 
@@ -346,10 +372,10 @@ sudo -E $ansible_cmd -i localhost, playbook.yml -e "ansible_python_interpreter=/
 install_result=$?
 if [ -f $rebootfile ]
 then 
-	echo "Restarting system. Please run the installer script afterwards to continue the setup."
-	sec=30
-	while [ $sec -ge 0 ]; do echo -n "Restarting system in [CTRL+C to cancel]: " && echo -ne "$sec\033[0K\r" && let "sec=sec-1" && sleep 1; done
-	sudo reboot
+    echo "Restarting system. Please run the installer script afterwards to continue the setup."
+    sec=30
+    while [ $sec -ge 0 ]; do echo -n "Restarting system in [CTRL+C to cancel]: " && echo -ne "$sec\033[0K\r" && let "sec=sec-1" && sleep 1; done
+    sudo reboot
 else
         if [ $install_result == 0 ]
         then
@@ -368,8 +394,8 @@ echo "Updating system, kernel and installing ansible..."
 sudo sudo apt-add-repository --yes --update ppa:ansible/ansible && sudo apt update && sudo apt upgrade -y && sudo apt autoremove -y &&  sudo apt -y install software-properties-common ansible
 if [ $? -eq 0 ]
 then 
-	echo "Update successfull. Continuing..."
-	ubuntu_20_04_ansible_playbook	
+    echo "Update successfull. Continuing..."
+    ubuntu_20_04_ansible_playbook   
 fi
 }
 
@@ -377,16 +403,16 @@ ubuntu(){
 #Getting which version of Ubuntu is instaled
 echo "Ubuntu OS found. Determining version..."
 case $(awk '/^VERSION_ID=/' /etc/*-release 2>/dev/null | awk -F'=' '{ print tolower($2) }' | tr -d '"') in
-	20.04) 
-		os='Ubuntu 20.04'
-		ubuntu_20_04;;
-	18.04) 
-		os='Ubuntu 18.04'
-		ubuntu_20_04;;
-	22.04) 
-		os='Ubuntu 22.04'
-		ubuntu_20_04;;
-	*) echo "Version not supported. Exiting..."
+    20.04) 
+        os='Ubuntu 20.04'
+        ubuntu_20_04;;
+    18.04) 
+        os='Ubuntu 18.04'
+        ubuntu_20_04;;
+    22.04) 
+        os='Ubuntu 22.04'
+        ubuntu_20_04;;
+    *) echo "Version not supported. Exiting..."
 esac
 }
 
@@ -394,14 +420,14 @@ start(){
 #getting which Linux distribution is installed
 echo "Getting distro..."
 case $(awk '/^ID=/' /etc/*-release 2>/dev/null | awk -F'=' '{ print tolower($2) }' | tr -d '"') in
-	ubuntu) ubuntu;;
-#	debian) echo "debian distro Found. Not Supported. Exiting...";;
-#	centos) echo "centos distro Found. Not Supported. Exiting...";;
-#	manjaro) echo "manjaro distro Found. Not Supported. Exiting...";;
-#	arch) echo "arch distro Found. Not Supported. Exiting...";;
-#	rhel) echo "red hat  distro Found. Not Supported. Exiting...";;
-#	fedora) echo "fedora distro Found. Not Supported. Exiting...";;
-	*) echo "Could not determine Distro. Exiting..."
+    ubuntu) ubuntu;;
+#   debian) echo "debian distro Found. Not Supported. Exiting...";;
+#   centos) echo "centos distro Found. Not Supported. Exiting...";;
+#   manjaro) echo "manjaro distro Found. Not Supported. Exiting...";;
+#   arch) echo "arch distro Found. Not Supported. Exiting...";;
+#   rhel) echo "red hat  distro Found. Not Supported. Exiting...";;
+#   fedora) echo "fedora distro Found. Not Supported. Exiting...";;
+    *) echo "Could not determine Distro. Exiting..."
 esac
 }
 start
