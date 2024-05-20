@@ -6,7 +6,7 @@ rebootfile="/tmp/reboot"
 service="etny-vagrant.service"
 os=""
 
-source custom_rpc.sh
+source ubuntu/etny-node-custom-rpc.sh
 
 if [ "$1" == "-v" ]
 then
