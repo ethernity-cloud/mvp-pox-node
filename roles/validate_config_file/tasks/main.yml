@@ -16,7 +16,7 @@
 
 - name: Defining bloxberg gas balance request
   uri:
-    url: https://bloxberg.ethernity.cloud
+    url: "{{ config_file_map.BLOXBERG_RPC_URL }}"
     method: POST
     headers:
       Content-Type: "application/json"
@@ -28,7 +28,7 @@
 
 - name: Defining polygon gas balance request
   uri:
-    url: https://polygon-rpc.com
+    url: "{{ config_file_map.POLYGON_RPC_URL }}"
     method: POST
     headers:
       Content-Type: "application/json"
@@ -40,7 +40,7 @@
 
 - name: Defining mumbai gas balance request
   uri:
-    url: https://rpc-amoy.polygon.technology
+    url: "{{ config_file_map.MUMBAI_RPC_URL }}"
     method: POST
     headers:
       Content-Type: "application/json"
@@ -79,7 +79,7 @@
     - addressbergs.json.result == "0x0"
     - addressmatic.json.result == "0x0"
   when:
-    - lookup('ansible.builtin.env', 'NETWORK') == 'AUTO'
+    - config_file_map.NETWORK == 'AUTO'
 
 
 - name: Checking gas balance for BLOXBERG
@@ -90,7 +90,7 @@
   failed_when:
     - addressbergs.json.result == "0x0"
   when:
-    - lookup('ansible.builtin.env', 'NETWORK') == 'BLOXBERG'
+    - config_file_map.NETWORK == 'BLOXBERK'
 
 - name: Checking gas balance for TESTNET
   debug:
@@ -100,7 +100,7 @@
   failed_when:
     - addressbergs.json.result == "0x0"
   when:
-    - lookup('ansible.builtin.env', 'NETWORK') == 'TESTNET'
+    - config_file_map.NETWORK == 'TESTNET'
 
 - name: Checking gas balance for POLYGON
   debug:
@@ -110,7 +110,7 @@
   failed_when:
     - addressmatic.json.result == "0x0"
   when:
-    - lookup('ansible.builtin.env', 'NETWORK') == 'POLYGON'
+    - config_file_map.NETWORK == 'POLYGON'
 
 - name: Checking gas balance for MUMBAI
   debug:
@@ -120,7 +120,7 @@
   failed_when:
     - addressmumbaimatic.json.result == "0x0"
   when:
-    - lookup('ansible.builtin.env', 'NETWORK') == 'MUMBAI'
+    - config_file_map.NETWORK == 'MUMBAI'
 
 - meta: end_play
   when: (addressmatic.json.result is defined and addressmatic.json.result == '0') and (addressbergs.json.result is defined and addressbergs.json.result == '0')

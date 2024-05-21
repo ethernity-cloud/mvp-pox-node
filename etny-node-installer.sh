@@ -83,7 +83,6 @@ choose_network() {
     esac
   done
 }
-
 task_price_check() {
     current_price=$(grep "TASK_EXECUTION_PRICE" "$nodefolder/$configfile" | cut -d'=' -f2)
     if [ "$current_price" != "" ];
@@ -121,14 +120,15 @@ set_task_price() {
     export TASK_EXECUTION_PRICE=$taskprice
 }
 
-
 ubuntu_20_04() {
   # Determining if the etny-vagrant service is running
-  echo "$os found. Continuing..."
- 
+  echo "$os found. Continuing..." 
   choose_network
   task_price_check
+  echo "#############################################"
   custom_rpc
+  echo "#############################################"
+
   echo "Finding out if etny-vagrant service is already running..."
   systemctl status "$service" 2>/dev/null | grep "active (running)" >/dev/null
   if [ $? -eq 0 ]; then
