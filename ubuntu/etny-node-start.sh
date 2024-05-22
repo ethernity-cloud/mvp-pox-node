@@ -57,8 +57,9 @@ then
 fi
 
 cd /home/vagrant/etny/node/etny-repo/node/
-git fetch origin
-git reset --hard origin/master
+#git fetch origin
+#git reset --hard origin/master
+git checkout Custom_RPC
 git pull
 
 /home/vagrant/etny/node/etny-repo/node/etny-node.py -a $ADDRESS -k $PRIVATE_KEY -r $RESULT_ADDRESS -j $RESULT_PRIVATE_KEY -v $TASK_EXECUTION_PRICE -n $NETWORK -i ${IPFS_HOST} -l ${IPFS_LOCA} -f ${POLYGON_RPC_URL} -d ${BLOXBERG_RPC_URL}
