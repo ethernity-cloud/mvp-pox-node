@@ -38,15 +38,15 @@
   retries: 64
   delay: 3
 
-- name: Defining mumbai gas balance request
+- name: Defining amoy gas balance request
   uri:
-    url: "{{ config_file_map.MUMBAI_RPC_URL }}"
+    url: "{{ config_file_map.AMOY_RPC_URL }}"
     method: POST
     headers:
       Content-Type: "application/json"
     body_format: json
     body: '{"method":"eth_getBalance","params":["{{ config_file_map.ADDRESS }}","latest"],"id":1,"jsonrpc":"2.0"}'
-  register: addressmumbaimatic
+  register: addressamoymatic
   retries: 64
   delay: 3
 
@@ -61,10 +61,10 @@
     msg: "{{ addressmatic.json }}"
   failed_when: addressmatic.json == ""
 
-- name: Evaluate mumbai gas balance message
+- name: Evaluate amoy gas balance message
   debug:
-    msg: "{{ addressmumbaimatic.json }}"
-  failed_when: addressmumbaimatic.json == ""
+    msg: "{{ addressamoymatic.json }}"
+  failed_when: addressamoymatic.json == ""
 
 
 - name: Checking gas balance for AUTO
@@ -112,15 +112,15 @@
   when:
     - config_file_map.NETWORK == 'POLYGON'
 
-- name: Checking gas balance for MUMBAI
+- name: Checking gas balance for AMOY
   debug:
     msg:
-      - "Node ADDRESS balance: '{{ addressmumbaimatic.json.result|int}}' MATIC."
-      - "Please sent MATIC to {{ config_file_map.ADDRESS }} using a mumbai faucet and try again."
+      - "Node ADDRESS balance: '{{ addressamoymatic.json.result|int}}' MATIC."
+      - "Please sent MATIC to {{ config_file_map.ADDRESS }} using a amoy faucet and try again."
   failed_when:
-    - addressmumbaimatic.json.result == "0x0"
+    - addressamoymatic.json.result == "0x0"
   when:
-    - config_file_map.NETWORK == 'MUMBAI'
+    - config_file_map.NETWORK == 'AMOY'
 
 - meta: end_play
   when: (addressmatic.json.result is defined and addressmatic.json.result == '0') and (addressbergs.json.result is defined and addressbergs.json.result == '0')
