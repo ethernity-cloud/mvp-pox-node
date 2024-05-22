@@ -6,8 +6,6 @@ rebootfile="/tmp/reboot"
 service="etny-vagrant.service"
 os=""
 
-source ubuntu/etny-node-custom-rpc.sh
-
 if [ "$1" == "-v" ]
 then
     ansible_cmd="ansible-playbook -v"
@@ -32,12 +30,24 @@ choose_network() {
     read -p "Enter your choice: " choice
     case $choice in
         1)  # Check Ubuntu kernel version
-        if [ "$os" != 'Ubuntu 20.04' ] && [ "$os" != 'Ubuntu 22.04' ]; then
-        echo "You need to upgrade your Ubuntu OS to at least version 20.04 or 22.04 to proceed with the installation."
-            exit 1
-        fi
+            if [ "$os" != 'Ubuntu 20.04' ] && [ "$os" != 'Ubuntu 22.04' ]; then
+            	echo "You need to upgrade your Ubuntu OS to at least version 20.04 or 22.04 to proceed with the installation."
+            	exit 1
+            fi
             echo "You selected Automatic. This option will set polygon Mainnet if your wallet has MATIC, otherwise will set bloxberg Mainnet."
-        export NETWORK=AUTO
+            export NETWORK=AUTO
+	    read -p "Do you want to use the default RPC? [Y/n]: " use_default_rpc
+	    use_default_rpc=${use_default_rpc:-Y}
+            if [[ "$use_default_rpc" =~ ^[Nn]$ ]]; then
+            read -p "Enter your custom RPC for Bloxberg: " custom_bloxberg_rpc
+            export BLOXBERG_RPC_URL=$custom_bloxberg_rpc
+            read -p "Enter your custom RPC for Polygon: " custom_polygon_rpc
+            export POLYGON_RPC_URL=$custom_polygon_rpc
+    	    else
+	    echo "Using default RPC settings."
+	    export BLOXBERG_RPC_URL=https://bloxberg.ethernity.cloud
+	    export POLYGON_RPC_URL=https://polygon-rpc.com
+	    fi
             break
             ;;
         2)  # Check Ubuntu kernel version
@@ -45,9 +55,18 @@ choose_network() {
                 echo "You need to upgrade your Ubuntu OS to at least version 20.04 or 22.04 to proceed with the installation."
                 exit 1
             fi
-            echo "You selected Open Beta."
+            echo "You selected Mainnet on POLYGON."
             export NETWORK=POLYGON
-            break
+            read -p "Do you want to use the default POLYGON RPC? [Y/n]: " use_default_rpc
+	    use_default_rpc=${use_default_rpc:-Y}
+	    if [[ "$use_default_rpc" =~ ^[Nn]$ ]]; then
+            read -p "Enter your custom RPC for Polygon: " custom_polygon_rpc
+            export POLYGON_RPC_URL=$custom_polygon_rpc
+            else
+            echo "Using default RPC settings."
+            export POLYGON_RPC_URL=https://polygon-rpc.com
+	    fi
+	    break
             ;;
         3)  # Check Ubuntu kernel version
             if [ "$os" != 'Ubuntu 20.04' ] && [ "$os" != 'Ubuntu 22.04' ]; then
@@ -56,8 +75,17 @@ choose_network() {
             fi
             echo "You selected Open Beta."
             export NETWORK=AMOY
-            break
-            ;;
+            read -p "Do you want to use the default AMOY RPC? [Y/n]: " use_default_rpc
+  	    use_default_rpc=${use_default_rpc:-Y}
+	    if [[ "$use_default_rpc" =~ ^[Nn]$ ]]; then
+            read -p "Enter your custom RPC for Polygon: " custom_amoy_rpc
+            export AMOY_RPC_URL=$custom_amoy_rpc
+	    else
+            echo "Using default RPC settings."	
+	    export AMOY_RPC_URL=https://rpc-amoy.polygon.technology
+	    fi
+	    break
+	    ;;
         4)  # Check Ubuntu kernel version
             if [ "$os" != 'Ubuntu 20.04' ] && [ "$os" != 'Ubuntu 22.04' ]; then
                 echo "You need to upgrade your Ubuntu OS to at least version 20.04 or 22.04 to proceed with the installation."
@@ -65,12 +93,30 @@ choose_network() {
             fi
             echo "You selected Open Beta."
             export NETWORK=BLOXBERG
-            break
+            read -p "Do you want to use the default Bloxberg RPC? [Y/n]: " use_default_rpc
+            use_default_rpc=${use_default_rpc:-Y}
+            if [[ "$use_default_rpc" =~ ^[Nn]$ ]]; then
+            read -p "Enter your custom RPC for Bloxberg: " custom_bloxberg_rpc
+            export BLOXBERG_RPC_URL=$custom_bloxberg_rpc
+            else
+            echo "Using default RPC settings."
+            export BLOXBERG_RPC_URL=https://bloxberg.ethernity.cloud
+            fi
+	    break
             ;;
 
         5)
             echo "You selected Testnet."
-        export NETWORK=TESTNET
+       	    export NETWORK=TESTNET
+	    read -p "Do you want to use the default TESTNET RPC? [Y/n]: " use_default_rpc
+            use_default_rpc=${use_default_rpc:-Y}
+            if [[ "$use_default_rpc" =~ ^[Nn]$ ]]; then
+            read -p "Enter your custom RPC for TESTNET: " custom_testnet_rpc
+            export TESTNET_RPC_URL=$custom_testnet_rpc
+            else
+            echo "Using default RPC settings."
+            export TESTNET_RPC_URL=https://bloxberg.ethernity.cloud
+            fi
             break
             ;;
         6)
@@ -126,9 +172,6 @@ ubuntu_20_04() {
   choose_network
   task_price_check
   echo "#############################################"
-  custom_rpc
-  echo "#############################################"
-
   echo "Finding out if etny-vagrant service is already running..."
   systemctl status "$service" 2>/dev/null | grep "active (running)" >/dev/null
   if [ $? -eq 0 ]; then
@@ -346,12 +389,16 @@ case "$choice" in
 
             esac
         done
-        echo "ADDRESS="$nodeaddress > $nodefolder/$configfile
+        echo "ADDRESS="$nodeaddress >> $nodefolder/$configfile
         echo "PRIVATE_KEY="$nodeprivatekey >> $nodefolder/$configfile
         echo "RESULT_ADDRESS="$resultaddress >> $nodefolder/$configfile
         echo "RESULT_PRIVATE_KEY="$resultprivatekey >> $nodefolder/$configfile
         echo "NETWORK="$NETWORK >> $nodefolder/$configfile
         echo "TASK_EXECUTION_PRICE="$TASK_EXECUTION_PRICE >> $nodefolder/$configfile
+	echo "BLOXBERG_RPC_URL=$BLOXBERG_RPC_URL" >> $nodefolder/$configfile
+	echo "POLYGON_RPC_URL=$POLYGON_RPC_URL" >> $nodefolder/$configfile
+	echo "TESTNET_RPC_URL=$TESTNET_RPC_URL" >> $nodefolder/$configfile
+        echo "AMOY_RPC_URL=$AMOY_RPC_URL" >> $nodefolder/$configfile
         if [ -f $nodefolder/$configfile ]; then echo "Config file generated successfully. Continuing..."; else echo "Something went wrong. Seek Help!" && exit; fi
     ;;
     2) 
