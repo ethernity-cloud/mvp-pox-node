@@ -6,13 +6,13 @@ configfile="config"
 DEFAULT_BLOXBERG_RPC="https://bloxberg.ethernity.cloud"
 DEFAULT_TESTNET_RPC="https://bloxberg.ethernity.cloud"
 DEFAULT_POLYGON_RPC="https://polygon-rpc.com"
-DEFAULT_MUMBAI_RPC="https://rpc-amoy.polygon.technology"
+DEFAULT_AMOY_RPC="https://rpc-amoy.polygon.technology"
 
 custom_rpc() {
     echo "Use custom RPC URL? (y/N)"
     read -r use_custom_rpc
     if [[ "$use_custom_rpc" =~ ^[Yy]$ ]]; then
-        for network in bloxberg testnet polygon mumbai; do
+        for network in bloxberg testnet polygon amoy; do
             rpc_check "$network"
         done
     else
@@ -62,12 +62,12 @@ set_default_rpc() {
     export BLOXBERG_RPC_URL="$DEFAULT_BLOXBERG_RPC"
     export TESTNET_RPC_URL="$DEFAULT_TESTNET_RPC"
     export POLYGON_RPC_URL="$DEFAULT_POLYGON_RPC"
-    export MUMBAI_RPC_URL="$DEFAULT_MUMBAI_RPC"
+    export AMOY_RPC_URL="$DEFAULT_AMOY_RPC"
 
     echo "Using default RPC URLs:"
     echo "BLOXBERG_RPC_URL: $BLOXBERG_RPC_URL"
     echo "TESTNET_RPC_URL: $TESTNET_RPC_URL"
     echo "POLYGON_RPC_URL: $POLYGON_RPC_URL"
-    echo "MUMBAI_RPC_URL: $MUMBAI_RPC_URL"
+    echo "AMOY_RPC_URL: $AMOY_RPC_URL"
 }
 
