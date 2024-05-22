@@ -154,7 +154,7 @@ parser.add_argument("-f", "--rpc_polygon", help="Polygon RPC",
                     required=False)
 
 arguments = {
-    str: ['address', 'privatekey', 'resultaddress', 'resultprivatekey', 'endpoint', 'access_key', 'secret_key', 'network', 'ipfshost', 'ipfslocal', 'rpc_bloxberg', 'rcp_polygon'],
+    str: ['address', 'privatekey', 'resultaddress', 'resultprivatekey', 'endpoint', 'access_key', 'secret_key', 'network', 'ipfshost', 'ipfslocal', 'rpc_bloxberg', 'rpc_polygon'],
     int: ['cpu', 'memory', 'storage', 'storage', 'bandwidth', 'duration', 'price']
 }
 
