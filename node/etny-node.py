@@ -92,14 +92,14 @@ class EtnyPoXNode:
             config.integration_test_image = 'ecld-pynithy';
             if self.__price == None:
                 self.__price = 3;
-        elif self.__network == 'MUMBAI':
-            config.http_provider = config.mumbai_rpc_url;
-            config.chain_id = int(config.mumbai_chain_id);
-            config.contract_address = config.mumbai_contract_address;
-            config.heart_beat_address = config.mumbai_heartbeat_address;
-            config.image_registry_address = config.mumbai_image_registry_address;
-            config.gas_price_measure = config.mumbai_gas_price_measure;
-            config.integration_test_image = 'etny-pynithy-mumbai';
+        elif self.__network == 'AMOY':
+            config.http_provider = config.amoy_rpc_url;
+            config.chain_id = int(config.amoy_chain_id);
+            config.contract_address = config.amoy_contract_address;
+            config.heart_beat_address = config.amoy_heartbeat_address;
+            config.image_registry_address = config.amoy_image_registry_address;
+            config.gas_price_measure = config.amoy_gas_price_measure;
+            config.integration_test_image = 'etny-pynithy-amoy';
             if self.__price == None:
                 self.__price = 3;
         elif self.__network == 'BLOXBERG':
