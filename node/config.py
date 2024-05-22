@@ -55,13 +55,13 @@ polygon_image_registry_address = os.environ.get('POLYGON_IMAGE_REGISTRY');
 polygon_gas_price_measure = os.environ.get('POLYGON_GAS_PRICE_MEASURE')
 polygon_task_execution_price_default = os.environ.get('POLYGON_TASK_EXECUTION_PRICE_DEFAULT');
 
-mumbai_rpc_url = os.environ.get('MUMBAI_RPC_URL');
-mumbai_chain_id = os.environ.get('MUMBAI_CHAIN_ID');
-mumbai_contract_address = os.environ.get('MUMBAI_CONTRACT_ADDRESS');
-mumbai_heartbeat_address = os.environ.get('MUMBAI_HEARTBEAT_CONTRACT_ADDRESS');
-mumbai_image_registry_address = os.environ.get('MUMBAI_IMAGE_REGISTRY');
-mumbai_gas_price_measure = os.environ.get('MUMBAI_GAS_PRICE_MEASURE')
-mumbai_task_execution_price_default = os.environ.get('MUMBAI_TASK_EXECUTION_PRICE_DEFAULT');
+amoy_rpc_url = os.environ.get('AMOY_RPC_URL');
+amoy_chain_id = os.environ.get('AMOY_CHAIN_ID');
+amoy_contract_address = os.environ.get('AMOY_CONTRACT_ADDRESS');
+amoy_heartbeat_address = os.environ.get('AMOY_HEARTBEAT_CONTRACT_ADDRESS');
+amoy_image_registry_address = os.environ.get('AMOY_IMAGE_REGISTRY');
+amoy_gas_price_measure = os.environ.get('AMOY_GAS_PRICE_MEASURE')
+amoy_task_execution_price_default = os.environ.get('AMOY_TASK_EXECUTION_PRICE_DEFAULT');
 
 
 network_default = "AUTO"
