@@ -55,7 +55,7 @@ choose_network() {
                 exit 1
             fi
             echo "You selected Open Beta."
-            export NETWORK=MUMBAI
+            export NETWORK=AMOY
             break
             ;;
         4)  # Check Ubuntu kernel version
@@ -231,9 +231,9 @@ check_config_file() {
         echo "POLYGON_RPC_URL="$POLYGON_RPC_URL >> "$nodefolder/$configfile"
     fi
 
-    if [[ ! -z $MUMBAI_RPC_URL ]]; then
-        sed -i "/MUMBAI_RPC_URL/d" "$nodefolder/$configfile"
-        echo "MUMBAI_RPC_URL="$MUMBAI_RPC_URL >> "$nodefolder/$configfile"
+    if [[ ! -z $AMOY_RPC_URL ]]; then
+        sed -i "/AMOY_RPC_URL/d" "$nodefolder/$configfile"
+        echo "AMOY_RPC_URL="$AMOY_RPC_URL >> "$nodefolder/$configfile"
     fi
 
     else
