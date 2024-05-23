@@ -47,6 +47,8 @@ choose_network() {
 	    echo "Using default RPC settings."
 	    export BLOXBERG_RPC_URL=https://bloxberg.ethernity.cloud
 	    export POLYGON_RPC_URL=https://polygon-rpc.com
+     	    export AMOY_RPC_URL=https://rpc-amoy.polygon.technology
+            export TESTNET_RPC_URL=https://bloxberg.ethernity.cloud
 	    fi
             break
             ;;
@@ -64,7 +66,10 @@ choose_network() {
             export POLYGON_RPC_URL=$custom_polygon_rpc
             else
             echo "Using default RPC settings."
-            export POLYGON_RPC_URL=https://polygon-rpc.com
+	    export BLOXBERG_RPC_URL=https://bloxberg.ethernity.cloud
+	    export POLYGON_RPC_URL=https://polygon-rpc.com
+     	    export AMOY_RPC_URL=https://rpc-amoy.polygon.technology
+            export TESTNET_RPC_URL=https://bloxberg.ethernity.cloud
 	    fi
 	    break
             ;;
@@ -82,7 +87,10 @@ choose_network() {
             export AMOY_RPC_URL=$custom_amoy_rpc
 	    else
             echo "Using default RPC settings."	
-	    export AMOY_RPC_URL=https://rpc-amoy.polygon.technology
+	    export BLOXBERG_RPC_URL=https://bloxberg.ethernity.cloud
+	    export POLYGON_RPC_URL=https://polygon-rpc.com
+     	    export AMOY_RPC_URL=https://rpc-amoy.polygon.technology
+            export TESTNET_RPC_URL=https://bloxberg.ethernity.cloud
 	    fi
 	    break
 	    ;;
@@ -100,7 +108,10 @@ choose_network() {
             export BLOXBERG_RPC_URL=$custom_bloxberg_rpc
             else
             echo "Using default RPC settings."
-            export BLOXBERG_RPC_URL=https://bloxberg.ethernity.cloud
+	    export BLOXBERG_RPC_URL=https://bloxberg.ethernity.cloud
+	    export POLYGON_RPC_URL=https://polygon-rpc.com
+     	    export AMOY_RPC_URL=https://rpc-amoy.polygon.technology
+            export TESTNET_RPC_URL=https://bloxberg.ethernity.cloud
             fi
 	    break
             ;;
@@ -115,6 +126,9 @@ choose_network() {
             export TESTNET_RPC_URL=$custom_testnet_rpc
             else
             echo "Using default RPC settings."
+	    export BLOXBERG_RPC_URL=https://bloxberg.ethernity.cloud
+	    export POLYGON_RPC_URL=https://polygon-rpc.com
+     	    export AMOY_RPC_URL=https://rpc-amoy.polygon.technology
             export TESTNET_RPC_URL=https://bloxberg.ethernity.cloud
             fi
             break
