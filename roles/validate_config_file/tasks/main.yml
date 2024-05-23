@@ -14,7 +14,12 @@
     _vals: "{{ _arr|map('regex_replace', '^(.*?)=(.*)$', '\\2')|map('trim')|list }}"
   failed_when: config_file_map.ADDRESS is undefined or config_file_map.PRIVATE_KEY is undefined
 
+- name: Print NETWORK environment variable
+  debug:
+    msg: "NETWORK environment variable value is {{ lookup('ansible.builtin.env', 'NETWORK') }}"
+  
 - name: Defining bloxberg gas balance request
+  when: lookup('ansible.builtin.env', 'NETWORK') == 'BLOXBERG' or lookup('ansible.builtin.env', 'NETWORK') == 'AUTO' or lookup('ansible.builtin.env', 'NETWORK') == 'TESTNET'
   uri:
     url: "{{ config_file_map.BLOXBERG_RPC_URL }}"
     method: POST
@@ -27,6 +32,7 @@
   delay: 3
 
 - name: Defining polygon gas balance request
+  when: lookup('ansible.builtin.env', 'NETWORK') == 'POLYGON' or lookup('ansible.builtin.env', 'NETWORK') == 'AUTO'
   uri:
     url: "{{ config_file_map.POLYGON_RPC_URL }}"
     method: POST
@@ -39,6 +45,7 @@
   delay: 3
 
 - name: Defining amoy gas balance request
+  when: lookup('ansible.builtin.env', 'NETWORK') == 'AMOY'
   uri:
     url: "{{ config_file_map.AMOY_RPC_URL }}"
     method: POST
@@ -52,20 +59,22 @@
 
 
 - name: Evaluate bloxberg gas balance message
+  when: lookup('ansible.builtin.env', 'NETWORK') == 'BLOXBERG' or lookup('ansible.builtin.env', 'NETWORK') == 'AUTO' or lookup('ansible.builtin.env', 'NETWORK') == 'TESTNET'
   debug:
     msg: "{{ addressbergs.json }}"
   failed_when: addressbergs.json == ""
 
 - name: Evaluate polygon gas balance message
+  when: lookup('ansible.builtin.env', 'NETWORK') == 'POLYGON' or lookup('ansible.builtin.env', 'NETWORK') == 'AUTO'
   debug:
     msg: "{{ addressmatic.json }}"
   failed_when: addressmatic.json == ""
 
 - name: Evaluate amoy gas balance message
+  when: lookup('ansible.builtin.env', 'NETWORK') == 'AMOY'
   debug:
     msg: "{{ addressamoymatic.json }}"
   failed_when: addressamoymatic.json == ""
-
 
 - name: Checking gas balance for AUTO
   debug:
@@ -80,7 +89,9 @@
     - addressmatic.json.result == "0x0"
   when:
     - config_file_map.NETWORK == 'AUTO'
-
+    - addressbergs.json.result == "0x0"
+    - addressmatic.json.result == "0x0"
+  
 
 - name: Checking gas balance for BLOXBERG
   debug:
@@ -91,6 +102,7 @@
     - addressbergs.json.result == "0x0"
   when:
     - config_file_map.NETWORK == 'BLOXBERK'
+    - addressbergs.json.result == "0x0"
 
 - name: Checking gas balance for TESTNET
   debug:
@@ -101,6 +113,7 @@
     - addressbergs.json.result == "0x0"
   when:
     - config_file_map.NETWORK == 'TESTNET'
+    - addressbergs.json.result == "0x0"  
 
 - name: Checking gas balance for POLYGON
   debug:
@@ -111,6 +124,7 @@
     - addressmatic.json.result == "0x0"
   when:
     - config_file_map.NETWORK == 'POLYGON'
+    - addressmatic.json.result == "0x0"
 
 - name: Checking gas balance for AMOY
   debug:
@@ -121,6 +135,7 @@
     - addressamoymatic.json.result == "0x0"
   when:
     - config_file_map.NETWORK == 'AMOY'
+    - addressamoymatic.json.result == "0x0"  
 
 - meta: end_play
   when: (addressmatic.json.result is defined and addressmatic.json.result == '0') and (addressbergs.json.result is defined and addressbergs.json.result == '0')
