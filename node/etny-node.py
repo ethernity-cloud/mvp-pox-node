@@ -48,9 +48,10 @@ class EtnyPoXNode:
         if self.__network == None or self.__network == 'AUTO' or self.__network == "OPENBETA":
           logger.info("Network is automatic, determining gas value for POLYGON");
           try:
-            config.http_provider = config.polygon_rpc_url;
-            config.chain_id = int(config.polygon_chain_id);
-            config.contract_address = config.polygon_contract_address;
+                if  config.rpc_polygon == None:
+                    config.http_provider = config.polygon_rpc_url;
+                    config.chain_id = int(config.polygon_chain_id);
+                    config.contract_address = config.polygon_contract_address;
 
             with open(config.abi_filepath) as f:
                 self.__contract_abi = f.read()
@@ -73,6 +74,7 @@ class EtnyPoXNode:
               self.__network = 'BLOXBERG'
 
         if self.__network == 'TESTNET':
+            if config.rpc_testnet == None:
             config.http_provider = config.testnet_rpc_url;
             config.chain_id = int(config.testnet_chain_id);
             config.contract_address = config.testnet_contract_address;
@@ -83,6 +85,7 @@ class EtnyPoXNode:
             if self.__price == None:
                 self.__price = 3;
         elif self.__network == 'POLYGON':
+            if config.rpc_polygon == None:
             config.http_provider = config.polygon_rpc_url;
             config.chain_id = int(config.polygon_chain_id);
             config.contract_address = config.polygon_contract_address;
@@ -93,6 +96,7 @@ class EtnyPoXNode:
             if self.__price == None:
                 self.__price = 3;
         elif self.__network == 'AMOY':
+            if config.rpc_amoy == None:
             config.http_provider = config.amoy_rpc_url;
             config.chain_id = int(config.amoy_chain_id);
             config.contract_address = config.amoy_contract_address;
@@ -103,6 +107,7 @@ class EtnyPoXNode:
             if self.__price == None:
                 self.__price = 3;
         elif self.__network == 'BLOXBERG':
+            if config.rpc_bloxberg == None:
             config.http_provider = config.bloxberg_rpc_url;
             config.chain_id = int(config.bloxberg_chain_id);
             config.contract_address = config.bloxberg_contract_address;

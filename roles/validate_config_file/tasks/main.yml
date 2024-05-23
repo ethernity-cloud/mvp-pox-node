@@ -101,7 +101,7 @@
   failed_when:
     - addressbergs.json.result == "0x0"
   when:
-    - config_file_map.NETWORK == 'BLOXBERK'
+    - config_file_map.NETWORK == 'BLOXBERG'
     - addressbergs.json.result == "0x0"
 
 - name: Checking gas balance for TESTNET

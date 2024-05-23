@@ -47,8 +47,6 @@ choose_network() {
 	    echo "Using default RPC settings."
 	    export BLOXBERG_RPC_URL=https://bloxberg.ethernity.cloud
 	    export POLYGON_RPC_URL=https://polygon-rpc.com
-     	    export AMOY_RPC_URL=https://rpc-amoy.polygon.technology
-            export TESTNET_RPC_URL=https://bloxberg.ethernity.cloud
 	    fi
             break
             ;;
@@ -66,10 +64,7 @@ choose_network() {
             export POLYGON_RPC_URL=$custom_polygon_rpc
             else
             echo "Using default RPC settings."
-	    export BLOXBERG_RPC_URL=https://bloxberg.ethernity.cloud
 	    export POLYGON_RPC_URL=https://polygon-rpc.com
-     	    export AMOY_RPC_URL=https://rpc-amoy.polygon.technology
-            export TESTNET_RPC_URL=https://bloxberg.ethernity.cloud
 	    fi
 	    break
             ;;
@@ -87,10 +82,7 @@ choose_network() {
             export AMOY_RPC_URL=$custom_amoy_rpc
 	    else
             echo "Using default RPC settings."	
-	    export BLOXBERG_RPC_URL=https://bloxberg.ethernity.cloud
-	    export POLYGON_RPC_URL=https://polygon-rpc.com
      	    export AMOY_RPC_URL=https://rpc-amoy.polygon.technology
-            export TESTNET_RPC_URL=https://bloxberg.ethernity.cloud
 	    fi
 	    break
 	    ;;
@@ -109,9 +101,6 @@ choose_network() {
             else
             echo "Using default RPC settings."
 	    export BLOXBERG_RPC_URL=https://bloxberg.ethernity.cloud
-	    export POLYGON_RPC_URL=https://polygon-rpc.com
-     	    export AMOY_RPC_URL=https://rpc-amoy.polygon.technology
-            export TESTNET_RPC_URL=https://bloxberg.ethernity.cloud
             fi
 	    break
             ;;
@@ -126,9 +115,6 @@ choose_network() {
             export TESTNET_RPC_URL=$custom_testnet_rpc
             else
             echo "Using default RPC settings."
-	    export BLOXBERG_RPC_URL=https://bloxberg.ethernity.cloud
-	    export POLYGON_RPC_URL=https://polygon-rpc.com
-     	    export AMOY_RPC_URL=https://rpc-amoy.polygon.technology
             export TESTNET_RPC_URL=https://bloxberg.ethernity.cloud
             fi
             break
@@ -409,10 +395,18 @@ case "$choice" in
         echo "RESULT_PRIVATE_KEY="$resultprivatekey >> $nodefolder/$configfile
         echo "NETWORK="$NETWORK >> $nodefolder/$configfile
         echo "TASK_EXECUTION_PRICE="$TASK_EXECUTION_PRICE >> $nodefolder/$configfile
+	if [[ ! -z $BLOXBERG_RPC_URL ]]; then
 	echo "BLOXBERG_RPC_URL=$BLOXBERG_RPC_URL" >> $nodefolder/$configfile
+	fi
+	if [[ ! -z $POLYGON_RPC_URL ]]; then
 	echo "POLYGON_RPC_URL=$POLYGON_RPC_URL" >> $nodefolder/$configfile
+	fi
+	if [[ ! -z $TESTNET_RPC_URL ]]; then
 	echo "TESTNET_RPC_URL=$TESTNET_RPC_URL" >> $nodefolder/$configfile
-        echo "AMOY_RPC_URL=$AMOY_RPC_URL" >> $nodefolder/$configfile
+	fi
+	if [[ ! -z $AMOY_RPC_URL ]]; then
+	echo "AMOY_RPC_URL=$AMOY_RPC_URL" >> $nodefolder/$configfile
+	fi
         if [ -f $nodefolder/$configfile ]; then echo "Config file generated successfully. Continuing..."; else echo "Something went wrong. Seek Help!" && exit; fi
     ;;
     2) 
