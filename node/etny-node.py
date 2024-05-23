@@ -48,10 +48,10 @@ class EtnyPoXNode:
         if self.__network == None or self.__network == 'AUTO' or self.__network == "OPENBETA":
           logger.info("Network is automatic, determining gas value for POLYGON");
           try:
-                if  config.rpc_polygon == None:
-                    config.http_provider = config.polygon_rpc_url;
-                    config.chain_id = int(config.polygon_chain_id);
-                    config.contract_address = config.polygon_contract_address;
+            if  config.rpc_polygon == None:
+                config.http_provider = config.polygon_rpc_url;
+                config.chain_id = int(config.polygon_chain_id);
+                config.contract_address = config.polygon_contract_address;
 
             with open(config.abi_filepath) as f:
                 self.__contract_abi = f.read()
