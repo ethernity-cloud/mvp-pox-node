@@ -65,11 +65,19 @@ git checkout Custom_RPC
 COMMAND_LINE="/home/vagrant/etny/node/etny-repo/node/etny-node.py -a ${ADDRESS} -k ${PRIVATE_KEY} -r ${RESULT_ADDRESS} -j ${RESULT_PRIVATE_KEY} -v ${TASK_EXECUTION_PRICE} -n ${NETWORK} -i ${IPFS_HOST} -l ${IPFS_LOCAL}"
 
 if [ -n "${POLYGON_RPC_URL}" ]; then
-  COMMAND_LINE="${COMMAND_LINE} -f ${POLYGON_RPC_URL}"
+  COMMAND_LINE="${COMMAND_LINE} -p ${POLYGON_RPC_URL}"
 fi
 
 if [ -n "${BLOXBERG_RPC_URL}" ]; then
-  COMMAND_LINE="${COMMAND_LINE} -d ${BLOXBERG_RPC_URL}"
+  COMMAND_LINE="${COMMAND_LINE} -b ${BLOXBERG_RPC_URL}"
+fi
+
+if [ -n "${TESTNET_RPC_URL}" ]; then
+  COMMAND_LINE="${COMMAND_LINE} -t ${TESTNET_RPC_URL}"
+fi
+
+if [ -n "${AMOY_RPC_URL}" ]; then
+  COMMAND_LINE="${COMMAND_LINE} -m ${AMOY_RPC_URL}"
 fi
 
 $COMMAND_LINE
