@@ -48,10 +48,11 @@ class EtnyPoXNode:
         if self.__network == None or self.__network == 'AUTO' or self.__network == "OPENBETA":
           logger.info("Network is automatic, determining gas value for POLYGON");
           try:
-            if  config.rpc_polygon == None:
-                config.http_provider = config.polygon_rpc_url;
-                config.chain_id = int(config.polygon_chain_id);
-                config.contract_address = config.polygon_contract_address;
+            if self.__rpc_polygon == None:
+               self.__rpc_polygon = config.polygon_rpc_url;
+            config.http_provider = self.__rpc_polygon;
+            config.chain_id = int(config.polygon_chain_id);
+            config.contract_address = config.polygon_contract_address;
 
             with open(config.abi_filepath) as f:
                 self.__contract_abi = f.read()
@@ -74,54 +75,57 @@ class EtnyPoXNode:
               self.__network = 'BLOXBERG'
 
         if self.__network == 'TESTNET':
-            if config.rpc_testnet == None:
-                config.http_provider = config.testnet_rpc_url;
-                config.chain_id = int(config.testnet_chain_id);
-                config.contract_address = config.testnet_contract_address;
-                config.heart_beat_address = config.testnet_heartbeat_address;
-                config.image_registry_address = config.testnet_image_registry_address;
-                config.gas_price_measure = config.testnet_gas_price_measure;
-                config.integration_test_image = 'etny-pynithy-testnet';
+            if self.__rpc_testnet == None:
+               self.__rpc_testnet = config.testnet_rpc_url;
+            config.http_provider = self.__rpc_testnet;
+            config.chain_id = int(config.testnet_chain_id);
+            config.contract_address = config.testnet_contract_address;
+            config.heart_beat_address = config.testnet_heartbeat_address;
+            config.image_registry_address = config.testnet_image_registry_address;
+            config.gas_price_measure = config.testnet_gas_price_measure;
+            config.integration_test_image = 'etny-pynithy-testnet';
             if self.__price == None:
                 self.__price = 3;
         elif self.__network == 'POLYGON':
-            if config.rpc_polygon == None:
-                config.http_provider = config.polygon_rpc_url;
-                config.chain_id = int(config.polygon_chain_id);
-                config.contract_address = config.polygon_contract_address;
-                config.heart_beat_address = config.polygon_heartbeat_address;
-                config.image_registry_address = config.polygon_image_registry_address;
-                config.gas_price_measure = config.polygon_gas_price_measure;
-                config.integration_test_image = 'ecld-pynithy';
+            if self.__rpc_polygon == None:
+               self.__rpc_polygon = config.polygon_rpc_url;
+            config.http_provider = self.__rpc_polygon;
+            config.chain_id = int(config.polygon_chain_id);
+            config.contract_address = config.polygon_contract_address;
+            config.heart_beat_address = config.polygon_heartbeat_address;
+            config.image_registry_address = config.polygon_image_registry_address;
+            config.gas_price_measure = config.polygon_gas_price_measure;
+            config.integration_test_image = 'ecld-pynithy';
             if self.__price == None:
                 self.__price = 3;
         elif self.__network == 'AMOY':
-            if config.rpc_amoy == None:
-                config.http_provider = config.amoy_rpc_url;
-                config.chain_id = int(config.amoy_chain_id);
-                config.contract_address = config.amoy_contract_address;
-                config.heart_beat_address = config.amoy_heartbeat_address;
-                config.image_registry_address = config.amoy_image_registry_address;
-                config.gas_price_measure = config.amoy_gas_price_measure;
-                config.integration_test_image = 'etny-pynithy-amoy';
+            if self.__rpc_amoy == None:
+               self.__rpc_amoy = config.amoy_rpc_url;
+            config.http_provider = self.__rpc_amoy;
+            config.chain_id = int(config.amoy_chain_id);
+            config.contract_address = config.amoy_contract_address;
+            config.heart_beat_address = config.amoy_heartbeat_address;
+            config.image_registry_address = config.amoy_image_registry_address;
+            config.gas_price_measure = config.amoy_gas_price_measure;
+            config.integration_test_image = 'etny-pynithy-amoy';
             if self.__price == None:
                 self.__price = 3;
         elif self.__network == 'BLOXBERG':
-            if config.rpc_bloxberg == None:
-                config.http_provider = config.bloxberg_rpc_url;
-                config.chain_id = int(config.bloxberg_chain_id);
-                config.contract_address = config.bloxberg_contract_address;
-                config.heart_beat_address = config.bloxberg_heartbeat_address;
-                config.image_registry_address = config.bloxberg_image_registry_address;
-                config.gas_price_measure = config.bloxberg_gas_price_measure;
-                config.integration_test_image = 'etny-pynithy';
+            if self.__rpc_bloxberg == None:
+               self.__rpc_bloxberg = config.bloxberg_rpc_url;
+            config.http_provider = self.__rpc_bloxberg;
+            config.chain_id = int(config.bloxberg_chain_id);
+            config.contract_address = config.bloxberg_contract_address;
+            config.heart_beat_address = config.bloxberg_heartbeat_address;
+            config.image_registry_address = config.bloxberg_image_registry_address;
+            config.gas_price_measure = config.bloxberg_gas_price_measure;
+            config.integration_test_image = 'etny-pynithy';
             if self.__price == None:
                 self.__price = 3;
         else:
             logger.error("Network configuration is not supported: %s", self.__network);
             exit()
-
-
+            
         if config.http_provider == None:
             config.http_provider = 'https://bloxberg.ethernity.cloud';
         if config.chain_id == None:
