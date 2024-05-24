@@ -146,15 +146,21 @@ parser.add_argument("-i", "--ipfshost", help="Default ipfs gateway",
 parser.add_argument("-l", "--ipfslocal", help="Local ipfs connect url",
                     default=str(client_connect_url_default),
                     required=False)
-parser.add_argument("-d", "--rpc_bloxberg", help="Bloxberg RPC",
+parser.add_argument("-x", "--rpc_bloxberg", help="Bloxberg RPC",
                     default=str(bloxberg_rpc_url),
                     required=False)
-parser.add_argument("-f", "--rpc_polygon", help="Polygon RPC",
+parser.add_argument("-y", "--rpc_polygon", help="Polygon RPC",
+                    default=str(polygon_rpc_url),
+                    required=False)
+parser.add_argument("-z", "--rpc_testnet", help="Testnet RPC",
+                    default=str(polygon_rpc_url),
+                    required=False)
+parser.add_argument("-w", "--rpc_amoy", help="Amoy RPC",
                     default=str(polygon_rpc_url),
                     required=False)
 
 arguments = {
-    str: ['address', 'privatekey', 'resultaddress', 'resultprivatekey', 'endpoint', 'access_key', 'secret_key', 'network', 'ipfshost', 'ipfslocal', 'rpc_bloxberg', 'rpc_polygon'],
+    str: ['address', 'privatekey', 'resultaddress', 'resultprivatekey', 'endpoint', 'access_key', 'secret_key', 'network', 'ipfshost', 'ipfslocal', 'rpc_bloxberg', 'rpc_polygon', 'rpc_testnet', 'rpc_amoy'],
     int: ['cpu', 'memory', 'storage', 'storage', 'bandwidth', 'duration', 'price']
 }
 
