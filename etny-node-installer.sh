@@ -129,48 +129,78 @@ choose_network() {
     esac
   done
 }
+
 task_price_check() {
-    current_price=$(grep "TASK_EXECUTION_PRICE" "$nodefolder/$configfile" | cut -d'=' -f2)
-    if [ "$current_price" != "" ];
-    then
+    local current_price
+    current_price=$(grep "TASK_EXECUTION_PRICE\s*=\s*" "$nodefolder/$configfile" | awk -F '=' '{print $2}' | tr -d '[:space:]')
+    if [ -n "$current_price" ]; then
         echo "Task execution price already exists in the config file and is currently set to $current_price ETNY/hour."
-    export TASK_EXECUTION_PRICE=$current_price
-        echo "Would you like to modify it? (y/N)"
-        read modify
-    if [[ "$modify" =~ ^[Yy]$ ]]; then
-        set_task_price
-        fi
-    else
-        echo "The TASK_EXECUTION_PRICE is not set in the config file."
-        echo "Do you want to use the default value of 3 ETNY/hour? (Y/n)"
-        read -r use_default
-        if [[ -z "$use_default" ]] || [[ "$use_default" =~ ^[Yy]$ ]]; then
-            default_price=3
-        export TASK_EXECUTION_PRICE=$default_price
-        else
+        export TASK_EXECUTION_PRICE=$current_price
+        read -rp "Would you like to modify it? (y/N)" modify
+        if [[ "$modify" =~ ^[Yy]$ ]]; then
             set_task_price
         fi
+    else
+        read -rp "The TASK_EXECUTION_PRICE is not set in the config file. Do you want to use the default value of 3 ETNY/hour? (Y/n)" use_default
+        export TASK_EXECUTION_PRICE=${use_default:-3}
     fi
 }
 
 set_task_price() {
+    local taskprice
     while true; do
-        echo -n "Enter the Task Execution Price (Recommended price for executing a task/hour: 1 - 10 ETNY): "
-        read taskprice
-        if [[ $taskprice =~ ^[1-9]$|^10$ ]]; then
-            break
-        else
-            echo "Invalid task execution price. Please enter a valid integer price within the recommended range (1 - 10 ETNY)..."
-        fi
+        read -rp "Enter the Task Execution Price (Recommended price for executing a task/hour: 1 - 10 ETNY): " taskprice
+        [[ $taskprice =~ ^[1-9]$|^10$ ]] && break
+        echo "Invalid task execution price. Please enter a valid integer price within the recommended range (1 - 10 ETNY)..."
     done
     export TASK_EXECUTION_PRICE=$taskprice
+}
+
+check_ipfs_local_connect_url() {
+    local ipfs_line
+    ipfs_line=$(grep "^IPFS_LOCAL_CONNECT_URL=" "$nodefolder/$configfile")
+
+    if [ -n "$ipfs_line" ]; then
+        echo "IPFS_LOCAL_CONNECT_URL found in the config file."
+        read -rp "Do you want to modify this IPFS URL? (Y/n): " modify
+        if [[ "$modify" =~ ^[Yy]$ ]]; then
+            set_ipfs_local_connect_url
+        fi
+    else
+        read -rp "IPFS_LOCAL_CONNECT_URL not found. Do you want to use the default IPFS URL? (Y/n): " use_default
+        if [[ -z "$use_default" || "${use_default,,}" =~ ^[Yy]$ ]]; then
+            export IPFS_LOCAL_CONNECT_URL="/ip4/127.0.0.1/tcp/5001/http"
+            echo "IPFS_LOCAL_CONNECT_URL=$IPFS_LOCAL_CONNECT_URL" >> "$nodefolder/$configfile"
+            echo "Default IPFS URL added to config file."
+        else
+            read -rp "Do you want to use a custom IPFS URL? (y/N): " use_custom
+            if [[ "${use_custom,,}" == "y" ]]; then
+                read -rp "Enter the custom IPFS URL: " custom_url
+                export IPFS_LOCAL_CONNECT_URL="$custom_url"
+                echo "IPFS_LOCAL_CONNECT_URL=$IPFS_LOCAL_CONNECT_URL" >> "$nodefolder/$configfile"
+                echo "Custom IPFS URL added to config file."
+            else
+                echo "No changes made."
+            fi
+        fi
+    fi
+}
+
+set_ipfs_local_connect_url() {
+    read -rp "Enter the new IPFS_LOCAL_CONNECT_URL: " new_url
+    export IPFS_LOCAL_CONNECT_URL="$new_url"
+    echo "IPFS_LOCAL_CONNECT_URL=$IPFS_LOCAL_CONNECT_URL" >> "$nodefolder/$configfile"
+    echo "Config file updated."
 }
 
 ubuntu_20_04() {
   # Determining if the etny-vagrant service is running
   echo "$os found. Continuing..." 
   choose_network
+  echo "#############################################"
   task_price_check
+  echo "#############################################"
+  check_ipfs_local_connect_url
   echo "#############################################"
   echo "Finding out if etny-vagrant service is already running..."
   systemctl status "$service" 2>/dev/null | grep "active (running)" >/dev/null

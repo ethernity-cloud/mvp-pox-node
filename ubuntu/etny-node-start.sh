@@ -16,7 +16,7 @@ fi
 
 systemctl stop ipfs
 
-if [ -v IPFS_LOCAL_CONNECT_URL ]
+if [ -v IPFS_LOCAL_CONNECT_URL ] && [ "$IPFS_LOCAL_CONNECT_URL" != "/ip4/127.0.0.1/tcp/5001/http" ]
 then
   systemctl disable ipfs
   IPFS_LOCAL=${IPFS_LOCAL_CONNECT_URL}
@@ -57,9 +57,10 @@ then
 fi
 
 cd /home/vagrant/etny/node/etny-repo/node/
-git fetch origin
-git reset --hard origin/master
-git pull
+#git fetch origin
+#git reset --hard origin/master
+#git pull
+git checkout local_ipfs
 
 COMMAND_LINE="/home/vagrant/etny/node/etny-repo/node/etny-node.py -a ${ADDRESS} -k ${PRIVATE_KEY} -r ${RESULT_ADDRESS} -j ${RESULT_PRIVATE_KEY} -v ${TASK_EXECUTION_PRICE} -n ${NETWORK} -i ${IPFS_HOST} -l ${IPFS_LOCAL}"
 
