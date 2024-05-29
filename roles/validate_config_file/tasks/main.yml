@@ -14,9 +14,14 @@
     _vals: "{{ _arr|map('regex_replace', '^(.*?)=(.*)$', '\\2')|map('trim')|list }}"
   failed_when: config_file_map.ADDRESS is undefined or config_file_map.PRIVATE_KEY is undefined
 
+- name: Print NETWORK environment variable
+  debug:
+    msg: "NETWORK environment variable value is {{ lookup('ansible.builtin.env', 'NETWORK') }}"
+  
 - name: Defining bloxberg gas balance request
+  when: lookup('ansible.builtin.env', 'NETWORK') == 'BLOXBERG' or lookup('ansible.builtin.env', 'NETWORK') == 'AUTO' or lookup('ansible.builtin.env', 'NETWORK') == 'TESTNET'
   uri:
-    url: https://bloxberg.ethernity.cloud
+    url: "{{ config_file_map.BLOXBERG_RPC_URL }}"
     method: POST
     headers:
       Content-Type: "application/json"
@@ -27,8 +32,9 @@
   delay: 3
 
 - name: Defining polygon gas balance request
+  when: lookup('ansible.builtin.env', 'NETWORK') == 'POLYGON' or lookup('ansible.builtin.env', 'NETWORK') == 'AUTO'
   uri:
-    url: https://polygon-rpc.com
+    url: "{{ config_file_map.POLYGON_RPC_URL }}"
     method: POST
     headers:
       Content-Type: "application/json"
@@ -38,34 +44,37 @@
   retries: 64
   delay: 3
 
-- name: Defining mumbai gas balance request
+- name: Defining amoy gas balance request
+  when: lookup('ansible.builtin.env', 'NETWORK') == 'AMOY'
   uri:
-    url: https://rpc-amoy.polygon.technology
+    url: "{{ config_file_map.AMOY_RPC_URL }}"
     method: POST
     headers:
       Content-Type: "application/json"
     body_format: json
     body: '{"method":"eth_getBalance","params":["{{ config_file_map.ADDRESS }}","latest"],"id":1,"jsonrpc":"2.0"}'
-  register: addressmumbaimatic
+  register: addressamoymatic
   retries: 64
   delay: 3
 
 
 - name: Evaluate bloxberg gas balance message
+  when: lookup('ansible.builtin.env', 'NETWORK') == 'BLOXBERG' or lookup('ansible.builtin.env', 'NETWORK') == 'AUTO' or lookup('ansible.builtin.env', 'NETWORK') == 'TESTNET'
   debug:
     msg: "{{ addressbergs.json }}"
   failed_when: addressbergs.json == ""
 
 - name: Evaluate polygon gas balance message
+  when: lookup('ansible.builtin.env', 'NETWORK') == 'POLYGON' or lookup('ansible.builtin.env', 'NETWORK') == 'AUTO'
   debug:
     msg: "{{ addressmatic.json }}"
   failed_when: addressmatic.json == ""
 
-- name: Evaluate mumbai gas balance message
+- name: Evaluate amoy gas balance message
+  when: lookup('ansible.builtin.env', 'NETWORK') == 'AMOY'
   debug:
-    msg: "{{ addressmumbaimatic.json }}"
-  failed_when: addressmumbaimatic.json == ""
-
+    msg: "{{ addressamoymatic.json }}"
+  failed_when: addressamoymatic.json == ""
 
 - name: Checking gas balance for AUTO
   debug:
@@ -79,8 +88,10 @@
     - addressbergs.json.result == "0x0"
     - addressmatic.json.result == "0x0"
   when:
-    - lookup('ansible.builtin.env', 'NETWORK') == 'AUTO'
-
+    - config_file_map.NETWORK == 'AUTO'
+    - addressbergs.json.result == "0x0"
+    - addressmatic.json.result == "0x0"
+  
 
 - name: Checking gas balance for BLOXBERG
   debug:
@@ -90,7 +101,8 @@
   failed_when:
     - addressbergs.json.result == "0x0"
   when:
-    - lookup('ansible.builtin.env', 'NETWORK') == 'BLOXBERG'
+    - config_file_map.NETWORK == 'BLOXBERG'
+    - addressbergs.json.result == "0x0"
 
 - name: Checking gas balance for TESTNET
   debug:
@@ -100,7 +112,8 @@
   failed_when:
     - addressbergs.json.result == "0x0"
   when:
-    - lookup('ansible.builtin.env', 'NETWORK') == 'TESTNET'
+    - config_file_map.NETWORK == 'TESTNET'
+    - addressbergs.json.result == "0x0"  
 
 - name: Checking gas balance for POLYGON
   debug:
@@ -110,17 +123,19 @@
   failed_when:
     - addressmatic.json.result == "0x0"
   when:
-    - lookup('ansible.builtin.env', 'NETWORK') == 'POLYGON'
+    - config_file_map.NETWORK == 'POLYGON'
+    - addressmatic.json.result == "0x0"
 
-- name: Checking gas balance for MUMBAI
+- name: Checking gas balance for AMOY
   debug:
     msg:
-      - "Node ADDRESS balance: '{{ addressmumbaimatic.json.result|int}}' MATIC."
-      - "Please sent MATIC to {{ config_file_map.ADDRESS }} using a mumbai faucet and try again."
+      - "Node ADDRESS balance: '{{ addressamoymatic.json.result|int}}' MATIC."
+      - "Please sent MATIC to {{ config_file_map.ADDRESS }} using a amoy faucet and try again."
   failed_when:
-    - addressmumbaimatic.json.result == "0x0"
+    - addressamoymatic.json.result == "0x0"
   when:
-    - lookup('ansible.builtin.env', 'NETWORK') == 'MUMBAI'
+    - config_file_map.NETWORK == 'AMOY'
+    - addressamoymatic.json.result == "0x0"  
 
 - meta: end_play
   when: (addressmatic.json.result is defined and addressmatic.json.result == '0') and (addressbergs.json.result is defined and addressbergs.json.result == '0')

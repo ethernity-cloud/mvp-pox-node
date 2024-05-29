@@ -55,13 +55,13 @@ polygon_image_registry_address = os.environ.get('POLYGON_IMAGE_REGISTRY');
 polygon_gas_price_measure = os.environ.get('POLYGON_GAS_PRICE_MEASURE')
 polygon_task_execution_price_default = os.environ.get('POLYGON_TASK_EXECUTION_PRICE_DEFAULT');
 
-mumbai_rpc_url = os.environ.get('MUMBAI_RPC_URL');
-mumbai_chain_id = os.environ.get('MUMBAI_CHAIN_ID');
-mumbai_contract_address = os.environ.get('MUMBAI_CONTRACT_ADDRESS');
-mumbai_heartbeat_address = os.environ.get('MUMBAI_HEARTBEAT_CONTRACT_ADDRESS');
-mumbai_image_registry_address = os.environ.get('MUMBAI_IMAGE_REGISTRY');
-mumbai_gas_price_measure = os.environ.get('MUMBAI_GAS_PRICE_MEASURE')
-mumbai_task_execution_price_default = os.environ.get('MUMBAI_TASK_EXECUTION_PRICE_DEFAULT');
+amoy_rpc_url = os.environ.get('AMOY_RPC_URL');
+amoy_chain_id = os.environ.get('AMOY_CHAIN_ID');
+amoy_contract_address = os.environ.get('AMOY_CONTRACT_ADDRESS');
+amoy_heartbeat_address = os.environ.get('AMOY_HEARTBEAT_CONTRACT_ADDRESS');
+amoy_image_registry_address = os.environ.get('AMOY_IMAGE_REGISTRY');
+amoy_gas_price_measure = os.environ.get('AMOY_GAS_PRICE_MEASURE')
+amoy_task_execution_price_default = os.environ.get('AMOY_TASK_EXECUTION_PRICE_DEFAULT');
 
 
 network_default = "AUTO"
@@ -146,10 +146,21 @@ parser.add_argument("-i", "--ipfshost", help="Default ipfs gateway",
 parser.add_argument("-l", "--ipfslocal", help="Local ipfs connect url",
                     default=str(client_connect_url_default),
                     required=False)
-
+parser.add_argument("-x", "--rpc_bloxberg", help="Bloxberg RPC",
+                    default=str(bloxberg_rpc_url),
+                    required=False)
+parser.add_argument("-y", "--rpc_polygon", help="Polygon RPC",
+                    default=str(polygon_rpc_url),
+                    required=False)
+parser.add_argument("-z", "--rpc_testnet", help="Testnet RPC",
+                    default=str(polygon_rpc_url),
+                    required=False)
+parser.add_argument("-w", "--rpc_amoy", help="Amoy RPC",
+                    default=str(polygon_rpc_url),
+                    required=False)
 
 arguments = {
-    str: ['address', 'privatekey', 'resultaddress', 'resultprivatekey', 'endpoint', 'access_key', 'secret_key', 'network', 'ipfshost', 'ipfslocal'],
+    str: ['address', 'privatekey', 'resultaddress', 'resultprivatekey', 'endpoint', 'access_key', 'secret_key', 'network', 'ipfshost', 'ipfslocal', 'rpc_bloxberg', 'rpc_polygon', 'rpc_testnet', 'rpc_amoy'],
     int: ['cpu', 'memory', 'storage', 'storage', 'bandwidth', 'duration', 'price']
 }
 

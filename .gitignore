@@ -17,4 +17,4 @@ log/
 node/process_order_data.json
 node/auto_update.etny
 node/heartbeat.etny
-
+etny-node-installer.log

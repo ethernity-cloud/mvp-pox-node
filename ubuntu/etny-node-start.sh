@@ -61,4 +61,22 @@ git fetch origin
 git reset --hard origin/master
 git pull
 
-/home/vagrant/etny/node/etny-repo/node/etny-node.py -a $ADDRESS -k $PRIVATE_KEY -r $RESULT_ADDRESS -j $RESULT_PRIVATE_KEY -v $TASK_EXECUTION_PRICE -n $NETWORK -i ${IPFS_HOST} -l ${IPFS_LOCAL}
+COMMAND_LINE="/home/vagrant/etny/node/etny-repo/node/etny-node.py -a ${ADDRESS} -k ${PRIVATE_KEY} -r ${RESULT_ADDRESS} -j ${RESULT_PRIVATE_KEY} -v ${TASK_EXECUTION_PRICE} -n ${NETWORK} -i ${IPFS_HOST} -l ${IPFS_LOCAL}"
+
+if [ -n "${POLYGON_RPC_URL}" ]; then
+  COMMAND_LINE="${COMMAND_LINE} -y ${POLYGON_RPC_URL}"
+fi
+
+if [ -n "${BLOXBERG_RPC_URL}" ]; then
+  COMMAND_LINE="${COMMAND_LINE} -x ${BLOXBERG_RPC_URL}"
+fi
+
+if [ -n "${TESTNET_RPC_URL}" ]; then
+  COMMAND_LINE="${COMMAND_LINE} -z ${TESTNET_RPC_URL}"
+fi
+
+if [ -n "${AMOY_RPC_URL}" ]; then
+  COMMAND_LINE="${COMMAND_LINE} -w ${AMOY_RPC_URL}"
+fi
+
+$COMMAND_LINE
