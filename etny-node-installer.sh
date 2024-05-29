@@ -162,7 +162,7 @@ check_ipfs_local_connect_url() {
 
     if [ -n "$ipfs_line" ]; then
         echo "IPFS_LOCAL_CONNECT_URL found in the config file."
-        read -rp "Do you want to modify this IPFS URL? (Y/n): " modify
+        read -rp "Do you want to modify this IPFS URL? (y/N): " modify
         if [[ "$modify" =~ ^[Yy]$ ]]; then
             set_ipfs_local_connect_url
         fi
@@ -174,7 +174,7 @@ check_ipfs_local_connect_url() {
             echo "Default IPFS URL added to config file."
         else
             read -rp "Do you want to use a custom IPFS URL? (y/N): " use_custom
-            if [[ "${use_custom,,}" == "y" ]]; then
+            if [[ "${use_custom,,}" =~ ^[Yy]$ ]]; then
                 read -rp "Enter the custom IPFS URL: " custom_url
                 export IPFS_LOCAL_CONNECT_URL="$custom_url"
                 echo "IPFS_LOCAL_CONNECT_URL=$IPFS_LOCAL_CONNECT_URL" >> "$nodefolder/$configfile"
@@ -438,6 +438,7 @@ case "$choice" in
 	echo "AMOY_RPC_URL=$AMOY_RPC_URL" >> $nodefolder/$configfile
 	fi
         if [ -f $nodefolder/$configfile ]; then echo "Config file generated successfully. Continuing..."; else echo "Something went wrong. Seek Help!" && exit; fi
+    	echo "IPFS_LOCAL_CONNECT_URL=$IPFS_LOCAL_CONNECT_URL" >> "$nodefolder/$configfile"
     ;;
     2) 
         export FILE=generate
