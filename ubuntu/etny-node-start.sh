@@ -1,43 +1,73 @@
 #!/bin/bash
 set -e
-
-trap 'echo "Installer status: \"${BASH_COMMAND}\" command end with exit code $?."' SIGINT SIGTERM ERR EXIT
-
-# Load configuration
-source /home/vagrant/etny/node/config
-
-# Set default IPFS host if not provided
-IPFS_HOST=${IPFS_HOSTNAME:-"ipfs.ethernity.cloud"}
-
-# Function to resolve IPFS host
-resolve_ipfs_host() {
-    IPFS_IP=$(getent ahosts "$IPFS_HOST" | awk '/^[0-9]/ { print $1; exit }')
-    if [ -z "$IPFS_IP" ]; then
-        echo "Unable to resolve IPFS gateway $IPFS_HOST, please check DNS configuration"
-        return 1
-    fi
-}
-
-# Main script logic
+trap 'echo "Installer status: \"${BASH_COMMAND}\"command end with exit code $?."' SIGINT SIGTERM ERR EXIT
+. /home/vagrant/etny/node/config
 cd /home/vagrant/etny/node/go-ipfs
+if [ -v IPFS_HOSTNAME ]
+then
+  IPFS_HOST=${IPFS_HOSTNAME}
+else
+  IPFS_HOST="ipfs.ethernity.cloud";
+fi
 
-if [ "$IPFS_HOST" == "ipfs.ethernity.cloud" ]; then
-    resolve_ipfs_host
+systemctl stop ipfs
 
-    until timeout 10 ./ipfs --api="$IPFS_LOCAL_CONNECT_URL" swarm connect "/ip4/$IPFS_IP/tcp/4001/ipfs/QmRBc1eBt4hpJQUqHqn6eA8ixQPD3LFcUDsn6coKBQtia5"; do
-        echo "Unable to connect to IPFS gateway, please check IPFS configuration or restart the service"
-        resolve_ipfs_host
-        sleep 5
-    done
-
-    ./ipfs --api="$IPFS_LOCAL_CONNECT_URL" bootstrap add "/ip4/$IPFS_IP/tcp/4001/ipfs/QmRBc1eBt4hpJQUqHqn6eA8ixQPD3LFcUDsn6coKBQtia5"
+if [ -v IPFS_LOCAL_CONNECT_URL ] && [ "$IPFS_LOCAL_CONNECT_URL" != "/ip4/127.0.0.1/tcp/5001/http" ]
+then
+  systemctl disable ipfs
+  IPFS_LOCAL=${IPFS_LOCAL_CONNECT_URL}
+else
+  systemctl enable ipfs
+  systemctl start ipfs
+  IPFS_LOCAL="/ip4/127.0.0.1/tcp/5001/http";
+fi
+resolve_ipfs_host () {
+resolving=false
+while [ $resolving == false ]
+do
+        IPFS_IP=`getent ahosts ${IPFS_HOST} | grep ${IPFS_HOST} | awk '{print $1}'`
+        if [ "$IPFS_IP" != "" ]
+	then
+		IPFS_IP=$(echo ${IPFS_IP} | awk 'NR==1{print $1}')
+		resolving=true
+        else
+		echo "Unable to resolve IPFS gateway ${IPFS_HOST}, please check DNS configuration"
+        fi
+done
+}
+if [ "$IPFS_HOSTNAME" == "ipfs.ethernity.cloud" ]
+then
+	resolve_ipfs_host
+	until timeout 10 ./ipfs --api=${IPFS_LOCAL_CONNECT_URL} swarm connect /ip4/${IPFS_IP}/tcp/4001/ipfs/QmRBc1eBt4hpJQUqHqn6eA8ixQPD3LFcUDsn6coKBQtia5
+	do
+        	echo "Unable to connect to IPFS gateway, please check IPFS configuration or restart the service"
+		resolve_ipfs_host
+		sleep 5
+	done
+	./ipfs --api=${IPFS_LOCAL_CONNECT_URL} bootstrap add /ip4/${IPFS_IP}/tcp/4001/ipfs/QmRBc1eBt4hpJQUqHqn6eA8ixQPD3LFcUDsn6coKBQtia5
 fi
 
 cd /home/vagrant/etny/node/etny-repo/node/
 #git fetch origin
 #git reset --hard origin/master
 #git pull
-git checkout local-ipfs
+git checkout local_ipfs
+
+COMMAND_LINE="/home/vagrant/etny/node/etny-repo/node/etny-node.py -a ${ADDRESS} -k ${PRIVATE_KEY} -r ${RESULT_ADDRESS} -j ${RESULT_PRIVATE_KEY} -v ${TASK_EXECUTION_PRICE} -n ${NETWORK} -i ${IPFS_HOST} -l ${IPFS_LOCAL}"
+
+if [ -n "${POLYGON_RPC_URL}" ]; then
+  COMMAND_LINE="${COMMAND_LINE} -y ${POLYGON_RPC_URL}"
+fi
+if [ -n "${BLOXBERG_RPC_URL}" ]; then
+  COMMAND_LINE="${COMMAND_LINE} -x ${BLOXBERG_RPC_URL}"
+fi
+if [ -n "${TESTNET_RPC_URL}" ]; then
+  COMMAND_LINE="${COMMAND_LINE} -z ${TESTNET_RPC_URL}"
+fi
+if [ -n "${AMOY_RPC_URL}" ]; then
+  COMMAND_LINE="${COMMAND_LINE} -w ${AMOY_RPC_URL}"
+fi
+$COMMAND_LINE
 
 COMMAND_LINE="/home/vagrant/etny/node/etny-repo/node/etny-node.py -a ${ADDRESS} -k ${PRIVATE_KEY} -r ${RESULT_ADDRESS} -j ${RESULT_PRIVATE_KEY} -v ${TASK_EXECUTION_PRICE} -n ${NETWORK} -i ${IPFS_HOST} -l ${IPFS_LOCAL}"
 
