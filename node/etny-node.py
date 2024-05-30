@@ -45,7 +45,7 @@ class EtnyPoXNode:
 
         logger.info("Configuration network is: %s", self.__network)
 
-        if self.__network == None or self.__network == 'AUTO' or self.__network == "POLYGON":
+        if self.__network == None or self.__network in {'AUTO', 'OPENBETA'}:
           logger.info("Network is automatic, determining gas value for POLYGON");
           try:
             if self.__rpc_polygon == None:
