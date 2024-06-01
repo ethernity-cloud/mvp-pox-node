@@ -153,10 +153,10 @@ parser.add_argument("-y", "--rpc_polygon", help="Polygon RPC",
                     default=str(polygon_rpc_url),
                     required=False)
 parser.add_argument("-z", "--rpc_testnet", help="Testnet RPC",
-                    default=str(polygon_rpc_url),
+                    default=str(testnet_rpc_url),
                     required=False)
 parser.add_argument("-w", "--rpc_amoy", help="Amoy RPC",
-                    default=str(polygon_rpc_url),
+                    default=str(amoy_rpc_url),
                     required=False)
 
 arguments = {
