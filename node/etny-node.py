@@ -142,6 +142,8 @@ class EtnyPoXNode:
 
         if self.__ipfslocal == None:
             self.__ipfslocal = config.client_connect_url_default;
+        
+        self.__node_geo = get_node_geo()
 
         logger.info("Initialized with settings below!");
         logger.info("NodeID: %s", self.__address);
@@ -155,6 +157,7 @@ class EtnyPoXNode:
         logger.info("Hourly price in ETNY/ECLD: %d", self.__price);
         logger.info("IPFS Host: %s", self.__ipfshost);
         logger.info("IPFS Local Connect URL: %s", self.__ipfslocal);
+        logger.info("Node Geo: %s", self.__node_geo);
 
         with open(config.abi_filepath) as f:
             self.__contract_abi = f.read()
@@ -196,8 +199,6 @@ class EtnyPoXNode:
                                                        self.__access_key,
                                                        self.__secret_key)
         self.process_order_data = {}
-
-        self.__node_geo = get_node_geo()
 
         self.__reset_cache()
 
