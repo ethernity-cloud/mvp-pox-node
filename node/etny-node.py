@@ -12,7 +12,7 @@ from web3.gas_strategies.time_based import fast_gas_price_strategy
 from web3.gas_strategies.rpc import rpc_gas_price_strategy
 
 import config
-from utils import get_or_generate_uuid, run_subprocess, retry, Storage, Cache, ListCache, MergedOrdersCache, subprocess
+from utils import get_or_generate_uuid, run_subprocess, retry, Storage, Cache, ListCache, MergedOrdersCache, subprocess, get_node_geo
 from models import *
 from error_messages import errorMessages
 from swift_stream_service import SwiftStreamService
@@ -197,6 +197,8 @@ class EtnyPoXNode:
                                                        self.__secret_key)
         self.process_order_data = {}
 
+        self.__node_geo = get_node_geo()
+
         self.__reset_cache()
 
         self.__run_integration_test()
@@ -289,7 +291,7 @@ class EtnyPoXNode:
             self.__price,
             self.__uuid,
             "v3",
-            "",
+            self.__node_geo,
             ""
         ]
 
