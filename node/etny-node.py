@@ -289,18 +289,16 @@ class EtnyPoXNode:
         if self.__price is None:
             self.__price = 0
 
-        node_info = self.__number_of_cpus + ';' + self.__free_memory + ';' + self.__free_storage + ';' + self.__node_geo;
-
         params = [
-            self._limited_arg(self.__cpu),
-            self._limited_arg(self.__memory),
-            self._limited_arg(self.__storage),
+            self._limited_arg(self.__number_of_cpus),
+            self._limited_arg(self.__free_memory),
+            self._limited_arg(self.__free_storage),
             self._limited_arg(self.__bandwidth),
             self.__duration,
             self.__price,
             self.__uuid,
             "v3",
-            node_info,
+            self.__node_geo,
             ""
         ]
 
