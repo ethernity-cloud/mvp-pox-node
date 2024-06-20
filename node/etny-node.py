@@ -144,9 +144,9 @@ class EtnyPoXNode:
             self.__ipfslocal = config.client_connect_url_default;
         
         self.__node_geo = get_node_geo();
-        self.__number_of_cpus = str(HardwareInfoProvider.get_number_of_cpus());
-        self.__free_memory = str(HardwareInfoProvider.get_free_memory());
-        self.__free_storage = str(HardwareInfoProvider.get_free_storage());
+        self.__number_of_cpus = int(HardwareInfoProvider.get_number_of_cpus());
+        self.__free_memory = int(HardwareInfoProvider.get_free_memory());
+        self.__free_storage = int(HardwareInfoProvider.get_free_storage());
 
         logger.info("Initialized with settings below!");
         logger.info("NodeID: %s", self.__address);
