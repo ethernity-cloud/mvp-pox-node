@@ -12,7 +12,7 @@ from web3.gas_strategies.time_based import fast_gas_price_strategy
 from web3.gas_strategies.rpc import rpc_gas_price_strategy
 
 import config
-from utils import get_or_generate_uuid, run_subprocess, retry, Storage, Cache, ListCache, MergedOrdersCache, subprocess
+from utils import get_or_generate_uuid, run_subprocess, retry, Storage, Cache, ListCache, MergedOrdersCache, subprocess, get_node_geo, HardwareInfoProvider
 from models import *
 from error_messages import errorMessages
 from swift_stream_service import SwiftStreamService
@@ -142,6 +142,11 @@ class EtnyPoXNode:
 
         if self.__ipfslocal == None:
             self.__ipfslocal = config.client_connect_url_default;
+        
+        self.__node_geo = get_node_geo();
+        self.__number_of_cpus = int(HardwareInfoProvider.get_number_of_cpus());
+        self.__free_memory = int(HardwareInfoProvider.get_free_memory());
+        self.__free_storage = int(HardwareInfoProvider.get_free_storage());
 
         logger.info("Initialized with settings below!");
         logger.info("NodeID: %s", self.__address);
@@ -155,6 +160,10 @@ class EtnyPoXNode:
         logger.info("Hourly price in ETNY/ECLD: %d", self.__price);
         logger.info("IPFS Host: %s", self.__ipfshost);
         logger.info("IPFS Local Connect URL: %s", self.__ipfslocal);
+        logger.info("Node number of cpus: %s", self.__number_of_cpus);
+        logger.info("Node free memory: %s", self.__free_memory);
+        logger.info("Node free storage: %s", self.__free_storage);
+        logger.info("Node geo: %s", self.__node_geo);
 
         with open(config.abi_filepath) as f:
             self.__contract_abi = f.read()
@@ -281,15 +290,15 @@ class EtnyPoXNode:
             self.__price = 0
 
         params = [
-            self._limited_arg(self.__cpu),
-            self._limited_arg(self.__memory),
-            self._limited_arg(self.__storage),
+            self._limited_arg(self.__number_of_cpus),
+            self._limited_arg(self.__free_memory),
+            self._limited_arg(self.__free_storage),
             self._limited_arg(self.__bandwidth),
             self.__duration,
             self.__price,
             self.__uuid,
             "v3",
-            "",
+            self.__node_geo,
             ""
         ]
 

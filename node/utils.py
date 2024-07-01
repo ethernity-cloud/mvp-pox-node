@@ -6,6 +6,7 @@ import subprocess
 import time
 import uuid
 import math
+import urllib.request
 from collections import OrderedDict
 
 import ipfshttpclient
@@ -48,6 +49,19 @@ def retry(func, *func_args, attempts, delay=0, callback=None):
         except:
             time.sleep(delay)
     return False, None
+
+def get_node_geo():
+    try:
+        request = urllib.request.urlopen('https://ipinfo.io/json')
+        data = json.loads(request.read().decode(request.info().get_param('charset') or 'utf-8'))
+        location = data.get('loc')
+        if (location):
+            return location
+        else:
+            raise Exception('Location not found in JSON object')
+    except Exception as e:
+        print('error = ', e)
+        return ''
 
 
 class Storage:
