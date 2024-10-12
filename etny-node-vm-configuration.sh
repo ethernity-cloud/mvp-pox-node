@@ -3,10 +3,10 @@
 # Define minimum and recommended settings
 MIN_MEMORY_MB=3072 #MB
 MIN_CPUS=2
-MIN_DISK=80 #GB
+MIN_DISK=128 #GB
 
 REC_MEMORY_MB=7168 #MB
-REC_CPUS=2
+REC_CPUS=4
 REC_DISK=200 #GB
 
 # Function to get available resources
@@ -53,7 +53,7 @@ if ((new_cpus < MIN_CPUS || new_cpus > available_cpus)); then
 fi
 
 # Prompt for additional storage
-read -p "Enter additional allocated storage (GB) (minimum $MIN_DISK, recommended $REC_DISK): " additional_storage
+read -p "Enter allocated storage (GB) (minimum $MIN_DISK, recommended $REC_DISK): " additional_storage
 
 # Calculate the new total storage size
 total_storage=$(echo "$available_disk_size + $additional_storage" | bc)
@@ -74,13 +74,22 @@ modify_vagrantfile
 
 echo "Backup of the original Vagrantfile created: Vagrantfile.bak"
 echo "Vagrantfile updated successfully!"
+echo "Reloading vagrant..."
 
 # Reload Vagrant
-vagrant reload
+vagrant reload > /dev/null 2>&1
+sleep 60
+vagrant up > /dev/null 2>&1
 echo "Vagrant reloaded successfully!"
 
+# Resize Memory
+echo "Setting up memory size"
+VAGRANT_ID=`vagrant status | grep etny | awk '{print $1}'`
+VMID=`virsh list | grep $VAGRANT_ID | awk '{print $2}'`
+virsh setmem --domain ${VMID} ${new_memory_MB}M --live
+
 # Resize VM disk
-vagrant ssh -c "sudo lvextend -l +100%FREE /dev/ubuntu-vg/ubuntu-lv"
+echo "Extending partition"
+vagrant ssh -c "sudo lvextend -l+100%FREE /dev/ubuntu-vg/ubuntu-lv"
 vagrant ssh -c "sudo resize2fs /dev/mapper/ubuntu--vg-ubuntu--lv"
-echo "Disk resized successfully!"
 echo "Configuration done"
