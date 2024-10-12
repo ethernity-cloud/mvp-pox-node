@@ -32,14 +32,14 @@
   script: ubuntu/etny-node-provision-sgx.sh
   when: "sgx_enclave_driver.rc != 0"
 
-- name: Ubuntu 20.04 | enable_sgx dependencies
+- name: Ubuntu | enable_sgx dependencies
   apt:
     pkg:
       - make-guile
       - gcc
-- name: Ubuntu 20.04 | build enable_sgx
+- name: Ubuntu | build enable_sgx
   shell: make all -C sgx/
-- name: Ubuntu 20.04 | run enable_sgx
+- name: Ubuntu | run enable_sgx
   shell: sgx/sgx_enable
   register: sgx_register
 - name: "Print message"
@@ -136,16 +136,17 @@
 - name: vagrant - get VM name
   shell: virsh list --name --state-running
   register: vagrant_vm_name_running
-- name: vagrant - cleanup VM
-  shell: virsh shutdown {{ vagrant_vm_name.stdout }}
+- name: vagrant - shutting down VM 
+  shell: virsh shutdown {{ vagrant_vm_name.stdout }} --mode acpi && sleep 60
   when: 
     - vagrant_vm_name.stdout != ''
     - vagrant_vm_name_running.stdout != ''
-- name: vagrant - cleanup VM
+- name: vagrant - unset VM vars
   shell: virsh undefine {{ vagrant_vm_name.stdout }}
   when: vagrant_vm_name.stdout != ''
 - name: vagrant - cleanup VM
-  shell: vagrant destroy -f && sleep 60
+  shell: vagrant destroy -f; sleep 60
+  ignore_errors: true
   #when: ansible_facts.services['etny-vagrant.service'].state != 'running'
 - name: vagrant - provision VM
   shell: vagrant up --provider=libvirt

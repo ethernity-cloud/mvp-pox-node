@@ -30,10 +30,6 @@ choose_network() {
     read -p "Enter your choice: " choice
     case $choice in
         1)  # Check Ubuntu kernel version
-            if [ "$os" != 'Ubuntu 20.04' ] && [ "$os" != 'Ubuntu 22.04' ]; then
-            	echo "You need to upgrade your Ubuntu OS to at least version 20.04 or 22.04 to proceed with the installation."
-            	exit 1
-            fi
             echo "You selected Automatic. This option will set polygon Mainnet if your wallet has MATIC, otherwise will set bloxberg Mainnet."
             export NETWORK=AUTO
 	    read -p "Do you want to use the default RPC? [Y/n]: " use_default_rpc
@@ -51,10 +47,6 @@ choose_network() {
             break
             ;;
         2)  # Check Ubuntu kernel version
-            if [ "$os" != 'Ubuntu 20.04' ] && [ "$os" != 'Ubuntu 22.04' ]; then
-                echo "You need to upgrade your Ubuntu OS to at least version 20.04 or 22.04 to proceed with the installation."
-                exit 1
-            fi
             echo "You selected Mainnet on POLYGON."
             export NETWORK=POLYGON
             read -p "Do you want to use the default POLYGON RPC? [Y/n]: " use_default_rpc
@@ -69,10 +61,6 @@ choose_network() {
 	    break
             ;;
         3)  # Check Ubuntu kernel version
-            if [ "$os" != 'Ubuntu 20.04' ] && [ "$os" != 'Ubuntu 22.04' ]; then
-                echo "You need to upgrade your Ubuntu OS to at least version 20.04 or 22.04 to proceed with the installation."
-                exit 1
-            fi
             echo "You selected Open Beta."
             export NETWORK=AMOY
             read -p "Do you want to use the default AMOY RPC? [Y/n]: " use_default_rpc
@@ -87,10 +75,6 @@ choose_network() {
 	    break
 	    ;;
         4)  # Check Ubuntu kernel version
-            if [ "$os" != 'Ubuntu 20.04' ] && [ "$os" != 'Ubuntu 22.04' ]; then
-                echo "You need to upgrade your Ubuntu OS to at least version 20.04 or 22.04 to proceed with the installation."
-                exit 1
-            fi
             echo "You selected Open Beta."
             export NETWORK=BLOXBERG
             read -p "Do you want to use the default Bloxberg RPC? [Y/n]: " use_default_rpc
@@ -461,11 +445,11 @@ case $(awk '/^VERSION_ID=/' /etc/*-release 2>/dev/null | awk -F'=' '{ print tolo
     20.04) 
         os='Ubuntu 20.04'
         ubuntu_20_04;;
-    18.04) 
-        os='Ubuntu 18.04'
-        ubuntu_20_04;;
     22.04) 
         os='Ubuntu 22.04'
+        ubuntu_20_04;;
+    24.04)
+        os='Ubuntu 24.04'
         ubuntu_20_04;;
     *) echo "Version not supported. Exiting..."
 esac
