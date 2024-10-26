@@ -150,7 +150,7 @@ set_task_price() {
     export TASK_EXECUTION_PRICE=$taskprice
 }
 
-ubuntu_20_04() {
+deploy_ansible() {
   # Determining if the etny-vagrant service is running
   echo "$os found. Continuing..." 
   choose_network
@@ -166,14 +166,14 @@ ubuntu_20_04() {
       echo "Stopping the service..."
       # Stop the service here
       systemctl stop "$service"
-      ubuntu_20_04_kernel_check
+      deploy_ansible_kernel_check
     else
       echo "The service is currently running. Setup aborted."
       exit 1
     fi
   else
     echo "The service is not running."
-    ubuntu_20_04_kernel_check
+    deploy_ansible_kernel_check
   fi
 }
 
@@ -270,9 +270,27 @@ check_config_file() {
 }
 
 check_ansible(){
-        echo "Check ansible version..."
-        ANSIBLE_VERSION=`ansible --version 2> /dev/null || echo ""`
-        if [[ $ANSIBLE_VERSION = "" ]]; then echo "Installing latest ansible version..." && sudo apt-add-repository --yes --update ppa:ansible/ansible && sudo apt update && sudo apt -y install software-properties-common ansible; fi
+    echo "Check ansible version..."
+    ANSIBLE_VERSION=`ansible --version 2> /dev/null || echo ""`
+    if [[ $ANSIBLE_VERSION = "" ]];
+    then 
+        echo "Installing latest ansible version..." ;
+        if [ "$os" = "Debian 12" ]
+	then
+	    UBUNTU_CODENAME=jammy
+            sudo apt -y install gpg
+	    wget -O- "https://keyserver.ubuntu.com/pks/lookup?fingerprint=on&op=get&search=0x93C4A3FD7BB9C367" | sudo gpg --dearmour -o /usr/share/keyrings/ansible-archive-keyring.gpg
+	    echo "deb [signed-by=/usr/share/keyrings/ansible-archive-keyring.gpg] http://ppa.launchpad.net/ansible/ansible/ubuntu $UBUNTU_CODENAME main" | sudo tee /etc/apt/sources.list.d/ansible.list
+            sudo apt update 
+            sudo apt -y install ansible
+        fi
+        if [ "$os" = "Ubuntu 20.04" ] || [ "$os" = "Ubuntu 22.04" ] || [ "$os" = "Ubuntu 24.04" ]
+        then
+            sudo apt-add-repository --yes --update ppa:ansible/ansible 
+            sudo apt update 
+            sudo apt -y install software-properties-common ansible
+        fi
+    fi
 }
 
 is_miminum_kernel_version(){
@@ -281,10 +299,10 @@ is_miminum_kernel_version(){
     if [ "$(printf '%s\n' "$requiredkernelversion" "$currentver" | sort -V | head -n1)" = "$requiredkernelversion" ]; then echo true ; else echo false; fi
  } 
 
-ubuntu_20_04_kernel_check(){
+deploy_ansible_kernel_check(){
 #if we have the right kernel then we run the ansible-playbook and finish installation
 echo "Determining if the right kernel is running..."
-if [[ ( "$(is_miminum_kernel_version)" = true && $os = "Ubuntu 20.04" ) || ( $(uname -r) = "5.0.0-050000-generic"  && $os = "Ubuntu 18.04") || ( "$(is_miminum_kernel_version)" = true && $os = "Ubuntu 22.04" )]]
+if [[ ( "$(is_miminum_kernel_version)" = true && $os = "Ubuntu 20.04" ) || ( $(uname -r) = "5.0.0-050000-generic"  && $os = "Ubuntu 18.04") || ( "$(is_miminum_kernel_version)" = true && $os = "Ubuntu 22.04" ) || "$os" = "Debian 12" || "$os" = "Ubuntu 24.04" ]]
 then  
     echo "The right kernel is running. Continuing setup..."
     ## check ansible 
@@ -444,23 +462,38 @@ echo "Ubuntu OS found. Determining version..."
 case $(awk '/^VERSION_ID=/' /etc/*-release 2>/dev/null | awk -F'=' '{ print tolower($2) }' | tr -d '"') in
     20.04) 
         os='Ubuntu 20.04'
-        ubuntu_20_04;;
+        deploy_ansible;;
     22.04) 
         os='Ubuntu 22.04'
-        ubuntu_20_04;;
+        deploy_ansible;;
     24.04)
         os='Ubuntu 24.04'
-        ubuntu_20_04;;
+        deploy_ansible;;
     *) echo "Version not supported. Exiting..."
 esac
 }
+
+debian(){
+#Getting which version of Ubuntu is instaled
+echo "Debian found. Determining version..."
+case $(awk '/^VERSION_ID=/' /etc/*-release 2>/dev/null | awk -F'=' '{ print tolower($2) }' | tr -d '"') in
+    11)
+        os='Ubuntu 20.04'
+        deploy_ansible;;
+    12)
+        os='Debian 12'
+        deploy_ansible;;
+    *) echo "Version not supported. Exiting..."
+esac
+}
+
 
 start(){
 #getting which Linux distribution is installed
 echo "Getting distro..."
 case $(awk '/^ID=/' /etc/*-release 2>/dev/null | awk -F'=' '{ print tolower($2) }' | tr -d '"') in
     ubuntu) ubuntu;;
-#   debian) echo "debian distro Found. Not Supported. Exiting...";;
+    debian) debian;;
 #   centos) echo "centos distro Found. Not Supported. Exiting...";;
 #   manjaro) echo "manjaro distro Found. Not Supported. Exiting...";;
 #   arch) echo "arch distro Found. Not Supported. Exiting...";;
