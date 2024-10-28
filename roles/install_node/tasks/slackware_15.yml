@@ -15,3 +15,6 @@
     src: vagrant/qemu-8.2
     dest: Vagrantfile
     force: yes
+
+- name: Slackware 15 | vagrant template network update
+  shell: IFACE="`virsh iface-list | head -3 | tail -1 | awk '{print $1}'`" && sed -i s/"interface.strip!"/"'${IFACE}'"/ Vagrantfile
