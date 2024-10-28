@@ -1,0 +1,17 @@
+---
+
+- name: Slackware 15 | Install python swig
+  ansible.builtin.pip:
+    name: swig
+
+- name: Slackware 15 | Compiling and installing qemu packages
+  shell: if [ "`sudo sbopkg -p | grep -i qemu`" == "" ]; then sudo sqg -p qemu && echo 'Q' | sudo sbopkg -B -e stop -q -k -i qemu; fi
+
+- name: Slackware | Compiling and installing libvirt packages
+  shell: if [ ! "`vagrant version`" ]; then mkdir vagrant-bin && cd vagrant-bin && wget https://releases.hashicorp.com/vagrant/2.4.1/vagrant_2.4.1_linux_amd64.zip && unzip vagrant_2.4.1_linux_amd64.zip && cp -f vagrant /usr/bin/ && cd ../ && rm -rf vagrant-bin; fi
+
+- name: Slackware 15 | vagrant template
+  copy:
+    src: vagrant/qemu-8.2
+    dest: Vagrantfile
+    force: yes
