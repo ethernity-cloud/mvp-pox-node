@@ -27,10 +27,12 @@
     
 - name: Run script if both drivers are found
   script: ubuntu/etny-node-isgx-removal-tool.sh
+  ignore_errors: true
   when: "isgx_driver.rc == 0 and sgx_enclave_driver.rc == 0"
 
 - name: Run script if sgx_enclave drivers are not installed
   script: ubuntu/etny-node-provision-sgx.sh
+  ignore_errors: true
   when: "sgx_enclave_driver.rc != 0"
 
 - name: Ubuntu | enable_sgx dependencies
@@ -168,7 +170,7 @@
     - vagrant_vm_name.stdout != ''
     - vagrant_vm_name_running.stdout != ''
 - name: vagrant - unset VM vars
-  shell: virsh undefine {{ vagrant_vm_name.stdout }}
+  shell: virsh managedsave-remove {{ vagrant_vm_name.stdout }}  && virsh undefine {{ vagrant_vm_name.stdout }}
   when: vagrant_vm_name.stdout != ''
 - name: vagrant - cleanup VM
   shell: vagrant destroy -f; sleep 60
@@ -200,6 +202,7 @@
   copy:
     src: etc/rc.d/rc.etny
     dest: /etc/rc.d/rc.etny
+    mode: '0555'
   when: (ansible_facts['distribution'] == "Slackware")
 - name: startup - start rc.etny
   shell: /etc/rc.d/rc.etny start
