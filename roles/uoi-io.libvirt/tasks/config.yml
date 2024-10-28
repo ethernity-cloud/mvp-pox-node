@@ -6,20 +6,6 @@
     regexp={{ item.option }}
     line={{ item.value }}
   with_items: "{{ libvirt_config }}"
-  notify: restart libvirtd
-  when: (ansible_facts['distribution'] != "Slackware")
-
-- name: Configuring "{{ libvirt_config_file }}" file (libvirt)
-  lineinfile:
-    dest="{{ libvirt_config_file }}"
-    regexp={{ item.option }}
-    line={{ item.value }}
-  with_items: "{{ libvirt_config }}"
-  when: (ansible_facts['distribution'] != "Slackware")
-
-- name: restart libvirt
-  shell: /etc/rc.d/rc.libvirt restart
-  when: (ansible_facts['distribution'] == "Slackware")
 
 - name: Configuring "{{ libvirt_qemu_config_file }}" file (QEMU)
   lineinfile:
@@ -27,7 +13,6 @@
     regexp={{ item.option }}
     line={{ item.value }}
   with_items: "{{ libvirt_qemu_config }}"
-  notify: restart libvirtd
 
 - name: Configuring "{{ libvirt_daemon_config_file }}" file (daemon)
   lineinfile:
@@ -35,8 +20,18 @@
     regexp={{ item.option }}
     line={{ item.value }}
   with_items: "{{ libvirt_daemon_config }}"
-  notify: restart libvirtd
   when: (ansible_facts['distribution'] != "Slackware")
+
+- name: restart libvirt
+  ansible.builtin.service:
+    name: libvirtd
+    state: restarted
+  when: (ansible_facts['distribution'] != "Slackware")
+
+- name: restart libvirt
+  shell: /etc/rc.d/rc.libvirt restart
+  when: (ansible_facts['distribution'] == "Slackware")
+
 
 
 - meta: flush_handlers
