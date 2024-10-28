@@ -29,7 +29,7 @@
   when: (ansible_facts['distribution'] != "Slackware")
 
 - name: restart libvirt
-  shell: /etc/rc.d/rc.libvirt restart
+  shell: /etc/rc.d/rc.libvirt stop; /etc/rc.d/rc.libvirt start
   when: (ansible_facts['distribution'] == "Slackware")
 
 
