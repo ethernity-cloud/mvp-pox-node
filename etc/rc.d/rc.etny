@@ -20,6 +20,15 @@ enty_restart() {
   etny_start
 }
 
+etny_status() {
+  if [ "`virsh list | grep running | grep -i etnyvm`" == "0" ]
+  then
+    echo "Running";
+  else
+    echo "Stopped";
+  fi
+}
+
 case "$1" in
 'start')
   etny_start
@@ -29,6 +38,9 @@ case "$1" in
   ;;
 'restart')
   etny_restart
+  ;;
+'status')
+  etny_tatus
   ;;
 *)
   echo "usage $0 start|stop|restart"

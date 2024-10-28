@@ -151,7 +151,7 @@ set_task_price() {
     export TASK_EXECUTION_PRICE=$taskprice
 }
 
-deploy_ansible() {
+deploy_debian() {
   # Determining if the etny-vagrant service is running
   echo "$os found. Continuing..." 
   choose_network
@@ -159,6 +159,34 @@ deploy_ansible() {
   echo "#############################################"
   echo "Finding out if etny-vagrant service is already running..."
   systemctl status "$service" 2>/dev/null | grep "active (running)" >/dev/null
+  if [ $? -eq 0 ]; then
+    echo "The service is currently running."
+    read -p "Would you like to stop the service? (Y/n) " choice
+    choice="${choice:-Y}"  # Set the default value to "Y" if the input is empty
+    if [[ "$choice" =~ ^[Yy]$ ]]; then
+      echo "Stopping the service..."
+      # Stop the service here
+      systemctl stop "$service"
+      deploy_ansible_kernel_check
+    else
+      echo "The service is currently running. Setup aborted."
+      exit 1
+    fi
+  else
+    echo "The service is not running."
+    deploy_ansible_kernel_check
+  fi
+}
+
+
+deploy_slackware() {
+  # Determining if the etny-vagrant service is running
+  echo "$os found. Continuing..."
+  choose_network
+  task_price_check
+  echo "#############################################"
+  echo "Finding out if rc.etny service is already running..."
+  /etc/rc.d/rc.etny | grep -i "running" >/dev/null
   if [ $? -eq 0 ]; then
     echo "The service is currently running."
     read -p "Would you like to stop the service? (Y/n) " choice
@@ -273,13 +301,14 @@ check_config_file() {
 }
 
 check_ansible(){
-    echo "Check ansible version..."
+    echo -en "Check ansible version... "
     ANSIBLE_VERSION=`ansible --version 2> /dev/null || echo ""`
     if [[ $ANSIBLE_VERSION = "" ]];
     then 
-        echo "Installing latest ansible version..." ;
+	echo "ansible not installed on the system, proceeding with setup"
         if [ "$os" = "Debian 12" ]
 	then
+            echo "Installing latest ansible version..." ;
 	    UBUNTU_CODENAME=jammy
             sudo apt -y install gpg
 	    wget -O- "https://keyserver.ubuntu.com/pks/lookup?fingerprint=on&op=get&search=0x93C4A3FD7BB9C367" | sudo gpg --dearmour -o /usr/share/keyrings/ansible-archive-keyring.gpg
@@ -288,22 +317,40 @@ check_ansible(){
             sudo apt -y install ansible
         elif [ "$os" = "Ubuntu 20.04" ] || [ "$os" = "Ubuntu 22.04" ] || [ "$os" = "Ubuntu 24.04" ]
         then
+            echo "Installing latest ansible version..." ;
             sudo apt-add-repository --yes --update ppa:ansible/ansible 
             sudo apt update 
             sudo apt -y install software-properties-common ansible
         elif [ "$os" = "Slackware 15" ]
         then
-            if [ ! -f sbopkg-0.38.2-noarch-1_wsr.tgz ] ; then wget https://github.com/sbopkg/sbopkg/releases/download/0.38.2/sbopkg-0.38.2-noarch-1_wsr.tgz; fi
-            sudo upgradepkg --install-new  sbopkg-0.38.2-noarch-1_wsr.tgz
+            mkdir -p ansible-setup
+            cd ansible-setup
+	    echo "Installing sbopkg..."
+            wget https://github.com/sbopkg/sbopkg/releases/download/0.38.2/sbopkg-0.38.2-noarch-1_wsr.tgz -o ansible-install.log
+            sudo upgradepkg --install-new  sbopkg-0.38.2-noarch-1_wsr.tgz >> ansible-install.log
 	    sudo mkdir -p /var/lib/sbopkg/queues
 	    sudo mkdir -p /var/lib/sbopkg/SBo/15.0
-            sudo sbopkg -r
-            sudo sqg -p ansible
-            echo 'Q' | sudo sbopkg -B -q -k -i ansible		
+	    echo "Syncing sbo repository..."
+            sudo sbopkg -r >> ansible-install.log
+	    echo "Installing ansible from sbo..."
+            sudo sqg -p ansible >> ansible-install.log 2>&1
+            echo 'Q' | sudo sbopkg -B -e stop -q -k -i ansible >> ansible-install.log 2>&1
+	    sudo sbopkg -p | grep -v ansible-core | grep -i ansible > /dev/null 2>&1 
+	    if [ $? -eq 0 ]
+	    then
+	        rm -rf ansible-install.log
+            else
+		echo "Error occured while installing ansible, please check ansible-setup/ansible-install.log"
+		exit
+            fi
+	    cd ..
+	    rm -rf ansible-setup
         else
             echo "Your operating system does not have an ansible setup path. This should not happen."
             exit 1
         fi
+    else
+        echo "ansible found, skipping setup"
     fi
 }
 
@@ -322,10 +369,10 @@ slackware_is_miminum_kernel_version(){
 
 deploy_ansible_kernel_check(){
 #if we have the right kernel then we run the ansible-playbook and finish installation
-echo "Determining if the right kernel is running..."
+echo -en "Checking kernel version... "
 if [[ ( "$(ubuntu_20_04_is_miminum_kernel_version)" = true && $os = "Ubuntu 20.04" ) || ( $(uname -r) = "5.0.0-050000-generic"  && $os = "Ubuntu 18.04") || ( "$(ubuntu_20_04_is_miminum_kernel_version)" = true && $os = "Ubuntu 22.04" ) || "$os" = "Debian 12" || "$os" = "Ubuntu 24.04" || ( "$(slackware_is_miminum_kernel_version)" = true && $os = "Slackware 15" ) ]]
 then  
-    echo "The right kernel is running. Continuing setup..."
+    echo "kernel is up to date, skipping kernel upgrade..."
     ## check ansible 
     check_ansible
     check_config_file
@@ -349,9 +396,11 @@ then
                     echo "Node installation failed! Please check error messages above." && exit
                 fi
     fi
-else 
+else
+    echo "kernel does not have SGX support, kernel will be upgraded by ansible"
     check_config_file
-    ubuntu_20_04_update_ansible
+    check_ansible
+    ubuntu_20_04_ansible_playbook
 fi
 }
 
@@ -467,8 +516,6 @@ fi
 
 ubuntu_20_04_update_ansible(){
 #If we don't have the right kernel running that means we didn't update the system
-echo "We don't have the right kernel running."
-echo "Updating system, kernel and installing ansible..."
 sudo sudo apt-add-repository --yes --update ppa:ansible/ansible && sudo apt update && sudo apt upgrade -y && sudo apt autoremove -y &&  sudo apt -y install software-properties-common ansible
 if [ $? -eq 0 ]
 then 
@@ -480,19 +527,18 @@ fi
 ubuntu(){
 #Getting which version of Ubuntu is instaled
 echo "Ubuntu OS found. Determining version..."
+family='Debian';
+
 case $(awk '/^VERSION_ID=/' /etc/*-release 2>/dev/null | awk -F'=' '{ print tolower($2) }' | tr -d '"') in
     20.04) 
         os='Ubuntu 20.04'
-	family='Debian'
-        deploy_ansible;;
+        deploy_debian;;
     22.04) 
         os='Ubuntu 22.04'
-	family='Debian'
-        deploy_ansible;;
+        deploy_debian;;
     24.04)
         os='Ubuntu 24.04'
-	family='Debian'
-        deploy_ansible;;
+        deploy_debian;;
     *) echo "Version not supported. Exiting..."
 esac
 }
@@ -500,11 +546,11 @@ esac
 debian(){
 #Getting which version of Debian is instaled
 echo "Debian found. Determining version..."
+family='Debian';
 case $(awk '/^VERSION_ID=/' /etc/*-release 2>/dev/null | awk -F'=' '{ print tolower($2) }' | tr -d '"') in
     12)
         os='Debian 12'
-	family='Debian'
-        deploy_ansible;;
+        deploy_debian;;
     *) echo "Version not supported. Exiting..."
 esac
 }
@@ -512,11 +558,12 @@ esac
 slackware(){
 #Getting which version of Slackware is instaled
 echo "Slackware found. Determining version..."
+family='Slackware';
 case $(awk '/^VERSION_ID=/' /etc/*-release 2>/dev/null | awk -F'=' '{ print tolower($2) }' | tr -d '"') in
     15.0)
         os='Slackware 15';
 	family='Slackware';
-        deploy_ansible;;
+        deploy_slackware;;
     *) echo "Version not supported. Exiting..."
 esac
 }
