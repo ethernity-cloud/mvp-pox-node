@@ -36,6 +36,7 @@ Ubuntu 20.04
 Ubuntu 22.04
 Ubuntu 24.04
 Slackware 15-current
+Debian 12.0
 ```
 
 We are planning support for the following operating systems:
