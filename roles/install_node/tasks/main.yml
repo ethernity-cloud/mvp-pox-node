@@ -85,6 +85,17 @@
   ignore_errors: true
   when: (ansible_facts['distribution'] != "Slackware")
   
+- name: Fail the playbook if VT-x is not enabled
+  fail:
+    msg: "VT-x is not enabled. Make sure to enable VT-x and VT-d from BIOS."
+  when: (ansible_facts['distribution'] != "Slackware") and (vt_x_supported.rc != 0)
+    
+  
+- name: Print VTx status
+  debug:
+    msg: "VTx enabled"
+  when: (ansible_facts['distribution'] != "Slackware") and (vt_x_supported.rc == 0)
+
 - name: Check if VT-x is enabled
   shell: lscpu | grep -i VT-x
   register: vt_x_supported
@@ -96,12 +107,12 @@
 - name: Fail the playbook if VT-x is not enabled
   fail:
     msg: "VT-x is not enabled. Make sure to enable VT-x and VT-d from BIOS."
-  when: vt_x_supported.rc != 0
-  
+  when: (ansible_facts['distribution'] == "Slackware") and (vt_x_supported.rc != 0)
+
 - name: Print VTx status
   debug:
     msg: "VTx enabled"
-  when: vt_x_supported.rc == 0
+  when: (ansible_facts['distribution'] == "Slackware") and (vt_x_supported.rc == 0)
 
 - name: Check if VT-d is enabled
   shell: dmesg | grep DMAR

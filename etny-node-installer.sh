@@ -165,7 +165,7 @@ deploy_debian() {
       echo "Stopping the service..."
       # Stop the service here
       systemctl stop "$service"
-      deploy_ansibl
+      deploy_ansible
     else
       echo "The service is currently running. Setup aborted."
       exit 1
