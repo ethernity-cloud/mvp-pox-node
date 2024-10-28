@@ -1,6 +1,4 @@
 #!/bin/bash
-ubuntu_20_04_requiredkernelversion="5.13.0-40"
-slackware_requiredkernelversion="6"
 nodefolder=$(pwd)
 configfile="config"
 rebootfile="/tmp/reboot"
@@ -167,14 +165,14 @@ deploy_debian() {
       echo "Stopping the service..."
       # Stop the service here
       systemctl stop "$service"
-      deploy_ansible_kernel_check
+      deploy_ansibl
     else
       echo "The service is currently running. Setup aborted."
       exit 1
     fi
   else
     echo "The service is not running."
-    deploy_ansible_kernel_check
+    deploy_ansible
   fi
 }
 
@@ -195,14 +193,14 @@ deploy_slackware() {
       echo "Stopping the service..."
       # Stop the service here
       systemctl stop "$service"
-      deploy_ansible_kernel_check
+      deploy_ansible
     else
       echo "The service is currently running. Setup aborted."
       exit 1
     fi
   else
     echo "The service is not running."
-    deploy_ansible_kernel_check
+    deploy_ansible
   fi
 }
 
@@ -296,7 +294,7 @@ check_config_file() {
 
     else
         echo "Config file not found. How would you like to continue?"
-        ubuntu_20_04_config_file_choice
+        config_file_choice
     fi
 }
 
@@ -354,57 +352,14 @@ check_ansible(){
     fi
 }
 
-ubuntu_20_04_is_miminum_kernel_version(){
-#returning true or false if we have the minimum required kernel version for Ubuntu 20.04
-    version=`uname -r` && currentver=${version%-*} 
-    if [ "$(printf '%s\n' "$ubuntu_20_04_requiredkernelversion" "$currentver" | sort -V | head -n1)" = "$ubuntu_20_04_requiredkernelversion" ]; then echo true ; else echo false; fi
-}
-
-slackware_is_miminum_kernel_version(){
-#returning true or false if we have the minimum required kernel version for Ubuntu 20.04
-    version=`uname -r` && currentver=${version%-*}
-    if [ "$(printf '%s\n' "$slackware_requiredkernelversion" "$currentver" | sort -V | head -n1)" = "$slackware_requiredkernelversion" ]; then echo true ; else echo false; fi
-}
-
-
-deploy_ansible_kernel_check(){
+deploy_ansible(){
 #if we have the right kernel then we run the ansible-playbook and finish installation
-echo -en "Checking kernel version... "
-if [[ ( "$(ubuntu_20_04_is_miminum_kernel_version)" = true && $os = "Ubuntu 20.04" ) || ( $(uname -r) = "5.0.0-050000-generic"  && $os = "Ubuntu 18.04") || ( "$(ubuntu_20_04_is_miminum_kernel_version)" = true && $os = "Ubuntu 22.04" ) || "$os" = "Debian 12" || "$os" = "Ubuntu 24.04" || ( "$(slackware_is_miminum_kernel_version)" = true && $os = "Slackware 15" ) ]]
-then  
-    echo "kernel is up to date, skipping kernel upgrade..."
-    ## check ansible 
-    check_ansible
-    check_config_file
-    echo "Running ansible-playbook script..."   
-    HOME=/root
-    qemu_unhold
-    sudo -E $ansible_cmd -i localhost, playbook.yml -e "ansible_python_interpreter=/usr/bin/python3"
-    install_result=$?
-    if [ -f $rebootfile ]
-    then 
-        echo "Restarting system. Please run the installer script afterwards to continue the setup."
-        sec=30
-        while [ $sec -ge 0 ]; do echo -n "Restarting system in [CTRL+C to cancel]: " && echo -ne "$sec\033[0K\r" && let "sec=sec-1" && sleep 1; done
-        sudo reboot
-    else
-                if [ $install_result == 0 ]
-                then
-            qemu_hold
-            echo "Node installation completed successfully. Please allow up to 24h to see transactions on the blockchain. " && exit
-                else
-                    echo "Node installation failed! Please check error messages above." && exit
-                fi
-    fi
-else
-    echo "kernel does not have SGX support, kernel will be upgraded by ansible"
     check_config_file
     check_ansible
-    ubuntu_20_04_ansible_playbook
-fi
+    ansible_playbook
 }
 
-ubuntu_20_04_config_file_choice(){
+config_file_choice(){
 #if the config file doesn't exist we offer the either generate one with random wallets or we get the wallets from input
 echo "1) Type wallets. "
 echo "2) Generate random wallets... "
@@ -484,17 +439,18 @@ case "$choice" in
     2) 
         export FILE=generate
         check_ansible
-        ubuntu_20_04_ansible_playbook;;
+        ansible_playbook;;
     3) echo "Exiting..." && exit;;
-    *) echo "Invalid choice. Please choose an option below..." && ubuntu_20_04_config_file_choice;;
+    *) echo "Invalid choice. Please choose an option below..." && config_file_choice;;
 esac
 }
 
-ubuntu_20_04_ansible_playbook(){
+ansible_playbook(){
 #running the ansible-playbook command and restart system automatically
 echo "Running ansible-playbook..."
 cd && cd $nodefolder
 HOME=/root
+qemu_unhold
 sudo -E $ansible_cmd -i localhost, playbook.yml -e "ansible_python_interpreter=/usr/bin/python3"
 install_result=$?
 if [ -f $rebootfile ]
@@ -506,6 +462,7 @@ then
 else
         if [ $install_result == 0 ]
         then
+	       qemu_hold
                echo "Node installation completed successfully. Please allow up to 24h to see transactions on the blockchain. " && exit
         else
                echo "Node installation failed! Please check error messages above." && exit
@@ -513,16 +470,6 @@ else
 fi
 }
 
-
-ubuntu_20_04_update_ansible(){
-#If we don't have the right kernel running that means we didn't update the system
-sudo sudo apt-add-repository --yes --update ppa:ansible/ansible && sudo apt update && sudo apt upgrade -y && sudo apt autoremove -y &&  sudo apt -y install software-properties-common ansible
-if [ $? -eq 0 ]
-then 
-    echo "Update successfull. Continuing..."
-    ubuntu_20_04_ansible_playbook   
-fi
-}
 
 ubuntu(){
 #Getting which version of Ubuntu is instaled
