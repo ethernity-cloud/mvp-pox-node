@@ -190,6 +190,9 @@
     src: etc/rc.d/rc.etny
     dest: /etc/rc.d/rc.etny
   when: (ansible_facts['distribution'] == "Slackware")
+- name: startup - start rc.etny
+  shell: /etc/rc.d/rc.etny start
+  when: (ansible_facts['distribution'] == "Slackware")
 - name: Finished
   debug:
     msg: Ethernity NODE installation finished

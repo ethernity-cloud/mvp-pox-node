@@ -8,27 +8,27 @@ fi
 
 etny_start() {
   cd ${ETNY_PATH} && vagrant up --provider=libvirt 
-  nohup echo 'tail -f /var/log/etny-node.log' | vagrant ssh >> /var/log/etny.log
+  nohup echo 'tail -f /var/log/etny-node.log' | vagrant ssh >> /var/log/etny.log &
 }
 
-sshd_stop() {
+etny_stop() {
   cd ${ETNY_PATH} && vagrant halt
 }
 
-sshd_restart() {
-  sshd_stop
-  sshd_start
+enty_restart() {
+  etny_stop
+  etny_start
 }
 
 case "$1" in
 'start')
-  sshd_start
+  etny_start
   ;;
 'stop')
-  sshd_stop
+  etny_stop
   ;;
 'restart')
-  sshd_restart
+  etny_restart
   ;;
 *)
   echo "usage $0 start|stop|restart"
