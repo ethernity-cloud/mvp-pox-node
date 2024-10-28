@@ -86,6 +86,7 @@ echo "Vagrant reloaded successfully!"
 echo "Setting up memory size"
 VAGRANT_ID=`vagrant status | grep etny | awk '{print $1}'`
 VMID=`virsh list | grep $VAGRANT_ID | awk '{print $2}'`
+virsh setmem --domain ${VMID} ${new_memory_MB}M --config
 virsh setmem --domain ${VMID} ${new_memory_MB}M --live
 
 # Resize VM disk
