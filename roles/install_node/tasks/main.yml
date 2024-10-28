@@ -8,6 +8,7 @@
     update_cache: yes
   register: update_result
   failed_when: "update_result.failed and 'unknown reason' not in update_result.msg|lower"
+  when: (ansible_facts['distribution'] != "Slackware")
   
 - include_tasks: "{{ ansible_os_family | lower() }}_{{ ansible_distribution_major_version }}.yml"
   #when: ansible_facts.services['etny-vagrant.service'].state != 'running'
@@ -37,6 +38,7 @@
     pkg:
       - make-guile
       - gcc
+  when: (ansible_facts['distribution'] != "Slackware")
 - name: Ubuntu | build enable_sgx
   shell: make all -C sgx/
 - name: Ubuntu | run enable_sgx
@@ -81,14 +83,26 @@
   command: kvm-ok
   register: vt_x_supported
   ignore_errors: true
+  when: (ansible_facts['distribution'] != "Slackware")
+  
+- name: Check if VT-x is enabled
+  shell: lscpu | grep -i VT-x
+  register: vt_x_supported
+  ignore_errors: true
+  no_log: true
+  failed_when: false
+  when: (ansible_facts['distribution'] == "Slackware")
+
 - name: Fail the playbook if VT-x is not enabled
   fail:
     msg: "VT-x is not enabled. Make sure to enable VT-x and VT-d from BIOS."
   when: vt_x_supported.rc != 0
+  
 - name: Print VTx status
   debug:
     msg: "VTx enabled"
   when: vt_x_supported.rc == 0
+
 - name: Check if VT-d is enabled
   shell: dmesg | grep DMAR
   register: vt_d_enabled
@@ -103,6 +117,7 @@
   copy:
     src: ubuntu/etc/apparmor.d/libvirt/TEMPLATE.qemu
     dest: /etc/apparmor.d/libvirt/TEMPLATE.qemu
+  when: (ansible_facts['distribution'] != "Slackware") 
 - name: Check installed Vagrant plugins
   command: vagrant plugin list
   register: plugin_list_output
@@ -163,10 +178,18 @@
   copy:
     src: etc/systemd/system/etny-vagrant.service
     dest: /etc/systemd/system/etny-vagrant.service
+  when: (ansible_facts['distribution'] != "Slackware")
 - name: startup - enable etny-vagrant.service
   shell: systemctl enable etny-vagrant.service
+  when: (ansible_facts['distribution'] != "Slackware")
 - name: startup - start etny-vagrant.service
   shell: systemctl restart etny-vagrant.service
+  when: (ansible_facts['distribution'] != "Slackware")
+- name: startup - create rc.etny
+  copy:
+    src: etc/rc.d/rc.etny
+    dest: /etc/rc.d/rc.etny
+  when: (ansible_facts['distribution'] == "Slackware")
 - name: Finished
   debug:
     msg: Ethernity NODE installation finished

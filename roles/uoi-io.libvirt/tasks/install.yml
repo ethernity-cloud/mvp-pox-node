@@ -5,11 +5,30 @@
     name={{ item }}
     state=latest
   with_items: "{{ libvirt_packages }}"
+  when: (ansible_facts['distribution'] != "Slackware")
 
 - name: Enabling and starting libvirtd service
   service:
     name=libvirtd
     state=started
     enabled=yes
+  when: (ansible_facts['distribution'] != "Slackware")
+
+- name: Slackware | Installing libvirt dependencies
+  slackpkg:
+    name={{ item }}
+    state=present
+  with_items: "{{ libvirt_packages }}"
+  when: (ansible_facts['distribution'] == "Slackware")
+
+
+- name: Slackware | Compiling and installing libvirt packages
+  shell: if [ "`sudo sbopkg -p | grep -i libvirt`" == "" ]; then sudo sqg -p libvirt && echo 'Q' | sudo sbopkg -B -e stop -q -k -i libvirt; fi
+  when: (ansible_facts['distribution'] == "Slackware")
+
+- name: Slackware | Enabling and starting libvirt service
+  shell: if [ -f /etc/rc.d/rc.libvirt ] && [ "`ps aux | grep libvirt | grep -v grep`" == "" ]; then /etc/rc.d/rc.libvirt start; fi
+  when: (ansible_facts['distribution'] == "Slackware")
+ 
 
 - meta: flush_handlers

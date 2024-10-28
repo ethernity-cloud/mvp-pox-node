@@ -23,5 +23,7 @@
     line={{ item.value }}
   with_items: "{{ libvirt_daemon_config }}"
   notify: restart libvirtd
+  when: (ansible_facts['distribution'] != "Slackware")
+
 
 - meta: flush_handlers

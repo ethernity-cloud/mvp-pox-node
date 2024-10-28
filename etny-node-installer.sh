@@ -1,5 +1,6 @@
 #!/bin/bash
-requiredkernelversion="5.13.0-40"
+ubuntu_20_04_requiredkernelversion="5.13.0-40"
+slackware_requiredkernelversion="6"
 nodefolder=$(pwd)
 configfile="config"
 rebootfile="/tmp/reboot"
@@ -178,21 +179,23 @@ deploy_ansible() {
 }
 
 qemu_hold(){
-
-apt-mark hold qemu-system-common
-apt-mark hold qemu-system-data
-apt-mark hold qemu-system-x86
-apt-mark hold qemu-utils
-
+    if [ $family = 'Debian' ]
+    then
+        apt-mark hold qemu-system-common
+        apt-mark hold qemu-system-data
+        apt-mark hold qemu-system-x86
+        apt-mark hold qemu-utils
+    fi
 }
 
 qemu_unhold(){
-
-apt-mark unhold qemu-system-common
-apt-mark unhold qemu-system-data
-apt-mark unhold qemu-system-x86
-apt-mark unhold qemu-utils
-
+    if [ $family = 'Debian' ]
+    then
+        apt-mark unhold qemu-system-common
+        apt-mark unhold qemu-system-data
+        apt-mark unhold qemu-system-x86
+        apt-mark unhold qemu-utils
+    fi
 }
 
 check_config_file() {
@@ -283,26 +286,44 @@ check_ansible(){
 	    echo "deb [signed-by=/usr/share/keyrings/ansible-archive-keyring.gpg] http://ppa.launchpad.net/ansible/ansible/ubuntu $UBUNTU_CODENAME main" | sudo tee /etc/apt/sources.list.d/ansible.list
             sudo apt update 
             sudo apt -y install ansible
-        fi
-        if [ "$os" = "Ubuntu 20.04" ] || [ "$os" = "Ubuntu 22.04" ] || [ "$os" = "Ubuntu 24.04" ]
+        elif [ "$os" = "Ubuntu 20.04" ] || [ "$os" = "Ubuntu 22.04" ] || [ "$os" = "Ubuntu 24.04" ]
         then
             sudo apt-add-repository --yes --update ppa:ansible/ansible 
             sudo apt update 
             sudo apt -y install software-properties-common ansible
+        elif [ "$os" = "Slackware 15" ]
+        then
+            if [ ! -f sbopkg-0.38.2-noarch-1_wsr.tgz ] ; then wget https://github.com/sbopkg/sbopkg/releases/download/0.38.2/sbopkg-0.38.2-noarch-1_wsr.tgz; fi
+            sudo upgradepkg --install-new  sbopkg-0.38.2-noarch-1_wsr.tgz
+	    sudo mkdir -p /var/lib/sbopkg/queues
+	    sudo mkdir -p /var/lib/sbopkg/SBo/15.0
+            sudo sbopkg -r
+            sudo sqg -p ansible
+            echo 'Q' | sudo sbopkg -B -q -k -i ansible		
+        else
+            echo "Your operating system does not have an ansible setup path. This should not happen."
+            exit 1
         fi
     fi
 }
 
-is_miminum_kernel_version(){
+ubuntu_20_04_is_miminum_kernel_version(){
 #returning true or false if we have the minimum required kernel version for Ubuntu 20.04
     version=`uname -r` && currentver=${version%-*} 
-    if [ "$(printf '%s\n' "$requiredkernelversion" "$currentver" | sort -V | head -n1)" = "$requiredkernelversion" ]; then echo true ; else echo false; fi
- } 
+    if [ "$(printf '%s\n' "$ubuntu_20_04_requiredkernelversion" "$currentver" | sort -V | head -n1)" = "$ubuntu_20_04_requiredkernelversion" ]; then echo true ; else echo false; fi
+}
+
+slackware_is_miminum_kernel_version(){
+#returning true or false if we have the minimum required kernel version for Ubuntu 20.04
+    version=`uname -r` && currentver=${version%-*}
+    if [ "$(printf '%s\n' "$slackware_requiredkernelversion" "$currentver" | sort -V | head -n1)" = "$slackware_requiredkernelversion" ]; then echo true ; else echo false; fi
+}
+
 
 deploy_ansible_kernel_check(){
 #if we have the right kernel then we run the ansible-playbook and finish installation
 echo "Determining if the right kernel is running..."
-if [[ ( "$(is_miminum_kernel_version)" = true && $os = "Ubuntu 20.04" ) || ( $(uname -r) = "5.0.0-050000-generic"  && $os = "Ubuntu 18.04") || ( "$(is_miminum_kernel_version)" = true && $os = "Ubuntu 22.04" ) || "$os" = "Debian 12" || "$os" = "Ubuntu 24.04" ]]
+if [[ ( "$(ubuntu_20_04_is_miminum_kernel_version)" = true && $os = "Ubuntu 20.04" ) || ( $(uname -r) = "5.0.0-050000-generic"  && $os = "Ubuntu 18.04") || ( "$(ubuntu_20_04_is_miminum_kernel_version)" = true && $os = "Ubuntu 22.04" ) || "$os" = "Debian 12" || "$os" = "Ubuntu 24.04" || ( "$(slackware_is_miminum_kernel_version)" = true && $os = "Slackware 15" ) ]]
 then  
     echo "The right kernel is running. Continuing setup..."
     ## check ansible 
@@ -462,26 +483,39 @@ echo "Ubuntu OS found. Determining version..."
 case $(awk '/^VERSION_ID=/' /etc/*-release 2>/dev/null | awk -F'=' '{ print tolower($2) }' | tr -d '"') in
     20.04) 
         os='Ubuntu 20.04'
+	family='Debian'
         deploy_ansible;;
     22.04) 
         os='Ubuntu 22.04'
+	family='Debian'
         deploy_ansible;;
     24.04)
         os='Ubuntu 24.04'
+	family='Debian'
         deploy_ansible;;
     *) echo "Version not supported. Exiting..."
 esac
 }
 
 debian(){
-#Getting which version of Ubuntu is instaled
+#Getting which version of Debian is instaled
 echo "Debian found. Determining version..."
 case $(awk '/^VERSION_ID=/' /etc/*-release 2>/dev/null | awk -F'=' '{ print tolower($2) }' | tr -d '"') in
-    11)
-        os='Ubuntu 20.04'
-        deploy_ansible;;
     12)
         os='Debian 12'
+	family='Debian'
+        deploy_ansible;;
+    *) echo "Version not supported. Exiting..."
+esac
+}
+
+slackware(){
+#Getting which version of Slackware is instaled
+echo "Slackware found. Determining version..."
+case $(awk '/^VERSION_ID=/' /etc/*-release 2>/dev/null | awk -F'=' '{ print tolower($2) }' | tr -d '"') in
+    15.0)
+        os='Slackware 15';
+	family='Slackware';
         deploy_ansible;;
     *) echo "Version not supported. Exiting..."
 esac
@@ -494,6 +528,7 @@ echo "Getting distro..."
 case $(awk '/^ID=/' /etc/*-release 2>/dev/null | awk -F'=' '{ print tolower($2) }' | tr -d '"') in
     ubuntu) ubuntu;;
     debian) debian;;
+    slackware) slackware;;
 #   centos) echo "centos distro Found. Not Supported. Exiting...";;
 #   manjaro) echo "manjaro distro Found. Not Supported. Exiting...";;
 #   arch) echo "arch distro Found. Not Supported. Exiting...";;
