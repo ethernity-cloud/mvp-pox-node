@@ -1,0 +1,8 @@
+---
+# file: roles/libvirt/tasks/firewall.yml
+- name: Libvirt firewalld rule
+  firewalld:
+    port={{ libvirt_port }}/tcp
+    permanent=true
+    state=enabled
+    immediate=true

@@ -1,0 +1,172 @@
+---
+
+- name: Populate service facts
+  service_facts:
+  
+- name: update apt cache
+  apt:
+    update_cache: yes
+  register: update_result
+  failed_when: "update_result.failed and 'unknown reason' not in update_result.msg|lower"
+  
+- include_tasks: "{{ ansible_os_family | lower() }}_{{ ansible_distribution_major_version }}.yml"
+  #when: ansible_facts.services['etny-vagrant.service'].state != 'running'
+
+- name: Check if isgx driver is installed
+  shell: ls /dev/ | grep isgx
+  register: isgx_driver
+  changed_when: false
+  failed_when: false
+  
+- name: Check if sgx_enclave driver is installed
+  shell: ls /dev/ | grep sgx_enclave
+  register: sgx_enclave_driver
+  changed_when: false
+  failed_when: false
+    
+- name: Run script if both drivers are found
+  script: ubuntu/etny-node-isgx-removal-tool.sh
+  when: "isgx_driver.rc == 0 and sgx_enclave_driver.rc == 0"
+
+- name: Run script if sgx_enclave drivers are not installed
+  script: ubuntu/etny-node-provision-sgx.sh
+  when: "sgx_enclave_driver.rc != 0"
+
+- name: Ubuntu | enable_sgx dependencies
+  apt:
+    pkg:
+      - make-guile
+      - gcc
+- name: Ubuntu | build enable_sgx
+  shell: make all -C sgx/
+- name: Ubuntu | run enable_sgx
+  shell: sgx/sgx_enable
+  register: sgx_register
+- name: "Print message"
+  debug:
+    msg: '{{ sgx_register.stdout }}'
+- name: SGX check reboot
+  when: "('Software enable has been set.' in sgx_register.stdout) or ('The software enable has been performed on this system' in sgx_register.stdout)"
+  debug:
+    msg: "The software enabling procedure completed successfully."
+- name: SGX reboot
+  when: "('Software enable has been set.' in sgx_register.stdout) or ('The software enable has been performed on this system' in sgx_register.stdout)"
+  copy:
+    content: "yes"
+    dest: /tmp/reboot
+    mode: '0666'
+- name: SGX reboot
+  when: "('Software enable has been set.' in sgx_register.stdout) or ('The software enable has been performed on this system' in sgx_register.stdout)"
+  meta: end_play
+- name: Run SGX test and get EPC size
+  shell: sudo utils/linux/test-sgx | grep "size of EPC section in Processor Reserved Memory" | sed 's/.*Memory, \(.*\) M/\1/' | grep -v "^0$" | sort -nr | head -1
+  register: epc_size_output
+  changed_when: false
+- name: Print EPC size if available
+  debug:
+    msg: "EPC size is {{ epc_size_output.stdout }} M"
+  when: epc_size_output.stdout | length > 0
+- name: Check if EPC size is OK
+  fail:
+    msg: "EPC size for SGX is too low"
+  when: epc_size_output.stdout|int < 64
+- name: Determine SGX version support
+  shell: sudo utils/linux/test-sgx | awk '/sgx 1 supported/{sgx1=$NF} /sgx 2 supported/{sgx2=$NF} END {if (sgx1==1 && sgx2==0) {print "SGX version 1"} else if (sgx2==1) {print "SGX version 2"} else {print "SGX not available"}}'
+  register: sgx_version_output
+  changed_when: false
+- name: Print SGX version support
+  debug:
+    msg: "{{ sgx_version_output.stdout }}"
+- name: Check if VT-x is enabled
+  command: kvm-ok
+  register: vt_x_supported
+  ignore_errors: true
+- name: Fail the playbook if VT-x is not enabled
+  fail:
+    msg: "VT-x is not enabled. Make sure to enable VT-x and VT-d from BIOS."
+  when: vt_x_supported.rc != 0
+- name: Print VTx status
+  debug:
+    msg: "VTx enabled"
+  when: vt_x_supported.rc == 0
+- name: Check if VT-d is enabled
+  shell: dmesg | grep DMAR
+  register: vt_d_enabled
+  ignore_errors: true
+  no_log: true
+  failed_when: false
+- name: Print message if VT-d is not enabled
+  debug:
+    msg: "Warning! VT-d is not enabled. Check BIOS settings."
+  when: vt_d_enabled.rc != 0
+- name: apparmor - enable sgx support for libvirt qemu
+  copy:
+    src: ubuntu/etc/apparmor.d/libvirt/TEMPLATE.qemu
+    dest: /etc/apparmor.d/libvirt/TEMPLATE.qemu
+- name: Check installed Vagrant plugins
+  command: vagrant plugin list
+  register: plugin_list_output
+  changed_when: false
+  ignore_errors: true
+  failed_when: false
+  no_log: true
+- name: Print Vagrant plugins
+  debug:
+    var: plugin_list_output.stdout_lines
+  when: plugin_list_output is succeeded
+- name: Repair Vagrant plugins
+  command: sudo vagrant plugin repair
+  changed_when: false
+  when: plugin_list_output is failed
+  register: plugin_repair_result
+  ignore_errors: true
+  failed_when: false
+  no_log: true
+- name: Remove and reinstall Vagrant plugins
+  command: sudo vagrant plugin expunge --force
+  changed_when: false
+  when: plugin_repair_result is failed
+- name: Install Vagrant plugins
+  command: "vagrant plugin install {{ item.name }} --plugin-version {{ item.version }}"
+  loop: "{{ vagrant_plugins }}"
+  when: "(item.name + ' (' + item.version|string + ', global)') not in plugin_list_output.stdout_lines"
+- name: vagrant - get VM name
+  shell: virsh list --name --all
+  register: vagrant_vm_name
+- name: vagrant - get VM name
+  shell: virsh list --name --state-running
+  register: vagrant_vm_name_running
+- name: vagrant - shutting down VM 
+  shell: virsh shutdown {{ vagrant_vm_name.stdout }} --mode acpi && sleep 60
+  when: 
+    - vagrant_vm_name.stdout != ''
+    - vagrant_vm_name_running.stdout != ''
+- name: vagrant - unset VM vars
+  shell: virsh undefine {{ vagrant_vm_name.stdout }}
+  when: vagrant_vm_name.stdout != ''
+- name: vagrant - cleanup VM
+  shell: vagrant destroy -f; sleep 60
+  ignore_errors: true
+  #when: ansible_facts.services['etny-vagrant.service'].state != 'running'
+- name: vagrant - provision VM
+  shell: vagrant up --provider=libvirt
+  #when: ansible_facts.services['etny-vagrant.service'].state != 'running'
+- name: startup - set etny-vagrant configuration
+  shell: echo "ETNY_PATH=${PWD}" > /etc/default/etny-vagrant
+- name: Copy vagrant dir to root
+  when: (ansible_facts['distribution'] == "Ubuntu" and ansible_facts['distribution_major_version'] == "18" and ansible_kernel is version('5.0.0-050000-generic','=='))
+  copy:
+    src: ~/.vagrant.d
+    dest: /root
+    force: yes
+- name: startup - create etny-vagrant.service
+  copy:
+    src: etc/systemd/system/etny-vagrant.service
+    dest: /etc/systemd/system/etny-vagrant.service
+- name: startup - enable etny-vagrant.service
+  shell: systemctl enable etny-vagrant.service
+- name: startup - start etny-vagrant.service
+  shell: systemctl restart etny-vagrant.service
+- name: Finished
+  debug:
+    msg: Ethernity NODE installation finished

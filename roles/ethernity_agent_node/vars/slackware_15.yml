@@ -1,4 +1,0 @@
----
-# file: roles/libvirt/vars/Debian.yml
-libvirt_config_file: /etc/libvirt/libvirtd.conf
-libvirt_qemu_config_file: /etc/libvirt/qemu.conf
