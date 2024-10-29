@@ -1,0 +1,113 @@
+---
+
+- name: Ubuntu 20.04 | kernel SGX
+  when: ansible_kernel is version('5.13','<')
+  apt:
+    pkg: linux-generic-hwe-20.04
+- name: Ubuntu 20.04 | reboot
+  when: ansible_kernel is version('5.13','<')
+  debug:
+    msg: The kernel has been updated, a reboot is required
+- name: Ubuntu 20.04 | reboot
+  when: ansible_kernel is version('5.13','<')
+  copy:
+    content: "yes"
+    dest: /tmp/reboot
+    mode: '0666'
+- name: Ubuntu 20.04 | exit
+  when: ansible_kernel is version('5.13','<')
+  meta: end_play
+- name: Ubuntu 20.04 | qemu repo
+  ansible.builtin.apt_repository:
+    repo: 'ppa:savoury1/virtualisation'
+    codename: focal
+- name: Ubuntu 20.04 | qemu install dependencies
+  apt:
+    pkg:
+       - policycoreutils-python-utils
+       - qemu-utils
+       - qemu-system-common
+       - qemu-system-x86
+       - libfdt1
+       - qemu-system-data
+       - libvirt-clients
+       - libvirt-daemon-system
+       - bridge-utils
+       - python3-libvirt
+       - libnss-libvirt
+       - libguestfs-tools
+       - virtinst
+       - virt-top
+       - genisoimage
+       - cpu-checker  
+    state: present
+- name:  Ubuntu 20.04 | vagrant add key  
+  apt_key:
+    url: https://apt.releases.hashicorp.com/gpg
+- name: Ubuntu 20.04 | vagrant repo
+  apt_repository:
+    repo: "deb [arch=amd64] https://apt.releases.hashicorp.com {{ ansible_distribution_release }} main"
+- name: Ubuntu 20.04 | vagrant install
+  apt:
+    pkg:
+    - vagrant
+- name: Ubuntu 20.04 | remove old qemu
+  apt:
+    pkg:
+    - qemu*
+    state: absent
+- name: Ubuntu 20.04 | remove unused packages
+  apt:
+    autoremove: yes
+- name: Ubuntu 20.04 | qemu repo
+  ansible.builtin.apt_repository:
+    repo: 'ppa:ethernity-cloud/qemu-sgx'
+    codename: focal
+- name: Ubuntu 20.04 | qemu install
+  apt:
+    pkg: "{{item}}"
+  with_items:
+    - qemu-system-data=1:6.2+dfsg-2ubuntu8~20.04.sav0.etny
+    - qemu-utils=1:6.2+dfsg-2ubuntu8~20.04.sav0.etny
+    - qemu-system-common=1:6.2+dfsg-2ubuntu8~20.04.sav0.etny
+    - qemu-system-x86=1:6.2+dfsg-2ubuntu8~20.04.sav0.etny
+- name: Ubuntu 20.04 | qemu-utils install
+  apt:
+    pkg:
+    - qemu-utils
+
+- name: Ubuntu 20.04 | qemu-system-common hold
+  ansible.builtin.dpkg_selections:
+    name: qemu-system-common
+    selection: hold
+
+- name: Ubuntu 20.04 | qemu-system-data hold
+  ansible.builtin.dpkg_selections:
+    name: qemu-system-data
+    selection: hold
+
+- name: Ubuntu 20.04 | qemu-system-x86 hold
+  ansible.builtin.dpkg_selections:
+    name: qemu-system-x86
+    selection: hold
+
+- name: Ubuntu 20.04 | qemu-utils hold
+  ansible.builtin.dpkg_selections:
+    name: qemu-utils
+    selection: hold
+
+- name: Ubuntu 20.04 | vagrant-libvirt packages
+  apt:
+    pkg:
+    - ebtables
+    - dnsmasq-base
+    - libxslt-dev
+    - libxml2-dev
+    - libvirt-dev
+    - zlib1g-dev
+    - ruby-dev
+- name: Ubuntu 20.04 | vagrant template
+  copy:
+    src: vagrant/qemu-6.2
+    dest: Vagrantfile
+    force: yes

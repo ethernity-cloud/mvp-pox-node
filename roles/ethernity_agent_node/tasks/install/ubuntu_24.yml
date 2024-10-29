@@ -1,0 +1,53 @@
+---
+
+- name: Ubuntu 24.04 | qemu install dependencies
+  apt:
+    pkg:
+      - policycoreutils-python-utils
+      - libfdt1
+      - libvirt-clients
+      - libvirt-daemon-system
+      - bridge-utils
+      - python3-libvirt
+      - libnss-libvirt
+      - libguestfs-tools
+      - virtinst
+      - virt-top
+      - genisoimage
+      - cpu-checker  
+    state: present
+- name: Ubuntu 24.04 | qemu install
+  apt:
+    pkg:
+      - qemu-system-data
+      - qemu-utils
+      - qemu-system-common
+      - qemu-system-x86
+      - qemu-utils
+    state: present
+- name:  Ubuntu 24.04 | vagrant add key  
+  apt_key:
+    url: https://apt.releases.hashicorp.com/gpg
+- name: Ubuntu 24.04 | vagrant repo
+  apt_repository:
+    repo: "deb [arch=amd64] https://apt.releases.hashicorp.com {{ ansible_distribution_release }} main"
+- name: Ubuntu 24.04 | vagrant install
+  apt:
+    pkg:
+    - vagrant
+- name: Ubuntu 24.04 | vagrant-libvirt packages
+  apt:
+    pkg:
+      - ebtables
+      - dnsmasq-base
+      - libxslt-dev
+      - libxml2-dev
+      - libvirt-dev
+      - zlib1g-dev
+      - ruby-dev
+    state: present
+- name: Ubuntu 24.04 | vagrant template
+  copy:
+    src: vagrant/qemu-8.2
+    dest: Vagrantfile
+    force: yes

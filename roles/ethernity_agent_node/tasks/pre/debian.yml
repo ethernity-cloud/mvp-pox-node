@@ -1,0 +1,40 @@
+---
+
+- name: Debian family | update apt cache
+  apt:
+    update_cache: yes
+  register: update_result
+  failed_when: "update_result.failed and 'unknown reason' not in update_result.msg|lower"
+
+- name: Debian faimily | unhold package qemu-system-common
+  ansible.builtin.dpkg_selections:
+    name: qemu-system-common
+    selection: install
+
+- name: Debian faimily | unhold package qemu-system-data
+  ansible.builtin.dpkg_selections:
+    name: qemu-system-data
+    selection: install 
+
+- name: Debian faimily | unhold package qemu-system-x86
+  ansible.builtin.dpkg_selections:
+    name: qemu-system-x86
+    selection: install 
+
+- name: Debian faimily | unhold package qemu-utils
+  ansible.builtin.dpkg_selections:
+    name: qemu-utils
+    selection: install
+
+- name: Debian family | install gcc and make-guile
+  apt:
+    pkg:
+      - make-guile
+      - gcc
+
+- name: Debian family | configure Apparmor
+  copy:
+    src: ubuntu/etc/apparmor.d/libvirt/TEMPLATE.qemu
+    dest: /etc/apparmor.d/libvirt/TEMPLATE.qemu
+  when: (ansible_facts['distribution'] != "Slackware")
+

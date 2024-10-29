@@ -1,0 +1,18 @@
+---
+
+- name: Virtualization | Debian family | check VT-x
+  command: kvm-ok
+  register: vt_x_supported
+  ignore_errors: true
+
+- name: Virtualization | Debian family | check VT-x
+  fail:
+    msg: "VT-x is not enabled. Make sure to enable VT-x and VT-d from BIOS."
+  when: vt_x_supported.rc != 0
+
+
+- name: Virtualization | Debian family | check VT-x
+  debug:
+    msg: "VTx enabled"
+  when: vt_x_supported.rc == 0
+

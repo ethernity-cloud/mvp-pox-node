@@ -1,0 +1,53 @@
+#!/bin/sh
+# Start/stop/restart the secure shell server:
+
+# Source options
+
+if [ -r /etc/default/etny-vagrant ]; then
+  . /etc/default/etny-vagrant
+fi
+
+export HOME=/root
+
+etny_start() {
+  cd ${ETNY_PATH} && vagrant up --provider=libvirt 
+  nohup echo 'tail -f /var/log/etny-node.log' | vagrant ssh >> /var/log/etny.log &
+}
+
+etny_stop() {
+  cd ${ETNY_PATH} && vagrant halt
+}
+
+enty_restart() {
+  etny_stop
+  etny_start
+}
+
+etny_status() {
+  cd  ${ETNY_PATH} && vagrant status | grep "running (libvirt)" > /dev/null 2>&1
+  if [ $? -eq 0 ]
+  then
+    echo "Running";
+    exit 0
+  else
+    echo "Stopped";
+    exit 1
+  fi
+}
+
+case "$1" in
+'start')
+  etny_start
+  ;;
+'stop')
+  etny_stop
+  ;;
+'restart')
+  etny_restart
+  ;;
+'status')
+  etny_status
+  ;;
+*)
+  echo "usage $0 start|stop|restart|status"
+esac
