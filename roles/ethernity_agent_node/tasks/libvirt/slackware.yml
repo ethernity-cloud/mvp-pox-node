@@ -1,0 +1,28 @@
+---
+
+- name: Slackware | compile and install libvirt packages
+  shell: if [ "`sudo sbopkg -p | grep -i libvirt`" == "" ]; then sudo sqg -p libvirt && echo 'Q' | sudo sbopkg -B -e stop -q -k -i libvirt; fi
+
+- name: Slackware | enable and start libvirt service
+  shell: if [ -f /etc/rc.d/rc.libvirt ] && [ "`ps aux | grep libvirt | grep -v grep`" == "" ]; then /etc/rc.d/rc.libvirt start; fi
+
+- name: Slackware | configure "{{ libvirt_config_file }}" file (libvirt)
+  lineinfile:
+    dest="{{ libvirt_config_file }}"
+    regexp={{ item.option }}
+    line={{ item.value }}
+  with_items: "{{ libvirt_config }}"
+
+- name: Slackware | configure "{{ libvirt_qemu_config_file }}" file (QEMU)
+  lineinfile:
+    dest="{{ libvirt_qemu_config_file }}"
+    regexp={{ item.option }}
+    line={{ item.value }}
+  with_items: "{{ libvirt_qemu_config }}"
+
+
+- name: Slackware | restart libvirt
+  shell: /etc/rc.d/rc.libvirt stop; /etc/rc.d/rc.libvirt start
+  when: (ansible_facts['distribution'] == "Slackware")
+
+- meta: flush_handlers

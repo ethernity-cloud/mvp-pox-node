@@ -1,37 +1,30 @@
 ---
-# file: roles/libvirt/tasks/config.yml
-- name: Configuring "{{ libvirt_config_file }}" file (libvirt)
+
+- name: Debian family | configure "{{ libvirt_config_file }}" file (libvirt)
   lineinfile:
     dest="{{ libvirt_config_file }}"
     regexp={{ item.option }}
     line={{ item.value }}
   with_items: "{{ libvirt_config }}"
 
-- name: Configuring "{{ libvirt_qemu_config_file }}" file (QEMU)
+- name: Debian family | configure "{{ libvirt_qemu_config_file }}" file (QEMU)
   lineinfile:
     dest="{{ libvirt_qemu_config_file }}"
     regexp={{ item.option }}
     line={{ item.value }}
   with_items: "{{ libvirt_qemu_config }}"
 
-- name: Configuring "{{ libvirt_daemon_config_file }}" file (daemon)
+- name: Debian faimly | configure "{{ libvirt_daemon_config_file }}" file (daemon)
   lineinfile:
     dest="{{ libvirt_daemon_config_file }}"
     regexp={{ item.option }}
     line={{ item.value }}
   with_items: "{{ libvirt_daemon_config }}"
-  when: (ansible_facts['distribution'] != "Slackware")
 
-- name: restart libvirt
+- name: Debian family | restart libvirt
   ansible.builtin.service:
     name: libvirtd
     state: restarted
-  when: (ansible_facts['distribution'] != "Slackware")
-
-- name: restart libvirt
-  shell: /etc/rc.d/rc.libvirt stop; /etc/rc.d/rc.libvirt start
-  when: (ansible_facts['distribution'] == "Slackware")
-
-
 
 - meta: flush_handlers
+

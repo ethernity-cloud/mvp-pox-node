@@ -75,6 +75,27 @@
   apt:
     pkg:
     - qemu-utils
+
+- name: Ubuntu 20.04 | qemu-system-common hold
+  ansible.builtin.dpkg_selections:
+    name: qemu-system-common
+    selection: hold
+
+- name: Ubuntu 20.04 | qemu-system-data hold
+  ansible.builtin.dpkg_selections:
+    name: qemu-system-data
+    selection: hold
+
+- name: Ubuntu 20.04 | qemu-system-x86 hold
+  ansible.builtin.dpkg_selections:
+    name: qemu-system-x86
+    selection: hold
+
+- name: Ubuntu 20.04 | qemu-utils hold
+  ansible.builtin.dpkg_selections:
+    name: qemu-utils
+    selection: hold
+
 - name: Ubuntu 20.04 | vagrant-libvirt packages
   apt:
     pkg:

@@ -162,9 +162,10 @@ deploy_debian() {
     read -p "Do you want continue ? (Y/n)" choice
     choice="${choice:-Y}"  # Set the default value to "Y" if the input is empty
     if [[ "$choice" =~ ^[Yy]$ ]]; then
-      echo "Stopping the service..."
+      echo "Stopping the service. Please provide the sudo credentials when asked"
       # Stop the service here
-      systemctl stop "$service"
+      #
+      sudo systemctl stop "$service"
       deploy_ansible
     else
       echo "Please manually stop the service and then restart the setup."
@@ -202,26 +203,6 @@ deploy_slackware() {
     echo "The service is not running."
     deploy_ansible
   fi
-}
-
-qemu_hold(){
-    if [ $family = 'Debian' ]
-    then
-        apt-mark hold qemu-system-common
-        apt-mark hold qemu-system-data
-        apt-mark hold qemu-system-x86
-        apt-mark hold qemu-utils
-    fi
-}
-
-qemu_unhold(){
-    if [ $family = 'Debian' ]
-    then
-        apt-mark unhold qemu-system-common
-        apt-mark unhold qemu-system-data
-        apt-mark unhold qemu-system-x86
-        apt-mark unhold qemu-utils
-    fi
 }
 
 check_config_file() {
@@ -450,7 +431,6 @@ ansible_playbook(){
 echo "Running ansible-playbook..."
 cd && cd $nodefolder
 HOME=/root
-qemu_unhold
 sudo -E $ansible_cmd -i localhost, playbook.yml -e "ansible_python_interpreter=/usr/bin/python3"
 install_result=$?
 if [ -f $rebootfile ]
@@ -462,7 +442,6 @@ then
 else
         if [ $install_result == 0 ]
         then
-	       qemu_hold
                echo "Node installation completed successfully. Please allow up to 24h to see transactions on the blockchain. " && exit
         else
                echo "Node installation failed! Please check error messages above." && exit

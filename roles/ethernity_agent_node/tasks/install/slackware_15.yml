@@ -7,10 +7,6 @@
 - name: Slackware 15 | qemu compile and install
   shell: if [ "`sudo sbopkg -p | grep -i qemu`" == "" ]; then sudo sqg -p qemu && echo 'Q' | sudo sbopkg -B -e stop -q -k -i qemu; fi
 
-- name: Slackware 15 | libvirt compile and install
-  shell: if [ "`sudo sbopkg -p | grep -i libvirt`" == "" ]; then sudo sqg -p libvirt && echo 'Q' | sudo sbopkg -B -e stop -q -k -i libvirt; fi
-
-
 - name: Slackware 15 | vagrant compile and install
   shell: if [ ! "`vagrant version`" ]; then mkdir vagrant-bin && cd vagrant-bin && wget https://releases.hashicorp.com/vagrant/2.4.1/vagrant_2.4.1_linux_amd64.zip && unzip vagrant_2.4.1_linux_amd64.zip && cp -f vagrant /usr/bin/ && cd ../ && rm -rf vagrant-bin; fi
 
