@@ -1,0 +1,92 @@
+---
+
+- name: Ubuntu 22.04 | kernel SGX
+  when: ansible_kernel is version('5.13','<')
+  apt:
+    pkg: linux-generic-hwe-20.04
+- name: Ubuntu 22.04 | reboot
+  when: ansible_kernel is version('5.13','<')
+  debug:
+    msg: The kernel has been updated, a reboot is required
+- name: Ubuntu 22.04 | reboot
+  when: ansible_kernel is version('5.13','<')
+  copy:
+    content: "yes"
+    dest: /tmp/reboot
+    mode: '0666'
+- name: Ubuntu 22.04 | exit
+  when: ansible_kernel is version('5.13','<')
+  meta: end_play
+- name: Ubuntu 22.04 | qemu dependency packages
+  apt:
+    pkg:
+       - policycoreutils-python-utils
+       - libfdt1
+       - libvirt-clients
+       - libvirt-daemon-system
+       - bridge-utils
+       - python3-libvirt
+       - libnss-libvirt
+       - libguestfs-tools
+       - virtinst
+       - virt-top
+       - genisoimage
+       - cpu-checker  
+    state: present
+- name:  Ubuntu 22.04 | vagrant add key  
+  apt_key:
+    url: https://apt.releases.hashicorp.com/gpg
+- name: Ubuntu 22.04 | vagrant repo
+  apt_repository:
+    repo: "deb [arch=amd64] https://apt.releases.hashicorp.com {{ ansible_distribution_release }} main"
+- name: Ubuntu 22.04 | vagrant install
+  apt:
+    pkg:
+    - vagrant
+- name: "Remove old qemu"
+  apt:
+    pkg:
+    - qemu*
+    state: absent
+  when: (ansible_facts['distribution'] == "Ubuntu" and ansible_facts['distribution_major_version'] == "22")
+- name: "Remove unused packages"
+  apt:
+    autoremove: yes
+  when: (ansible_facts['distribution'] == "Ubuntu" and ansible_facts['distribution_major_version'] == "22")
+- name: "Refresh packages"
+  apt:
+    upgrade: yes
+    update_cache: yes
+  when: (ansible_facts['distribution'] == "Ubuntu" and ansible_facts['distribution_major_version'] == "22")
+- name: Ubuntu 22.04 | qemu repo
+  ansible.builtin.apt_repository:
+    repo: 'ppa:ethernity-cloud/qemu-sgx'
+    codename: jammy
+- name: Ubuntu 22.04 | qemu SGX
+  apt:
+    pkg: "{{item}}"
+  with_items:
+     - qemu-system-data=1:6.2+dfsg-2ubuntu6.4.etny0
+     - qemu-utils=1:6.2+dfsg-2ubuntu6.4.etny0
+     - qemu-system-common=1:6.2+dfsg-2ubuntu6.4.etny0
+     - qemu-system-x86=1:6.2+dfsg-2ubuntu6.4.etny0
+- name: "Installing qemu-utils"
+  apt:
+    pkg:
+    - qemu-utils
+  when: (ansible_facts['distribution'] == "Ubuntu" and ansible_facts['distribution_major_version'] == "22")
+- name: Ubuntu 22.04 | vagrant-libvirt packages
+  apt:
+    pkg:
+    - ebtables
+    - dnsmasq-base
+    - libxslt-dev
+    - libxml2-dev
+    - libvirt-dev
+    - zlib1g-dev
+    - ruby-dev
+- name: Ubuntu 22.04 | vagrant template
+  copy:
+    src: vagrant/qemu-6.2
+    dest: Vagrantfile
+    force: yes

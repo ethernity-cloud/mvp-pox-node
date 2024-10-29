@@ -1,0 +1,25 @@
+---
+# file: roles/libvirt/tasks/main.yml
+- include_vars: "{{ ansible_os_family }}_{{ ansible_distribution_major_version }}.yml"
+  tags:
+    - libvirt
+    - libvirt-firewall
+    - libvirt-selinux
+    - libvirt-install
+    - libvirt-config
+
+- include_tasks: firewall.yml
+  when: libvirt_firewalld is defined and
+        libvirt_firewalld
+  tags: [ libvirt, libvirt-firewalld ]
+
+- include_tasks: selinux.yml
+  when: libvirt_selinux is defined and
+        libvirt_selinux
+  tags: [ libvirt, libvirt-selinux ]
+
+- include_tasks: install.yml
+  tags: [ libvirt, libvirt-install ]
+
+- include_tasks: config.yml
+  tags: [ libvirt, libvirt-config ]

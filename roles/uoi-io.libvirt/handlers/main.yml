@@ -1,0 +1,4 @@
+---
+# file: roles/libvirt/handlers/main.yml
+- name: restart libvirtd
+  command: systemctl restart libvirtd
