@@ -1,5 +1,6 @@
 .env
 .vagrant
+*~
 *.pyc
 *.pyo
 __pychare__/

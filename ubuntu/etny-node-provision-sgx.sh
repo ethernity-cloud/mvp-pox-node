@@ -58,7 +58,10 @@ else
     cd /tmp
     sudo wget https://github.com/ethernity-cloud/sgx-driver/raw/main/sgx_linux_x64_driver_2.11.054c9c4c.bin
     sudo chmod +x sgx_linux_x64_driver_2.11.054c9c4c.bin
-    sudo ./sgx_linux_x64_driver_2.11.054c9c4c.bin
+    if [ "`sudo ./sgx_linux_x64_driver_2.11.054c9c4c.bin | grep 'There is no need to install additional SGX driver with in-kernel SGX support'`" != "" ]
+    then
+        echo "Driver embedded in kernel"
+    fi
   fi
 fi
 

@@ -1,6 +1,8 @@
 #!/bin/bash
 set -e
 
+sysctl -p
+
 trap 'echo "Installer status: \"${BASH_COMMAND}\"command end with exit code $?."' SIGINT SIGTERM ERR EXIT
 
 # Add DNS settings to /etc/systemd/resolved.conf

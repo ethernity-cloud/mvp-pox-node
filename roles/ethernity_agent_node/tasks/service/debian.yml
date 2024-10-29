@@ -1,0 +1,14 @@
+---
+
+- name: Debian family | configure etny-vagrant.service
+  shell: echo "ETNY_PATH=${PWD}" > /etc/default/etny-vagrant
+- name: startup - create etny-vagrant.service
+  copy:
+    src: etc/systemd/system/etny-vagrant.service
+    dest: /etc/systemd/system/etny-vagrant.service
+
+- name: Debian family | enable etny-vagrant.service
+  shell: systemctl enable etny-vagrant.service
+
+- name: Debian family | start etny-vagrant.service
+  shell: systemctl restart etny-vagrant.service
