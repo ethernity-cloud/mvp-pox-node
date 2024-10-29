@@ -1,0 +1,16 @@
+---
+
+- include_tasks: "virt/{{ ansible_os_family | lower() }}.yml"
+
+- name: Virtualization | check VT-d
+  shell: dmesg | grep DMAR
+  register: vt_d_enabled
+  ignore_errors: true
+  no_log: true
+  failed_when: false
+
+- name: Virtualization | check VT-d
+  debug:
+    msg: "Warning! VT-d is not enabled, this will have a big impact on your node, degrading performance. Check BIOS settings."
+  when: vt_d_enabled.rc != 0
+

@@ -1,6 +1,6 @@
 ---
 
-- name: Ubuntu 24.04 | qemu dependency packages
+- name: Ubuntu 24.04 | qemu install dependencies
   apt:
     pkg:
       - policycoreutils-python-utils
@@ -16,7 +16,7 @@
       - genisoimage
       - cpu-checker  
     state: present
-- name: Ubuntu 24.04 | "Installing qemu"
+- name: Ubuntu 24.04 | qemu install
   apt:
     pkg:
       - qemu-system-data

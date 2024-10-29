@@ -2,9 +2,12 @@
 # Start/stop/restart the secure shell server:
 
 # Source options
+
 if [ -r /etc/default/etny-vagrant ]; then
   . /etc/default/etny-vagrant
 fi
+
+export HOME=/root
 
 etny_start() {
   cd ${ETNY_PATH} && vagrant up --provider=libvirt 
@@ -21,11 +24,14 @@ enty_restart() {
 }
 
 etny_status() {
-  if [ "`virsh list | grep running | grep -i etnyvm`" == "0" ]
+  cd  ${ETNY_PATH} && vagrant status | grep "running (libvirt)" > /dev/null 2>&1
+  if [ $? -eq 0 ]
   then
     echo "Running";
+    exit 0
   else
     echo "Stopped";
+    exit 1
   fi
 }
 
@@ -40,8 +46,8 @@ case "$1" in
   etny_restart
   ;;
 'status')
-  etny_tatus
+  etny_status
   ;;
 *)
-  echo "usage $0 start|stop|restart"
+  echo "usage $0 start|stop|restart|status"
 esac

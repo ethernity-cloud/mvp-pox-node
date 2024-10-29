@@ -21,7 +21,7 @@
   ansible.builtin.apt_repository:
     repo: 'ppa:savoury1/virtualisation'
     codename: focal
-- name: Ubuntu 20.04 | qemu packages
+- name: Ubuntu 20.04 | qemu install dependencies
   apt:
     pkg:
        - policycoreutils-python-utils
@@ -51,26 +51,19 @@
   apt:
     pkg:
     - vagrant
-- name: "Remove old qemu"
+- name: Ubuntu 20.04 | remove old qemu
   apt:
     pkg:
     - qemu*
     state: absent
-  when: (ansible_facts['distribution'] == "Ubuntu" and ansible_facts['distribution_major_version'] == "20")
-- name: "Remove unused packages"
+- name: Ubuntu 20.04 | remove unused packages
   apt:
     autoremove: yes
-  when: (ansible_facts['distribution'] == "Ubuntu" and ansible_facts['distribution_major_version'] == "20")
-- name: "Refresh packages"
-  apt:
-    upgrade: yes
-    update_cache: yes
-  when: (ansible_facts['distribution'] == "Ubuntu" and ansible_facts['distribution_major_version'] == "20")
 - name: Ubuntu 20.04 | qemu repo
   ansible.builtin.apt_repository:
     repo: 'ppa:ethernity-cloud/qemu-sgx'
     codename: focal
-- name: Ubuntu 20.04 | qemu SGX
+- name: Ubuntu 20.04 | qemu install
   apt:
     pkg: "{{item}}"
   with_items:
@@ -78,11 +71,10 @@
     - qemu-utils=1:6.2+dfsg-2ubuntu8~20.04.sav0.etny
     - qemu-system-common=1:6.2+dfsg-2ubuntu8~20.04.sav0.etny
     - qemu-system-x86=1:6.2+dfsg-2ubuntu8~20.04.sav0.etny
-- name: "Installing qemu-utils"
+- name: Ubuntu 20.04 | qemu-utils install
   apt:
     pkg:
     - qemu-utils
-  when: (ansible_facts['distribution'] == "Ubuntu" and ansible_facts['distribution_major_version'] == "20")
 - name: Ubuntu 20.04 | vagrant-libvirt packages
   apt:
     pkg:

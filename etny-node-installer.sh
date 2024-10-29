@@ -158,8 +158,8 @@ deploy_debian() {
   echo "Finding out if etny-vagrant service is already running..."
   systemctl status "$service" 2>/dev/null | grep "active (running)" >/dev/null
   if [ $? -eq 0 ]; then
-    echo "The service is currently running."
-    read -p "Would you like to stop the service? (Y/n) " choice
+    echo "The Ethernity agent node is currently running. The service will be stopped, until the installation is complete."
+    read -p "Do you want continue ? (Y/n)" choice
     choice="${choice:-Y}"  # Set the default value to "Y" if the input is empty
     if [[ "$choice" =~ ^[Yy]$ ]]; then
       echo "Stopping the service..."
@@ -167,7 +167,7 @@ deploy_debian() {
       systemctl stop "$service"
       deploy_ansible
     else
-      echo "The service is currently running. Setup aborted."
+      echo "Please manually stop the service and then restart the setup."
       exit 1
     fi
   else
@@ -184,18 +184,18 @@ deploy_slackware() {
   task_price_check
   echo "#############################################"
   echo "Finding out if rc.etny service is already running..."
-  /etc/rc.d/rc.etny | grep -i "running" >/dev/null
+  /etc/rc.d/rc.etny status >/dev/null
   if [ $? -eq 0 ]; then
-    echo "The service is currently running."
-    read -p "Would you like to stop the service? (Y/n) " choice
+    echo "The Ethernity agent node is currently running. The service will be stopped, until the installation is complete."
+    read -p "Do you want continue ? (Y/n) " choice
     choice="${choice:-Y}"  # Set the default value to "Y" if the input is empty
     if [[ "$choice" =~ ^[Yy]$ ]]; then
       echo "Stopping the service..."
       # Stop the service here
-      systemctl stop "$service"
+      /etc/rc.d/rc.etny stop 
       deploy_ansible
     else
-      echo "The service is currently running. Setup aborted."
+      echo "Please manually stop the service and then restart the setup."
       exit 1
     fi
   else

@@ -14,7 +14,7 @@
       - virtinst
       - cpu-checker  
     state: present
-- name: Debian 12 | "Installing qemu"
+- name: Debian 12 | qemu install
   apt:
     pkg:
       - qemu-system-data
