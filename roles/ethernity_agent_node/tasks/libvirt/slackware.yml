@@ -20,6 +20,17 @@
     line={{ item.value }}
   with_items: "{{ libvirt_qemu_config }}"
 
+- name: Slackware family | add rc.libvirt to startup lunlevel 3
+  ansible.builtin.file:
+    src: /etc/rc.d/rc.libvirt
+    dest: /etc/rc.d/rc3.d/S01-libvirt
+    state: link
+
+- name: Slackware family | add rc.libvirt to startup lunlevel 5
+  ansible.builtin.file:
+    src: /etc/rc.d/rc.libvirt
+    dest: /etc/rc.d/rc5.d/K05-vagrant
+    state: link
 
 - name: Slackware | restart libvirt
   shell: /etc/rc.d/rc.libvirt stop; /etc/rc.d/rc.libvirt start
