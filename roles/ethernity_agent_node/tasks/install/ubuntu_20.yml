@@ -26,16 +26,12 @@
     pkg:
        - policycoreutils-python-utils
        - qemu-utils
-       - qemu-system-common
-       - qemu-system-x86
        - libfdt1
-       - qemu-system-data
        - libvirt-clients
        - libvirt-daemon-system
        - bridge-utils
        - python3-libvirt
        - libnss-libvirt
-       - libguestfs-tools
        - virtinst
        - virt-top
        - genisoimage

@@ -40,5 +40,5 @@
   copy:
     src: ubuntu/etc/apparmor.d/libvirt/TEMPLATE.qemu
     dest: /etc/apparmor.d/libvirt/TEMPLATE.qemu
-  when: (ansible_facts['distribution'] != "Slackware")
+  ignore_errors: true
 
