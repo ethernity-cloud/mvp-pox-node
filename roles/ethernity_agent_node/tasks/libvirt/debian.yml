@@ -14,7 +14,7 @@
     line={{ item.value }}
   with_items: "{{ libvirt_qemu_config }}"
 
-- name: Debian faimly | configure "{{ libvirt_daemon_config_file }}" file (daemon)
+- name: Debian family | configure "{{ libvirt_daemon_config_file }}" file (daemon)
   lineinfile:
     dest="{{ libvirt_daemon_config_file }}"
     regexp={{ item.option }}
