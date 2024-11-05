@@ -1,5 +1,11 @@
 ---
 
+- name: Debian family | install libvirt packages
+  package:
+    name={{ item }}
+    state=latest
+  with_items: "{{ libvirt_packages }}"
+
 - name: Debian family | configure "{{ libvirt_config_file }}" file (libvirt)
   lineinfile:
     dest="{{ libvirt_config_file }}"
