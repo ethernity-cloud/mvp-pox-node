@@ -32,7 +32,7 @@
 - name: Debian 12 | vagrant install
   apt:
     pkg:
-    - vagrant
+    - vagrant=2.4.1-1
 - name: Debian 12 | vagrant-libvirt packages
   apt:
     pkg:

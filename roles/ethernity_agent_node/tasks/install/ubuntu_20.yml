@@ -17,10 +17,10 @@
 - name: Ubuntu 20.04 | exit
   when: ansible_kernel is version('5.13','<')
   meta: end_play
-- name: Ubuntu 20.04 | qemu repo
-  ansible.builtin.apt_repository:
-    repo: 'ppa:savoury1/virtualisation'
-    codename: focal
+#- name: Ubuntu 20.04 | qemu repo
+#  ansible.builtin.apt_repository:
+#    repo: 'ppa:savoury1/virtualisation'
+#    codename: focal
 - name: Ubuntu 20.04 | EC qemu repo
   ansible.builtin.apt_repository:
     repo: 'ppa:ethernity-cloud/qemu-sgx'
@@ -39,7 +39,7 @@
 - name: Ubuntu 20.04 | vagrant install
   apt:
     pkg:
-    - vagrant
+    - vagrant=2.4.1-1
 - name: Ubuntu 20.04 | remove existing qemu
   apt:
     pkg:

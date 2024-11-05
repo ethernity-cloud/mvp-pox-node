@@ -34,7 +34,7 @@
 - name: Ubuntu 24.04 | vagrant install
   apt:
     pkg:
-    - vagrant
+    - vagrant=2.4.1-1
 - name: Ubuntu 24.04 | vagrant-libvirt packages
   apt:
     pkg:

@@ -17,13 +17,16 @@
 - name: Ubuntu 22.04 | exit
   when: ansible_kernel is version('5.13','<')
   meta: end_play
+- name: Ubuntu 22.04 | qemu repo
+  ansible.builtin.apt_repository:
+    repo: 'ppa:ethernity-cloud/qemu-sgx'
+    codename: jammy
 - name: Ubuntu 22.04 | qemu install dependencies
   apt:
     pkg:
        - policycoreutils-python-utils
        - libfdt1
        - libvirt-clients
-       - libvirt-daemon-system
        - bridge-utils
        - python3-libvirt
        - libnss-libvirt
@@ -42,19 +45,12 @@
 - name: Ubuntu 22.04 | vagrant install
   apt:
     pkg:
-    - vagrant
-- name: Ubuntu 22.04 | remove old qemu
+    - vagrant=2.4.1-1
+- name: Ubuntu 22.04 | remove current qemu
   apt:
     pkg:
     - qemu*
     state: absent
-- name: Ubuntu 22.04 | remove unused packages
-  apt:
-    autoremove: yes
-- name: Ubuntu 22.04 | qemu repo
-  ansible.builtin.apt_repository:
-    repo: 'ppa:ethernity-cloud/qemu-sgx'
-    codename: jammy
 - name: Ubuntu 22.04 | qemu install
   apt:
     pkg: "{{item}}"
