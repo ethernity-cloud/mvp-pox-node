@@ -21,22 +21,15 @@
   ansible.builtin.apt_repository:
     repo: 'ppa:savoury1/virtualisation'
     codename: focal
-- name: Ubuntu 20.04 | qemu install dependencies
+- name: Ubuntu 20.04 | EC qemu repo
+  ansible.builtin.apt_repository:
+    repo: 'ppa:ethernity-cloud/qemu-sgx'
+    codename: focal
+- name: Ubuntu 20.04 | update apt cache
   apt:
-    pkg:
-       - policycoreutils-python-utils
-       - qemu-utils
-       - libfdt1
-       - libvirt-clients
-       - libvirt-daemon-system
-       - bridge-utils
-       - python3-libvirt
-       - libnss-libvirt
-       - virtinst
-       - virt-top
-       - genisoimage
-       - cpu-checker  
-    state: present
+    update_cache: yes
+  register: update_result
+  failed_when: "update_result.failed and 'unknown reason' not in update_result.msg|lower"
 - name:  Ubuntu 20.04 | vagrant add key  
   apt_key:
     url: https://apt.releases.hashicorp.com/gpg
@@ -47,18 +40,11 @@
   apt:
     pkg:
     - vagrant
-- name: Ubuntu 20.04 | remove old qemu
+- name: Ubuntu 20.04 | remove existing qemu
   apt:
     pkg:
     - qemu*
     state: absent
-- name: Ubuntu 20.04 | remove unused packages
-  apt:
-    autoremove: yes
-- name: Ubuntu 20.04 | qemu repo
-  ansible.builtin.apt_repository:
-    repo: 'ppa:ethernity-cloud/qemu-sgx'
-    codename: focal
 - name: Ubuntu 20.04 | qemu install
   apt:
     pkg: "{{item}}"
