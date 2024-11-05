@@ -17,18 +17,14 @@
 - name: Ubuntu 20.04 | exit
   when: ansible_kernel is version('5.13','<')
   meta: end_play
-#- name: Ubuntu 20.04 | qemu repo
-#  ansible.builtin.apt_repository:
-#    repo: 'ppa:savoury1/virtualisation'
-#    codename: focal
+- name: Ubuntu 20.04 | savoury1 qemu repo
+  ansible.builtin.apt_repository:
+    repo: 'ppa:savoury1/virtualisation'
+    codename: focal
 - name: Ubuntu 20.04 | EC qemu repo
   ansible.builtin.apt_repository:
     repo: 'ppa:ethernity-cloud/qemu-sgx'
     codename: focal
-- name: Ubuntu 20.04 | update apt cache
-  apt:
-    update_cache: yes
-  register: update_result
   failed_when: "update_result.failed and 'unknown reason' not in update_result.msg|lower"
 - name:  Ubuntu 20.04 | vagrant add key  
   apt_key:
