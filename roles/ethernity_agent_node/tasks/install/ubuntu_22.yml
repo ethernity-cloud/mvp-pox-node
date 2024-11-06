@@ -59,6 +59,7 @@
     pkg:
     - qemu*
     state: absent
+
 - name: Ubuntu 22.04 | qemu install
   apt:
     pkg: "{{item}}"

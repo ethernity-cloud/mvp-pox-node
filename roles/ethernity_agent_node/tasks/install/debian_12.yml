@@ -42,6 +42,7 @@
     selection: hold
 
 - name: Debian 12 | vagrant-libvirt dependencies
+
   apt:
     pkg:
       - ebtables

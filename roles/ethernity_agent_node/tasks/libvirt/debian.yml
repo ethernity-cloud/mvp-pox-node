@@ -1,5 +1,6 @@
 ---
 
+
 - name: Debian family | install libvirt packages
   package:
     name={{ item }}
@@ -19,6 +20,7 @@
     regexp={{ item.option }}
     line={{ item.value }}
   with_items: "{{ libvirt_qemu_config }}"
+
 
 - name: Debian family | configure "{{ libvirt_daemon_config_file }}" file (daemon)
   lineinfile:
