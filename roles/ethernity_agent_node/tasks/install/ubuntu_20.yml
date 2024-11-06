@@ -32,10 +32,18 @@
 - name: Ubuntu 20.04 | vagrant repo
   apt_repository:
     repo: "deb [arch=amd64] https://apt.releases.hashicorp.com {{ ansible_distribution_release }} main"
+
 - name: Ubuntu 20.04 | vagrant install
   apt:
+    allow_downgrade: yes
     pkg:
     - vagrant=2.4.1-1
+
+- name: Ubuntu 20.04 | vagrant hold
+  ansible.builtin.dpkg_selections:
+    name: vagrant
+    selection: hold
+
 - name: Ubuntu 20.04 | remove existing qemu
   apt:
     pkg:
@@ -74,7 +82,7 @@
     name: qemu-utils
     selection: hold
 
-- name: Ubuntu 20.04 | vagrant-libvirt packages
+- name: Ubuntu 20.04 | vagrant-libvirt dependencies
   apt:
     pkg:
     - ebtables

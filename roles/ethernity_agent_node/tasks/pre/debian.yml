@@ -30,6 +30,12 @@
     selection: install
   ignore_errors: true
 
+- name: Debian family | unhold package vagrant
+  ansible.builtin.dpkg_selections:
+    name: vagrant
+    selection: install
+  ignore_errors: true
+
 - name: Debian family | install gcc and make-guile
   apt:
     pkg:

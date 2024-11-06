@@ -16,6 +16,7 @@
       - genisoimage
       - cpu-checker  
     state: present
+
 - name: Ubuntu 24.04 | qemu install
   apt:
     pkg:
@@ -25,17 +26,27 @@
       - qemu-system-x86
       - qemu-utils
     state: present
+
 - name:  Ubuntu 24.04 | vagrant add key  
   apt_key:
     url: https://apt.releases.hashicorp.com/gpg
+
 - name: Ubuntu 24.04 | vagrant repo
   apt_repository:
     repo: "deb [arch=amd64] https://apt.releases.hashicorp.com {{ ansible_distribution_release }} main"
+
 - name: Ubuntu 24.04 | vagrant install
   apt:
+    allow_downgrade: yes
     pkg:
     - vagrant=2.4.1-1
-- name: Ubuntu 24.04 | vagrant-libvirt packages
+
+- name: Ubuntu 24.04 | vagrant hold
+  ansible.builtin.dpkg_selections:
+    name: vagrant
+    selection: hold
+
+- name: Ubuntu 24.04 | vagrant-libvirt dependencies
   apt:
     pkg:
       - ebtables
@@ -46,6 +57,7 @@
       - zlib1g-dev
       - ruby-dev
     state: present
+
 - name: Ubuntu 24.04 | vagrant template
   copy:
     src: vagrant/qemu-8.2

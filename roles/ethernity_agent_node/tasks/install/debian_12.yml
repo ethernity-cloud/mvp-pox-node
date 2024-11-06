@@ -29,11 +29,19 @@
 - name: Debian 12 | vagrant repo
   apt_repository:
     repo: "deb [arch=amd64] https://apt.releases.hashicorp.com {{ ansible_distribution_release }} main"
+
 - name: Debian 12 | vagrant install
   apt:
+    allow_downgrade: yes
     pkg:
     - vagrant=2.4.1-1
-- name: Debian 12 | vagrant-libvirt packages
+
+- name: Debian 12 | vagrant hold
+  ansible.builtin.dpkg_selections:
+    name: vagrant
+    selection: hold
+
+- name: Debian 12 | vagrant-libvirt dependencies
   apt:
     pkg:
       - ebtables
