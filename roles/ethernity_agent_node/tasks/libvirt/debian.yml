@@ -27,6 +27,12 @@
     line={{ item.value }}
   with_items: "{{ libvirt_daemon_config }}"
 
+- name: Debian family | configure Apparmor
+  copy:
+    src: ubuntu/etc/apparmor.d/libvirt/TEMPLATE.qemu
+    dest: /etc/apparmor.d/libvirt/TEMPLATE.qemu
+  ignore_errors: true
+
 - name: Debian family | restart libvirt
   ansible.builtin.service:
     name: libvirtd

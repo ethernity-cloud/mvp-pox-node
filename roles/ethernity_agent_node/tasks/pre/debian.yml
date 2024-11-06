@@ -36,9 +36,3 @@
       - make-guile
       - gcc
       - cpu-checker
-
-- name: Debian family | configure Apparmor
-  copy:
-    src: ubuntu/etc/apparmor.d/libvirt/TEMPLATE.qemu
-    dest: /etc/apparmor.d/libvirt/TEMPLATE.qemu
-  ignore_errors: true
