@@ -59,10 +59,23 @@
 
 
 - name: Evaluate bloxberg gas balance message
-  when: lookup('ansible.builtin.env', 'NETWORK') == 'BLOXBERG' or lookup('ansible.builtin.env', 'NETWORK') == 'AUTO' or lookup('ansible.builtin.env', 'NETWORK') == 'TESTNET'
+  when: lookup('ansible.builtin.env', 'NETWORK') == 'BLOXBERG' or lookup('ansible.builtin.env', 'NETWORK') == 'AUTO' or lookup('ansible.builtin.env', 'NETWORK') == ''
   debug:
     msg: "{{ addressbergs.json }}"
   failed_when: addressbergs.json == ""
+
+- name: Defining bloxberg gas balance request
+  when: lookup('ansible.builtin.env', 'NETWORK') == 'TESTNET'
+  uri:
+    url: "{{ config_file_map.TESTNET_RPC_URL }}"
+    method: POST
+    headers:
+      Content-Type: "application/json"
+    body_format: json
+    body: '{"method":"eth_getBalance","params":["{{ config_file_map.ADDRESS }}","latest"],"id":1,"jsonrpc":"2.0"}'
+  register: addressbergs
+  retries: 64
+  delay: 3
 
 - name: Evaluate polygon gas balance message
   when: lookup('ansible.builtin.env', 'NETWORK') == 'POLYGON' or lookup('ansible.builtin.env', 'NETWORK') == 'AUTO'
