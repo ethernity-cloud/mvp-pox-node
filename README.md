@@ -42,9 +42,9 @@ Debian 12.0
 We are planning support for the following operating systems:
 
 ```
-Debian 12*
-Fedora 41*
-Rocky 9*
+Fedora
+Rocky
+AlmaLinux
 ```
 
 ## Automated Installation
