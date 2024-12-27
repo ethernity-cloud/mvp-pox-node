@@ -1,16 +1,19 @@
 from asyncio.log import logger
 import json
 import os
+import shutil
 import socket
 import subprocess
-import time
 import uuid
 import math
 import urllib.request
+import time
+
 from collections import OrderedDict
 
 import ipfshttpclient
 import psutil
+
 
 
 def get_or_generate_uuid(filename):
@@ -64,11 +67,13 @@ def get_node_geo():
         return ''
 
 
+
 class Storage:
     def __init__(self, ipfs_host, client_connect_url, client_bootstrap_url, cache, logger):
         self.client_bootstrap_url = client_bootstrap_url
         self.ipfs_host = ipfs_host
         ipfs_node = socket.gethostbyname(ipfs_host)
+        self.client_connect_url = client_connect_url
         self.bootstrap_client = ipfshttpclient.connect(client_connect_url)
         self.bootstrap_client.bootstrap.add(client_bootstrap_url % ipfs_node)
         self.bootstrap_client.config.set("Datastore.StorageMax", "3GB")
@@ -94,9 +99,26 @@ class Storage:
             self.bootstrap_client.get(data, compress=True, opts={"compression-level": 9}, timeout=120)
             self.cache.add(data)
         except Exception as e:
-            self.logger.info(f'error while downloading file {data}', e)
-            self.logger.error(e)
+            self.logger.warning(f"Error while downloading file {data}: {e}")
+            if "127.0.0.1" in self.client_connect_url:
+                self.logger.warning("Restarting IPFS service")
+                self.restart_ipfs_service()
+            else:
+                self.logger.warning("Please make sure your IPFS host is working properly")
             raise
+
+    def restart_ipfs_service(self):
+        try:
+            # Execute the systemctl command to restart the ipfs service
+            result = subprocess.run(
+                ['systemctl', 'restart', 'ipfs'],
+                check=True,        # Raises CalledProcessError if the command exits with a non-zero status
+                stdout=subprocess.PIPE,  # Capture standard output
+                stderr=subprocess.PIPE   # Capture standard error
+            )
+            self.logger.info("IPFS service restarted successfully.")
+        except subprocess.CalledProcessError as e:
+            self.logger.warning(f"Failed to restart local IPFS service. Error: {e.stderr.decode().strip()}")
 
     def download_many(self, lst, attempts=1, delay=0):
         for data in lst:
@@ -120,6 +142,71 @@ class Storage:
 
     def add(self, data):
         pass
+
+    def pin_rm(self, hash):
+        try:
+            self.bootstrap_client.pin.rm(hash)
+        except Exception as e:
+            error_message = str(e).lower()
+            if 'not pinned' in error_message or 'pinned indirectly' in error_message:
+                return
+            self.logger.info(f'error while removing pin')
+            self.logger.error(e)
+            raise
+
+    def rm(self, hash):
+        """
+        Delete all files and directories within the specified directory whose names start with 'Qm'.
+
+        Args:
+            hash (str): The path to the file or directory to clean up.
+
+        Raises:
+            ValueError: If the target_directory does not exist or is not a directory.
+            Exception: Re-raises any unexpected exceptions encountered during deletion.
+        """
+
+        # Define the prefix to look for
+        prefix = "Qm"
+
+        # Validate the target_directory
+        if not os.path.exists(hash):
+            raise ValueError(f"The path '{target_directory}' does not exist.")
+
+        if not os.path.isdir(hash):
+            os.remove(hash) if hash.startswith(prefix) else None
+            return
+
+        target_directory = hash
+
+        # Iterate over all items in the target directory
+        for item_name in os.listdir(target_directory):
+            if item_name.startswith(prefix):
+                item_path = os.path.join(target_directory, item_name)
+
+                try:
+                    if os.path.isfile(item_path) or os.path.islink(item_path):
+                        # If it's a file or a symbolic link, remove it
+                        os.remove(item_path)
+
+                    elif os.path.isdir(item_path):
+                        # If it's a directory, remove it and all its contents
+                        shutil.rmtree(item_path)
+
+                except Exception as e:
+                    # Log any other exceptions and re-raise
+                    self.logger.error(f"Error while removing '{item_path}': {e}")
+                    raise
+
+
+    def repo_gc(self):
+        try:
+            self.bootstrap_client.repo.gc()
+        except Exception as e:
+            self.logger.info(f'error while removing pin')
+            self.logger.error(e)
+            raise
+
 
 
 class Cache:
@@ -173,6 +260,11 @@ class ListCache(Cache):
     def get(self, value):
         return value if self.contains(value) else None
 
+    def rem(self, value):
+        if value in self.mem:
+            self.mem.remove(value)
+            self._update_file()
+
     def contains(self, value):
         return value in self.mem
 
@@ -180,6 +272,211 @@ class ListCache(Cache):
     def get_values(self):
         return list(map(lambda x: int(x), self.mem))
 
+    def __iter__(self):
+        """Make the object iterable."""
+        return iter(self.mem)
+
+    def __len__(self):
+        """Return the number of items in the cache."""
+        return len(self.mem)
+
+    def __contains__(self, item):
+        """Check if an item exists in the cache."""
+        return item in self.mem
+
+
+class ListCacheWithTimestamp:
+    """
+    A cache that stores unique items with associated timestamps using OrderedDict.
+    It can migrate existing cache files from a JSON list format to a JSON dict format with timestamps.
+
+    Attributes:
+        items_limit (int): The maximum number of items the cache can hold.
+        filepath (str): The path to the JSON file used for persisting the cache.
+        mem (OrderedDict): In-memory storage of cache items with timestamps.
+    """
+
+    def __init__(self, items_limit, filepath):
+        """
+        Initialize the ListCacheWithTimestamp instance.
+
+        Args:
+            items_limit (int): The maximum number of items the cache can hold.
+            filepath (str): The path to the JSON file used for persisting the cache.
+        """
+        self.items_limit = items_limit
+        self.filepath = filepath
+        self.mem = self._load_cache()
+
+    def _load_cache(self):
+        """
+        Load the cache from the JSON file. If the file contains a list, migrate it to include timestamps.
+        If the file does not exist or is corrupted, initialize an empty cache.
+
+        Returns:
+            OrderedDict: The in-memory cache with items and their timestamps.
+        """
+        if not os.path.exists(self.filepath):
+            initial_mem = OrderedDict()
+            self._update_file(initial_mem)
+            return initial_mem
+
+        try:
+            with open(self.filepath, 'r', encoding="utf-8") as f:
+                data = json.load(f)
+
+                if isinstance(data, list):
+                    # Migrate list to OrderedDict with timestamps
+                    current_time = time.time()
+                    entries = OrderedDict()
+                    for item in data:
+                        entries[item] = {'timestamp': current_time}
+                    self._update_file(entries)
+                    return entries
+
+                elif isinstance(data, dict):
+                    # Ensure all entries have a 'timestamp'
+                    updated = False
+                    for key, value in data.items():
+                        if not isinstance(value, dict) or 'timestamp' not in value:
+                            data[key] = {'timestamp': time.time()}
+                            updated = True
+                    if updated:
+                        self._update_file(data)
+                    return OrderedDict(data)
+
+                else:
+                    initial_mem = OrderedDict()
+                    self._update_file(initial_mem)
+                    return initial_mem
+        except (json.JSONDecodeError, TypeError) as e:
+            initial_mem = OrderedDict()
+            self._update_file(initial_mem)
+            return initial_mem
+
+    def _update_file(self, mem=None):
+        """
+        Update the cache file with the current in-memory data.
+
+        Args:
+            mem (OrderedDict, optional): The in-memory cache to be saved. Defaults to self.mem.
+        """
+        mem = mem if mem is not None else self.mem
+        try:
+            with open(self.filepath, 'w', encoding='utf-8') as f:
+                # Serialize the cache as a dictionary with items and their timestamps
+                json.dump(mem, f, indent=4)
+        except IOError as e:
+            return
+
+    def add(self, value):
+        """
+        Add a unique value to the cache with the current timestamp. If the cache exceeds the items_limit,
+        the oldest item is evicted.
+
+        Args:
+            value (str): The value to add to the cache.
+        """
+        current_time = time.time()
+        if value not in self.mem:
+            self.mem[value] = {'timestamp': current_time}
+            if len(self.mem) > self.items_limit:
+                popped_item, _ = self.mem.popitem(last=False)
+            self._update_file()
+
+    def get(self, value):
+        """
+        Retrieve a value from the cache.
+
+        Args:
+            value (str): The value to retrieve.
+
+        Returns:
+            str or None: The value if it exists in the cache; otherwise, None.
+        """
+        if value in self.mem:
+            return value
+        return None
+
+    def rem(self, value):
+        """
+        Remove a value from the cache.
+
+        Args:
+            value (str): The value to remove.
+        """
+        if value in self.mem:
+            del self.mem[value]
+            self._update_file()
+
+    def contains(self, value):
+        """
+        Check if a value exists in the cache.
+
+        Args:
+            value (str): The value to check.
+
+        Returns:
+            bool: True if the value exists in the cache; otherwise, False.
+        """
+        presence = value in self.mem
+        return presence
+
+    @property
+    def get_values(self):
+        """
+        Get all values in the cache.
+
+        Returns:
+            list: A list of all values in the cache.
+        """
+        return list(self.mem.keys())
+
+    def get_timestamp(self, value):
+        """
+        Get the timestamp of a specific entry.
+
+        Args:
+            value (str): The value whose timestamp is to be retrieved.
+
+        Returns:
+            float or None: The timestamp if the value exists; otherwise, None.
+        """
+        entry = self.mem.get(value)
+        timestamp = entry['timestamp'] if entry else None
+        return timestamp
+
+    def __iter__(self):
+        """
+        Make the object iterable over its values.
+
+        Returns:
+            iterator: An iterator over the cached values.
+        """
+        return iter(self.mem.keys())
+
+    def __len__(self):
+        """
+        Return the number of items in the cache.
+
+        Returns:
+            int: The number of items in the cache.
+        """
+        length = len(self.mem)
+        return length
+
+    def __contains__(self, item):
+        """
+        Check if an item exists in the cache.
+
+        Args:
+            item (str): The item to check.
+
+        Returns:
+            bool: True if the item exists; otherwise, False.
+        """
+        presence = item in self.mem
+        return presence
 
 class MergedOrdersCache(Cache):
     def __init__(self, items_limit, filepath, store_type=list):
@@ -197,7 +494,7 @@ class HardwareInfoProvider:
 
     @staticmethod
     def get_free_memory():
-        return math.ceil(psutil.virtual_memory()[1] / (2 ** 30))  # in GB
+        return math.floor(psutil.virtual_memory()[1] / (2 ** 30))  # in GB
 
     @staticmethod
     def get_free_storage():
