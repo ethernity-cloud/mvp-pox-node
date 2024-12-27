@@ -47,12 +47,32 @@ Fedora 41*
 Rocky 9*
 ```
 
-## Installation
+## Automated Installation
 
-### Automated Installation
-Please check the automated process at https://github.com/ethernity-cloud/etny-node-installer.
+This installer provides an easy way to automate the installation process of an Ethernity Node as much as possible.
 
-For Manual installation please continue reading below.
+Features:
+-	Automates the system update, kernel update (5.0.0-050000-generic for ubuntu 18.04 and 5.13.0-41-generic for ubuntu 20.04) and runs the ansible-playbook installation process
+-	Asks the user to generate (using the “ethkey” tool) or to input wallet details from console (node and result)
+-	Checks wallet balance for Bergs (continues only if Bergs > 0)
+-	Validates wallet for wrong input 
+-	Prevents the user to continue if the node wallet  is the same as the result wallet
+-	Restarts the system automatically after the system and kernel is updated
+
+### 1. Clone the repository to the home folder and run it
+```
+$ cd && git clone https://github.com/ethernity-cloud/mvp-pox-node.git
+$ cd mvp-pox-node
+$ ./etny-node-installer.sh
+```
+
+### 2. Run the script again after system restart
+```
+$ cd mvp-pox-node
+$ ./etny-node-installer.sh
+```
+
+## Maual Installation
 
 ### 1. Install ansible
 
@@ -127,38 +147,27 @@ Service status can be seen by running the below command.
 ```
 systemctl status etny-vagrant.service
 ```
-### 7. For Ubuntu 18.04 and 20.04 installations if you'd like to upgrade the virtual machine from Ubuntu 18.04 to 22.04
 
-Please run the commands below
+## Ugrading
+
+To upgrade to the latest version, please use the automated installer by running the following commands:
 ```
 $ cd && cd mvp-pox-node
 $ git pull 
-$ sudo ansible-playbook -i localhost, playbook.yml \
-  -e "ansible_python_interpreter=/usr/bin/python3"
-```
-
-# ETNY Node Installer
-
-This installer provides an easy way to automate the installation process of an Ethernity Node as much as possible.
-
-Features:
--	Automates the system update, kernel update (5.0.0-050000-generic for ubuntu 18.04 and 5.13.0-41-generic for ubuntu 20.04) and runs the ansible-playbook installation process
--	Asks the user to generate (using the “ethkey” tool) or to input wallet details from console (node and result)
--	Checks wallet balance for Bergs (continues only if Bergs > 0)
--	Validates wallet for wrong input 
--	Prevents the user to continue if the node wallet  is the same as the result wallet
--	Restarts the system automatically after the system and kernel is updated
-
-## Usage Instructions
-
-### 1. Clone the repository to the home folder and run it
-```
-$ cd && git clone https://github.com/ethernity-cloud/mvp-pox-node.git
-$ cd mvp-pox-node
 $ ./etny-node-installer.sh
 ```
 
-### 2. Run the script again after system restart
+## Troubleshooting
+
+### Failed installation
+Backup the `~/mvp-pox-node/config` file
+
 ```
-$ cd mvp-pox-node
+$ cd && cd mvp-pox-node
+$ git pull
+$ rm -rf config
 $ ./etny-node-installer.sh
+```
+
+Follow through the prompts and use the same keys and addresses from your backup
+
