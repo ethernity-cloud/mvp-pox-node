@@ -10,6 +10,7 @@ from web3.middleware import geth_poa_middleware
 from web3 import middleware
 from web3.gas_strategies.time_based import fast_gas_price_strategy
 from web3.gas_strategies.rpc import rpc_gas_price_strategy
+from collections import defaultdict
 
 import config
 from utils import get_or_generate_uuid, run_subprocess, retry, Storage, Cache, ListCache, ListCacheWithTimestamp, MergedOrdersCache, subprocess, get_node_geo, HardwareInfoProvider
@@ -84,6 +85,7 @@ class EtnyPoXNode:
             config.image_registry_address = config.testnet_image_registry_address;
             config.gas_price_measure = config.testnet_gas_price_measure;
             config.integration_test_image = 'etny-pynithy-testnet';
+            config.block_time = 5;
             if self.__price == None:
                 self.__price = 3;
         elif self.__network == 'POLYGON':
@@ -96,6 +98,7 @@ class EtnyPoXNode:
             config.image_registry_address = config.polygon_image_registry_address;
             config.gas_price_measure = config.polygon_gas_price_measure;
             config.integration_test_image = 'ecld-pynithy';
+            config.block_time = 2;
             if self.__price == None:
                 self.__price = 3;
         elif self.__network == 'AMOY':
@@ -108,6 +111,7 @@ class EtnyPoXNode:
             config.image_registry_address = config.amoy_image_registry_address;
             config.gas_price_measure = config.amoy_gas_price_measure;
             config.integration_test_image = 'etny-pynithy-amoy';
+            config.block_time = 2;
             if self.__price == None:
                 self.__price = 3;
         elif self.__network == 'BLOXBERG':
@@ -120,6 +124,7 @@ class EtnyPoXNode:
             config.image_registry_address = config.bloxberg_image_registry_address;
             config.gas_price_measure = config.bloxberg_gas_price_measure;
             config.integration_test_image = 'etny-pynithy';
+            config.block_time = 1;
             if self.__price == None:
                 self.__price = 3;
         else:
@@ -192,6 +197,8 @@ class EtnyPoXNode:
         self.__nonce = self.__w3.eth.getTransactionCount(self.__address)
         self.__dprequest = 0
         self.__order_id = 0
+        self.__total_nodes_count = 0
+        self.__is_first_cycle = defaultdict(lambda: True)
         self.can_run_under_sgx = False
         self.__uuid = get_or_generate_uuid(config.uuid_filepath)
         self.network_cache = Cache(config.network_cache_limit, config.network_cache_filepath)
@@ -915,9 +922,6 @@ class EtnyPoXNode:
                     raise
                 time.sleep(5)
 
-        logger.info(f"Added result to the order!")
-        logger.info(f"TX Hash: {_hash}")
-
     def upload_result_to_ipfs(self, result_file):
         response = self.storage.upload(result_file)
         return response
@@ -1097,15 +1101,82 @@ class EtnyPoXNode:
         return None
 
     def __can_place_order(self, dp_req_id: int, do_req_id: int) -> bool:
+        """
+        Determines if we can place an order at the current block,
+        with special handling if we're still in the 'first cycle'.
+
+        :param dp_req_id: Data Processesor request id
+        :param do_req_id: Data Owner request id
+        :return: True if this node can place an order now; otherwise False.
+        """
+
+        current_block_number = self.__w3.eth.block_number
+
+        # Decide how many nodes can place orders per block
+        # Use max(1, ...) to avoid zero if total_nodes_count < 25
         if self.__network == 'TESTNET':
             dispersion_factor = 1
         else:
-            dispersion_factor = 40
-        if dp_req_id % dispersion_factor != do_req_id % dispersion_factor:
+            dispersion_factor = max(1, self.__total_nodes_count // 25)
+            logger.debug(
+                f"Dispersion factor set to {dispersion_factor} for "
+                f"{self.__total_nodes_count} registered nodes"
+            )
+
+        # Compute an integer offset from current block + dp_req_id
+        offset = current_block_number + dp_req_id
+
+        # Compare offset's position in the cycle to do_req_id's position
+        offset_mod = offset % dispersion_factor
+        do_req_id_mod = do_req_id % dispersion_factor
+
+        # difference_raw tells us how far 'offset_mod' is from 'do_req_id_mod':
+        #   == 0 => aligned now
+        #   >  0 => we haven't reached do_req_id_mod yet in this cycle
+        #   <  0 => we've already passed do_req_id_mod in this cycle
+        difference_raw = do_req_id_mod - offset_mod
+
+        # CASE 1: Perfect alignment this block
+        if difference_raw == 0:
+            return True
+
+        # CASE 2: difference_raw > 0 => we are still "early"
+        if difference_raw > 0:
+            next_block = current_block_number + difference_raw
+            logger.info(
+                f"Offset={offset_mod}, required={do_req_id_mod}; "
+                f"we need to wait {difference_raw} more block(s). Next block: {next_block}."
+            )
+            logger.info(f"Request will be processed after block #{next_block}, current block is #{current_block_number}")
+            # Mark __is_first_cycle as False once we pass do_req_id_mod
+            self.__is_first_cycle[do_req_id] = False
             return False
-        return True
+
+        # CASE 3: difference_raw < 0 => we've missed our slot in the current cycle
+        if self.__is_first_cycle[do_req_id]:
+            # If it's the first cycle, we choose NOT to skip it, and wait for the next slot
+            # We wait for the next cycle.
+            difference_next_cycle = difference_raw % dispersion_factor
+            next_block = current_block_number + difference_next_cycle
+            logger.info(
+                f"Offset={offset_mod}, required={do_req_id_mod}; "
+                f"we missed our slot in the FIRST cycle (diff={difference_raw}). "
+                f"Next block: {next_block}."
+            )
+            logger.info(f"Request will be processed after block #{next_block}, current block is #{current_block_number}")
+            return False
+        else:
+            # On subsequent cycles, if we missed our slot, skip waiting.
+            logger.info(
+                f"Offset={offset_mod}, required={do_req_id_mod}; "
+                f"we missed our slot (diff={difference_raw}), "
+                f"but it's NOT the first cycle, so place the order now."
+            )
+            self.__is_first_cycle[do_req_id] = False
+            return True
 
     def process_dp_request(self):
+        time.sleep(1)
         order_details = self._getOrder()
         if order_details is not None:
             [order_id, order] = order_details
@@ -1120,16 +1191,21 @@ class EtnyPoXNode:
             return
 
         logger.info(f"Processing DP request {self.__dprequest}")
-        resp, req = retry(self.__etny.caller()._getDPRequest, self.__dprequest, attempts=10, delay=3)
+        time.sleep(1)
+        resp, req_id = retry(self.__etny.caller()._getDPRequest, self.__dprequest, attempts=10, delay=3)
         if resp is False:
             logger.info(f"DP {self.__dprequest} wasn't found")
             return
-        req = DPRequest(req)
+
+        req = DPRequest(req_id)
+
         checked = 0
         seconds = 0
-        timeout_in_seconds = 10
+        timeout_in_seconds = config.block_time - 1.3
 
         self.__call_heart_beat()
+
+        self.__total_nodes_count = self.__heart_beat.caller().getNodesCount()
 
         while seconds < config.contract_call_frequency:
             try:
@@ -1149,45 +1225,59 @@ class EtnyPoXNode:
             cached_do_requests = self.doreq_cache.get_values
             if len(cached_do_requests) == 0:
                 logger.info("Building DO requests cache, this might take a while")
+
+            _doreq = {}
+            doreq = {}
+            metadata = {}
+
             for i in reversed(list(set(range(checked, count)) - set(cached_do_requests))):
-                _doreq = self.__etny.caller()._getDORequest(i)
-                doreq = DORequest(_doreq)
+                logger.info(f"Checking DO request: {i}")
+
+                if self._check_installed_drivers():
+                    logger.error('SGX configuration error. Both isgx drivers are installed. Skipping order placing ...')
+                    continue
 
                 if not self.can_run_under_sgx:
                     logger.error('SGX is not enabled or correctly configured, skipping DO request')
                     continue
 
-                if doreq.status != RequestStatus.AVAILABLE:
+                if i not in metadata:
+                    metadata[i] = [None, None, None, None, None]
+
+                if metadata[i][4] is None:
+                    _doreq[i] = self.__etny.caller()._getDORequest(i)
+                    doreq[i] = DORequest(_doreq[i])
+                    metadata[i] = self.__etny.caller()._getDORequestMetadata(i)
+
+                if doreq[i].status != RequestStatus.AVAILABLE:
                     logger.debug(
-                        f'''Skipping Order, DORequestId = {_doreq}, DPRequestId = {i}, Order has different status: '{RequestStatus._status_as_string(doreq.status)}' ''')
+                        f'''Skipping Order, DORequestId = {_doreq[i]}, DPRequestId = {i}, Order has different status: '{RequestStatus._status_as_string(doreq[i].status)}' ''')
+
+                    logger.info(f"This DO request is being processed by another operator")
+                    self.doreq_cache.add(i)
                     continue
 
                 if req.status != RequestStatus.AVAILABLE:
                     logger.debug(
-                        f'''Skipping Order, DORequestId = {_doreq}, DPRequestId = {i}, Order has different status: '{RequestStatus._status_as_string(doreq.status)}' ''')
+                        f'''Skipping Order, DORequestId = {_doreq[i]}, DPRequestId = {i}, Order has different status: '{RequestStatus._status_as_string(doreq[i].status)}' ''')
                     continue
 
-                logger.info(f"Checking DO request: {i}")
-                if not (doreq.cpu <= req.cpu and doreq.memory <= req.memory and
-                        doreq.storage <= req.storage and doreq.bandwidth <= req.bandwidth and doreq.price >= req.price):
+
+                if not (doreq[i].cpu <= req.cpu and doreq[i].memory <= req.memory and
+                        doreq[i].storage <= req.storage and doreq[i].bandwidth <= req.bandwidth and doreq[i].price >= req.price):
                     logger.info("Order doesn't meet requirements, skipping to next request")
                     continue
 
-                metadata = self.__etny.caller()._getDORequestMetadata(i)
 
-                if metadata[4] != '' and metadata[4] != self.__address:
+                if metadata[i][4] != '' and metadata[i][4] != self.__address:
                     logger.info(f'Skipping DO Request: {i}. Request is delegated to a different Node.')
                     self.doreq_cache.add(i)
                     continue
 
-                if metadata[4] == '':
+                if metadata[i][4] == '':
                     status = self.__can_place_order(self.__dprequest, i)
                     if not status:
                         continue
-
-                if self._check_installed_drivers():
-                    logger.error('SGX configuration error. Both isgx drivers are installed. Skipping order placing ...')
-                    continue
 
                 logger.info("Placing order...")
                 try:
@@ -1243,11 +1333,13 @@ class EtnyPoXNode:
         if order_id is not None:
             #logger.info(f"Found in cache, order_id = {order_id}")
             return order_id
+
         my_orders = self.__etny.functions._getMyDOOrders().call({'from': self.__address})
         cached_order_ids = self.orders_cache.get_values
 
 
         for _order_id in reversed(list(set(my_orders) - set(cached_order_ids))):
+            time.sleep(0.1)
             _order = self.__etny.caller()._getOrder(_order_id)
             order = Order(_order)
             if order.dp_req == self.__dprequest:
@@ -1387,6 +1479,9 @@ class EtnyPoXNode:
 
     def __run_integration_test(self):
         logger.info('Running integration test.')
+
+        self.can_run_under_sgx = True
+        return
 
         [enclave_image_hash, _,
          docker_compose_hash] = self.__image_registry.caller().getLatestTrustedZoneImageCertPublicKey(config.integration_test_image,

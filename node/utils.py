@@ -38,7 +38,7 @@ def run_subprocess(args, logger):
             logger.debug(item.decode())
 
 
-def retry(func, *func_args, attempts, delay=0, callback=None):
+def retry(func, *func_args, attempts, delay=1, callback=None):
     for _ in range(attempts):
         try:
             if callback != None:
