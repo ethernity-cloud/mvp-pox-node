@@ -1,12 +1,14 @@
 #!/usr/bin/python3
 
-import os, time, json, sys, argparse
+import io, os, time, json, sys, argparse, threading
 from types import SimpleNamespace
-
+from collections import defaultdict
 import concurrent.futures
 import shutil
 from pathlib import Path
 
+import logging
+import config
 
 from eth_account import Account
 from web3 import Web3
@@ -15,18 +17,12 @@ from web3.middleware import ExtraDataToPOAMiddleware
 from web3 import middleware
 from web3.gas_strategies.time_based import fast_gas_price_strategy
 from web3.gas_strategies.rpc import rpc_gas_price_strategy
-from collections import defaultdict
-import threading
-import logging
-
-import config
 
 from utils import get_or_generate_uuid, run_subprocess, retry, Storage, Cache, ListCache, ListCacheWithTimestamp, MergedOrdersCache, subprocess, get_node_geo, HardwareInfoProvider
 from models import *
 from error_messages import errorMessages
 from swift_stream_service import SwiftStreamService
 from cache_config import CacheConfig
-import io
 
 logger = config.logger 
 task_running_on = None
@@ -199,12 +195,20 @@ class EtnyPoXNode:
 
         self.__clear_ipfs_cache()
 
-           
+          
     def __migrate_cache(self):
         logger = self.logger
 
         logger.info(f"Migrating cache from legacy cache {self.network_cache.get('NETWORK')} to network dir {self.__network}")
         self.cache_config_legacy = CacheConfig('./')
+        self.ipfs_cache_legacy = ListCache(self.cache_config_legacy.ipfs_cache_limit, self.cache_config_legacy.ipfs_cache_filepath)
+
+        self.storage_legacy = Storage(self.__ipfshost, self.__ipfslocal, config.client_bootstrap_url,
+                               self.ipfs_cache_legacy, logger, self.cache_config_legacy.base_path)
+
+        for hash in list(self.ipfs_cache_legacy.get_values):
+            self.storage_legacy.mig(hash, self.cache_config.base_path)
+
         for attr in dir(self.cache_config_legacy):
             if attr.startswith('_'):
                 continue
@@ -228,6 +232,7 @@ class EtnyPoXNode:
                 logger.warning(f"Source file '{src}' does not exist and was skipped.")
             except Exception as e:
                 logger.error(f"Failed to copy '{src}' to '{dest}': {e}")
+       
 
     def __clear_ipfs_cache(self):
         logger = self.logger
@@ -1574,7 +1579,7 @@ class EtnyPoXNode:
                 time.sleep(self.__network_config.rpc_delay/1000)
                 unicorn_txn = self.__heart_beat.functions.logCall(*params).build_transaction(self.get_transaction_build())
                 _hash = self.send_transaction(unicorn_txn)
-                logger.info(f"{_hash} pending... fingers crossed")
+                logger.info(f"{_hash} pending... ")
                 receipt = self.__w3.eth.wait_for_transaction_receipt(_hash)
                 if receipt.status == 1:
                     logger.info(f"{_hash} confirmed!")

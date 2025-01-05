@@ -167,6 +167,25 @@ class Storage:
             self.logger.error(e)
             raise
 
+    def mig(self, hash, base_path):
+        prefix = "Qm"
+
+        legacy_path = hash
+        target_path = base_path / hash
+        # Validate the target_directory
+
+        if not os.path.exists(legacy_path) and not os.path.exists(base_path):
+            self.cache.rem(hash)
+            raise ValueError(f"The paths '{hash}' or '{legacy_path}' do not exist.")
+       
+        try:
+            if os.path.exists(legacy_path):
+                shutil.move(legacy_path, target_path)
+        except Exception as e:
+            self.cache.rem(hash)
+            raise Exception("Unable to migrate '{hash}', deleting from cache.")
+
+
     def rm(self, hash):
         """
         Delete all files and directories within the specified directory whose names start with 'Qm'.
@@ -324,7 +343,25 @@ class ListCache(Cache):
 
     @property
     def get_values(self):
-        return list(map(lambda x: int(x), self.mem))
+        """
+        Return a list of cached values.
+        Converts string representations of integers to actual integers.
+        Non-convertible strings remain as strings.
+        """
+        converted_values = []
+        for item in self.mem:
+            if isinstance(item, int):
+                converted_values.append(item)
+            elif isinstance(item, str):
+                try:
+                    converted_item = int(item)
+                    converted_values.append(converted_item)
+                except ValueError:
+                    converted_values.append(item)
+            else:
+                # This should not happen due to type checks in add method
+                converted_values.append(item)
+        return converted_values
 
     def __iter__(self):
         """Make the object iterable."""
