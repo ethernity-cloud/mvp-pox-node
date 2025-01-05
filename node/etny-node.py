@@ -5,6 +5,8 @@ from types import SimpleNamespace
 
 import concurrent.futures
 import shutil
+from pathlib import Path
+
 
 from eth_account import Account
 from web3 import Web3
@@ -149,10 +151,22 @@ class EtnyPoXNode:
         self.__uuid = get_or_generate_uuid(config.uuid_filepath)
 
         self.cache_config = CacheConfig(network.name)
+        self.network_cache = Cache(self.cache_config.network_cache_limit, self.cache_config.network_cache_filepath)
+
+        if self.network_cache.get("NETWORK") == "BLOXBERG" and self.__network == "bloxberg_mainnet":
+           self.__migrate_cache()
+           self.network_cache.add("NETWORK","MIGRATED_FROM_BLOXBERG")
+
+        if self.network_cache.get("NETWORK") == "TESTNET" and self.__network == "bloxberg_testnet":
+           self.__migrate_cache()
+           self.network_cache.add("NETWORK","MIGRATED_FROM_TESTNET")
+
+        if self.network_cache.get("NETWORK") == "POLYGON" and self.__network == "polygon_mainnet":
+           self.__migrate_cache()
+           self.network_cache.add("NETWORK","MIGRATED_FROM_POLYGON")
 
         os.chdir(self.cache_config.base_path)
 
-        self.network_cache = Cache(self.cache_config.network_cache_limit, self.cache_config.network_cache_filepath)
         self.orders_cache = Cache(self.cache_config.orders_cache_limit, self.cache_config.orders_cache_filepath)
         self.dpreq_cache = ListCache(self.cache_config.dpreq_cache_limit, self.cache_config.dpreq_filepath)
         self.doreq_cache = ListCache(self.cache_config.doreq_cache_limit, self.cache_config.doreq_filepath)
@@ -183,6 +197,38 @@ class EtnyPoXNode:
            self.__run_integration_test()
            reset_task_running_on()
 
+        self.__clear_ipfs_cache()
+
+           
+    def __migrate_cache(self):
+        logger = self.logger
+
+        logger.info(f"Migrating cache from legacy cache {self.network_cache.get('NETWORK')} to network dir {self.__network}")
+        self.cache_config_legacy = CacheConfig('./')
+        for attr in dir(self.cache_config_legacy):
+            if attr.startswith('_'):
+                continue
+
+            if attr == 'base_path':
+                continue
+
+            if attr == 'network_cache_filepath':
+                continue
+
+            legacy_path = getattr(self.cache_config_legacy, attr, None)
+
+            if isinstance(legacy_path, Path) and legacy_path.is_absolute():
+                src = getattr(self.cache_config_legacy, attr)
+                dest = getattr(self.cache_config, attr)
+
+            try:
+                shutil.copy2(src, dest)
+                logger.debug(f"Copied '{src}' to '{dest}'")
+            except FileNotFoundError:
+                logger.warning(f"Source file '{src}' does not exist and was skipped.")
+            except Exception as e:
+                logger.error(f"Failed to copy '{src}' to '{dest}': {e}")
+
     def __clear_ipfs_cache(self):
         logger = self.logger
 
@@ -192,19 +238,11 @@ class EtnyPoXNode:
         current_time = time.time()
         threshold_time = current_time - ONE_WEEK_SECONDS
         
-        integration_images = {}
-        if self.__network == 'BLOXBERG':
-            integration_images = { 'enty-pynithy', 'etny-nodenithy' }
-        elif self.__network == 'TESNET':
-            integration_images = { 'enty-pynithy-testnet', 'etny-nodenithy-testnet' }
-        elif self.__network == 'POLYGON':
-            integration_images = { 'ecld-pynithy', 'ecld-nodenithy' }
-        elif self.__network == 'AMOY':
-            integration_images = { 'ecld-pynithy-amoy', 'ecld-nodenithy-amoy' }
+        trustedzone_images = self.__network_config.trustedzone_images.split(',')
 
         keep_hashes = []
 
-        for image in integration_images:
+        for image in trustedzone_images:
             while True:
                 try:
                     time.sleep(self.__network_config.rpc_delay/1000)
@@ -223,19 +261,20 @@ class EtnyPoXNode:
             if timestamp:
                 age = current_time - timestamp
                 if age > ONE_WEEK_SECONDS:
-                    logger.info(f"Deleting {hash} (Age: {age / 3600:.2f} hours)")
+                    logger.debug(f"Deleting {hash} (Age: {age / 3600:.2f} hours)")
                     try:
                         self.storage.pin_rm(hash)
                         self.storage.rm(hash)
                         self.storage.repo_gc()
-                        self.ipfs_cache.rem(hash)
                         logger.debug(f"Successfully deleted {hash}")
                     except Exception as e:
-                        logger.error(f"Failed to delete {hash}: {e}")
+                        logger.debug(f"Failed to delete {hash}: {e}")
                 else:
                     logger.debug(f"Hash {hash} is not older than one week (Age: {age / 3600:.2f} hours). Skipping.")
             else:
                 logger.warning(f"No timestamp found for {hash}. Unable to determine age. Skipping deletion.")
+          else:
+            self.storage.pin_add(hash)
 
     def generate_process_order_data(self, write=False):
 
@@ -894,7 +933,7 @@ class EtnyPoXNode:
         if os.path.isfile(source):
             shutil.copy(source, dest)
         else:
-            logger.info('The copied path is not a file')
+            logger.debug('The copied path is not a file')
 
     def generate_enclave_env_file(self, env_file, env_dictionary):
         with open(env_file, 'w') as f:
@@ -1172,11 +1211,12 @@ class EtnyPoXNode:
                     reset_task_running_on()
 
            
-            if self.__do_requests_build_pending and not stop_event.is_set():
+            if self.__do_requests_build_pending and threshold > 0:
                 logger.info(f"Building DO Requests cache: 100%")
                 logger.info("Finished building DO requests cache")
+                logger.info("System ready for the next DO request")
 
-                self.__do_requests_build_pending = False
+            self.__do_requests_build_pending = False
 
             if next_dp_request == True:
                 break
@@ -1421,13 +1461,13 @@ class EtnyPoXNode:
             logger.info("Cannot download data from IPFS, stopping test")
             return
 
-        logger.info("Running docker swift-stream")
+        logger.debug("Running docker swift-stream")
         run_subprocess(
             ['docker-compose', '-f', f'docker/docker-compose-swift-stream.yml', 'up', '-d', 'swift-stream'],
             logger)
 
         docker_compose_file = f'{self.cache_config.base_path}/{docker_compose_hash}'
-        logger.info(f'Preparing prerequisites for integration test')
+        logger.debug(f'Preparing prerequisites for integration test')
         self.build_prerequisites_integration_test(self.integration_bucket_name, order_id, docker_compose_file)
 
         logger.debug("Stopping previous docker registry and containers")

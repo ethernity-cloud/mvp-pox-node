@@ -11,7 +11,7 @@ class CacheConfig:
         self.base_path = base_path
         self.auto_update_file_path = base_path / 'auto_update.etny'
         self.heart_beat_log_file_path = base_path / 'heartbeat.etny'
-        self.network_cache_filepath = base_path / 'network_cache.txt'
+        self.network_cache_filepath = Path(__file__).parent / 'network_cache.txt'
         self.orders_cache_filepath = base_path / 'orders_cache.txt'
         self.ipfs_cache_filepath = base_path / 'ipfs_cache.txt'
         self.dpreq_filepath = base_path / 'dpreq_cache.txt'

@@ -41,6 +41,7 @@ class NetworkConfig:
     minimum_gas_at_start: int
     task_execution_price_default: int
     integration_test_image: str
+    trustedzone_images: str
     eip1559: bool
     middleware: str
     gas_price: int
@@ -137,14 +138,26 @@ def parse_networks(arguments: argparse.Namespace, parser: argparse.ArgumentParse
             AVAILABLE_NETWORKS.append(network_suffix.lower())
     
     ALL_NETWORKS = ["all"]
-    CURRNET_NETWORKS = ["auto", "openbeta"]
+    CURRENT_NETWORKS = ["auto", "openbeta"]
+    LEGACY_NETWORKS = ["bloxberg", "testnet", "polygon"]
+
+    lower_networks = [n.lower() for n in arguments.network]
     # Determine which networks to load
-    if arguments.network and any(n.lower() in ALL_NETWORKS for n in arguments.network):
+    if any(n in ALL_NETWORKS for n in lower_networks):
         # If any special keyword is specified, load all networks
         selected_networks = AVAILABLE_NETWORKS
-    elif arguments.network and any(n.lower() in CURRNET_NETWORKS for n in arguments.network):
+    elif any(n in CURRENT_NETWORKS for n in lower_networks):
         # If any special keyword is specified, load all networks
         selected_networks = [ "polygon_mainnet", "bloxberg_mainnet" ]
+    elif len(lower_networks) == 1 and lower_networks[0] in LEGACY_NETWORKS:
+        # If there's exactly one network and it's one of the SPECIFIC_NETWORKS
+        single_network = lower_networks[0]
+        if single_network == "bloxberg":
+            selected_networks = ["bloxberg_mainnet"]
+        elif single_network == "testnet":
+            selected_networks = ["bloxberg_testnet"]
+        elif single_network == "polygon":
+            selected_networks = ["polygon_mainnet"]
     else:
         # Otherwise, load only the specified networks
         selected_networks = [network.lower() for network in arguments.network]

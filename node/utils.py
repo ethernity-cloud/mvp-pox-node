@@ -89,6 +89,7 @@ class Storage:
 
     def download(self, data):
         if self.cache.contains(data):
+            self.cache.add(data)
             return
         try:
             ipfs_node = socket.gethostbyname(self.ipfs_host)
@@ -139,7 +140,20 @@ class Storage:
             self.logger.error(e)
             raise
 
-    def add(self, data):
+    def add(self, hash):
+        pass
+
+    def pin_add(self, hash):
+        try:
+            self.bootstrap_client.pin.add(hash)
+        except Exception as e:
+            error_message = str(e).lower()
+            if 'not pinned' in error_message or 'pinned indirectly' in error_message:
+                return
+            self.logger.info(f'error while adding pin')
+            self.logger.error(e)
+            raise
+
         pass
 
     def pin_rm(self, hash):
@@ -168,18 +182,28 @@ class Storage:
         # Define the prefix to look for
         prefix = "Qm"
 
-        # Validate the target_directory
-        if not os.path.exists(hash):
-            raise ValueError(f"The path '{target_directory}' does not exist.")
+        legacy_path = "../" + hash
 
-        if not os.path.isdir(hash):
+        # Validate the target_directory
+        if not os.path.exists(hash) and not os.path.exists(legacy_path):
+            self.cache.rem(hash)
+            raise ValueError(f"The paths '{hash}' or '{legacy_path}' do not exist.")
+
+        if os.path.exists(hash):
+          if not os.path.isdir(hash):
             os.remove(hash) if hash.startswith(prefix) else None
+            return
+       
+        if os.path.exists(legacy_path):
+          if not os.path.isdir(legacy_path):
+            os.remove(legacy_path) if hash.startswith(prefix) else None
             return
 
         target_directory = hash
 
         # Iterate over all items in the target directory
-        for item_name in os.listdir(target_directory):
+        if os.path.isdir(target_directory):
+          for item_name in os.listdir(target_directory):
             if item_name.startswith(prefix):
                 item_path = os.path.join(target_directory, item_name)
 
@@ -196,6 +220,31 @@ class Storage:
                     # Log any other exceptions and re-raise
                     self.logger.error(f"Error while removing '{item_path}': {e}")
                     raise
+
+        #Deleting legacy cache file
+        target_directory = "../" + hash
+
+        # Iterate over all items in the target directory
+        if os.path.isdir(target_directory):
+          for item_name in os.listdir(target_directory):
+            if item_name.startswith(prefix):
+                item_path = os.path.join(target_directory, item_name)
+
+                try:
+                    if os.path.isfile(item_path) or os.path.islink(item_path):
+                        # If it's a file or a symbolic link, remove it
+                        os.remove(item_path)
+
+                    elif os.path.isdir(item_path):
+                        # If it's a directory, remove it and all its contents
+                        shutil.rmtree(item_path)
+
+                except Exception as e:
+                    # Log any other exceptions and re-raise
+                    self.logger.error(f"Error while removing '{item_path}': {e}")
+                    raise
+
+        self.cache.rem(hash)
 
 
     def repo_gc(self):
@@ -383,12 +432,16 @@ class ListCacheWithTimestamp:
             value (str): The value to add to the cache.
         """
         current_time = time.time()
-        if value not in self.mem:
+        if value in self.mem:
+            # Update the timestamp for existing value
+            self.mem[value]['timestamp'] = current_time
+            # Optionally, move the item to the end to represent recent use
+            self.mem.move_to_end(value)
+        else:
             self.mem[value] = {'timestamp': current_time}
             if len(self.mem) > self.items_limit:
                 popped_item, _ = self.mem.popitem(last=False)
-            self._update_file()
-
+        self._update_file()
     def get(self, value):
         """
         Retrieve a value from the cache.
