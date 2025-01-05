@@ -1,28 +1,50 @@
 #!/usr/bin/python3
 
-import os, time, json
+import os, time, json, sys, argparse
+from types import SimpleNamespace
+
+import concurrent.futures
 import shutil
 
 from eth_account import Account
 from web3 import Web3
 from web3 import exceptions
-from web3.middleware import geth_poa_middleware
+from web3.middleware import ExtraDataToPOAMiddleware
 from web3 import middleware
 from web3.gas_strategies.time_based import fast_gas_price_strategy
 from web3.gas_strategies.rpc import rpc_gas_price_strategy
 from collections import defaultdict
+import threading
+import logging
 
 import config
+
 from utils import get_or_generate_uuid, run_subprocess, retry, Storage, Cache, ListCache, ListCacheWithTimestamp, MergedOrdersCache, subprocess, get_node_geo, HardwareInfoProvider
 from models import *
 from error_messages import errorMessages
 from swift_stream_service import SwiftStreamService
+from cache_config import CacheConfig
 import io
 
-logger = config.logger
+logger = config.logger 
+task_running_on = None
+task_lock = threading.Lock()
+stop_event = threading.Event()
 
+class NetworkLoggerAdapter(logging.LoggerAdapter):
+    def __init__(self, logger, network):
+        super().__init__(logger, {})
+        self.network = network
+
+    def process(self, msg, kwargs):
+        """
+        Prepend the network name to the log message.
+        """
+        return f"[{self.network}] {msg}", kwargs
 
 class EtnyPoXNode:
+    logger = None
+
     __address = None
     __privatekey = None
     __resultaddress = None
@@ -38,149 +60,73 @@ class EtnyPoXNode:
     __network = None
     __ipfshost = None
     __price = None
+    __orders = {}
+    __do_requests_build_pending = True
 
-    def __init__(self):
+    def __init__(self, network):
         self.parse_arguments(config.arguments, config.parser)
 
         polygonBalance = 0
 
-        logger.info("Configuration network is: %s", self.__network)
+        self.__network = network.name
 
-        if self.__network == None or self.__network in {'AUTO', 'OPENBETA'}:
-          logger.info("Network is automatic, determining gas value for POLYGON");
-          try:
-            if self.__rpc_polygon == None:
-               self.__rpc_polygon = config.polygon_rpc_url;
-            config.http_provider = self.__rpc_polygon;
-            config.chain_id = int(config.polygon_chain_id);
-            config.contract_address = config.polygon_contract_address;
+        self.logger = NetworkLoggerAdapter(config.logger, self.__network)
 
+        logger = self.logger
+
+        logger.info(f"Configured network is: {self.__network}")
+        
+        self.__network_config = network
+ 
+        self.__price = int(network.task_execution_price_default);
+
+        try:
             with open(config.abi_filepath) as f:
                 self.__contract_abi = f.read()
 
-            self.__w3 = Web3(Web3.HTTPProvider(config.http_provider, request_kwargs={'timeout': 120}))
-            self.__acct = Account.privateKeyToAccount(self.__privatekey)
+            self.__w3 = Web3(Web3.HTTPProvider(self.__network_config.rpc_url, request_kwargs={'timeout': 120}))
+
+            if network.middleware is not None:
+                self.__w3.middleware_onion.inject(ExtraDataToPOAMiddleware, layer=0)
+
+            self.__acct = Account.from_key(self.__privatekey)
+            self.__address = self.__acct.address
             self.__etny = self.__w3.eth.contract(
-                address=self.__w3.toChecksumAddress(config.contract_address),
+                address=self.__w3.to_checksum_address(self.__network_config.contract_address),
                 abi=self.__contract_abi
             )
 
-            polygonBalance = self.__w3.eth.get_balance(self.__address)
-          except Exception as e:
-            logger.info(e)
-            pass
+            balance = self.__w3.eth.get_balance(self.__address)
 
-          if polygonBalance > 100000000000000000:
-              self.__network = 'POLYGON'
-          else:
-              self.__network = 'BLOXBERG'
+            if balance < int(network.minimum_gas_at_start):
+               logger.error("Not enough gas to run node agent, exiting")
+               raise Exception(f"Not enough gas on network {self.__network}: {balance}")
 
-        if self.__network == 'TESTNET':
-            if self.__rpc_testnet == None:
-               self.__rpc_testnet = config.testnet_rpc_url;
-            config.http_provider = self.__rpc_testnet;
-            config.chain_id = int(config.testnet_chain_id);
-            config.contract_address = config.testnet_contract_address;
-            config.heart_beat_address = config.testnet_heartbeat_address;
-            config.image_registry_address = config.testnet_image_registry_address;
-            config.gas_price_measure = config.testnet_gas_price_measure;
-            config.integration_test_image = 'etny-pynithy-testnet';
-            config.block_time = 5;
-            if self.__price == None:
-                self.__price = 3;
-        elif self.__network == 'POLYGON':
-            if self.__rpc_polygon == None:
-               self.__rpc_polygon = config.polygon_rpc_url;
-            config.http_provider = self.__rpc_polygon;
-            config.chain_id = int(config.polygon_chain_id);
-            config.contract_address = config.polygon_contract_address;
-            config.heart_beat_address = config.polygon_heartbeat_address;
-            config.image_registry_address = config.polygon_image_registry_address;
-            config.gas_price_measure = config.polygon_gas_price_measure;
-            config.integration_test_image = 'ecld-pynithy';
-            config.block_time = 2;
-            if self.__price == None:
-                self.__price = 3;
-        elif self.__network == 'AMOY':
-            if self.__rpc_amoy == None:
-               self.__rpc_amoy = config.amoy_rpc_url;
-            config.http_provider = self.__rpc_amoy;
-            config.chain_id = int(config.amoy_chain_id);
-            config.contract_address = config.amoy_contract_address;
-            config.heart_beat_address = config.amoy_heartbeat_address;
-            config.image_registry_address = config.amoy_image_registry_address;
-            config.gas_price_measure = config.amoy_gas_price_measure;
-            config.integration_test_image = 'etny-pynithy-amoy';
-            config.block_time = 2;
-            if self.__price == None:
-                self.__price = 3;
-        elif self.__network == 'BLOXBERG':
-            if self.__rpc_bloxberg == None:
-               self.__rpc_bloxberg = config.bloxberg_rpc_url;
-            config.http_provider = self.__rpc_bloxberg;
-            config.chain_id = int(config.bloxberg_chain_id);
-            config.contract_address = config.bloxberg_contract_address;
-            config.heart_beat_address = config.bloxberg_heartbeat_address;
-            config.image_registry_address = config.bloxberg_image_registry_address;
-            config.gas_price_measure = config.bloxberg_gas_price_measure;
-            config.integration_test_image = 'etny-pynithy';
-            config.block_time = 1;
-            if self.__price == None:
-                self.__price = 3;
-        else:
-            logger.error("Network configuration is not supported: %s", self.__network);
-            exit()
-            
-        if config.http_provider == None:
-            config.http_provider = 'https://bloxberg.ethernity.cloud';
-        if config.chain_id == None:
-            config.chain_id = 8995
-        if config.contract_address == None:
-            config.contract_address = '0x549A6E06BB2084100148D50F51CF77a3436C3Ae7';
-        if config.heart_beat_address == None:
-            config.heart_beat_address = '0x5c190f7253930C473822AcDED40B2eF1936B4075';
-        if config.gas_price_measure == None:
-            config.gas_price_measure = 'mwei';
+        except Exception as e:
+            logger.info(f"Error: {e}")
+            raise Exception(e)
 
-        if self.__ipfshost == None:
-            self.__ipfshost = config.ipfs_default;
-
-        if self.__ipfslocal == None:
-            self.__ipfslocal = config.client_connect_url_default;
-        
         self.__node_geo = get_node_geo();
         self.__number_of_cpus = int(HardwareInfoProvider.get_number_of_cpus());
         self.__free_memory = int(HardwareInfoProvider.get_free_memory());
         self.__free_storage = int(HardwareInfoProvider.get_free_storage());
 
-        logger.info("Initialized with settings below!");
-        logger.info("NodeID: %s", self.__address);
-        logger.info("Network: %s", self.__network);
-        logger.info("RPC URL: %s", config.http_provider);
-        logger.info("ChainID: %s", config.chain_id);
-        logger.info("Contract Address: %s", config.contract_address);
-        logger.info("Heartbeat Contract Address: %s", config.heart_beat_address);
-        logger.info("Image Registry Address: %s", config.image_registry_address);
-        logger.info("Gas Price Measure: %s", config.gas_price_measure);
-        logger.info("Hourly price in ETNY/ECLD: %d", self.__price);
-        logger.info("IPFS Host: %s", self.__ipfshost);
-        logger.info("IPFS Local Connect URL: %s", self.__ipfslocal);
-        logger.info("Node number of cpus: %s", self.__number_of_cpus);
-        logger.info("Node free memory: %s", self.__free_memory);
-        logger.info("Node free storage: %s", self.__free_storage);
-        logger.info("Node geo: %s", self.__node_geo);
-
-        with open(config.abi_filepath) as f:
-            self.__contract_abi = f.read()
-        self.__w3 = Web3(Web3.HTTPProvider(config.http_provider, request_kwargs={'timeout': 120}))
-        if self.__network == 'BLOXBERG' or self.__network == 'TESTNET' or self.__network == 'POLYGON':
-            self.__w3.middleware_onion.inject(geth_poa_middleware, layer=0)
-
-        self.__acct = Account.privateKeyToAccount(self.__privatekey)
-        self.__etny = self.__w3.eth.contract(
-            address=self.__w3.toChecksumAddress(config.contract_address),
-            abi=self.__contract_abi
-        )
+        logger.info(f"Initialized with the following settings:");
+        logger.info(f"NodeID: {self.__address}");
+        logger.info(f"Network: {self.__address}");
+        logger.info(f"RPC URL: {self.__network_config.rpc_url}");
+        logger.info(f"ChainID: {self.__network_config.chain_id}");
+        logger.info(f"Contract Address: %s", self.__network_config.contract_address);
+        logger.info(f"Heartbeat Contract Address: %s", self.__network_config.heartbeat_contract_address);
+        logger.info(f"Image Registry Address: %s", self.__network_config.image_registry_contract_address);
+        logger.info(f"Gas Price Measure: %s", self.__network_config.gas_price_measure);
+        logger.info(f"Hourly reward for operations: %d %s", self.__price, self.__network_config.token_name);
+        logger.info(f"IPFS Host: %s", self.__ipfshost);
+        logger.info(f"IPFS Local Connect URL: %s", self.__ipfslocal);
+        logger.info(f"Node number of cpus: %s", self.__number_of_cpus);
+        logger.info(f"Node free memory: %s", self.__free_memory);
+        logger.info(f"Node free storage: %s", self.__free_storage);
+        logger.info(f"Node geo: %s", self.__node_geo);
 
         with open(config.image_registry_abi_filepath) as f:
             self.__image_registry_abi = f.read()
@@ -189,68 +135,64 @@ class EtnyPoXNode:
             self.__heart_beat_abi = f.read()
 
         self.__image_registry = self.__w3.eth.contract(
-            address=self.__w3.toChecksumAddress(config.image_registry_address),
+            address=self.__w3.to_checksum_address(self.__network_config.image_registry_contract_address),
             abi=self.__image_registry_abi)
         self.__heart_beat = self.__w3.eth.contract(
-            address=self.__w3.toChecksumAddress(config.heart_beat_address),
+            address=self.__w3.to_checksum_address(self.__network_config.heartbeat_contract_address),
             abi=self.__heart_beat_abi)
-        self.__nonce = self.__w3.eth.getTransactionCount(self.__address)
+        self.__nonce = self.__w3.eth.get_transaction_count(self.__address)
         self.__dprequest = 0
         self.__order_id = 0
         self.__total_nodes_count = 0
         self.__is_first_cycle = defaultdict(lambda: True)
         self.can_run_under_sgx = False
         self.__uuid = get_or_generate_uuid(config.uuid_filepath)
-        self.network_cache = Cache(config.network_cache_limit, config.network_cache_filepath)
-        self.orders_cache = Cache(config.orders_cache_limit, config.orders_cache_filepath)
-        self.dpreq_cache = ListCache(config.dpreq_cache_limit, config.dpreq_filepath)
-        self.doreq_cache = ListCache(config.doreq_cache_limit, config.doreq_filepath)
-        self.ipfs_cache = ListCacheWithTimestamp(config.ipfs_cache_limit, config.ipfs_cache_filepath)
+
+        self.cache_config = CacheConfig(network.name)
+
+        os.chdir(self.cache_config.base_path)
+
+        self.network_cache = Cache(self.cache_config.network_cache_limit, self.cache_config.network_cache_filepath)
+        self.orders_cache = Cache(self.cache_config.orders_cache_limit, self.cache_config.orders_cache_filepath)
+        self.dpreq_cache = ListCache(self.cache_config.dpreq_cache_limit, self.cache_config.dpreq_filepath)
+        self.doreq_cache = ListCache(self.cache_config.doreq_cache_limit, self.cache_config.doreq_filepath)
+        self.ipfs_cache = ListCacheWithTimestamp(self.cache_config.ipfs_cache_limit, self.cache_config.ipfs_cache_filepath)
         self.storage = Storage(self.__ipfshost, self.__ipfslocal, config.client_bootstrap_url,
-                               self.ipfs_cache, config.logger)
-        self.merged_orders_cache = MergedOrdersCache(config.merged_orders_cache_limit, config.merged_orders_cache)
+                               self.ipfs_cache, logger, self.cache_config.base_path)
+        self.merged_orders_cache = MergedOrdersCache(self.cache_config.merged_orders_cache_limit, self.cache_config.merged_orders_cache)
         self.swift_stream_service = SwiftStreamService(self.__endpoint,
                                                        self.__access_key,
                                                        self.__secret_key)
         self.process_order_data = {}
 
-        self.__reset_cache()
+        [enclave_image_hash, _, docker_compose_hash] = self.__image_registry.caller().getLatestTrustedZoneImageCertPublicKey(self.__network_config.integration_test_image, 'v3')
+        
+        if config.skip_integration_test == True:
+           logger.warning('Node is configured to run confidential tasks using SGX, by skipping the integration check')
+           order_id = 'integration_test'
+           docker_compose_file = f'{self.cache_config.base_path}/{docker_compose_hash}'
+           self.integration_bucket_name = 'etny-bucket-integration'
+           self.build_prerequisites_integration_test(self.integration_bucket_name, order_id, docker_compose_file)
+           self.__clean_up_integration_test()
 
-        self.__run_integration_test()
-
-
-    def __reset_cache(self):
-        if self.network_cache.get("NETWORK") == self.__network:
-            self.generate_process_order_data()
+           self.can_run_under_sgx = True
         else:
-            logger.info("Switching networks from %s to %s and resetting cache", self.network_cache.get("NETWORK"), self.__network)
-            self.network_cache.wipe()
-            self.orders_cache.wipe()
-            self.dpreq_cache.wipe()
-            self.doreq_cache.wipe()
-            self.merged_orders_cache.wipe()
-            self.process_orders_cache = Cache(config.orders_cache_limit,config.process_orders_cache_filepath)
-            self.process_orders_cache.wipe()
-            self.auto_update_cache = Cache(1, config.auto_update_file_path)
-            self.auto_update_cache.wipe()
-            self.network_cache = Cache(config.network_cache_limit, config.network_cache_filepath)
-            self.orders_cache = Cache(config.orders_cache_limit, config.orders_cache_filepath)
-            self.dpreq_cache = ListCache(config.dpreq_cache_limit, config.dpreq_filepath)
-            self.doreq_cache = ListCache(config.doreq_cache_limit, config.doreq_filepath)
-            self.ipfs_cache = ListCache(config.ipfs_cache_limit, config.ipfs_cache_filepath)
-            self.merged_orders_cache = MergedOrdersCache(config.merged_orders_cache_limit, config.merged_orders_cache)
-            self.network_cache.add("NETWORK", str(self.__network))
-            self.generate_process_order_data(True)
-
-        self.__clear_ipfs_cache()
+           while get_task_running_on() is not None:
+               time.sleep(1)
+           set_task_running_on(self.__network)
+           self.__run_integration_test()
+           reset_task_running_on()
 
     def __clear_ipfs_cache(self):
+        logger = self.logger
+
         logger.info(f"Cleaning up ipfs cache")
 
         ONE_WEEK_SECONDS = 7 * 24 * 60 * 60  # Number of seconds in one week
         current_time = time.time()
         threshold_time = current_time - ONE_WEEK_SECONDS
-
+        
+        integration_images = {}
         if self.__network == 'BLOXBERG':
             integration_images = { 'enty-pynithy', 'etny-nodenithy' }
         elif self.__network == 'TESNET':
@@ -265,7 +207,7 @@ class EtnyPoXNode:
         for image in integration_images:
             while True:
                 try:
-                    time.sleep(1)
+                    time.sleep(self.__network_config.rpc_delay/1000)
                     [enclave_image_hash, _,
                      docker_compose_hash] = self.__image_registry.caller().getLatestTrustedZoneImageCertPublicKey(image, 'v3')
                     break
@@ -296,60 +238,162 @@ class EtnyPoXNode:
                 logger.warning(f"No timestamp found for {hash}. Unable to determine age. Skipping deletion.")
 
     def generate_process_order_data(self, write=False):
-        if not os.path.exists(config.process_orders_cache_filepath) or write == True:
+
+        if not os.path.exists(self.cache_config.process_orders_cache_filepath) or write == True:
             self.process_order_data = {"process_order_retry_counter": 0,
                                        "order_id": self.__order_id,
                                        "uuid": self.__uuid}
 
             json_object = json.dumps(self.process_order_data, indent=4)
 
-            with open(config.process_orders_cache_filepath, "w") as outfile:
+            with open(self.cache_config.process_orders_cache_filepath, "w") as outfile:
                 outfile.write(json_object)
 
         else:
-            with open(config.process_orders_cache_filepath, 'r') as openfile:
+            with open(self.cache_config.process_orders_cache_filepath, 'r') as openfile:
                 self.process_order_data = json.load(openfile)
 
     def parse_arguments(self, arguments, parser):
-        parser = parser.parse_args()
+        parser, unknown_args = parser.parse_known_args()
         for args_type, args in arguments.items():
             for arg in args:
                 setattr(self, "_" + self.__class__.__name__ + "__" + arg, args_type(getattr(parser, arg)))
 
-    def cleanup_dp_requests(self):
-        while True:
+    def cache_dp_requests(self):
+        logger = self.logger
+
+        if not stop_event.is_set():
             try:
-                time.sleep(1)
+                time.sleep(self.__network_config.rpc_delay/1000)
                 my_dp_requests = self.__etny.functions._getMyDPRequests().call({'from': self.__address})
                 cached_ids = self.dpreq_cache.get_values
-                for req_id in sorted(set(my_dp_requests) - set(cached_ids)):
-                    time.sleep(1)
+                req_to_process = sorted(set(my_dp_requests) - set(cached_ids))
+       
+                total_requests = len(req_to_process)
+                threshold = 0
+
+                for idx, req_id in enumerate(req_to_process, start=1):
+
+                    self.__call_heart_beat()
+
+                    if stop_event.is_set():
+                        break
+
+                    percent_complete = (idx * 100) // total_requests
+                
+                    if percent_complete >= threshold and total_requests > 1:
+                        logger.info(f"Building DP requests cache [STAGE 1]: {percent_complete}% ({idx} / {total_requests})")
+                        threshold += 10  # Increment to the next threshold
+                  
+                    logger.debug(f"Cleaning up DP request {req_id}")
+                    time.sleep(self.__network_config.rpc_delay/1000)
                     req_uuid = self.__etny.caller()._getDPRequestMetadata(req_id)[1]
                     if req_uuid != self.__uuid:
-                        logger.info(f"Skipping DP request {req_id}, not mine")
+                        logger.debug(f"Skipping DP request {req_id}, not mine")
+                        self.__dprequest = req_id
+                        order_details = self._getOrder()
                         self.dpreq_cache.add(req_id)
                         continue
-                    time.sleep(1)
+                    time.sleep(self.__network_config.rpc_delay/1000)
                     req = DPRequest(self.__etny.caller()._getDPRequest(req_id))
-                    if req.status == RequestStatus.BOOKED:
-                        logger.info(f"DP Request {req_id} already assigned to order")
+                    if req.status == RequestStatus.CANCELED:
                         self.__dprequest = req_id
-                        self.process_dp_request()
-                    if req.status == RequestStatus.AVAILABLE:
-                        logger.info(f"DP Request {req_id} is available, resuming processing")
+                        order_details = self._getOrder()
+                        self.dpreq_cache.add(req_id)
+                    elif req.status == RequestStatus.BOOKED:
+                        logger.debug(f"DP Request {req_id} already assigned to order")
                         self.__dprequest = req_id
-                        self.process_dp_request()
+                        order_details = self._getOrder()
+                        [order_id, order] = order_details
+                        if order.status == OrderStatus.CLOSED:
+                            logger.debug(f"DP request {self.__dprequest} completed successfully!")
+                            self.dpreq_cache.add(self.__dprequest)
+                        if order.status == OrderStatus.OPEN:
+                            logger.debug("Order was never approved, skipping")
+                            self.dpreq_cache.add(self.__dprequest)
+
+                if total_requests > 1 and not stop_event.is_set():
+                    logger.info(f"Building DP requests cache [STAGE 1]: 100%")
+                    logger.info(f"Finished building DP requests cache [STAGE 1]")
+                        
             except Exception as e:
                 logger.info(f'error = {e}, type = {type(e)}')
-                continue
-            break
+
+    def resume_pending_dp_requests(self):
+        logger = self.logger
+
+        if not stop_event.is_set():
+            try:
+                time.sleep(self.__network_config.rpc_delay/1000)
+                my_dp_requests = self.__etny.functions._getMyDPRequests().call({'from': self.__address})
+                cached_ids = self.dpreq_cache.get_values
+                req_to_process = sorted(set(my_dp_requests) - set(cached_ids))
+
+                total_requests = len(req_to_process)
+                threshold = 0
+
+                for idx, req_id in enumerate(req_to_process, start=1):
+                    if stop_event.is_set():
+                        break
+
+                    percent_complete = (idx * 100) // total_requests
+
+                    if percent_complete >= threshold and total_requests > 1:
+                        logger.info(f"Building DP requests cache [STAGE 2]: {percent_complete}% ({idx} / {total_requests})")
+                        threshold += 10  # Increment to the next threshold
+
+                    time.sleep(self.__network_config.rpc_delay/1000)
+                    req = DPRequest(self.__etny.caller()._getDPRequest(req_id))
+                    if req.status == RequestStatus.BOOKED:
+                        logger.debug(f"DP Request {req_id} already assigned to order")
+                        self.__dprequest = req_id
+                        self.process_dp_request()
+
+                if total_requests > 1 and not stop_event.is_set():
+                    logger.info(f"Building DP requests cache [STAGE 2]: 100%")
+                    logger.info(f"Finished building DP requests cache [STAGE 2]")
+
+
+            except Exception as e:
+                logger.info(f'error = {e}, type = {type(e)}')
+
+    def resume_available_dp_requests(self):
+        logger = self.logger
+
+        if not stop_event.is_set():
+            try:
+                time.sleep(self.__network_config.rpc_delay/1000)
+                my_dp_requests = self.__etny.functions._getMyDPRequests().call({'from': self.__address})
+                cached_ids = self.dpreq_cache.get_values
+                req_to_process = sorted(set(my_dp_requests) - set(cached_ids))
+
+
+                for idx, req_id in enumerate(req_to_process, start=1):
+                    if stop_event.is_set():
+                        break
+
+                    time.sleep(self.__network_config.rpc_delay/1000)
+                    req = DPRequest(self.__etny.caller()._getDPRequest(req_id))
+                    if req.status == RequestStatus.AVAILABLE:
+                        logger.info(f"DP Request {req_id} initialized. Unlocking the value of decentralization. ")
+                        self.__dprequest = req_id
+                        self.process_dp_request()
+                    else:
+                        logger.debug(f"DP Request {req_id} should be in cache already with status {req.status}")
+
+            except Exception as e:
+                logger.info(f'error = {e}, type = {type(e)}')
+
+
 
     def _limited_arg(self, item, allowed_max=255):
         return allowed_max if item > allowed_max else item
 
     def add_dp_request(self, waiting_period_on_error=15, beginning_of_recursion=None):
+        logger = self.logger
+
         if self.__price is None:
-            self.__price = 0
+            self.__price = 1
 
         # Getting available hardware resources
         self.__number_of_cpus = int(HardwareInfoProvider.get_number_of_cpus());
@@ -369,21 +413,21 @@ class EtnyPoXNode:
             ""
         ]
 
-        #logger.info('params: {}'.format(params))
-
         max_retries = 20
         retries = 0
 
         while True: 
           try:
-            time.sleep(1)
-            unicorn_txn = self.__etny.functions._addDPRequest(*params).buildTransaction(self.get_transaction_build())
+            logger.info("Preparing transaction for new DP request")
+            time.sleep(self.__network_config.rpc_delay/1000)
+            unicorn_txn = self.__etny.functions._addDPRequest(*params).build_transaction(self.get_transaction_build())
             _hash = self.send_transaction(unicorn_txn)
-            logger.info(f"{_hash} pending...")
-            receipt = self.__w3.eth.waitForTransactionReceipt(_hash)
-            processed_logs = self.__etny.events._addDPRequestEV().processReceipt(receipt)
+            logger.info(f"TXID {_hash} pending... ")
+            receipt = self.__w3.eth.wait_for_transaction_receipt(_hash)
+            processed_logs = self.__etny.events._addDPRequestEV().process_receipt(receipt)
             self.__dprequest = processed_logs[0].args._rowNumber
             if receipt.status == 1:
+                logger.info(f"TXID {_hash} confirmed!")
                 break
           except Exception as ex:
             retries += 1
@@ -393,39 +437,75 @@ class EtnyPoXNode:
               raise
             time.sleep(5)
 
-        logger.info("DP request created successfully!")
-        logger.info(f"TX Hash: {_hash}")
+        logger.info(f"DP Request {self.__dprequest} initialized. Unlocking the value of decentralization.")
+
 
     def cancel_dp_request(self, req):
+        logger = self.logger
 
         logger.info(f"Cancelling DP request {req}")
 
         while True:
             try:
-                time.sleep(1)
-                unicorn_txn = self.__etny.functions._cancelDPRequest(req).buildTransaction(self.get_transaction_build())
+                logger.info("Preparing transaction for DO request cancellation")
+                time.sleep(self.__network_config.rpc_delay/1000)
+                unicorn_txn = self.__etny.functions._cancelDPRequest(req).build_transaction(self.get_transaction_build())
                 _hash = self.send_transaction(unicorn_txn)
-                logger.info(f"{_hash} pending...")
-                receipt = self.__w3.eth.waitForTransactionReceipt(_hash)
+                logger.info(f"TXID {_hash} pending... ")
+                receipt = self.__w3.eth.wait_for_transaction_receipt(_hash)
                 if receipt.status == 1:
+                    logger.info(f"TXID {_hash} confirmed!")
                     break
             except Exception as ex:
                 logger.warning(f"Unable to cancel  DP request - {req}: Error: {ex}")
                 logger.warning(f"Retrying")
 
         logger.info(f"DP request {req} cancelled successfully!")
-        logger.info(f"TX Hash: {_hash}")
         time.sleep(5)
 
     def ipfs_timeout_cancel(self, order_id):
         result = 'Error: cannot download files from IPFS'
         self.add_result_to_order(order_id, result)
 
-    def process_order(self, order_id, metadata=None):
-        with open(config.process_orders_cache_filepath, 'r') as openfile:
-            self.process_order_data = json.load(openfile)
 
-        if self.process_order_data["order_id"] != order_id:
+    def calculate_reward(self):
+        logger = self.logger
+
+        order_details = self._getOrder()
+        [order_id, order] = order_details
+
+        do_req = DORequest(self.__etny.caller()._getDORequest(order.do_req))
+        if self.__network_config.reward_type == 1:
+            total_amount = do_req.price * do_req.duration
+            networ_fee = total_amount * self.__network_config.network_fee / 100
+            enclave_fee = total_amount * self.__network_config.enclave_fee / 100
+            operator_fee = total_amount - networ_fee - enclave_fee
+            reward = round(operator_fee, 2)
+        elif self.__network_config.reward_type == 2:
+            total_amount = do_req.price * do_req.duration
+            base_amount = (total_amount * 100) / ( 100 + self.__network_config.networ_fee + self.__network_config.enclave_fee )
+            networ_fee = base_amount * self.__network_config.network_fee / 100
+            enclave_fee = base_amount * self.__network_config.enclave_fee / 100
+            operator_fee = total_amount - networ_fee - enclave_fee
+            reward = round(operator_fee, 2)
+
+            
+        logger.info(f"Reward: {reward} {self.__network_config.token_name}. You’ve earned it. ")
+        logger.info(f"HODL your {self.__network_config.token_name} for long-term growth. Payout after validation.")
+
+    def process_order(self, order_id, metadata=None):
+        logger = self.logger
+
+
+        logger.debug(f"Processing order {order_id}")
+
+        try:
+            with open(self.cache_config.process_orders_cache_filepath, 'r') as openfile:
+                self.process_order_data = json.load(openfile)
+        except Exception as e:
+            pass
+         
+        if not self.process_order_data or self.process_order_data["order_id"] != order_id:
             self.process_order_data["order_id"] = order_id
             self.process_order_data["process_order_retry_counter"] = 0
 
@@ -433,7 +513,7 @@ class EtnyPoXNode:
         if not metadata:
             while True:
                 try:
-                    time.sleep(1)
+                    time.sleep(self.__network_config.rpc_delay/1000)
                     order = Order(self.__etny.caller()._getOrder(order_id))
                     metadata = self.__etny.caller()._getDORequestMetadata(order.do_req)
                     break
@@ -441,19 +521,17 @@ class EtnyPoXNode:
                     logger.warning(f"Unable to get order metadata: {e}")
                     logger.werning("Retrying")
 
-
         if self.process_order_data['process_order_retry_counter'] > 10:
             if metadata[1].startswith('v1:') == 1:
-                logger.info('Building result ')
+                logger.debug('Building result ')
                 result = self.build_result_format_v1("[Warn]",
                                                      f'Too many retries for the current order_id: {order_id}')
-                logger.info(f'Result is: {result}')
-                logger.info('Adding result to order')
+                logger.debug(f'Result is: {result}')
                 self.add_result_to_order(order_id, result)
                 return
 
             else:
-                logger.info('Building result ')
+                logger.debug('Building result ')
                 logger.warn('Too many retries for the current order_id: %d', order_id)
                 logger.info('Adding result to order')
                 result_msg='[Warn] Order execution failed more than 10 times'
@@ -462,281 +540,28 @@ class EtnyPoXNode:
 
         self.process_order_data['process_order_retry_counter'] += 1
         json_object = json.dumps(self.process_order_data, indent=4)
-        with open(config.process_orders_cache_filepath, "w") as outfile:
+        with open(self.cache_config.process_orders_cache_filepath, "w") as outfile:
             outfile.write(json_object)
 
         #self.add_processor_to_order(order_id)
-        version = 0
-        if metadata[1].startswith('v1:'):
-            version = 1
-            [v1, enclave_image_hash, enclave_image_name, docker_compose_hash, challenge_hash] = metadata[1].split(':')
+        try:
+            version = 0
+            if metadata[1].startswith('v3:'):
+                version = 3
+                [v3, enclave_image_hash, enclave_image_name, docker_compose_hash, challenge_hash, public_cert] = metadata[
+                    1].split(':')
+                 
+        except Exception as e:
+            pass
 
-        if metadata[1].startswith('v2:'):
-            version = 2
-            [v2, enclave_image_hash, enclave_image_name, docker_compose_hash, challenge_hash, public_cert] = metadata[
-                1].split(':')
-
-        if metadata[1].startswith('v3:'):
-            version = 3
-            [v3, enclave_image_hash, enclave_image_name, docker_compose_hash, challenge_hash, public_cert] = metadata[
-                1].split(':')
-
-        logger.info(f'Running version v{version}')
-        if version == 0:
-            # before
-            [enclave_image_hash, *etny_pinithy] = metadata[1].split(':')
-            try:
-                logger.info(f"Downloading IPFS Image: {enclave_image_hash}")
-                logger.info(f"Downloading IPFS Payload Hash: {metadata[2]}")
-                logger.info(f"Downloading IPFS FileSet Hash: {metadata[3]}")
-            except Exception as e:
-                logger.info(str(e))
-            self.storage.download_many([enclave_image_hash])
-            if not self.storage.download_many([enclave_image_hash, metadata[2], metadata[3]]):
-                logger.info("Cannot download data from IPFS, cancelling processing")
-                self.ipfs_timeout_cancel(order_id)
-                return
-
-            logger.info("Stopping previous docker registry")
-
-            run_subprocess(['docker', 'stop', 'registry'], logger)
-            logger.info("Cleaning up docker registry")
-            run_subprocess(['docker', 'system', 'prune', '-a', '-f', '--volumes'], logger)
-            logger.info("Running new docker registry")
-            logger.debug(os.path.dirname(os.path.realpath(__file__)) + '/' + enclave_image_hash + ':/var/lib/registry')
-            run_subprocess([
-                'docker', 'run', '-d', '--restart=always', '-p', '5000:5000', '--name', 'registry', '-v',
-                os.path.dirname(os.path.realpath(__file__)) + '/' + enclave_image_hash + ':/var/lib/registry',
-                'registry:2'
-            ], logger)
-
-            logger.info("Cleaning up docker container")
-            run_subprocess(['docker', 'rm', '-f', 'etny-pynithy-' + str(order_id)], logger)
-
-            logger.info("Running docker-compose")
-
-            yaml_file = '-initial-image' if enclave_image_hash in [
-                'QmeQiSC1dLMKv4BvpvjWt1Zeak9zj6TWgWhN7LLiRznJqC'] else ''
-
-            run_subprocess([
-                'docker-compose', '-f', f'docker/docker-compose-etny-pynithy{yaml_file}.yml', 'run', '--rm', '-d',
-                '--name',
-                'etny-pynithy-' + str(order_id), 'etny-pynithy', str(order_id), metadata[2], metadata[3],
-                self.__resultaddress, self.__resultprivatekey, config.contract_address
-            ], logger)
-
-            '''new version'''
-            '''
-            logger.info("Running new docker registry - 4 ")
-            subprocess.call('docker rm -f $(sudo docker ps -aq)', shell=True)
-            run_subprocess(['docker', 'build', '-t', 'docker_etny-pynithy1', '-f', 'docker/etny-pynithy.Dockerfile', './docker'], logger)
-
-            logger.info("Running docker-compose")
-            run_subprocess([
-                 'docker-compose', '-f', 'docker/docker-compose-without-registry.yaml', 'run', '--rm', '-d', '--name',
-                 'etny-pynithy-' + str(order_id), 'etny-pynithy', str(order_id), metadata[2], metadata[3],
-                 self.__resultaddress, self.__resultprivatekey, config.contract_address
-            ], logger)
-            '''
-            '''new version'''
-
-            time.sleep(10)
-            logger.info("Attaching to docker process")
-            run_subprocess(['docker', 'attach', 'etny-pynithy-' + str(order_id)], logger)
-            time.sleep(3)
-
-        if version == 1:
-            try:
-                logger.info(f"Downloading IPFS Image: {enclave_image_hash}")
-                logger.info(f"Downloading IPFS docker yml file: {docker_compose_hash}")
-                logger.info(f"Downloading IPFS Payload Hash: {metadata[2]}")
-                logger.info(f"Downloading IPFS FileSet Hash: {metadata[3]}")
-                logger.info(f"Downloading IPFS Challenge Hash: {challenge_hash}")
-            except Exception as e:
-                logger.info(str(e))
-
-            payload_hash = metadata[2].split(':')[1]
-            input_hash = metadata[3].split(':')[1]
-            list_of_ipfs_hashes = [enclave_image_hash, docker_compose_hash, challenge_hash, payload_hash]
-            if input_hash is not None and len(input_hash) > 0:
-                list_of_ipfs_hashes.append(input_hash)
-
-            self.storage.download_many(list_of_ipfs_hashes, attempts=5, delay=3)
-            if not self.storage.download_many(list_of_ipfs_hashes, attempts=5, delay=3):
-                logger.info("Cannot download data from IPFS, cancelling processing")
-                self.ipfs_timeout_cancel(order_id)
-                return
-
-            payload_file = f'{os.path.dirname(os.path.realpath(__file__))}/{payload_hash}'
-            if input_hash is not None and len(input_hash) > 0:
-                input_file = f'{os.path.dirname(os.path.realpath(__file__))}/{input_hash}'
-                logger.info(f'input hash is not none: {input_file}')
-            else:
-                input_file = None
-
-            docker_compose_file = f'{os.path.dirname(os.path.realpath(__file__))}/{docker_compose_hash}'
-            challenge_file = f'{os.path.dirname(os.path.realpath(__file__))}/{challenge_hash}'
-            challenge_content = self.read_file(challenge_file)
-            self.build_prerequisites_v1(order_id, payload_file, input_file, docker_compose_file, challenge_content)
-
-            logger.info("Stopping previous docker registry")
-            run_subprocess(['docker', 'stop', 'registry'], logger)
-            logger.info("Cleaning up docker registry")
-            run_subprocess(['docker', 'system', 'prune', '-a', '-f', '--volumes'], logger)
-            logger.info("Running new docker registry")
-            logger.debug(os.path.dirname(os.path.realpath(__file__)) + '/' + enclave_image_hash + ':/var/lib/registry')
-
-            logger.info("Stopping previous docker las")
-            run_subprocess(['docker', 'stop', 'las'], logger)
-            logger.info("Removing previous docker las")
-            run_subprocess(['docker', 'rm', 'las'], logger)
-            run_subprocess([
-                'docker', 'run', '-d', '--restart=always', '-p', '5000:5000', '--name', 'registry', '-v',
-                os.path.dirname(os.path.realpath(__file__)) + '/' + enclave_image_hash + ':/var/lib/registry',
-                'registry:2'
-            ], logger)
-
-            logger.info("Cleaning up docker container")
-            run_subprocess(['docker', 'rm', '-f', 'etny-pynithy-' + str(order_id)], logger)
-
-            logger.info("Running docker-compose")
-            run_subprocess([
-                'docker-compose', '-f', self.order_docker_compose_file, 'run',
-                '--rm', '-d',
-                '--name',
-                'etny-pynithy-' + str(order_id), 'etny-pynithy'
-            ], logger)
-
-            logger.info('waiting for result')
-            self.wait_for_enclave(120)
-            run_subprocess([
-                'docker-compose', '-f', self.order_docker_compose_file, 'down'
-            ], logger)
-            logger.info('Uploading result to ipfs')
-            result_hash = self.upload_result_to_ipfs(f'{self.order_folder}/result.txt')
-            logger.info(f'Result ipfs hash is {result_hash}')
-            logger.info('Reading transaction from file')
-            transaction_hex = self.read_file(f'{self.order_folder}/transaction.txt')
-            logger.info('Transaction content is: ', transaction_hex)
-
-            logger.info('Building result ')
-            result = self.build_result_format_v1(result_hash, transaction_hex)
-            logger.info(f'Result is: {result}')
-            logger.info('Adding result to order')
-            self.add_result_to_order(order_id, result)
-            self.dpreq_cache.add(self.__dprequest)
-
-        if version == 2:
-            try:
-                logger.info(f"Downloading IPFS Image: {enclave_image_hash}")
-                logger.info(f"Downloading IPFS docker yml file: {docker_compose_hash}")
-                logger.info(f"Downloading IPFS Payload Hash: {metadata[2]}")
-                logger.info(f"Downloading IPFS FileSet Hash: {metadata[3]}")
-                logger.info(f"Downloading IPFS Challenge Hash: {challenge_hash}")
-            except Exception as e:
-                logger.info(str(e))
-
-            payload_hash = metadata[2].split(':')[1]
-            input_hash = metadata[3].split(':')[1]
-            list_of_ipfs_hashes = [enclave_image_hash, docker_compose_hash, challenge_hash, payload_hash]
-            if input_hash is not None and len(input_hash) > 0:
-                list_of_ipfs_hashes.append(input_hash)
-
-            if self.process_order_data['process_order_retry_counter'] <= 10:
-                logger.info("Downloading data from IPFS")
-                self.storage.download_many(list_of_ipfs_hashes, attempts=5, delay=3)
-                if not self.storage.download_many(list_of_ipfs_hashes, attempts=5, delay=3):
-                    logger.info("Cannot download data from IPFS, cancelling processing")
-                    self.ipfs_timeout_cancel(order_id)
-                    return
-
-            payload_file = f'{os.path.dirname(os.path.realpath(__file__))}/{payload_hash}'
-            if input_hash is not None and len(input_hash) > 0:
-                input_file = f'{os.path.dirname(os.path.realpath(__file__))}/{input_hash}'
-                logger.info('input hash is not none: ', input_file)
-            else:
-                input_file = None
-
-            logger.info("Running docker swift-stream")
-            run_subprocess(
-                ['docker-compose', '-f', f'docker/docker-compose-swift-stream.yml', 'up', '-d', 'swift-stream'],
-                logger)
-
-            docker_compose_file = f'{os.path.dirname(os.path.realpath(__file__))}/{docker_compose_hash}'
-            challenge_file = f'{os.path.dirname(os.path.realpath(__file__))}/{challenge_hash}'
-            challenge_content = self.read_file(challenge_file)
-            bucket_name = f'{enclave_image_name}-{v2}'
-            logger.info('Preparing prerequisites for v2')
-            self.build_prerequisites_v2(bucket_name, order_id, payload_file, input_file,
-                                        docker_compose_file, challenge_content)
-
-            logger.info("Stopping previous docker registry")
-            run_subprocess(['docker', 'stop', 'registry'], logger)
-            logger.info("Cleaning up docker registry")
-            run_subprocess(['docker', 'system', 'prune', '-a', '-f', '--volumes'], logger)
-            logger.info("Running new docker registry")
-            logger.debug(os.path.dirname(os.path.realpath(__file__)) + '/' + enclave_image_hash + ':/var/lib/registry')
-
-            logger.info("Stopping previous docker las")
-            run_subprocess(['docker', 'stop', 'las'], logger)
-            logger.info("Removing previous docker las")
-            run_subprocess(['docker', 'rm', 'las'], logger)
-            run_subprocess([
-                'docker', 'run', '-d', '--restart=always', '-p', '5000:5000', '--name', 'registry', '-v',
-                os.path.dirname(os.path.realpath(__file__)) + '/' + enclave_image_hash + ':/var/lib/registry',
-                'registry:2'
-            ], logger)
-
-            logger.info("Cleaning up docker container")
-            run_subprocess(['docker', 'rm', '-f', f'{enclave_image_name}-' + str(order_id)], logger)
-
-            logger.info("Running docker-compose")
-            run_subprocess([
-                'docker-compose', '-f', self.order_docker_compose_file, 'run',
-                '--rm', '-d',
-                '--name',
-                f'{enclave_image_name}-' + str(order_id), enclave_image_name
-            ], logger)
-
-            logger.info('Waiting for execution of v2')
-            self.wait_for_enclave_v2(bucket_name, 'result.txt', 120)
-            run_subprocess([
-                'docker-compose', '-f', self.order_docker_compose_file, 'down'
-            ], logger)
-            logger.info(f'Uploading result to {enclave_image_name}-{v2} bucket')
-            status, result_data = self.swift_stream_service.get_file_content(bucket_name, "result.txt")
-            if not status:
-                logger.info(result_data)
-
-            with open(f'{self.order_folder}/result.txt', 'w') as f:
-                f.write(result_data)
-            logger.info(f'[2] Result file successfully downloaded to {self.order_folder}/result.txt')
-            result_hash = self.upload_result_to_ipfs(f'{self.order_folder}/result.txt')
-            logger.info(f'[v2] Result file successfully uploaded to IPFS with hash: {result_hash}')
-            logger.info(f'Result file successfully uploaded to {enclave_image_name}-{v2} bucket')
-            logger.info('Reading transaction from file')
-            status, transaction_data = self.swift_stream_service.get_file_content(bucket_name, "transaction.txt")
-            if not status:
-                logger.info(transaction_data)
-            logger.info('Building result for v2')
-            result = self.build_result_format_v2(result_hash, transaction_data)
-            logger.info(f'Result is: {result}')
-            logger.info('Adding result to order')
-            self.add_result_to_order(order_id, result)
-            self.dpreq_cache.add(self.__dprequest)
-
-            logger.info('Cleaning up swift-stream docker container.')
-            run_subprocess([
-                'docker-compose', '-f', f'docker/docker-compose-swift-stream.yml', 'down', 'swift-stream'
-            ], logger)
-
+        logger.debug(f'Running version v{version}')
         if version == 3:
             try:
-                logger.info(f"Downloading IPFS Image: {enclave_image_hash}")
-                logger.info(f"Downloading IPFS docker yml file: {docker_compose_hash}")
-                logger.info(f"Downloading IPFS Payload Hash: {metadata[2]}")
-                logger.info(f"Downloading IPFS FileSet Hash: {metadata[3]}")
-                logger.info(f"Downloading IPFS Challenge Hash: {challenge_hash}")
+                logger.debug(f"Downloading IPFS Image: {enclave_image_hash}")
+                logger.debug(f"Downloading IPFS docker yml file: {docker_compose_hash}")
+                logger.debug(f"Downloading IPFS Payload Hash: {metadata[2]}")
+                logger.debug(f"Downloading IPFS FileSet Hash: {metadata[3]}")
+                logger.debug(f"Downloading IPFS Challenge Hash: {challenge_hash}")
             except Exception as e:
                 logger.info(str(e))
 
@@ -747,7 +572,7 @@ class EtnyPoXNode:
                 list_of_ipfs_hashes.append(input_hash)
 
             if self.process_order_data['process_order_retry_counter'] <= 10:
-                logger.info("Downloading data from IPFS")
+                logger.info(f"Fetching task data for DO Request {order.do_req} from IPFS.")
                 # self.storage.download_many(list_of_ipfs_hashes, attempts=5, delay=3)
                 if not self.storage.download_many(list_of_ipfs_hashes, attempts=5, delay=3):
                     logger.info("Cannot download data from IPFS, cancelling processing")
@@ -755,94 +580,98 @@ class EtnyPoXNode:
                     self.dpreq_cache.add(self.__dprequest)
                     return
 
-            payload_file = f'{os.path.dirname(os.path.realpath(__file__))}/{payload_hash}'
+            payload_file = f'{self.cache_config.base_path}/{payload_hash}'
             if input_hash is not None and len(input_hash) > 0:
-                input_file = f'{os.path.dirname(os.path.realpath(__file__))}/{input_hash}'
+                input_file = f'{self.cache_config.base_path}/{input_hash}'
                 logger.info('input hash is not none: ', input_file)
             else:
                 input_file = None
 
-            logger.info("Running docker swift-stream")
+            logger.info("Task preloaded. Preparing docker environment")
             run_subprocess(
                 ['docker-compose', '-f', f'docker/docker-compose-swift-stream.yml', 'up', '-d', 'swift-stream'],
                 logger)
 
-            docker_compose_file = f'{os.path.dirname(os.path.realpath(__file__))}/{docker_compose_hash}'
-            challenge_file = f'{os.path.dirname(os.path.realpath(__file__))}/{challenge_hash}'
+            docker_compose_file = f'{self.cache_config.base_path}/{docker_compose_hash}'
+            challenge_file = f'{self.cache_config.base_path}/{challenge_hash}'
             challenge_content = self.read_file(challenge_file)
             bucket_name = f'{enclave_image_name}-{v3}'
-            logger.info(f'Preparing prerequisites for {v3}')
+            logger.debug(f'Preparing prerequisites for {v3}')
             self.build_prerequisites_v3(bucket_name, order_id, payload_file, input_file,
                                         docker_compose_file, challenge_content)
 
-            logger.info("Stopping previous docker registry")
+            logger.debug("Stopping previous docker registry")
             run_subprocess(['docker', 'stop', 'registry'], logger)
-            logger.info("Cleaning up docker registry")
+            logger.debug("Cleaning up docker registry")
             run_subprocess(['docker', 'system', 'prune', '-a', '-f', '--volumes'], logger)
-            logger.info("Running new docker registry")
-            logger.debug(os.path.dirname(os.path.realpath(__file__)) + '/' + enclave_image_hash + ':/var/lib/registry')
+            logger.debug("Running new docker registry")
+            logger.debug(str(self.cache_config.base_path) + '/' + enclave_image_hash + ':/var/lib/registry')
 
-            logger.info("Stopping previous docker las")
+            logger.debug("Stopping previous docker las")
             run_subprocess(['docker', 'stop', 'las'], logger)
-            logger.info("Removing previous docker las")
+            logger.debug("Removing previous docker las")
             run_subprocess(['docker', 'rm', 'las'], logger)
             run_subprocess([
                 'docker', 'run', '-d', '--restart=always', '-p', '5000:5000', '--name', 'registry', '-v',
-                os.path.dirname(os.path.realpath(__file__)) + '/' + enclave_image_hash + ':/var/lib/registry',
+                str(self.cache_config.base_path) + '/' + enclave_image_hash + ':/var/lib/registry',
                 'registry:2'
             ], logger)
 
-            logger.info("Cleaning up docker container")
+            logger.debug("Cleaning up docker container")
             run_subprocess([
                 'docker-compose', '-f', self.order_docker_compose_file, 'down', '-d'
             ], logger)
 
-            logger.info("Started enclaves by running ETNY docker-compose")
+            logger.debug("Started enclave executon")
             run_subprocess([
                 'docker-compose', '-f', self.order_docker_compose_file, 'up', '-d'
             ], logger)
 
-            logger.info('Waiting for execution of v3 enclave')
+            logger.info('Docker environment ready. Execution started in SGX enclave')
             status_enclave = self.wait_for_enclave_v2(bucket_name, 'result.txt', 3600)
             status_enclave = self.wait_for_enclave_v2(bucket_name, 'transaction.txt', 60)
+            logger.info('Enclave finished the execution')
 
             if status_enclave == True:
-                logger.info(f'Uploading result to {enclave_image_name}-{v3} bucket')
+                logger.debug(f'Uploading result to {enclave_image_name}-{v3} bucket')
                 status, result_data = self.swift_stream_service.get_file_content(bucket_name, "result.txt")
                 if not status:
-                    logger.info(result_data)
+                    logger.debug(result_data)
 
                 with open(f'{self.order_folder}/result.txt', 'w') as f:
                     f.write(result_data)
-                logger.info(f'[v3] Result file successfully downloaded to {self.order_folder}/result.txt')
+                logger.debug(f'[v3] Result file successfully downloaded to {self.order_folder}/result.txt')
                 result_hash = self.upload_result_to_ipfs(f'{self.order_folder}/result.txt')
-                logger.info(f'[v3] Result file successfully uploaded to IPFS with hash: {result_hash}')
-                logger.info(f'Result file successfully uploaded to {enclave_image_name}-{v3} bucket')
-                logger.info('Reading transaction from file')
+                logger.debug(f'[v3] Result file successfully uploaded to IPFS with hash: {result_hash}')
+                logger.debug(f'Result file successfully uploaded to {enclave_image_name}-{v3} bucket')
+                logger.debug('Reading transaction from file')
                 status, transaction_data = self.swift_stream_service.get_file_content(bucket_name, "transaction.txt")
                 if not status:
-                   logger.info(transaction_data)
-                logger.info('Building result for v3')
+                   logger.debug(transaction_data)
+                logger.debug('Building result for v3')
                 result = self.build_result_format_v3(result_hash, transaction_data)
-                logger.info(f'Result is: {result}')
-                logger.info('Adding result to order')
+                logger.debug(f'Result is: {result}')
                 self.add_result_to_order(order_id, result)
+                logger.info("ZK proof added. Task integrity submitted for validation.")
+                self.calculate_reward()
             else:
-                logger.info('Adding result to order')
                 result = self.build_result_format_v3("[WARN]","Task execution timed out");
                 self.add_result_to_order(order_id, result);
 
             self.dpreq_cache.add(self.__dprequest)
-            logger.info('Cleaning up SecureLock and TrustedZone containers.')
+            logger.debug('Cleaning up environment')
+            logger.debug('Cleaning up SecureLock and TrustedZone containers.')
             run_subprocess([
                 'docker-compose', '-f', self.order_docker_compose_file, 'down'
             ], logger)
-            logger.info('Cleaning up swift-stream docker container.')
+            logger.debug('Cleaning up swift-stream docker container.')
             run_subprocess([
                 'docker-compose', '-f', f'docker/docker-compose-swift-stream.yml', 'down', 'swift-stream'
             ], logger)
 
     def wait_for_enclave(self, timeout=120):
+        logger = self.logger
+
         i = 0
         while True:
             time.sleep(1)
@@ -855,8 +684,10 @@ class EtnyPoXNode:
         logger.info('enclave finished the execution')
 
     def wait_for_enclave_v2(self, bucket_name, object_name, timeout=120):
+        logger = self.logger
+
         i = 0
-        logger.info(f'Checking if object {object_name} exists in bucket {bucket_name}')
+        logger.debug(f'Checking if object {object_name} exists in bucket {bucket_name}')
         while True:
             time.sleep(1)
             i = i + 1
@@ -864,7 +695,7 @@ class EtnyPoXNode:
                 break
             (status, result) = self.swift_stream_service.is_object_in_bucket(bucket_name, object_name)
             if status:
-                logger.info('Enclave finished the execution')
+                logger.debug(f'Object found!')
                 return True
 
         logger.info('Enclave execution timed out')
@@ -880,39 +711,25 @@ class EtnyPoXNode:
         return f'v3:{transaction_hex}:{result_hash}'
 
     def add_result_to_order(self, order_id, result):
-        logger.info('Adding result to order', order_id, result)
+        logger = self.logger
 
+        logger.info(f'Packaging results for blockchain submission.')
 
         max_retries = 20
         retries = 0
 
         while True:
             try:
-                if self.__network == 'POLYGON':
-                    self.__w3.eth.set_gas_price_strategy(rpc_gas_price_strategy)
-                    #self.__w3.middleware_onion.add(middleware.time_based_cache_middleware)
-                    #self.__w3.middleware_onion.add(middleware.latest_block_based_cache_middleware)
-                    #self.__w3.middleware_onion.add(middleware.simple_cache_middleware)
-                    config.gas_price_value = self.__w3.eth.generate_gas_price() * 1.1
-                    config.gas_price_measure = 'wei'
-
-                logger.info(f"Sending transaction using gasPrice: {self.__w3.fromWei(config.gas_price_value, 'gwei')} gwei");
-
-                _nonce = self.__w3.eth.getTransactionCount(self.__address)
-
                 unicorn_txn = self.__etny.functions._addResultToOrder(
                     order_id, result
-                ).buildTransaction({
-                    'chainId': config.chain_id,
-                    'gas': config.gas_limit,
-                    'nonce': _nonce,
-                    'gasPrice': self.__w3.toWei(config.gas_price_value, config.gas_price_measure),
-                })
+                ).build_transaction(self.get_transaction_build())
 
                 _hash = self.send_transaction(unicorn_txn)
-                logger.info(f"{_hash} pending...")
-                receipt = self.__w3.eth.waitForTransactionReceipt(_hash)
+                logger.info(f"TXID {_hash} pending... ")
+                receipt = self.__w3.eth.wait_for_transaction_receipt(_hash)
                 if receipt.status == 1:
+                    logger.info(f"TXID {_hash} confirmed!")
+                    self.dpreq_cache.add(self.__dprequest)
                     break
             except Exception as ex:
                 retries += 1
@@ -921,7 +738,7 @@ class EtnyPoXNode:
                     logger.error("Maximum retries reached. Aborting.")
                     raise
                 time.sleep(5)
-
+        
     def upload_result_to_ipfs(self, result_file):
         response = self.storage.upload(result_file)
         return response
@@ -937,6 +754,8 @@ class EtnyPoXNode:
         return contents
 
     def __create_empty_file(self, file_path: str) -> bool:
+        logger = self.logger
+
         try:
             open(file_path, 'w').close()
         except OSError:
@@ -947,6 +766,8 @@ class EtnyPoXNode:
         return True
 
     def build_prerequisites_v1(self, order_id, payload_file, input_file, docker_compose_file, challenge):
+        logger = self.logger
+
         self.order_folder = f'./orders/{order_id}/etny-order-{order_id}'
         self.create_folder_v1(self.order_folder)
         self.copy_order_files(payload_file, f'{self.order_folder}/payload.py')
@@ -967,9 +788,11 @@ class EtnyPoXNode:
         self.generate_enclave_env_file(f'{self.order_folder}/.env', env_content)
 
     def build_prerequisites_v2(self, bucket_name, order_id, payload_file, input_file, docker_compose_file, challenge):
-        logger.info('Cleaning up swift-stream bucket.')
+        logger = self.logger
+
+        logger.debug('Cleaning up swift-stream bucket.')
         self.swift_stream_service.delete_bucket(bucket_name)
-        logger.info('Creating new bucket.')
+        logger.debug('Creating new bucket.')
         self.order_folder = f'./orders/{order_id}/etny-order-{order_id}'
         self.create_folder_v1(self.order_folder)
         (status, msg) = self.swift_stream_service.create_bucket(bucket_name)
@@ -1012,9 +835,11 @@ class EtnyPoXNode:
             logger.error(msg)
 
     def build_prerequisites_v3(self, bucket_name, order_id, payload_file, input_file, docker_compose_file, challenge):
-        logger.info('Cleaning up swift-stream bucket.')
+        logger = self.logger
+
+        logger.debug('Cleaning up swift-stream bucket.')
         self.swift_stream_service.delete_bucket(bucket_name)
-        logger.info('Creating new bucket.')
+        logger.debug('Creating new bucket.')
         self.order_folder = f'./orders/{order_id}/etny-order-{order_id}'
         self.create_folder_v1(self.order_folder)
         (status, msg) = self.swift_stream_service.create_bucket(bucket_name)
@@ -1064,6 +889,8 @@ class EtnyPoXNode:
             f.write(content)
 
     def copy_order_files(self, source, dest):
+        logger = self.logger
+
         if os.path.isfile(source):
             shutil.copy(source, dest)
         else:
@@ -1077,9 +904,9 @@ class EtnyPoXNode:
 
     def get_enclave_env_dictionary(self, order_id, challenge):
         env_vars = {
-            "ETNY_CHAIN_ID": config.chain_id,
-            "ETNY_SMART_CONTRACT_ADDRESS": config.contract_address,
-            "ETNY_WEB3_PROVIDER": config.http_provider,
+            "ETNY_CHAIN_ID": self.__network_config.chain_id,
+            "ETNY_SMART_CONTRACT_ADDRESS": self.__network_config.contract_address,
+            "ETNY_WEB3_PROVIDER": self.__network_config.rpc_url,
             "ETNY_CLIENT_CHALLENGE": challenge,
             "ETNY_ORDER_ID": order_id
         }
@@ -1101,6 +928,8 @@ class EtnyPoXNode:
         return None
 
     def __can_place_order(self, dp_req_id: int, do_req_id: int) -> bool:
+        logger = self.logger
+
         """
         Determines if we can place an order at the current block,
         with special handling if we're still in the 'first cycle'.
@@ -1143,9 +972,9 @@ class EtnyPoXNode:
         # CASE 2: difference_raw > 0 => we are still "early"
         if difference_raw > 0:
             next_block = current_block_number + difference_raw
-            logger.info(
+            logger.debug(
                 f"Offset={offset_mod}, required={do_req_id_mod}; "
-                f"we need to wait {difference_raw} more block(s). Next block: {next_block}."
+                f"waiting {difference_raw} more block(s). Next block: {next_block}."
             )
             logger.info(f"Request will be processed after block #{next_block}, current block is #{current_block_number}")
             # Mark __is_first_cycle as False once we pass do_req_id_mod
@@ -1158,7 +987,7 @@ class EtnyPoXNode:
             # We wait for the next cycle.
             difference_next_cycle = difference_raw % dispersion_factor
             next_block = current_block_number + difference_next_cycle
-            logger.info(
+            logger.debug(
                 f"Offset={offset_mod}, required={do_req_id_mod}; "
                 f"we missed our slot in the FIRST cycle (diff={difference_raw}). "
                 f"Next block: {next_block}."
@@ -1167,7 +996,7 @@ class EtnyPoXNode:
             return False
         else:
             # On subsequent cycles, if we missed our slot, skip waiting.
-            logger.info(
+            logger.debug(
                 f"Offset={offset_mod}, required={do_req_id_mod}; "
                 f"we missed our slot (diff={difference_raw}), "
                 f"but it's NOT the first cycle, so place the order now."
@@ -1176,22 +1005,23 @@ class EtnyPoXNode:
             return True
 
     def process_dp_request(self):
-        time.sleep(1)
+        logger = self.logger
+       
         order_details = self._getOrder()
         if order_details is not None:
             [order_id, order] = order_details
             if order.status == OrderStatus.PROCESSING:
-                logger.info(f"DP request never finished, processing order {order_id}")
+                logger.debug(f"DP request never finished, processing order {order_id}")
                 self.process_order(order_id)
             if order.status == OrderStatus.CLOSED:
-                logger.info(f"DP request {self.__dprequest} completed successfully!")
+                logger.debug(f"DP request {self.__dprequest} completed successfully!")
                 self.dpreq_cache.add(self.__dprequest)
             if order.status == OrderStatus.OPEN:
-                logger.info("Order was never approved, skipping")
+                logger.debug("Order was never approved, skipping")
             return
 
-        logger.info(f"Processing DP request {self.__dprequest}")
-        time.sleep(1)
+        logger.debug(f"Processing DP request {self.__dprequest}")
+        time.sleep(self.__network_config.rpc_delay/1000)
         resp, req_id = retry(self.__etny.caller()._getDPRequest, self.__dprequest, attempts=10, delay=3)
         if resp is False:
             logger.info(f"DP {self.__dprequest} wasn't found")
@@ -1201,37 +1031,59 @@ class EtnyPoXNode:
 
         checked = 0
         seconds = 0
-        timeout_in_seconds = config.block_time - 1.3
-
-        self.__call_heart_beat()
+        timeout_in_seconds = int(self.__network_config.block_time) - 1.3
 
         self.__total_nodes_count = self.__heart_beat.caller().getNodesCount()
 
-        while seconds < config.contract_call_frequency:
+        _doreq = {}
+        doreq = {}
+        metadata = {}
+        logger.info(f"System ready for the next DO request")
+
+        next_dp_request = False
+
+        while not stop_event.is_set():
+
+            time.sleep(timeout_in_seconds)
+
             try:
-                time.sleep(1)
+                self.__call_heart_beat()
+
+                if get_task_running_on():
+                     continue
+
+                if stop_event.is_set():
+                     break
+
+                time.sleep(self.__network_config.rpc_delay/1000)
                 count = self.__etny.caller()._getDORequestsCount()
+                checked = 0
             except Exception as e:
                 logger.warning(f"Warning while trying to get DORequestCount, Message: {e}")
-                time.sleep(timeout_in_seconds)
-                seconds += timeout_in_seconds
                 continue
 
             if count == 0:
-                time.sleep(5);
                 continue;
 
-            found = False
             cached_do_requests = self.doreq_cache.get_values
-            if len(cached_do_requests) == 0:
-                logger.info("Building DO requests cache, this might take a while")
 
-            _doreq = {}
-            doreq = {}
-            metadata = {}
+            req_to_process = list(set(range(checked, count)) - set(cached_do_requests))
 
-            for i in reversed(list(set(range(checked, count)) - set(cached_do_requests))):
-                logger.info(f"Checking DO request: {i}")
+            total_requests = len(req_to_process)
+            threshold = 0
+
+            for idx, i in enumerate(reversed(req_to_process), start=1):
+
+                self.__call_heart_beat()
+
+                if stop_event.is_set():
+                    break
+
+                percent_complete = (idx * 100) // total_requests
+
+                if percent_complete >= threshold and self.__do_requests_build_pending:
+                    logger.info(f"Building DO Requests cache: {percent_complete}% ({idx} / {total_requests})")
+                    threshold += 1   # Increment to the next threshold
 
                 if self._check_installed_drivers():
                     logger.error('SGX configuration error. Both isgx drivers are installed. Skipping order placing ...')
@@ -1245,15 +1097,17 @@ class EtnyPoXNode:
                     metadata[i] = [None, None, None, None, None]
 
                 if metadata[i][4] is None:
+                    time.sleep(self.__network_config.rpc_delay/1000)
                     _doreq[i] = self.__etny.caller()._getDORequest(i)
                     doreq[i] = DORequest(_doreq[i])
+                    time.sleep(self.__network_config.rpc_delay/1000)
                     metadata[i] = self.__etny.caller()._getDORequestMetadata(i)
 
                 if doreq[i].status != RequestStatus.AVAILABLE:
                     logger.debug(
                         f'''Skipping Order, DORequestId = {_doreq[i]}, DPRequestId = {i}, Order has different status: '{RequestStatus._status_as_string(doreq[i].status)}' ''')
 
-                    logger.info(f"This DO request is being processed by another operator")
+                    logger.debug(f"This DO request is matched with another operator")
                     self.doreq_cache.add(i)
                     continue
 
@@ -1265,12 +1119,13 @@ class EtnyPoXNode:
 
                 if not (doreq[i].cpu <= req.cpu and doreq[i].memory <= req.memory and
                         doreq[i].storage <= req.storage and doreq[i].bandwidth <= req.bandwidth and doreq[i].price >= req.price):
-                    logger.info("Order doesn't meet requirements, skipping to next request")
+                    self.doreq_cache.add(i)
+                    logger.debug("Not enough resources to process this DO request, skipping to next request")
                     continue
 
 
                 if metadata[i][4] != '' and metadata[i][4] != self.__address:
-                    logger.info(f'Skipping DO Request: {i}. Request is delegated to a different Node.')
+                    logger.debug(f'Skipping DO Request: {i}. Request is delegated to a different Node.')
                     self.doreq_cache.add(i)
                     continue
 
@@ -1279,7 +1134,9 @@ class EtnyPoXNode:
                     if not status:
                         continue
 
-                logger.info("Placing order...")
+                set_task_running_on(self.__network)
+
+                logger.info(f"DO Request {i} detected. Starting order placement. ")
                 try:
                     self.place_order(i)
                     self.doreq_cache.add(i)
@@ -1287,88 +1144,132 @@ class EtnyPoXNode:
                     # store merged log
                     self.merged_orders_cache.add(do_req_id=i, dp_req_id=self.__dprequest, order_id=self.__order_id)
 
-                except (exceptions.SolidityError, IndexError) as error:
+                except (exceptions.ContractLogicError, IndexError) as error:
                     logger.info(f"Order already created, skipping to next DO request")
+                    self.doreq_cache.add(i)
+                    reset_task_running_on()
                     continue
-                found = True
-                logger.info(f"Waiting for order {self.__order_id} approval...")
-                if retry(self.wait_for_order_approval, attempts=50, delay=2)[0] is False:
-                    logger.info("Order was not approved in the last ~50 blocks, skipping to next request")
+
+                if metadata[i][4] == '':
+                    logger.info(f"Awaiting approval for Order {self.__order_id}")
+
+                    if retry(self.wait_for_order_approval, attempts=60, delay=2)[0] is False:
+                        logger.info("Order was not approved in the last ~50 blocks, skipping to next DO request")
+                        reset_task_running_on()
+                        continue
+
+                    logger.info(f"Approval granted. Order processing continues.")
+
+                try:
+                    self.process_order(self.__order_id)
+                    logger.info(
+                        f"Order {self.__order_id} (DO request {i}, DP request {self.__dprequest}) completed.")
+                    reset_task_running_on()
+                    next_dp_request = True
                     break
-                # performance improvement, to avoid duplication
-                # self.process_order(self.__order_id, metadata=metadata)
-                self.process_order(self.__order_id)
-                logger.info(
-                    f"Order {self.__order_id}, with DO request {i} and DP request {self.__dprequest} processed successfully")
-                break
-            if len(cached_do_requests) == 0:
+                except Exception as e:
+                    logger.error(f"Unable to process order {self.__order_id}: {e}")
+                    reset_task_running_on()
+
+           
+            if self.__do_requests_build_pending and not stop_event.is_set():
+                logger.info(f"Building DO Requests cache: 100%")
                 logger.info("Finished building DO requests cache")
-            if found:
-                logger.info(f"Finished processing order {self.__order_id}")
-                return
-            checked = count - 1
-            time.sleep(timeout_in_seconds)
 
-            seconds += timeout_in_seconds
+                self.__do_requests_build_pending = False
 
-            self.__call_heart_beat()
-
-            if seconds >= config.contract_call_frequency:
-                if self.__network == 'POLYGON':
-                    seconds = 0;
-                else:
-                    self.cancel_dp_request(self.__dprequest)
-                    return;
+            if next_dp_request == True:
+                break
 
     def wait_for_order_approval(self):
+        logger = self.logger
+        
+        
         _order = self.__etny.caller()._getOrder(self.__order_id)
         order = Order(_order)
-        logger.info('Waiting...')
+        #logger.info('Waiting...')
         if order.status != OrderStatus.PROCESSING:
             raise Exception("Order has not been yet approved")
 
     def find_order_by_dp_req(self):
-        #logger.info(f"Checking if DP request {self.__dprequest} has an order associated")
+        logger = self.logger
+
+        logger.debug(f"Checking if DP request {self.__dprequest} has an order associated")
+        self.orders_cache
         order_id = self.orders_cache.get(str(self.__dprequest))
         if order_id is not None:
-            #logger.info(f"Found in cache, order_id = {order_id}")
+            logger.debug(f"Found in cache, order_id = {order_id}")
             return order_id
 
         my_orders = self.__etny.functions._getMyDOOrders().call({'from': self.__address})
         cached_order_ids = self.orders_cache.get_values
 
+        orders_to_process = list(set(my_orders))
+        total_requests = len(orders_to_process)
+        threshold = 0
+        building = False
 
-        for _order_id in reversed(list(set(my_orders) - set(cached_order_ids))):
-            time.sleep(0.1)
-            _order = self.__etny.caller()._getOrder(_order_id)
-            order = Order(_order)
-            if order.dp_req == self.__dprequest:
+        for idx, _order_id in enumerate(reversed(orders_to_process), start=1):
+
+            self.__call_heart_beat()
+
+            if stop_event.is_set():
+                break
+
+            if _order_id in cached_order_ids:
+                 dp_req = self.orders_cache.get_key(_order_id)
+                 order = SimpleNamespace()
+                 order.dp_req = dp_req
+                 self.__orders[_order_id] = order
+            else:
+                if _order_id not in self.__orders or self.__orders[_order_id] is None:
+                    building = True
+                    percent_complete = (idx * 100) // total_requests
+
+                    if percent_complete >= threshold and idx > 1:
+                        logger.info(f"Building orders cache: {percent_complete}% ({idx} / {total_requests})")
+                        threshold += 10
+
+                    time.sleep(self.__network_config.rpc_delay/1000)
+                    self.__orders[_order_id] = self.__etny.caller()._getOrder(_order_id)
+
+                order = Order(self.__orders[_order_id])
                 self.orders_cache.add(order.dp_req, _order_id)
+
+            if order.dp_req == self.__dprequest:
                 return _order_id
-        #logger.info(f"DP request {self.__dprequest} hash no order associated")
+
+        if total_requests > 1 and building == True and not stop_event.is_set():
+            logger.info(f"Building orders cache: 100%")
+            logger.info(f"Finished building orders cache")
+
+        logger.debug(f"DP request {self.__dprequest} hash no order associated")
         return None
 
     def place_order(self, doreq):
+        logger = self.logger
+
         order_id = 0
         max_retries = 20
         retries = 0
 
         while True:
           try:
-            time.sleep(1)
+            time.sleep(self.__network_config.rpc_delay/1000)
             unicorn_txn = self.__etny.functions._placeOrder(
                 int(doreq),
                 int(self.__dprequest),
-            ).buildTransaction(self.get_transaction_build())
+            ).build_transaction(self.get_transaction_build())
             _hash = self.send_transaction(unicorn_txn)
-            logger.info(f"{_hash} pending...")
-            receipt = self.__w3.eth.waitForTransactionReceipt(_hash)
-            processed_logs = self.__etny.events._placeOrderEV().processReceipt(receipt)
+            logger.info(f"TXID {_hash} pending... fingers crossed")
+            receipt = self.__w3.eth.wait_for_transaction_receipt(_hash)
+            processed_logs = self.__etny.events._placeOrderEV().process_receipt(receipt)
             order_id = processed_logs[0].args._orderNumber
             self.__order_id = order_id
             if order_id != 0:
+               logger.info(f"TXID {_hash} confirmed!")
                break
-          except (exceptions.SolidityError, IndexError) as e:
+          except (exceptions.ContractLogicError, IndexError) as e:
               logger.info(f"Order is already filled by another operator");
               raise
           except Exception as ex:
@@ -1380,51 +1281,62 @@ class EtnyPoXNode:
               time.sleep(5)
           continue
 
-        logger.info("Order placed successfully!")
+        logger.info("Order secured!")
 
     def get_transaction_build(self, existing_nonce=None):
-        self.__nonce = existing_nonce if existing_nonce else self.__w3.eth.getTransactionCount(self.__address)
+        logger = self.logger
 
-        if self.__network == 'POLYGON':
-            self.__w3.eth.set_gas_price_strategy(rpc_gas_price_strategy)
-            #self.__w3.middleware_onion.add(middleware.time_based_cache_middleware)
-            #self.__w3.middleware_onion.add(middleware.latest_block_based_cache_middleware)
-            #self.__w3.middleware_onion.add(middleware.simple_cache_middleware)
-            base_gas_price = self.__w3.eth.generate_gas_price()
-            config.gas_price_value = int(base_gas_price * 1.1)  # Ensure integer
-            config.gas_price_measure = 'wei'
+        self.__nonce = existing_nonce if existing_nonce else self.__w3.eth.get_transaction_count(self.__address)
 
-        logger.info(f"Sending transaction using gasPrice: {self.__w3.fromWei(config.gas_price_value, 'gwei')} gwei");
+        if self.__network_config.eip1559 == True:
+            latest_block = self.__w3.eth.get_block("latest")
+            max_fee_per_gas = int(latest_block.baseFeePerGas * 1.1) + self.__w3.to_wei(self.__network_config.max_priority_fee_per_gas, self.__network_config.gas_price_measure) # 10% increase in previous block gas price + priority fee
 
-        return {
-            'chainId': config.chain_id,
-            'gas': config.gas_limit,
-            'nonce': self.__nonce,
-            'gasPrice': self.__w3.toWei(config.gas_price_value, config.gas_price_measure),
-        }
+            if max_fee_per_gas > self.__w3.to_wei(self.__network_config.max_fee_per_gas, self.__network_config.gas_price_measure):
+                raise Exception("Network base fee is too high!")
+                
+            transaction_options = {
+                "type": 2,
+                "nonce": self.__nonce,
+                "chainId": self.__network_config.chain_id,
+                "from": self.__acct.address,
+                'maxFeePerGas': max_fee_per_gas,
+                'maxPriorityFeePerGas': self.__w3.to_wei(self.__network_config.max_priority_fee_per_gas, self.__network_config.gas_price_measure),
+            }
+            
+            gas_price_value = max_fee_per_gas
+            
+        else:
+            transaction_options = {
+                "nonce": self.__nonce,
+                "chainId": self.__network_config.chain_id,
+                "from": self.__acct.address,
+                "gasPrice": self.__w3.to_wei(self.__network_config.gas_price, self.__network_config.gas_price_measure),
+                "gas": self.__network_config.gas_limit,
+            }
+ 
+            gas_price_value = self.__network_config.gas_limit
+
+
+        logger.debug(f"Sending transaction using eip1559 = {self.__network_config.eip1559}, gasPrice = {self.__w3.from_wei(gas_price_value, 'gwei')} gwei");
+
+        return transaction_options
 
 
     def send_transaction(self, unicorn_txn):
         try:
             signed_txn = self.__w3.eth.account.sign_transaction(unicorn_txn, private_key=self.__acct.key)
-            self.__w3.eth.sendRawTransaction(signed_txn.rawTransaction)
-            _hash = self.__w3.toHex(self.__w3.sha3(signed_txn.rawTransaction))
+            self.__w3.eth.send_raw_transaction(signed_txn.raw_transaction)
+            _hash = self.__w3.to_hex(self.__w3.keccak(signed_txn.raw_transaction))
             return _hash
         except Exception as e:
             logger.error(f"Error sending Transaction, Error Message: {e}")
             raise
 
     def resume_processing(self):
-        while True:
-            polygonBalance = self.__w3.eth.get_balance(self.__address)
-            if self.__network == 'POLYGON':
-                if polygonBalance < 100000000000000000:
-                    self.__enforce_update()
-            else:
-                self.__enforce_update()
+        while True and not stop_event.is_set():
             self.add_dp_request()
             self.process_dp_request()
-            time.sleep(5)
 
     def _check_installed_drivers(self):
         driver_list = os.listdir('/dev')
@@ -1432,69 +1344,77 @@ class EtnyPoXNode:
 
     def get_env_for_integration_test(self):
         env_vars = {
-            "ETNY_CHAIN_ID": config.chain_id,
-            "ETNY_SMART_CONTRACT_ADDRESS": config.contract_address,
-            "ETNY_WEB3_PROVIDER": config.http_provider,
+            "ETNY_CHAIN_ID": self.__network_config.chain_id,
+            "ETNY_SMART_CONTRACT_ADDRESS": self.__network_config.contract_address,
+            "ETNY_WEB3_PROVIDER": self.__network_config.rpc_url,
             "ETNY_RUN_INTEGRATION_TEST": 1,
             "ETNY_ORDER_ID": 0
         }
         return env_vars
 
     def build_prerequisites_integration_test(self, bucket_name, order_id, docker_compose_file):
-        logger.info('Cleaning up swift-stream bucket.')
-        self.swift_stream_service.delete_bucket(bucket_name)
-        logger.info('Creating new bucket.')
-        self.order_folder = f'./orders/{order_id}/etny-order-{order_id}'
-        self.create_folder_v1(self.order_folder)
-        (status, msg) = self.swift_stream_service.create_bucket(bucket_name)
-        if not status:
-            logger.error(msg)
+        logger = self.logger
 
-        self.order_docker_compose_file = f'./orders/{order_id}/docker-compose.yml'
-        self.copy_order_files(docker_compose_file, self.order_docker_compose_file)
+        try:
+            logger.debug('Cleaning up swift-stream bucket.')
+            self.swift_stream_service.delete_bucket(bucket_name)
+            logger.debug('Creating new bucket.')
+            self.order_folder = f'./orders/{order_id}/etny-order-{order_id}'
+            self.create_folder_v1(self.order_folder)
+            (status, msg) = self.swift_stream_service.create_bucket(bucket_name)
+            if not status:
+                logger.error(msg)
 
-        self.set_retry_policy_on_fail_for_compose()
-        self.update_enclave_docker_compose(self.order_docker_compose_file, order_id)
+            self.order_docker_compose_file = f'./orders/{order_id}/docker-compose.yml'
+            self.copy_order_files(docker_compose_file, self.order_docker_compose_file)
 
-        env_content = self.get_env_for_integration_test()
-        self.generate_enclave_env_file(f'{self.order_folder}/.env', env_content)
+            self.set_retry_policy_on_fail_for_compose()
+            self.update_enclave_docker_compose(self.order_docker_compose_file, order_id)
 
-        (status, msg) = self.swift_stream_service.upload_file(bucket_name,
-                                                              ".env",
-                                                              f'{self.order_folder}/.env')
-        if not status:
-            logger.error(msg)
+            env_content = self.get_env_for_integration_test()
+            self.generate_enclave_env_file(f'{self.order_folder}/.env', env_content)
+
+            (status, msg) = self.swift_stream_service.upload_file(bucket_name,
+                                                                  ".env",
+                                                                  f'{self.order_folder}/.env')
+            if not status:
+                logger.error(msg)
+        except Exception as e:
+            logger.warning(f"Unable to preapre for integration test: {e}")
 
     def __clean_up_integration_test(self):
-        logger.info('Cleaning up containers after integration test.')
-        run_subprocess([
-            'docker-compose', '-f', self.order_docker_compose_file, 'down'
-        ], logger)
-        logger.info('Cleaning up swift-stream docker container.')
-        run_subprocess([
-            'docker-compose', '-f', f'docker/docker-compose-swift-stream.yml', 'down', 'swift-stream'
-        ], logger)
-        logger.info('Cleaning up swift-stream integration bucket.')
-        self.swift_stream_service.delete_bucket(self.integration_bucket_name)
+        logger = self.logger
+        try: 
+            logger.debug('Cleaning up containers after integration test.')
+            run_subprocess([
+                'docker-compose', '-f', self.order_docker_compose_file, 'down'
+            ], logger)
+            logger.debug('Cleaning up swift-stream docker container.')
+            run_subprocess([
+                'docker-compose', '-f', f'docker/docker-compose-swift-stream.yml', 'down', 'swift-stream'
+            ], logger)
+            logger.debug('Cleaning up swift-stream integration bucket.')
+            self.swift_stream_service.delete_bucket(self.integration_bucket_name)
+        except Exception as e:
+            logger.warning(f"Unable to clean container: {e}")
 
     def __run_integration_test(self):
+        logger = self.logger
+
         logger.info('Running integration test.')
 
-        self.can_run_under_sgx = True
-        return
-
         [enclave_image_hash, _,
-         docker_compose_hash] = self.__image_registry.caller().getLatestTrustedZoneImageCertPublicKey(config.integration_test_image,
+         docker_compose_hash] = self.__image_registry.caller().getLatestTrustedZoneImageCertPublicKey(self.__network_config.integration_test_image,
                                                                                                       'v3')
         self.integration_bucket_name = 'etny-bucket-integration'
         order_id = 'integration_test'
         integration_test_file = 'context_test.etny'
 
         try:
-            logger.info(f"Downloading IPFS Image: {enclave_image_hash}")
-            logger.info(f"Downloading IPFS docker yml file: {docker_compose_hash}")
+            logger.debug(f"Downloading IPFS Image: {enclave_image_hash}")
+            logger.debug(f"Downloading IPFS docker yml file: {docker_compose_hash}")
         except Exception as e:
-            logger.info(str(e))
+            logger.warning(str(e))
 
         list_of_ipfs_hashes = [enclave_image_hash, docker_compose_hash]
         if not self.storage.download_many(list_of_ipfs_hashes, attempts=10, delay=3):
@@ -1506,48 +1426,46 @@ class EtnyPoXNode:
             ['docker-compose', '-f', f'docker/docker-compose-swift-stream.yml', 'up', '-d', 'swift-stream'],
             logger)
 
-        docker_compose_file = f'{os.path.dirname(os.path.realpath(__file__))}/{docker_compose_hash}'
+        docker_compose_file = f'{self.cache_config.base_path}/{docker_compose_hash}'
         logger.info(f'Preparing prerequisites for integration test')
         self.build_prerequisites_integration_test(self.integration_bucket_name, order_id, docker_compose_file)
 
-        logger.info("Stopping previous docker registry and containers")
+        logger.debug("Stopping previous docker registry and containers")
         run_subprocess(['docker', 'stop', 'registry'], logger)
         run_subprocess(['docker', 'stop', 'etny-securelock'], logger)
         run_subprocess(['docker', 'stop', 'etny-trustedzone'], logger)
         run_subprocess(['docker', 'stop', 'las'], logger)
-        logger.info("Cleaning up docker registry")
+        logger.debug("Cleaning up docker registry")
         run_subprocess(['docker', 'system', 'prune', '-a', '-f', '--volumes'], logger)
-        logger.info("Running new docker registry")
-        logger.debug(os.path.dirname(os.path.realpath(__file__)) + '/' + enclave_image_hash + ':/var/lib/registry')
+        logger.debug("Running new docker registry")
+        logger.debug( "{self.cache_config.base_path} / {enclave_image_hash} :/var/lib/registry")
 
-        logger.info("Stopping previous docker las")
+        logger.debug("Stopping previous docker las")
         run_subprocess(['docker', 'stop', 'las'], logger)
-        logger.info("Removing previous docker las")
+        logger.debug("Removing previous docker las")
         run_subprocess(['docker', 'rm', 'las'], logger)
         run_subprocess([
             'docker', 'run', '-d', '--restart=always', '-p', '5000:5000', '--name', 'registry', '-v',
-            os.path.dirname(os.path.realpath(__file__)) + '/' + enclave_image_hash + ':/var/lib/registry',
+            f'{self.cache_config.base_path}/{enclave_image_hash}' + ':/var/lib/registry',
             'registry:2'
         ], logger)
 
-        logger.info("Started enclaves by running ETNY docker-compose")
+        logger.debug("Started enclaves by running ETNY docker-compose")
         run_subprocess([
             'docker-compose', '-f', self.order_docker_compose_file, 'up', '-d'
         ], logger)
 
-        logger.info('Waiting for execution of integration test enclave')
+        logger.debug('Waiting for execution of integration test enclave')
         self.wait_for_enclave_v2(self.integration_bucket_name, integration_test_file, 300)
         status, result_data = self.swift_stream_service.get_file_content(self.integration_bucket_name,
                                                                          integration_test_file)
         if not status:
-            logger.info('could not download the integration test result file')
-            logger.error('The node is not properly running under SGX. Please check the configuration.')
+            logger.warning('The node is not properly running under SGX. Please check the configuration.')
             self.can_run_under_sgx = False
             self.__clean_up_integration_test()
             return
 
         self.can_run_under_sgx = True
-        logger.info('Integration test result file successfully downloaded', result_data)
         logger.info('Node is properly configured to run confidential tasks using SGX')
         self.__clean_up_integration_test()
 
@@ -1592,14 +1510,9 @@ class EtnyPoXNode:
             return True
 
 
-    def __enforce_update(self):
-        logger.info('Checking if the auto update can be performed...')
-        if self.__can_run_auto_update(config.auto_update_file_path, 24 * 60 * 60):
-            logger.info('Exiting the agent. Performing auto update...')
-            self.__write_auto_update_cache(config.auto_update_file_path, 24 * 60 * 60);
-            exit(1)
-
     def __call_heart_beat(self):
+        logger = self.logger
+
         if self.__network == 'TESTNET':
             heartbeat_frequency = 1 * 60 * 60 - 60;
         elif self.__network == 'POLYGON':
@@ -1607,7 +1520,7 @@ class EtnyPoXNode:
         else:
             heartbeat_frequency = 12 * 60 * 60 - 60;
 
-        if self.__can_run_auto_update(config.heart_beat_log_file_path, heartbeat_frequency):
+        if self.__can_run_auto_update(self.cache_config.heart_beat_log_file_path, heartbeat_frequency):
             logger.info('Calling hearbeat...')
             params = [
                 "v3"
@@ -1618,18 +1531,19 @@ class EtnyPoXNode:
 
             while True:
               try:
-                time.sleep(1)
-                unicorn_txn = self.__heart_beat.functions.logCall(*params).buildTransaction(self.get_transaction_build())
+                time.sleep(self.__network_config.rpc_delay/1000)
+                unicorn_txn = self.__heart_beat.functions.logCall(*params).build_transaction(self.get_transaction_build())
                 _hash = self.send_transaction(unicorn_txn)
-                logger.info(f"{_hash} pending...")
-                receipt = self.__w3.eth.waitForTransactionReceipt(_hash)
+                logger.info(f"{_hash} pending... fingers crossed")
+                receipt = self.__w3.eth.wait_for_transaction_receipt(_hash)
                 if receipt.status == 1:
+                    logger.info(f"{_hash} confirmed!")
                     logger.info('Heart beat successfully called...')
-                    self.__write_auto_update_cache(config.heart_beat_log_file_path, heartbeat_frequency);
+                    self.__write_auto_update_cache(self.cache_config.heart_beat_log_file_path, heartbeat_frequency);
                     break
               except Exception as e:
                 retries += 1
-                logger.warning(f"Warning while sending heartbeat. Retry {retries}/{max_retries}. Message: {ex}")
+                logger.warning(f"Warning while sending heartbeat. Retry {retries}/{max_retries}. Message: {e}")
                 if retries == max_retries:
                     logger.error("Maximum retries reached. Aborting.")
                     raise
@@ -1642,14 +1556,117 @@ class SGXDriver:
         except Exception as e:
             pass
 
+
+def initiate_shutdown():
+    """
+    Function to initiate shutdown.
+    """
+    config.logger.info("Initiating periodic graceful restart...")
+    stop_event.set()  # Signal all threads to stop
+
+def process_network(network):
+    """
+    Processes a single network configuration.
+    
+    Args:
+        network (NetworkConfig): The network configuration to process.
+    
+    Raises:
+        Exception: Propagates exceptions after logging.
+    """
+
+    if stop_event.is_set():
+        config.logger.warning(f"[{network.name}] Stopping network processing due to interrupt.")
+        return
+
+    try:
+        while not stop_event.is_set():
+           app = EtnyPoXNode(network)
+           app.cache_dp_requests()
+           app.resume_pending_dp_requests()
+           app.resume_available_dp_requests()
+           app.resume_processing()
+
+        logger.info(f"[{network.name}] Exiting")
+        return(f"[{network.name}] Exiting")
+
+    except Exception as e:
+        logger.error(f"[{network.name}] An error occurred: {e}")
+        raise  # Re-raise the exception after logging
+
+def set_task_running_on(name):
+    """
+    Sets the shared network name in a thread-safe way.
+    """
+    global task_running_on
+    with task_lock:
+        task_running_on = name
+
+def get_task_running_on():
+    """
+    Gets the shared network name in a thread-safe way.
+    """
+    global task_running_on 
+    with task_lock:
+        return task_running_on 
+
+def reset_task_running_on():
+    """
+    Resets the shared network name to None in a thread-safe way.
+    """
+    global task_running_on
+    with task_lock:
+        task_running_on = None
+
 if __name__ == '__main__':
+
+    network_names = list(config.NETWORKS.keys())
+    
+    parser = config.parse_arguments(network_names)
+    args, unknown_args = parser.parse_known_args()
+
+    if unknown_args:
+       config.logger.warning(f"Ignored unrecognized arguments: {' '.join(unknown_args)}")
+
     try:
         sgx = SGXDriver()
-        app = EtnyPoXNode()
-        logger.info("Cleaning up previous DP requests...")
-        app.cleanup_dp_requests()
-        logger.info("[DONE]")
-        app.resume_processing()
+        network_configs = config.parse_networks(args, parser, network_names)
+
+        shutdown_timer = threading.Timer(48 * 60 * 60, initiate_shutdown)
+        shutdown_timer.start()
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=100) as executor:
+            # Submit all network processing tasks
+            future_to_network = {
+                executor.submit(process_network, network): network for network in network_configs
+            }
+
+            try:
+                for future in concurrent.futures.as_completed(future_to_network):
+                    network = future_to_network[future]
+                    try:
+                        future.result()
+                    except Exception as exc:
+                        config.logger.error(f"[{network.name}] Generated an exception: {exc}")
+            except KeyboardInterrupt:
+                # Handle Ctrl+C
+                config.logger.warning("Process interrupted by user. Stopping all tasks...")
+                shutdown_timer.cancel()
+                while get_task_running_on() is not None:
+                   time.sleep(1)
+                stop_event.set()  # Signal all threads to stop
+                executor.shutdown(wait=True)  # Shutdown executor immediately
+                config.logger.info("Exiting gracefully.")
+                sys.exit(0)
+
+        shutdown_timer.cancel()
+
+    except EnvironmentError as env_err:
+        logger.error(f"Environment configuration error: {env_err}")
+        sys.exit(1)
+    except argparse.ArgumentError as arg_err:
+        logger.error(f"Argument parsing error: {arg_err}")
+        sys.exit(1)
     except Exception as e:
-        logger.error(e)
-        raise
+        logger.exception(f"An unexpected error occurred: {e}")
+        sys.exit(1)

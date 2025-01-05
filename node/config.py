@@ -2,24 +2,18 @@ import os, sys, signal
 import argparse
 import logging.handlers
 from os.path import expanduser
-
-
-def onImportError():
-    os.system("pip3 install psutil==5.9.2")
-    os.system("pip3 install python-dotenv==0.21.0")
-    os.system("pip3 install minio==7.1.13")
-    os.killpg(os.getpgid(), signal.SIGCHLD)
-    sys.exit()
-
-
-try:
-    import psutil
-    from minio import Minio
-    from dotenv import load_dotenv
-except ImportError as e:
-    onImportError()
-
+from dataclasses import dataclass, fields
+from typing import List
+from pathlib import Path
 from utils import HardwareInfoProvider
+import dependency_manager
+from distutils.util import strtobool
+
+dependency_manager.check_dependencies()
+
+import psutil
+from minio import Minio
+from dotenv import load_dotenv
 
 # Load variables from .env and .env.conf if it exists
 if os.path.exists('.env'):
@@ -30,137 +24,315 @@ client_connect_url_default = os.environ.get('CLIENT_CONNECT_URL')
 client_bootstrap_url = os.environ.get('CLIENT_BOOTSTRAP_URL')
 gas_limit = int(os.environ.get('GAS_LIMIT'))
 gas_price_value = os.environ.get('GAS_PRICE_VALUE')
+skip_integration_test = strtobool(os.environ.get('SKIP_INTEGRATION_TEST'))
 
-bloxberg_rpc_url = os.environ.get('BLOXBERG_RPC_URL');
-bloxberg_chain_id = os.environ.get('BLOXBERG_CHAIN_ID');
-bloxberg_contract_address = os.environ.get('BLOXBERG_CONTRACT_ADDRESS');
-bloxberg_heartbeat_address = os.environ.get('BLOXBERG_HEARTBEAT_CONTRACT_ADDRESS');
-bloxberg_image_registry_address = os.environ.get('BLOXBERG_IMAGE_REGISTRY');
-bloxberg_gas_price_measure = os.environ.get('BLOXBERG_GAS_PRICE_MEASURE')
-bloxberg_task_execution_price_default = os.environ.get('BLOXBERG_TASK_EXECUTION_PRICE_DEFAULT');
+@dataclass(frozen=True)
+class NetworkConfig:
+    name: str
+    rpc_url: str
+    rpc_delay: int
+    chain_id: int
+    block_time: int
+    contract_address: str
+    heartbeat_contract_address: str
+    image_registry_contract_address: str
+    token_name: str
+    gas_price_measure: str
+    minimum_gas_at_start: int
+    task_execution_price_default: int
+    integration_test_image: str
+    eip1559: bool
+    middleware: str
+    gas_price: int
+    gas_limit: int
+    max_priority_fee_per_gas: int
+    max_fee_per_gas: int
+    reward_type: int
+    network_fee: int
+    enclave_fee: int
 
-testnet_rpc_url = os.environ.get('TESTNET_RPC_URL');
-testnet_chain_id = os.environ.get('TESTNET_CHAIN_ID');
-testnet_contract_address = os.environ.get('TESTNET_CONTRACT_ADDRESS');
-testnet_heartbeat_address = os.environ.get('TESTNET_HEARTBEAT_CONTRACT_ADDRESS');
-testnet_image_registry_address = os.environ.get('TESTNET_IMAGE_REGISTRY');
-testnet_gas_price_measure = os.environ.get('TESTNET_GAS_PRICE_MEASURE')
-testnet_task_execution_price_default = os.environ.get('TESTNET_TASK_EXECUTION_PRICE_DEFAULT');
-
-polygon_rpc_url = os.environ.get('POLYGON_RPC_URL');
-polygon_chain_id = os.environ.get('POLYGON_CHAIN_ID');
-polygon_contract_address = os.environ.get('POLYGON_CONTRACT_ADDRESS');
-polygon_heartbeat_address = os.environ.get('POLYGON_HEARTBEAT_CONTRACT_ADDRESS');
-polygon_image_registry_address = os.environ.get('POLYGON_IMAGE_REGISTRY');
-polygon_gas_price_measure = os.environ.get('POLYGON_GAS_PRICE_MEASURE')
-polygon_task_execution_price_default = os.environ.get('POLYGON_TASK_EXECUTION_PRICE_DEFAULT');
-
-amoy_rpc_url = os.environ.get('AMOY_RPC_URL');
-amoy_chain_id = os.environ.get('AMOY_CHAIN_ID');
-amoy_contract_address = os.environ.get('AMOY_CONTRACT_ADDRESS');
-amoy_heartbeat_address = os.environ.get('AMOY_HEARTBEAT_CONTRACT_ADDRESS');
-amoy_image_registry_address = os.environ.get('AMOY_IMAGE_REGISTRY');
-amoy_gas_price_measure = os.environ.get('AMOY_GAS_PRICE_MEASURE')
-amoy_task_execution_price_default = os.environ.get('AMOY_TASK_EXECUTION_PRICE_DEFAULT');
+NETWORKS = {
+    "POLYGON": ["MAINNET", "AMOY"],
+    "BLOXBERG": ["MAINNET", "TESTNET"],
+    "IOTEX": ["TESTNET"],
+}
 
 
-network_default = "AUTO"
 task_price_default = 3
 network = None
 heart_beat_address = None
 gas_price_measure = None
 image_registry_address = None
 
-# constants
-abi_filepath = os.path.dirname(os.path.realpath(__file__)) + '/docker/pox.abi'
-image_registry_abi_filepath = os.path.dirname(os.path.realpath(__file__)) + '/image_registry.abi'
-heart_beat_abi_filepath = os.path.dirname(os.path.realpath(__file__)) + '/heart_beat.abi'
-auto_update_file_path = os.path.dirname(os.path.realpath(__file__)) + '/auto_update.etny'
-heart_beat_log_file_path = os.path.dirname(os.path.realpath(__file__)) + '/heartbeat.etny'
-uuid_filepath = expanduser("~") + "/opt/etny/node/UUID"
-network_cache_limit = 1
-network_cache_filepath = os.path.dirname(os.path.realpath(__file__)) + '/network_cache.txt'
-orders_cache_limit = 10000000
-orders_cache_filepath = os.path.dirname(os.path.realpath(__file__)) + '/orders_cache.txt'
-ipfs_cache_limit = 10000000
-ipfs_cache_filepath = os.path.dirname(os.path.realpath(__file__)) + '/ipfs_cache.txt'
-dpreq_cache_limit = 10000000
-dpreq_filepath = os.path.dirname(os.path.realpath(__file__)) + '/dpreq_cache.txt'
-doreq_cache_limit = 10000000
-doreq_filepath = os.path.dirname(os.path.realpath(__file__)) + '/doreq_cache.txt'
+base_path = Path(__file__).parent
 
-merged_orders_cache = os.path.dirname(os.path.realpath(__file__)) + '/merged_orders_cache.json'
-merged_orders_cache_limit = 10000000
-
-process_orders_cache_filepath = os.path.dirname(os.path.realpath(__file__)) + '/process_order_data.json'
+abi_filepath = base_path / 'docker/pox.abi'
+image_registry_abi_filepath = base_path / 'image_registry.abi'
+heart_beat_abi_filepath = base_path / 'heart_beat.abi'
+uuid_filepath = Path(expanduser("~")) / "opt/etny/node/UUID"
 
 # logger
 logger = logging.getLogger("ETNY NODE")
 handler = logging.handlers.RotatingFileHandler('/var/log/etny-node.log', maxBytes=2048000, backupCount=5)
-formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+formatter = logging.Formatter('%(asctime)s [%(levelname)s] %(message)s')
 handler.setFormatter(formatter)
 logger.addHandler(handler)
 logger.setLevel(logging.DEBUG if os.environ.get('LOG_LEVEL') == 'debug' else logging.INFO)
 
 contract_call_frequency = int(os.environ.get('CONTRACT_CALL_FREQUENCY', 43200))
 
-# parser
-parser = argparse.ArgumentParser(description="Ethernity PoX request")
-parser.add_argument("-a", "--address", help="Etherem DP address (0xf17f52151EbEF6C7334FAD080c5704D77216b732)",
-                    required=True)
-parser.add_argument("-k", "--privatekey",
-                    help="Etherem DP privatekey "
-                         "(AE6AE8E5CCBFB04590405997EE2D52D2B330726137B875053C36D94E974D162F)",
-                    required=True)
-parser.add_argument("-r", "--resultaddress",
-                    help="Etherem RP address (0xC5fdf4076b8F3A5357c5E395ab970B5B54098Fef)", required=True)
-parser.add_argument("-j", "--resultprivatekey",
-                    help="Etherem RP privatekey "
-                         "(0DBBE8E4AE425A6D2687F1A7E3BA17BC98C673636790F1B8AD91193C05875EF1)",
-                    required=True)
-parser.add_argument("-c", "--cpu", help="Number of CPUs (count)", required=False,
-                    default=str(HardwareInfoProvider.get_number_of_cpus()))
-parser.add_argument("-m", "--memory", help="Amount of memory (GB)", required=False,
-                    default=str(HardwareInfoProvider.get_free_memory()))
-parser.add_argument("-s", "--storage", help="Amount of storage (GB)", required=False,
-                    default=str(HardwareInfoProvider.get_free_storage()))
-parser.add_argument("-b", "--bandwidth", help="Amount of bandwidth (GB)", required=False, default="1")
-parser.add_argument("-t", "--duration", help="Amount of time allocated for task (minutes)", required=False,
-                    default="60")
-parser.add_argument("-e", "--endpoint", help="Hostname of a S3 service", required=False, default="localhost:9000")
-parser.add_argument("-u", "--access_key", help="Access key (aka user ID) of your account in S3 service.",
-                    default="swiftstreamadmin",
-                    required=False)
-parser.add_argument("-p", "--secret_key", help="Secret Key (aka password) of your account in S3 service.",
-                    default="swiftstreamadmin",
-                    required=False)
-parser.add_argument("-v", "--price", help="Task price(per hour).",
-                    default=str(task_price_default),
-                    required=False)
-parser.add_argument("-n", "--network", help="Network the node runs on.",
-                    default=str(network_default),
-                    required=False)
-parser.add_argument("-i", "--ipfshost", help="Default ipfs gateway",
-                    default=str(ipfs_default),
-                    required=False)
-parser.add_argument("-l", "--ipfslocal", help="Local ipfs connect url",
-                    default=str(client_connect_url_default),
-                    required=False)
-parser.add_argument("-x", "--rpc_bloxberg", help="Bloxberg RPC",
-                    default=str(bloxberg_rpc_url),
-                    required=False)
-parser.add_argument("-y", "--rpc_polygon", help="Polygon RPC",
-                    default=str(polygon_rpc_url),
-                    required=False)
-parser.add_argument("-z", "--rpc_testnet", help="Testnet RPC",
-                    default=str(testnet_rpc_url),
-                    required=False)
-parser.add_argument("-w", "--rpc_amoy", help="Amoy RPC",
-                    default=str(amoy_rpc_url),
-                    required=False)
+def add_network_override_arguments(parser: argparse.ArgumentParser, network_names: list):
+    """
+    Dynamically add command-line arguments to override environment variables
+    based on the fields defined in the NetworkConfig data class.
+    """
+    for network in network_names:
+        suffixes = NETWORKS.get(network, [])
+        for suffix in suffixes:
+            network_suffix = f"{network}_{suffix}" if suffix else network
+            prefix = network_suffix.upper()
+
+            for field in fields(NetworkConfig):
+                if field.name == "name":
+                    continue  # Skip the 'name' field as it's already specified
+
+                # Construct environment variable name
+                env_var = f"{prefix}_{field.name.upper()}"
+
+                # Construct command-line argument name
+                arg_name = f"--{network_suffix.lower()}-{field.name.lower()}"
+                
+                # Determine the argument type based on the field typea
+
+                if field.type == bool:
+                    arg_type = strtobool
+                else:
+                    arg_type = field.type if field.type != int else int
+
+                # Add the argument to the parser
+                parser.add_argument(
+                    arg_name,
+                    help=f"Override for {env_var}",
+                    type=arg_type,
+                    required=False,
+                )
+
+def parse_networks(arguments: argparse.Namespace, parser: argparse.ArgumentParser, network_names: list) -> List[NetworkConfig]:
+    """
+    Parse and construct network configurations based on command-line arguments and environment variables.
+
+    Args:
+        arguments (argparse.Namespace): Parsed command-line arguments.
+        parser (argparse.ArgumentParser): The argument parser instance.
+        network_names (list): List of available network names.
+
+    Returns:
+        List[NetworkConfig]: A list of network configurations.
+    """
+    AVAILABLE_NETWORKS = []
+    for network in network_names:
+        suffixes = NETWORKS.get(network, [])
+        for suffix in suffixes:
+            network_suffix = f"{network}_{suffix}" if suffix else network
+            AVAILABLE_NETWORKS.append(network_suffix.lower())
+    
+    ALL_NETWORKS = ["all"]
+    CURRNET_NETWORKS = ["auto", "openbeta"]
+    # Determine which networks to load
+    if arguments.network and any(n.lower() in ALL_NETWORKS for n in arguments.network):
+        # If any special keyword is specified, load all networks
+        selected_networks = AVAILABLE_NETWORKS
+    elif arguments.network and any(n.lower() in CURRNET_NETWORKS for n in arguments.network):
+        # If any special keyword is specified, load all networks
+        selected_networks = [ "polygon_mainnet", "bloxberg_mainnet" ]
+    else:
+        # Otherwise, load only the specified networks
+        selected_networks = [network.lower() for network in arguments.network]
+        # Validate selected networks
+        invalid_networks = set(selected_networks) - set(AVAILABLE_NETWORKS)
+        if invalid_networks:
+            parser.error(
+                f"Invalid network(s) specified: {', '.join(invalid_networks)}. "
+                f"Available networks are: {', '.join(AVAILABLE_NETWORKS)}."
+           )
+
+    networks = []
+
+    for network_suffix in selected_networks:
+        prefix = network_suffix.upper()
+
+        config_kwargs = {}
+        missing_vars = []
+
+        # Iterate through NetworkConfig fields to fetch values
+        for field in fields(NetworkConfig):
+            if field.name == "name":
+                config_kwargs["name"] = network_suffix
+                continue  # Skip the 'name' field as it's already specified
+
+            # Construct environment variable name
+            env_var = f"{prefix}_{field.name.upper()}"
+
+            # Construct command-line argument name
+            arg_name = f"{network_suffix}-{field.name}".replace('_', '-').lower()
+
+            # Fetch the override value from command-line arguments
+            cli_value = getattr(arguments, arg_name.replace("-", "_"), None)
+
+            if cli_value is not None:
+                config_kwargs[field.name] = cli_value
+            else:
+                # Fetch the value from environment variables
+                value = os.environ.get(env_var)
+                if value is None:
+                    missing_vars.append(env_var)
+                else:
+                    # Convert the type if necessary
+                    if field.type == bool:
+                        try:
+                            value = strtobool(value)
+                        except argparse.ArgumentTypeError as e:
+                            logger.error(f"Invalid boolean for {env_var}: {value}")
+                            raise EnvironmentError(f"Invalid boolean value for {env_var}: {value}") from e
+                    elif field.type == int:
+                        try:
+                            value = int(value)
+                        except ValueError:
+                            logger.error(f"Invalid integer for {env_var}: {value}")
+                            raise EnvironmentError(f"Invalid integer value for {env_var}: {value}")
+                    config_kwargs[field.name] = value
+
+        if missing_vars:
+            logger.error(
+                f"Missing environment variables for network '{network_suffix}': {', '.join(missing_vars)}"
+            )
+            raise EnvironmentError(
+                f"Required environment variables are missing for network '{network_suffix}'. "
+                f"Please set: {', '.join(missing_vars)}"
+            )
+
+        # Create a NetworkConfig instance
+        network_config = NetworkConfig(**config_kwargs)
+        networks.append(network_config)
+        logger.info(f"Loaded configuration for network: {network_suffix}")
+
+    return networks
+
+def parse_arguments(network_names: list) -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="Ethernity PoX request")
+    parser.add_argument(
+        "-k",
+        "--privatekey",
+        help="Etherem DP privatekey (AE6AE8E5CCBFB04590405997EE2D52D2B330726137B875053C36D94E974D162F)",
+        required=True
+    )
+    parser.add_argument(
+        "-c",
+        "--cpu",
+        help="Number of CPUs (count)",
+        type=int,
+        required=False,
+        default=HardwareInfoProvider.get_number_of_cpus()
+    )
+    parser.add_argument(
+        "-m",
+        "--memory",
+        help="Amount of memory (GB)",
+        type=int,
+        required=False,
+        default=HardwareInfoProvider.get_free_memory()
+    )
+    parser.add_argument(
+        "-s",
+        "--storage",
+        help="Amount of storage (GB)",
+        type=int,
+        required=False,
+        default=HardwareInfoProvider.get_free_storage()
+    )
+    parser.add_argument(
+        "-b",
+        "--bandwidth",
+        help="Amount of bandwidth (GB)",
+        type=int,
+        required=False,
+        default=1
+    )
+    parser.add_argument(
+        "-t",
+        "--duration",
+        help="Amount of time allocated for task (minutes)",
+        type=int,
+        required=False,
+        default=60
+    )
+    parser.add_argument(
+        "-e",
+        "--endpoint",
+        help="Hostname of a S3 service",
+        type=str,
+        required=False,
+        default="localhost:9000"
+    )
+    parser.add_argument(
+        "-u",
+        "--access_key",
+        help="Access key (aka user ID) of your account in S3 service.",
+        type=str,
+        default="swiftstreamadmin",
+        required=False
+    )
+    parser.add_argument(
+        "-p",
+        "--secret_key",
+        help="Secret Key (aka password) of your account in S3 service.",
+        type=str,
+        default="swiftstreamadmin",
+        required=False
+    )
+    parser.add_argument(
+        "-v",
+        "--price",
+        help="Task price(per hour).",
+        type=float,
+        default=str(task_price_default),  # Replace with actual default value if available
+        required=False
+    )
+    parser.add_argument(
+        "-n",
+        "--network",
+        help="Networks the node runs on. Specify multiple networks separated by space (e.g., polygon_mainnet polygon_amoy bloxberg_mainnet bloxberg_testnet iotex_testnet). If not specified, all available networks are loaded.",
+        nargs='+',
+        default=["all"],
+        required=False
+    )
+    parser.add_argument(
+        "-i",
+        "--ipfshost",
+        help="Default IPFS gateway",
+        type=str,
+        default=str(ipfs_default),
+        required=False
+    )
+    parser.add_argument(
+        "-l",
+        "--ipfslocal",
+        help="Local IPFS connect URL",
+        type=str,
+        default=str(client_connect_url_default),
+        required=False
+    )
+
+    add_network_override_arguments(parser, network_names)
+
+    return parser
+
+parser = parse_arguments(list(NETWORKS.keys()))
 
 arguments = {
-    str: ['address', 'privatekey', 'resultaddress', 'resultprivatekey', 'endpoint', 'access_key', 'secret_key', 'network', 'ipfshost', 'ipfslocal', 'rpc_bloxberg', 'rpc_polygon', 'rpc_testnet', 'rpc_amoy'],
-    int: ['cpu', 'memory', 'storage', 'storage', 'bandwidth', 'duration', 'price']
+    str: [
+       'privatekey', 'endpoint', 'access_key', 'secret_key', 'network', 'ipfshost', 'ipfslocal'
+    ],
+    int: ['cpu', 'memory', 'storage', 'bandwidth', 'duration'],
+    float: ['price']
 }
-
