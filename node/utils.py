@@ -98,7 +98,7 @@ class Storage:
             opts = {'json': 'true'}
             self.bootstrap_client._client.request('/swarm/connect', args, opts=opts, decoder='json')
             self.bootstrap_client.bootstrap.add(self.client_bootstrap_url % ipfs_node)
-            self.bootstrap_client.get(data, target=self.target, compress=True, opts={"compression-level": 9}, timeout=120)
+            self.bootstrap_client.get(data, target=self.target, compress=True, opts={"compression-level": 9}, timeout=60)
             self.cache.add(data)
         except Exception as e:
             self.logger.warning(f"Error while downloading file {data}: {e}")
@@ -130,15 +130,22 @@ class Storage:
         return True
 
     def upload(self, data):
-        try:
-            ipfs_node = socket.gethostbyname(self.ipfs_host)
-            self.bootstrap_client.bootstrap.add(self.client_bootstrap_url % ipfs_node)
-            response = self.bootstrap_client.add(data, timeout=120)
-            return response['Hash']
-        except Exception as e:
-            self.logger.info(f'error while uploading')
-            self.logger.error(e)
-            raise
+        attempt = 0
+        while True:
+            if attmept == 10:
+               break
+            try:
+                ipfs_node = socket.gethostbyname(self.ipfs_host)
+                self.bootstrap_client.bootstrap.add(self.client_bootstrap_url % ipfs_node)
+                response = self.bootstrap_client.add(data, timeout=120)
+                return response['Hash']
+            except Exception as e:
+                self.logger.warn(f"Error while uploading: {e}")
+                if "127.0.0.1" in self.client_connect_url:
+                    self.logger.warning("Restarting IPFS service")
+                    self.restart_ipfs_service()
+            attempt += 1
+        raise Exception(f"Error while uploading: {e}")
 
     def add(self, hash):
         pass

@@ -27,6 +27,9 @@ from cache_config import CacheConfig
 logger = config.logger 
 task_running_on = None
 task_lock = threading.Lock()
+integration_test_complete = False
+integration_test_lock = threading.Lock()
+
 stop_event = threading.Event()
 
 class NetworkLoggerAdapter(logging.LoggerAdapter):
@@ -43,39 +46,33 @@ class NetworkLoggerAdapter(logging.LoggerAdapter):
 class EtnyPoXNode:
     logger = None
 
-    __address = None
-    __privatekey = None
-    __resultaddress = None
-    __resultprivatekey = None
-    __cpu = None
-    __memory = None
-    __storage = None
-    __bandwidth = None
-    __duration = None
-    __endpoint = None
-    __access_key = None
-    __secret_key = None
-    __network = None
-    __ipfshost = None
-    __price = None
-    __orders = {}
-    __do_requests_build_pending = True
-
     def __init__(self, network):
+
+        self.__address = None
+        self. __privatekey = None
+        self.__resultaddress = None
+        self.__resultprivatekey = None
+        self. __cpu = None
+        self. __memory = None
+        self.  __storage = None
+        self. __bandwidth = None
+        self. __duration = None
+        self. __endpoint = None
+        self.__access_key = None
+        self.__secret_key = None
+        self.__network = None
+        self.__ipfshost = None
+        self.__price = None
+        self.__orders = defaultdict(lambda: None)
+        self.__do_requests_build_pending = True
+
         self.parse_arguments(config.arguments, config.parser)
-
         polygonBalance = 0
-
         self.__network = network.name
-
         self.logger = NetworkLoggerAdapter(config.logger, self.__network)
-
         logger = self.logger
-
         logger.info(f"Configured network is: {self.__network}")
-        
         self.__network_config = network
- 
         self.__price = int(network.task_execution_price_default);
 
         try:
@@ -118,7 +115,7 @@ class EtnyPoXNode:
         logger.info(f"Heartbeat Contract Address: %s", self.__network_config.heartbeat_contract_address);
         logger.info(f"Image Registry Address: %s", self.__network_config.image_registry_contract_address);
         logger.info(f"Gas Price Measure: %s", self.__network_config.gas_price_measure);
-        logger.info(f"Hourly reward for operations: %d %s", self.__price, self.__network_config.token_name);
+        logger.info(f"Minimum reward for order processing: %d %s / hour", self.__price, self.__network_config.token_name);
         logger.info(f"IPFS Host: %s", self.__ipfshost);
         logger.info(f"IPFS Local Connect URL: %s", self.__ipfslocal);
         logger.info(f"Node number of cpus: %s", self.__number_of_cpus);
@@ -176,9 +173,12 @@ class EtnyPoXNode:
         self.process_order_data = {}
 
         [enclave_image_hash, _, docker_compose_hash] = self.__image_registry.caller().getLatestTrustedZoneImageCertPublicKey(self.__network_config.integration_test_image, 'v3')
-        
-        if config.skip_integration_test == True:
-           logger.warning('Node is configured to run confidential tasks using SGX, by skipping the integration check')
+
+        while get_task_running_on() is not None:
+           time.sleep(1)
+
+        if config.skip_integration_test == True or get_integration_test_complete():
+           logger.warning('Agent skipped SGX integration test, SGX capabilitties overwritten by configuration')
            order_id = 'integration_test'
            docker_compose_file = f'{self.cache_config.base_path}/{docker_compose_hash}'
            self.integration_bucket_name = 'etny-bucket-integration'
@@ -187,8 +187,6 @@ class EtnyPoXNode:
 
            self.can_run_under_sgx = True
         else:
-           while get_task_running_on() is not None:
-               time.sleep(1)
            set_task_running_on(self.__network)
            self.__run_integration_test()
            reset_task_running_on()
@@ -354,7 +352,6 @@ class EtnyPoXNode:
                             self.dpreq_cache.add(self.__dprequest)
                         if order.status == OrderStatus.OPEN:
                             logger.debug("Order was never approved, skipping")
-                            self.dpreq_cache.add(self.__dprequest)
 
                 if total_requests > 1 and not stop_event.is_set():
                     logger.info(f"Building DP requests cache [STAGE 1]: 100%")
@@ -377,6 +374,13 @@ class EtnyPoXNode:
                 threshold = 0
 
                 for idx, req_id in enumerate(req_to_process, start=1):
+
+                    balance = self.__w3.eth.get_balance(self.__address)
+
+                    if balance < int(self.__network_config.minimum_gas_at_start):
+                        logger.error("Not enough gas to run on this network, exiting")
+                        break
+
                     if stop_event.is_set():
                         break
 
@@ -419,7 +423,7 @@ class EtnyPoXNode:
                     time.sleep(self.__network_config.rpc_delay/1000)
                     req = DPRequest(self.__etny.caller()._getDPRequest(req_id))
                     if req.status == RequestStatus.AVAILABLE:
-                        logger.info(f"DP Request {req_id} initialized. Unlocking the value of decentralization. ")
+                        logger.info(f"DP Request {req_id} resumed. Unlocking the value of decentralization. ")
                         self.__dprequest = req_id
                         self.process_dp_request()
                     else:
@@ -438,6 +442,7 @@ class EtnyPoXNode:
 
         if self.__price is None:
             self.__price = 1
+
 
         # Getting available hardware resources
         self.__number_of_cpus = int(HardwareInfoProvider.get_number_of_cpus());
@@ -515,27 +520,29 @@ class EtnyPoXNode:
     def calculate_reward(self):
         logger = self.logger
 
-        order_details = self._getOrder()
-        [order_id, order] = order_details
+        [order_id, order] = self._getOrder()
 
         do_req = DORequest(self.__etny.caller()._getDORequest(order.do_req))
         if self.__network_config.reward_type == 1:
             total_amount = do_req.price * do_req.duration
-            networ_fee = total_amount * self.__network_config.network_fee / 100
+            network_fee = total_amount * self.__network_config.network_fee / 100
             enclave_fee = total_amount * self.__network_config.enclave_fee / 100
-            operator_fee = total_amount - networ_fee - enclave_fee
+            operator_fee = total_amount - network_fee - enclave_fee
             reward = round(operator_fee, 2)
         elif self.__network_config.reward_type == 2:
             total_amount = do_req.price * do_req.duration
-            base_amount = (total_amount * 100) / ( 100 + self.__network_config.networ_fee + self.__network_config.enclave_fee )
-            networ_fee = base_amount * self.__network_config.network_fee / 100
+            base_amount = (total_amount * 100) / ( 100 + self.__network_config.network_fee + self.__network_config.enclave_fee )
+            network_fee = base_amount * self.__network_config.network_fee / 100
             enclave_fee = base_amount * self.__network_config.enclave_fee / 100
-            operator_fee = total_amount - networ_fee - enclave_fee
+            operator_fee = total_amount - network_fee - enclave_fee
             reward = round(operator_fee, 2)
 
-            
+        logger.info("***")
         logger.info(f"Reward: {reward} {self.__network_config.token_name}. You’ve earned it. ")
-        logger.info(f"HODL your {self.__network_config.token_name} for long-term growth. Payout after validation.")
+        logger.info("***")
+
+        if self.__network_config.network_type == "MAINNET":
+            logger.info(f"HODL your {self.__network_config.token_name} for long-term growth. Payout after validation.")
 
     def process_order(self, order_id, metadata=None):
         logger = self.logger
@@ -621,7 +628,7 @@ class EtnyPoXNode:
                 if not self.storage.download_many(list_of_ipfs_hashes, attempts=5, delay=3):
                     logger.info("Cannot download data from IPFS, cancelling processing")
                     self.ipfs_timeout_cancel(order_id)
-                    self.dpreq_cache.add(self.__dprequest)
+                    self.dpreq_cache.add(order.dp_req)
                     return
 
             payload_file = f'{self.cache_config.base_path}/{payload_hash}'
@@ -965,6 +972,8 @@ class EtnyPoXNode:
             f.write(contents)
 
     def _getOrder(self):
+        logger = self.logger
+
         order_id = self.find_order_by_dp_req()
         if order_id is not None:
             order = Order(self.__etny.caller()._getOrder(order_id))
@@ -1052,6 +1061,7 @@ class EtnyPoXNode:
         logger = self.logger
        
         order_details = self._getOrder()
+
         if order_details is not None:
             [order_id, order] = order_details
             if order.status == OrderStatus.PROCESSING:
@@ -1188,19 +1198,19 @@ class EtnyPoXNode:
                     # store merged log
                     self.merged_orders_cache.add(do_req_id=i, dp_req_id=self.__dprequest, order_id=self.__order_id)
 
-                except (exceptions.ContractLogicError, IndexError) as error:
-                    logger.info(f"Order already created, skipping to next DO request")
-                    self.doreq_cache.add(i)
+                except (exceptions.ContractLogicError, IndexError) as e:
+                    logger.warning(f"Falied placing order: {e}")
                     reset_task_running_on()
                     continue
 
                 if metadata[i][4] == '':
-                    logger.info(f"Awaiting approval for Order {self.__order_id}")
-
-                    if retry(self.wait_for_order_approval, attempts=60, delay=2)[0] is False:
-                        logger.info("Order was not approved in the last ~50 blocks, skipping to next DO request")
+                    logger.info(f"Awaiting approval for order")
+                    attempts = int(60 / self.__network_config.block_time)
+                    if retry(self.wait_for_order_approval, attempts=attempts, delay=self.__network_config.block_time)[0] is False:
+                        logger.info(f"Order was not approved in the last ~{attempts} blocks, skipping to next DP request")
+                        next_dp_request = True
                         reset_task_running_on()
-                        continue
+                        break
 
                     logger.info(f"Approval granted. Order processing continues.")
 
@@ -1240,7 +1250,7 @@ class EtnyPoXNode:
         logger = self.logger
 
         logger.debug(f"Checking if DP request {self.__dprequest} has an order associated")
-        self.orders_cache
+
         order_id = self.orders_cache.get(str(self.__dprequest))
         if order_id is not None:
             logger.debug(f"Found in cache, order_id = {order_id}")
@@ -1262,11 +1272,13 @@ class EtnyPoXNode:
                 break
 
             if _order_id in cached_order_ids:
-                 dp_req = self.orders_cache.get_key(_order_id)
-                 order = SimpleNamespace()
-                 order.dp_req = dp_req
-                 self.__orders[_order_id] = order
+                dp_req = self.orders_cache.get_key(_order_id)
+                order = {'dp_req': dp_req}
+                self.__orders[_order_id] = order
+                order_dp_req = dp_req
             else:
+              try:
+
                 if _order_id not in self.__orders or self.__orders[_order_id] is None:
                     building = True
                     percent_complete = (idx * 100) // total_requests
@@ -1280,8 +1292,12 @@ class EtnyPoXNode:
 
                 order = Order(self.__orders[_order_id])
                 self.orders_cache.add(order.dp_req, _order_id)
+                order_dp_req = order.dp_req
 
-            if order.dp_req == self.__dprequest:
+              except Exception as e:
+                logger.error(f"Unable to find order: {e}")
+
+            if order_dp_req == self.__dprequest:
                 return _order_id
 
         if total_requests > 1 and building == True and not stop_event.is_set():
@@ -1308,14 +1324,11 @@ class EtnyPoXNode:
             _hash = self.send_transaction(unicorn_txn)
             logger.info(f"TXID {_hash} pending... fingers crossed")
             receipt = self.__w3.eth.wait_for_transaction_receipt(_hash)
-            processed_logs = self.__etny.events._placeOrderEV().process_receipt(receipt)
-            order_id = processed_logs[0].args._orderNumber
-            self.__order_id = order_id
-            if order_id != 0:
-               logger.info(f"TXID {_hash} confirmed!")
-               break
+            if receipt.status == 1:
+                logger.info(f"TXID {_hash} confirmed!")
+                break
           except (exceptions.ContractLogicError, IndexError) as e:
-              logger.info(f"Order is already filled by another operator");
+              logger.warning(f"ContractLogicError: {e}");
               raise
           except Exception as ex:
               retries += 1
@@ -1326,7 +1339,20 @@ class EtnyPoXNode:
               time.sleep(5)
           continue
 
-        logger.info("Order secured!")
+        while True:
+          try:
+            time.sleep(self.__network_config.rpc_delay/1000)
+            processed_logs = self.__etny.events._placeOrderEV().process_receipt(receipt)
+            order_id = processed_logs[0].args._orderNumber
+            if order_id != None:
+                self.__order_id = order_id
+                break
+          except Exception as e:
+            logger.warn(f"Exception while parsing transaction receipt: {e}")
+            logger.warn(f"{receipt}")
+            continue
+
+        logger.info(f"Order {self.__order_id} secured!")
 
     def get_transaction_build(self, existing_nonce=None):
         logger = self.logger
@@ -1360,7 +1386,7 @@ class EtnyPoXNode:
                 "gas": self.__network_config.gas_limit,
             }
  
-            gas_price_value = self.__network_config.gas_limit
+            gas_price_value = self.__w3.to_wei(self.__network_config.gas_price, self.__network_config.gas_price_measure)
 
 
         logger.debug(f"Sending transaction using eip1559 = {self.__network_config.eip1559}, gasPrice = {self.__w3.from_wei(gas_price_value, 'gwei')} gwei");
@@ -1380,6 +1406,13 @@ class EtnyPoXNode:
 
     def resume_processing(self):
         while True and not stop_event.is_set():
+
+            balance = self.__w3.eth.get_balance(self.__address)
+
+            if balance < int(self.__network_config.minimum_gas_at_start):
+                logger.error("Not enough gas to run on this network, exiting")
+                break
+
             self.add_dp_request()
             self.process_dp_request()
 
@@ -1511,7 +1544,8 @@ class EtnyPoXNode:
             return
 
         self.can_run_under_sgx = True
-        logger.info('Node is properly configured to run confidential tasks using SGX')
+        set_integration_test_complete(True)
+        logger.info('Agent is SGX capabilities tested and enabled successfuly')
         self.__clean_up_integration_test()
 
     def __can_run_auto_update(self, file_path, interval):
@@ -1662,6 +1696,24 @@ def reset_task_running_on():
     global task_running_on
     with task_lock:
         task_running_on = None
+
+def set_integration_test_complete(value):
+    """
+    Sets the shared value for integration test in a thread-safe way.
+    """
+    global integration_test_complete
+    with integration_test_lock:
+        integration_test_complete = value
+
+def get_integration_test_complete():
+    """
+    Sets the shared value for integration test in a thread-safe way.
+    """
+    global integration_test_complete
+    with integration_test_lock:
+        return integration_test_complete
+
+
 
 if __name__ == '__main__':
 

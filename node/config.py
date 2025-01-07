@@ -29,6 +29,7 @@ skip_integration_test = strtobool(os.environ.get('SKIP_INTEGRATION_TEST'))
 @dataclass(frozen=True)
 class NetworkConfig:
     name: str
+    network_type: str
     rpc_url: str
     rpc_delay: int
     chain_id: int
