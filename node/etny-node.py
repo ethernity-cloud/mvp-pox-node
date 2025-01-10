@@ -640,7 +640,7 @@ class EtnyPoXNode:
 
             logger.info("Task preloaded. Preparing docker environment")
             run_subprocess(
-                ['docker-compose', '-f', f'docker/docker-compose-swift-stream.yml', 'up', '-d', 'swift-stream'],
+                ['docker-compose', '-f', f'../docker/docker-compose-swift-stream.yml', 'up', '-d', 'swift-stream'],
                 logger)
 
             docker_compose_file = f'{self.cache_config.base_path}/{docker_compose_hash}'
@@ -717,7 +717,7 @@ class EtnyPoXNode:
             ], logger)
             logger.debug('Cleaning up swift-stream docker container.')
             run_subprocess([
-                'docker-compose', '-f', f'docker/docker-compose-swift-stream.yml', 'down', 'swift-stream'
+                'docker-compose', '-f', f'../docker/docker-compose-swift-stream.yml', 'down', 'swift-stream'
             ], logger)
 
     def wait_for_enclave(self, timeout=120):
@@ -1472,7 +1472,7 @@ class EtnyPoXNode:
             ], logger)
             logger.debug('Cleaning up swift-stream docker container.')
             run_subprocess([
-                'docker-compose', '-f', f'docker/docker-compose-swift-stream.yml', 'down', 'swift-stream'
+                'docker-compose', '-f', f'../docker/docker-compose-swift-stream.yml', 'down', 'swift-stream'
             ], logger)
             logger.debug('Cleaning up swift-stream integration bucket.')
             self.swift_stream_service.delete_bucket(self.integration_bucket_name)
@@ -1504,7 +1504,7 @@ class EtnyPoXNode:
 
         logger.debug("Running docker swift-stream")
         run_subprocess(
-            ['docker-compose', '-f', f'docker/docker-compose-swift-stream.yml', 'up', '-d', 'swift-stream'],
+            ['docker-compose', '-f', f'../docker/docker-compose-swift-stream.yml', 'up', '-d', 'swift-stream'],
             logger)
 
         docker_compose_file = f'{self.cache_config.base_path}/{docker_compose_hash}'
