@@ -268,16 +268,16 @@ class EtnyPoXNode:
                     try:
                         self.storage.pin_rm(hash)
                         self.storage.rm(hash)
-                        self.storage.repo_gc()
                         logger.debug(f"Successfully deleted {hash}")
                     except Exception as e:
                         logger.debug(f"Failed to delete {hash}: {e}")
                 else:
-                    logger.debug(f"Hash {hash} is not older than one week (Age: {age / 3600:.2f} hours). Skipping.")
+                    logger.debug(f"Hash {hash} is not older than one week (Age: {age / 3600:.2f} hours). Keeping pin.")
             else:
                 logger.warning(f"No timestamp found for {hash}. Unable to determine age. Skipping deletion.")
           else:
             self.storage.pin_add(hash)
+            self.ipfs_cache.add(hash)
 
     def generate_process_order_data(self, write=False):
 
@@ -1236,6 +1236,9 @@ class EtnyPoXNode:
             if next_dp_request == True:
                 break
 
+        self.storage.repo_gc() # Running garbage colleciton on ipfs before exiting
+
+
     def wait_for_order_approval(self):
         logger = self.logger
         
@@ -1545,7 +1548,7 @@ class EtnyPoXNode:
 
         self.can_run_under_sgx = True
         set_integration_test_complete(True)
-        logger.info('Agent is SGX capabilities tested and enabled successfuly')
+        logger.info('Agent SGX capabilities tested and enabled successfuly')
         self.__clean_up_integration_test()
 
     def __can_run_auto_update(self, file_path, interval):
@@ -1635,14 +1638,6 @@ class SGXDriver:
         except Exception as e:
             pass
 
-
-def initiate_shutdown():
-    """
-    Function to initiate shutdown.
-    """
-    config.logger.info("Initiating periodic graceful restart...")
-    stop_event.set()  # Signal all threads to stop
-
 def process_network(network):
     """
     Processes a single network configuration.
@@ -1713,6 +1708,60 @@ def get_integration_test_complete():
     with integration_test_lock:
         return integration_test_complete
 
+class TaskManager:
+    def __init__(self):
+        self.executor = None
+        self.futures = []
+
+    def start_threads(self, network_configs):
+        """
+        Creates a new ThreadPoolExecutor and starts tasks.
+        Stores them in self.executor/self.futures.
+        """
+        logger.info("Starting new threads...")
+        self.executor = concurrent.futures.ThreadPoolExecutor(max_workers=5)
+        self.futures = [
+            self.executor.submit(process_network, net) for net in network_configs
+        ]
+
+def initiate_restart(network_configs, task_manager):
+    """
+    1) Signal the old tasks to stop.
+    2) Wait for them to finish.
+    3) Shutdown the old executor.
+    4) Clear stop_event and start fresh tasks in the same TaskManager.
+    """
+    logger.info("Initiating restart...")
+
+    # 1) Tell current tasks to stop
+    stop_event.set()
+
+    # 2) Wait until all futures are done
+    while not all(f.done() for f in task_manager.futures):
+        logger.info("Waiting for current tasks to finish...")
+        time.sleep(2)
+
+    logger.info("All current tasks have stopped.")
+
+    # 3) Shut down the old executor
+    task_manager.executor.shutdown(wait=True)
+    logger.info("Old executor shut down.")
+
+    # 4) Clear the stop flag
+    stop_event.clear()
+
+    # 5) Start fresh threads (re-using the same TaskManager object)
+    task_manager.start_threads(network_configs)
+    logger.info("New threads started after restart.")
+
+def run_scheduler(interval, network_configs, task_manager):
+    """
+    Runs in a background thread. Every `interval` seconds, calls initiate_restart().
+    This is an infinite loop, so adjust as needed or provide a break condition.
+    """
+    while True:
+        time.sleep(interval)
+        initiate_restart(network_configs, task_manager)
 
 
 if __name__ == '__main__':
@@ -1729,34 +1778,24 @@ if __name__ == '__main__':
         sgx = SGXDriver()
         network_configs = config.parse_networks(args, parser, network_names)
 
-        shutdown_timer = threading.Timer(48 * 60 * 60, initiate_shutdown)
-        shutdown_timer.start()
+        # Create a TaskManager to hold executor/futures
+        task_manager = TaskManager()
 
-        with concurrent.futures.ThreadPoolExecutor(max_workers=100) as executor:
-            # Submit all network processing tasks
-            future_to_network = {
-                executor.submit(process_network, network): network for network in network_configs
-            }
+        # Start the first batch of threads
+        task_manager.start_threads(network_configs)
 
-            try:
-                for future in concurrent.futures.as_completed(future_to_network):
-                    network = future_to_network[future]
-                    try:
-                        future.result()
-                    except Exception as exc:
-                        config.logger.error(f"[{network.name}] Generated an exception: {exc}")
-            except KeyboardInterrupt:
-                # Handle Ctrl+C
-                config.logger.warning("Process interrupted by user. Stopping all tasks...")
-                shutdown_timer.cancel()
-                while get_task_running_on() is not None:
-                   time.sleep(1)
-                stop_event.set()  # Signal all threads to stop
-                executor.shutdown(wait=True)  # Shutdown executor immediately
-                config.logger.info("Exiting gracefully.")
-                sys.exit(0)
+        # Create a background scheduler that restarts every 20 seconds
+        scheduler_thread = threading.Thread(
+            target=run_scheduler,
+            args=(24 * 60 * 60, network_configs, task_manager),
+            daemon=True  # daemon=True so it won't block process exit
+        )
+        scheduler_thread.start()
 
-        shutdown_timer.cancel()
+        # Keep main alive (or do other work)
+        logger.info("Main thread running. Press Ctrl+C to stop.")
+        while True:
+            time.sleep(1)
 
     except EnvironmentError as env_err:
         logger.error(f"Environment configuration error: {env_err}")

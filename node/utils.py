@@ -89,7 +89,6 @@ class Storage:
 
     def download(self, data):
         if self.cache.contains(data):
-            self.cache.add(data)
             return
         try:
             ipfs_node = socket.gethostbyname(self.ipfs_host)
@@ -132,12 +131,13 @@ class Storage:
     def upload(self, data):
         attempt = 0
         while True:
-            if attmept == 10:
+            if attempt == 10:
                break
             try:
                 ipfs_node = socket.gethostbyname(self.ipfs_host)
                 self.bootstrap_client.bootstrap.add(self.client_bootstrap_url % ipfs_node)
                 response = self.bootstrap_client.add(data, timeout=120)
+                self.cache.add(data)
                 return response['Hash']
             except Exception as e:
                 self.logger.warn(f"Error while uploading: {e}")
