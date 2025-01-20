@@ -259,6 +259,10 @@ choose_network() {
         echo "${shortnames[$choice]}_RPC_URL=${rpc_url}" >> $nodefolder/$configfile
         echo "${shortnames[$choice]}_MINIMUM_GAS_AT_START=${gas_at_start}" >> $nodefolder/$configfile
 
+        sed -i "/TASK_EXECUTION_PRICE=/d" "$nodefolder/$configfile"
+        sed -i "/${shortnames[$choice]}_TASK_EXECUTION_PRICE=/d" "$nodefolder/$configfile"
+        echo "${shortnames[$choice]}_TASK_EXECUTION_PRICE=${TASK_EXECUTION_PRICE}" >> "$nodefolder/$configfile"
+
     done
 
     echo ""
@@ -269,7 +273,7 @@ choose_network() {
 
 
 task_price_check() {
-    current_price=$(grep "TASK_EXECUTION_PRICE" "$nodefolder/$configfile" | cut -d'=' -f2)
+    current_price=$(grep "TASK_EXECUTION_PRICE" "$nodefolder/$configfile" | cut -d'=' -f2 | head -1)
     echo ""
     if [ "$current_price" != "" ];
     then
@@ -308,9 +312,9 @@ set_task_price() {
 
 deploy_debian() {
   # Determining if the etny-vagrant service is running
-  echo "$os found. Continuing..." 
-  choose_network
+  echo "$os found. Continuing..."
   task_price_check
+  choose_network
   echo "#############################################"
   echo "Finding out if etny-vagrant service is already running..."
   systemctl status "$service" 2>/dev/null | grep "active (running)" >/dev/null
@@ -379,9 +383,6 @@ check_config_file() {
         # Remove existing entries and append the current values
         sed -i "/^NETWORK=/d" "$nodefolder/$configfile"
         echo "NETWORK=$NETWORK" >> "$nodefolder/$configfile"
-
-        sed -i "/^TASK_EXECUTION_PRICE=/d" "$nodefolder/$configfile"
-        echo "TASK_EXECUTION_PRICE=$TASK_EXECUTION_PRICE" >> "$nodefolder/$configfile"
 
         # Loop through each RPC variable and write to config file if set
         for rpc_var in "${rpc_vars[@]}"; do

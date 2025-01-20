@@ -139,8 +139,8 @@ def parse_networks(arguments: argparse.Namespace, parser: argparse.ArgumentParse
             network_suffix = f"{network}_{suffix}" if suffix else network
             AVAILABLE_NETWORKS.append(network_suffix.lower())
     
-    ALL_NETWORKS = ["all"]
-    CURRENT_NETWORKS = ["auto", "openbeta"]
+    ALL_NETWORKS = ["all", "auto"]
+    CURRENT_NETWORKS = ["openbeta"]
     LEGACY_NETWORKS = ["bloxberg", "testnet", "polygon"]
 
     lower_networks = [n.lower() for n in arguments.network]
