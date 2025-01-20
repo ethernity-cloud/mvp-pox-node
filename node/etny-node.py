@@ -73,7 +73,7 @@ class EtnyPoXNode:
         logger = self.logger
         logger.info(f"Configured network is: {self.__network}")
         self.__network_config = network
-        self.__price = int(network.task_execution_price_default);
+        self.__price = int(network.task_execution_price);
 
         try:
             with open(config.abi_filepath) as f:
@@ -94,7 +94,7 @@ class EtnyPoXNode:
             balance = self.__w3.eth.get_balance(self.__address)
 
             if balance < int(network.minimum_gas_at_start):
-               logger.error("Not enough gas to run node agent, exiting")
+               logger.error(f"Not enough gas at {self.__address} to run node agent, exiting")
                raise Exception(f"Not enough gas on network {self.__network}: {balance}")
 
         except Exception as e:
@@ -1151,11 +1151,16 @@ class EtnyPoXNode:
                     metadata[i] = [None, None, None, None, None]
 
                 if metadata[i][4] is None:
-                    time.sleep(self.__network_config.rpc_delay/1000)
-                    _doreq[i] = self.__etny.caller()._getDORequest(i)
-                    doreq[i] = DORequest(_doreq[i])
-                    time.sleep(self.__network_config.rpc_delay/1000)
-                    metadata[i] = self.__etny.caller()._getDORequestMetadata(i)
+                    while True:
+                        try:
+                            time.sleep(self.__network_config.rpc_delay/1000)
+                            _doreq[i] = self.__etny.caller()._getDORequest(i)
+                            doreq[i] = DORequest(_doreq[i])
+                            time.sleep(self.__network_config.rpc_delay/1000)
+                            metadata[i] = self.__etny.caller()._getDORequestMetadata(i)
+                            break
+                        except Exception as e:
+                            logger.warning(f"Failed to read DO request metadata")
 
                 if doreq[i].status != RequestStatus.AVAILABLE:
                     logger.debug(

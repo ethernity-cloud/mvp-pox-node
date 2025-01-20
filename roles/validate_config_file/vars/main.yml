@@ -1,0 +1,31 @@
+networks:
+  - name: "Polygon Mainnet (ECLD)"
+    shortname: "POLYGON_MAINNET"
+    description: "You can buy POLYGON (POL) on major exchanges"
+    rpc_url: "https://polygon-bor-rpc.publicnode.com"
+    minimum_gas_at_start: 100000000000000000
+  - name: "Polygon Amoy"
+    shortname: "POLYGON_AMOY"
+    description: "Faucet URL: https://faucet.polygon.technology"
+    rpc_url: "https://rpc.ankr.com/polygon_amoy"
+    minimum_gas_at_start: 100000000000000000
+  - name: "bloxberg Mainnet (ETNY)"
+    shortname: "BLOXBERG_MAINNET"
+    description: "Faucet URL: https://faucet.bloxberg.org"
+    rpc_url: "https://bloxberg.ethernity.cloud"
+    minimum_gas_at_start: 100000000000
+  - name: "bloxberg Testnet"
+    shortname: "BLOXBERG_TESTNET"
+    description: "Faucet URL: https://faucet.bloxberg.org"
+    rpc_url: "https://bloxberg.ethernity.cloud"
+    minimum_gas_at_start: 100000000000
+  - name: "IoTeX Testnet"
+    shortname: "IOTEX_TESTNET"
+    description: "Faucet URL: https://developers.iotex.io/faucet"
+    rpc_url: "https://babel-api.testnet.iotex.io"
+    minimum_gas_at_start: 2000000000000000000
+  - name: "Ethereum Sepolia"
+    shortname: "ETHEREUM_SEPOLIA"
+    description: "Faucet URL: https://sepolia-faucet.pk910.de"
+    rpc_url: "https://ethereum-sepolia-rpc.publicnode.com"
+    minimum_gas_at_start: 2000000000000000000

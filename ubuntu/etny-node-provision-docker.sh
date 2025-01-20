@@ -1,6 +1,10 @@
 #!/bin/bash
 set -e
 
+grep net.ipv6.conf.all.disable_ipv6 /etc/sysctl.conf || (echo; "net.ipv6.conf.all.disable_ipv6 = 1" | sudo tee -a /etc/sysctl.conf)
+grep net.ipv6.conf.default.disable_ipv6 /etc/sysctl.conf || (echo; "net.ipv6.conf.all.disable_ipv6 = 1" | sudo tee -a /etc/sysctl.conf)
+grep net.ipv6.conf.lo.disable_ipv6 /etc/sysctl.conf || (echo; "net.ipv6.conf.all.disable_ipv6 = 1" | sudo tee -a /etc/sysctl.conf)
+
 sysctl -p
 
 trap 'echo "Installer status: \"${BASH_COMMAND}\"command end with exit code $?."' SIGINT SIGTERM ERR EXIT

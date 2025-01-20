@@ -40,7 +40,7 @@ class NetworkConfig:
     token_name: str
     gas_price_measure: str
     minimum_gas_at_start: int
-    task_execution_price_default: int
+    task_execution_price: int
     integration_test_image: str
     trustedzone_images: str
     eip1559: bool
@@ -57,6 +57,7 @@ NETWORKS = {
     "POLYGON": ["MAINNET", "AMOY"],
     "BLOXBERG": ["MAINNET", "TESTNET"],
     "IOTEX": ["TESTNET"],
+    "ETHEREUM": ["SEPOLIA"],
 }
 
 
@@ -102,7 +103,7 @@ def add_network_override_arguments(parser: argparse.ArgumentParser, network_name
                 env_var = f"{prefix}_{field.name.upper()}"
 
                 # Construct command-line argument name
-                arg_name = f"--{network_suffix.lower()}-{field.name.lower()}"
+                arg_name = f"--{network_suffix.lower()}_{field.name.lower()}"
                 
                 # Determine the argument type based on the field typea
 
