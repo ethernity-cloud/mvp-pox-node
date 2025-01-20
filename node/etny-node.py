@@ -178,7 +178,12 @@ class EtnyPoXNode:
            time.sleep(1)
 
         if config.skip_integration_test == True or get_integration_test_complete():
-           logger.warning('Agent skipped SGX integration test, SGX capabilitties overwritten by configuration')
+
+           if config.skip_integration_test:
+               logger.warning('Agent skipped SGX integration test, SGX capabilitties overwritten by configuration')
+           else:
+               logger.info('SGX integration test completed already')
+
            order_id = 'integration_test'
            docker_compose_file = f'{self.cache_config.base_path}/{docker_compose_hash}'
            self.integration_bucket_name = 'etny-bucket-integration'
@@ -1139,14 +1144,6 @@ class EtnyPoXNode:
                     logger.info(f"Building DO Requests cache: {percent_complete}% ({idx} / {total_requests})")
                     threshold += 1   # Increment to the next threshold
 
-                if self._check_installed_drivers():
-                    logger.error('SGX configuration error. Both isgx drivers are installed. Skipping order placing ...')
-                    continue
-
-                if not self.can_run_under_sgx:
-                    logger.error('SGX is not enabled or correctly configured, skipping DO request')
-                    continue
-
                 if i not in metadata:
                     metadata[i] = [None, None, None, None, None]
 
@@ -1192,6 +1189,15 @@ class EtnyPoXNode:
                     status = self.__can_place_order(self.__dprequest, i)
                     if not status:
                         continue
+                if self._check_installed_drivers():
+                    logger.error('SGX configuration error. Both isgx drivers are installed. Skipping order placing ...')
+                    self.doreq_cache.add(i)
+                    continue
+
+                if not self.can_run_under_sgx:
+                    logger.error('SGX is not enabled or correctly configured, skipping DO request')
+                    self.doreq_cache.add(i)
+                    continue
 
                 set_task_running_on(self.__network)
 

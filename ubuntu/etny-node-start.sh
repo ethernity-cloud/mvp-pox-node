@@ -58,7 +58,7 @@ fi
 
 cd /home/vagrant/etny/node/etny-repo/node/
 git fetch origin
-git reset --hard origin/master
+git reset --hard origin/v3.3.3
 git pull
 
 parse_config_to_args() {
