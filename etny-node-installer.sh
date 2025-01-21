@@ -259,7 +259,7 @@ choose_network() {
         echo "${shortnames[$choice]}_RPC_URL=${rpc_url}" >> $nodefolder/$configfile
         echo "${shortnames[$choice]}_MINIMUM_GAS_AT_START=${gas_at_start}" >> $nodefolder/$configfile
 
-        sed -i "/TASK_EXECUTION_PRICE=/d" "$nodefolder/$configfile"
+        sed -i "/^TASK_EXECUTION_PRICE=/d" "$nodefolder/$configfile"
         sed -i "/${shortnames[$choice]}_TASK_EXECUTION_PRICE=/d" "$nodefolder/$configfile"
         echo "${shortnames[$choice]}_TASK_EXECUTION_PRICE=${TASK_EXECUTION_PRICE}" >> "$nodefolder/$configfile"
 
@@ -275,40 +275,26 @@ choose_network() {
 task_price_check() {
     current_price=$(grep "TASK_EXECUTION_PRICE" "$nodefolder/$configfile" | cut -d'=' -f2 | head -1)
     echo ""
-    if [ "$current_price" != "" ];
+    if [ "$current_price" == "" ];
     then
-        echo "Task execution price already exists in the config file and is currently set to $current_price ETNY/hour."
-        export TASK_EXECUTION_PRICE=$current_price
-        echo "Would you like to modify it? (y/N)"
-        read modify
-        if [[ "$modify" =~ ^[Yy]$ ]]; then
-            set_task_price
-        fi
-    else
-        echo "The TASK_EXECUTION_PRICE is not set in the config file."
-        echo "Do you want to use the default value of 1 ETNY/hour? (Y/n)"
-        read -r use_default
-        if [[ -z "$use_default" ]] || [[ "$use_default" =~ ^[Yy]$ ]]; then
-            default_price=1
-            export TASK_EXECUTION_PRICE=$default_price
-        else
-            set_task_price
-        fi
+       current_price=1;
     fi
+
+    echo "################## TASK PRICE ##################"
+    echo "Current task execution price: $current_price ETNY/ECLD"
+
+    read -p "Please specify the desired task exection price to continue (default: $current_price): " taskprice
+    if [[ $taskprice == "" ]] || [[ $taskprice == 0 ]]; then
+        taskprice=$current_price
+    fi
+
+    echo "Task price set to ${taskprice} ETNY/ECLD"
+
+
+    export TASK_EXECUTION_PRICE=$taskprice
+
 }
 
-set_task_price() {
-    while true; do
-        echo -n "Enter the Task Execution Price (Recommended price for executing a task/hour: 1 - 10 ETNY): "
-        read taskprice
-        if [[ $taskprice =~ ^[1-9]$|^10$ ]]; then
-            break
-        else
-            echo "Invalid task execution price. Please enter a valid integer price within the recommended range (1 - 10 ETNY)..."
-        fi
-    done
-    export TASK_EXECUTION_PRICE=$taskprice
-}
 
 deploy_debian() {
   # Determining if the etny-vagrant service is running
@@ -342,8 +328,8 @@ deploy_debian() {
 deploy_slackware() {
   # Determining if the etny-vagrant service is running
   echo "$os found. Continuing..."
-  choose_network
   task_price_check
+  choose_network
   echo "#############################################"
   echo "Finding out if rc.etny service is already running..."
   /etc/rc.d/rc.etny status >/dev/null
