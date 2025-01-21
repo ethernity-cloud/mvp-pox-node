@@ -1,6 +1,8 @@
 #!/bin/bash
 set -e
 
+sysctl -p /etc/sysctl.conf
+
 trap 'echo "Installer status: \"${BASH_COMMAND}\"command end with exit code $?."' SIGINT SIGTERM ERR EXIT
 
 . /home/vagrant/etny/node/config
