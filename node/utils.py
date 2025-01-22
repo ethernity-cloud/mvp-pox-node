@@ -79,7 +79,8 @@ class Storage:
         self.bootstrap_client = ipfshttpclient.connect(client_connect_url)
         self.bootstrap_client.bootstrap.add(self.client_bootstrap_url)
         self.bootstrap_client.config.set("Datastore.StorageMax", "3GB")
-        args = ("Swarm.ConnMgr.LowWater", 25)        opts = {'json': 'true'}
+        args = ("Swarm.ConnMgr.LowWater", 25)
+        opts = {'json': 'true'}
         self.bootstrap_client._client.request('/config', args, opts=opts, decoder='json')
         self.logger = logger
         self.cache = cache
