@@ -84,7 +84,7 @@ choose_network() {
 
     # Display the menu
     echo ""
-    echo "###################  NETWORK SETTINGS  ###################"
+    echo "##########################  NETWORK SETTINGS  ##########################"
     echo "Please select one or more networks (separated by spaces or commas):"
     echo "0. AUTO (Select all networks)"
     echo "   When AUTO is selected, the node will operate on"
@@ -92,11 +92,11 @@ choose_network() {
     for key in $(echo "${!networks[@]}" | tr ' ' '\n' | sort -n); do
         echo "$key. ${networks[$key]}"
     done
-    echo "#########################################################"
+    echo ""
 
     # Prompt user for selection
     while true; do
-        read -p "Enter your choices: " user_input
+        read -p "Enter your choices separated by comma (default: 0 (AUTO)): " user_input
 
         if [ "$user_input" == "" ]
         then
@@ -162,14 +162,14 @@ choose_network() {
     # Function to display current RPC settings
     display_rpc_settings() {
         echo ""
-        echo "################ RPC SETTINGS ################"
+        echo "############################  RPC SETTINGS  ############################"
         for choice in "${selected_choices[@]}"; do
             rpc_var="${rpc_vars[$choice]}"
             rpc_url="${selected_rpc_urls[$choice]}"
             echo "$choice. ${networks[$choice]}: $rpc_url"
         done
         echo "0. Continue"
-        echo "###############################################"
+        echo ""
     }
 
     # Initial RPC settings are already set to defaults from ini
@@ -266,8 +266,6 @@ choose_network() {
     done
 
     echo ""
-    echo "Ansible variables have been exported to $vars_file"
-    echo "You can include this file in your Ansible playbooks or roles."
 
 }
 
@@ -280,7 +278,7 @@ task_price_check() {
        current_price=1;
     fi
 
-    echo "################## TASK PRICE ##################"
+    echo "#############################  TASK PRICE  #############################"
     echo "Current task execution price: $current_price ETNY/ECLD"
 
     read -p "Please specify the desired task exection price to continue (default: $current_price): " taskprice
@@ -295,13 +293,122 @@ task_price_check() {
 
 }
 
+config_ipfs() {
+    # Define default values
+    DEFAULT_IPFS_HOST="ipfs.ethernity.cloud"
+    DEFAULT_IPFS_PORT="5001"
+    DEFAULT_IPFS_ID="QmRBc1eBt4hpJQUqHqn6eA8ixQPD3LFcUDsn6coKBQtia5"
+    DEFAULT_IPFS_CONNECT_URL="/ip4/127.0.0.1/tcp/5001/http"
+    DEFAULT_IPFS_TIMEOUT="30"
+
+    # Initialize variables with default values
+    IPFS_HOST="$DEFAULT_IPFS_HOST"
+    IPFS_PORT="$DEFAULT_IPFS_PORT"
+    IPFS_ID="$DEFAULT_IPFS_ID"
+    IPFS_CONNECT_URL="$DEFAULT_IPFS_CONNECT_URL"
+    IPFS_TIMEOUT="$DEFAULT_IPFS_TIMEOUT"
+
+    # Function to display the menu
+    display_ipfs_menu() {
+        echo "###########################  IPFS SETTINGS  ############################"
+        echo "1. IPFS_HOST (Current: $IPFS_HOST)"
+        echo "2. IPFS_PORT (Current: $IPFS_PORT)"
+        echo "3. IPFS_ID (Current: $IPFS_ID)"
+        echo "4. IPFS_CONNECT_URL (Current: $IPFS_CONNECT_URL)"
+        echo "5. IPFS_TIMEOUT (Current: $IPFS_TIMEOUT)"
+        echo "0. Continue without editing"
+        echo ""
+    }
+
+    while true; do
+        display_ipfs_menu
+        read -p "Enter the number of the variable you want to edit (or 0 to continue): " choice
+
+        case "$choice" in
+            1)
+                read -p "Enter new IPFS_HOST (default: $DEFAULT_IPFS_HOST): " input
+                IPFS_HOST="${input:-$DEFAULT_IPFS_HOST}"
+                echo "IPFS_HOST set to $IPFS_HOST."
+                ;;
+            2)
+                while true; do
+                    read -p "Enter new IPFS_PORT (default: $DEFAULT_IPFS_PORT): " input
+                    input="${input:-$DEFAULT_IPFS_PORT}"
+                    if [[ "$input" =~ ^[0-9]+$ ]]; then
+                        IPFS_PORT="$input"
+                        echo "IPFS_PORT set to $IPFS_PORT."
+                        break
+                    else
+                        echo "Invalid input. IPFS_PORT must be a number."
+                    fi
+                done
+                ;;
+            3)
+                read -p "Enter new IPFS_ID (default: $DEFAULT_IPFS_ID): " input
+                IPFS_ID="${input:-$DEFAULT_IPFS_ID}"
+                echo "IPFS_ID set to $IPFS_ID."
+                ;;
+            4)
+                read -p "Enter new IPFS_CONNECT_URL (default: $DEFAULT_IPFS_CONNECT_URL): " input
+                IPFS_CONNECT_URL="${input:-$DEFAULT_IPFS_CONNECT_URL}"
+                echo "IPFS_CONNECT_URL set to $IPFS_CONNECT_URL."
+                ;;
+            5)
+                while true; do
+                    read -p "Enter new IPFS_TIMEOUT (default: $DEFAULT_IPFS_TIMEOUT): " input
+                    input="${input:-$DEFAULT_IPFS_TIMEOUT}"
+                    IPFS_TIMEOUT="$input"
+                    echo "IPFS_TIMEOUT set to $IPFS_TIMEOUT."
+                    break
+                done
+                ;;
+            0)
+                echo "Continuing with setup."
+                break
+                ;;
+            *)
+                if [ "$choice" == "" ]; then
+                    choice=0
+                    break
+                fi
+                echo "Invalid choice. Please enter a number between 1 and 5, or 0 to continue."
+                ;;
+        esac
+    done
+
+    # Export the variables
+    export IPFS_HOST
+    export IPFS_PORT
+    export IPFS_ID
+    export IPFS_CONNECT_URL
+    export IPFS_TIMEOUT
+
+    # Remove existing entries and append the current values
+    sed -i "/^IPFS_HOST=/d" "$nodefolder/$configfile"
+    echo "IPFS_HOST=$IPFS_HOST" >> "$nodefolder/$configfile"
+
+    sed -i "/^IPFS_PORT=/d" "$nodefolder/$configfile"
+    echo "IPFS_PORT=$IPFS_PORT" >> "$nodefolder/$configfile"
+
+    sed -i "/^IPFS_ID=/d" "$nodefolder/$configfile"
+    echo "IPFS_ID=$IPFS_ID" >> "$nodefolder/$configfile"
+
+    sed -i "/^IPFS_CONNECT_URL=/d" "$nodefolder/$configfile"
+    echo "IPFS_CONNECT_URL=$IPFS_CONNECT_URL" >> "$nodefolder/$configfile"
+
+    sed -i "/^IPFS_TIMEOUT=/d" "$nodefolder/$configfile"
+    echo "IPFS_TIMEOUT=$IPFS_TIMEOUT" >> "$nodefolder/$configfile"
+
+}
+
 
 deploy_debian() {
   # Determining if the etny-vagrant service is running
-  echo "$os found. Continuing..."
   task_price_check
   choose_network
-  echo "#############################################"
+  config_ipfs
+  echo "########################################################################"
+  echo ""
   echo "Finding out if etny-vagrant service is already running..."
   systemctl status "$service" 2>/dev/null | grep "active (running)" >/dev/null
   if [ $? -eq 0 ]; then
@@ -327,10 +434,11 @@ deploy_debian() {
 
 deploy_slackware() {
   # Determining if the etny-vagrant service is running
-  echo "$os found. Continuing..."
   task_price_check
   choose_network
-  echo "#############################################"
+  config_ipfs
+  echo "########################################################################"
+  echo ""
   echo "Finding out if rc.etny service is already running..."
   /etc/rc.d/rc.etny status >/dev/null
   if [ $? -eq 0 ]; then
@@ -521,7 +629,6 @@ fi
 
 ubuntu(){
 #Getting which version of Ubuntu is instaled
-echo "Ubuntu OS found. Determining version..."
 family='Debian';
 
 case $(awk '/^VERSION_ID=/' /etc/*-release 2>/dev/null | awk -F'=' '{ print tolower($2) }' | tr -d '"') in
@@ -540,7 +647,6 @@ esac
 
 debian(){
 #Getting which version of Debian is instaled
-echo "Debian found. Determining version..."
 family='Debian';
 case $(awk '/^VERSION_ID=/' /etc/*-release 2>/dev/null | awk -F'=' '{ print tolower($2) }' | tr -d '"') in
     12)
@@ -552,7 +658,6 @@ esac
 
 slackware(){
 #Getting which version of Slackware is instaled
-echo "Slackware found. Determining version..."
 family='Slackware';
 case $(awk '/^VERSION_ID=/' /etc/*-release 2>/dev/null | awk -F'=' '{ print tolower($2) }' | tr -d '"') in
     15.0)
@@ -566,16 +671,14 @@ esac
 
 start(){
 #getting which Linux distribution is installed
-echo "Getting distro..."
+echo ""
+echo ""
+echo "#############################  INIT SETUP  #############################"
 case $(awk '/^ID=/' /etc/*-release 2>/dev/null | awk -F'=' '{ print tolower($2) }' | tr -d '"') in
     ubuntu) ubuntu;;
     debian) debian;;
     slackware) slackware;;
 #   centos) echo "centos distro Found. Not Supported. Exiting...";;
-#   manjaro) echo "manjaro distro Found. Not Supported. Exiting...";;
-#   arch) echo "arch distro Found. Not Supported. Exiting...";;
-#   rhel) echo "red hat  distro Found. Not Supported. Exiting...";;
-#   fedora) echo "fedora distro Found. Not Supported. Exiting...";;
     *) echo "Could not determine Distro. Exiting..."
 esac
 }

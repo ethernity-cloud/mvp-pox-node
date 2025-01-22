@@ -19,11 +19,12 @@ from dotenv import load_dotenv
 if os.path.exists('.env'):
     load_dotenv('.env')
 
-ipfs_default = os.environ.get('IPFS_HOST')
-client_connect_url_default = os.environ.get('CLIENT_CONNECT_URL')
-client_bootstrap_url = os.environ.get('CLIENT_BOOTSTRAP_URL')
-gas_limit = int(os.environ.get('GAS_LIMIT'))
-gas_price_value = os.environ.get('GAS_PRICE_VALUE')
+version = os.environ.get('VERSION')
+ipfs_host_default = os.environ.get('IPFS_HOST')
+ipfs_port_default = os.environ.get('IPFS_PORT')
+ipfs_id_default = os.environ.get('IPFS_ID')
+ipfs_connect_url_default = os.environ.get('IPFS_CONNECT_URL')
+ipfs_timeout_default = os.environ.get('IPFS_TIMEOUT')
 skip_integration_test = strtobool(os.environ.get('SKIP_INTEGRATION_TEST'))
 
 @dataclass(frozen=True)
@@ -323,7 +324,31 @@ def parse_arguments(network_names: list) -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "-i",
-        "--ipfshost",
+        "--ipfs_host",
+        help="IPFS peer",
+        type=str,
+        default=str(ipfs_host_default),
+        required=False
+    )
+    parser.add_argument(
+        "-o",
+        "--ipfs_port",
+        help="IPFS peer port",
+        type=str,
+        default=str(ipfs_port_default),
+        required=False
+    )
+    parser.add_argument(
+        "-h",
+        "--ipfs_id",
+        help="IPFS peer id",
+        type=str,
+        default=str(ipfs_id_default),
+        required=False
+    )
+    parser.add_argument(
+        "-i",
+        "--ipfs_host",
         help="Default IPFS gateway",
         type=str,
         default=str(ipfs_default),
@@ -331,13 +356,20 @@ def parse_arguments(network_names: list) -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "-l",
-        "--ipfslocal",
-        help="Local IPFS connect URL",
+        "--ipfs_connect_url",
+        help="IPFS connect URL",
         type=str,
-        default=str(client_connect_url_default),
+        default=str(ipfs_connect_url_default),
         required=False
     )
-
+    parser.add_argument(
+        "-d",
+        "--ipfs_timeout",
+        help="IPFS timeout",
+        type=str,
+        default=str(ipfs_timeout_default),
+        required=False
+    )
     add_network_override_arguments(parser, network_names)
 
     return parser

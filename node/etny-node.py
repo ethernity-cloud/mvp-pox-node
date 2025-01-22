@@ -66,6 +66,9 @@ class EtnyPoXNode:
         self.__orders = defaultdict(lambda: None)
         self.__do_requests_build_pending = True
 
+
+        logger.info(f"Initializing Ethernity CLOUD Agent v{config.version}");
+
         self.parse_arguments(config.arguments, config.parser)
         polygonBalance = 0
         self.__network = network.name
@@ -106,23 +109,6 @@ class EtnyPoXNode:
         self.__free_memory = int(HardwareInfoProvider.get_free_memory());
         self.__free_storage = int(HardwareInfoProvider.get_free_storage());
 
-        logger.info(f"Initialized with the following settings:");
-        logger.info(f"NodeID: {self.__address}");
-        logger.info(f"Network: {self.__address}");
-        logger.info(f"RPC URL: {self.__network_config.rpc_url}");
-        logger.info(f"ChainID: {self.__network_config.chain_id}");
-        logger.info(f"Contract Address: %s", self.__network_config.contract_address);
-        logger.info(f"Heartbeat Contract Address: %s", self.__network_config.heartbeat_contract_address);
-        logger.info(f"Image Registry Address: %s", self.__network_config.image_registry_contract_address);
-        logger.info(f"Gas Price Measure: %s", self.__network_config.gas_price_measure);
-        logger.info(f"Minimum reward for order processing: %d %s / hour", self.__price, self.__network_config.token_name);
-        logger.info(f"IPFS Host: %s", self.__ipfshost);
-        logger.info(f"IPFS Local Connect URL: %s", self.__ipfslocal);
-        logger.info(f"Node number of cpus: %s", self.__number_of_cpus);
-        logger.info(f"Node free memory: %s", self.__free_memory);
-        logger.info(f"Node free storage: %s", self.__free_storage);
-        logger.info(f"Node geo: %s", self.__node_geo);
-
         with open(config.image_registry_abi_filepath) as f:
             self.__image_registry_abi = f.read()
 
@@ -141,7 +127,27 @@ class EtnyPoXNode:
         self.__total_nodes_count = 0
         self.__is_first_cycle = defaultdict(lambda: True)
         self.can_run_under_sgx = False
-        self.__uuid = get_or_generate_uuid(config.uuid_filepath)
+
+        logger.info(f"NodeID: {self.__address}");
+        logger.info(f"Network: {self.__address}");
+        logger.info(f"RPC URL: {self.__network_config.rpc_url}");
+        logger.info(f"ChainID: {self.__network_config.chain_id}");
+        logger.info(f"Protocol Contract Address: %s", self.__network_config.contract_address);
+        logger.info(f"Heartbeat Contract Address: %s", self.__network_config.heartbeat_contract_address);
+        logger.info(f"Image Registry Address: %s", self.__network_config.image_registry_contract_address);
+        logger.info(f"Minimum reward for order processing: %d %s / hour", self.__price, self.__network_config.token_name);
+        logger.info(f"IPFS Host: %s", self.__ipfshost);
+        logger.info(f"IPFS Local Connect URL: %s", self.__ipfslocal);
+        logger.info(f"Node number of cpus: %s", self.__number_of_cpus);
+        logger.info(f"Node free memory: %s", self.__free_memory);
+        logger.info(f"Node free storage: %s", self.__free_storage);
+        logger.info(f"Node geo: %s", self.__node_geo);
+
+
+        [enclave_image_hash, _, docker_compose_hash] = self.__image_registry.caller().getLatestTrustedZoneImageCertPublicKey(self.__network_config.integration_test_image, 'v3')
+        logger.info(f"\nIntegration test info:")
+        logger.info(f"Docker registry hash: {enclave_image_hash}")
+        logger.info(f"Docker composer hash: {docker_compose_hash}")
 
         self.cache_config = CacheConfig(network.name)
         self.network_cache = Cache(self.cache_config.network_cache_limit, self.cache_config.network_cache_filepath)
@@ -172,10 +178,11 @@ class EtnyPoXNode:
                                                        self.__secret_key)
         self.process_order_data = {}
 
-        [enclave_image_hash, _, docker_compose_hash] = self.__image_registry.caller().getLatestTrustedZoneImageCertPublicKey(self.__network_config.integration_test_image, 'v3')
 
         while get_task_running_on() is not None:
            time.sleep(1)
+
+        self.__uuid = get_or_generate_uuid(config.uuid_filepath)
 
         if config.skip_integration_test == True or get_integration_test_complete():
 
@@ -629,8 +636,7 @@ class EtnyPoXNode:
 
             if self.process_order_data['process_order_retry_counter'] <= 10:
                 logger.info(f"Fetching task data for DO Request {order.do_req} from IPFS.")
-                # self.storage.download_many(list_of_ipfs_hashes, attempts=5, delay=3)
-                if not self.storage.download_many(list_of_ipfs_hashes, attempts=5, delay=3):
+                if not self.storage.download_many(list_of_ipfs_hashes, attempts=5, delay=3, timeout=config.ipfs_timeout):
                     logger.info("Cannot download data from IPFS, cancelling processing")
                     self.ipfs_timeout_cancel(order_id)
                     self.dpreq_cache.add(order.dp_req)
@@ -796,7 +802,7 @@ class EtnyPoXNode:
                 time.sleep(5)
         
     def upload_result_to_ipfs(self, result_file):
-        response = self.storage.upload(result_file)
+        response = self.storage.upload(result_file, config.ipfs_timeout)
         return response
 
     def create_folder_v1(self, order_directory):

@@ -87,7 +87,7 @@ class Storage:
         self.logger = logger
         self.cache = cache
 
-    def download(self, data):
+    def download(self, data, timeout):
         if self.cache.contains(data):
             return
         try:
@@ -97,7 +97,7 @@ class Storage:
             opts = {'json': 'true'}
             self.bootstrap_client._client.request('/swarm/connect', args, opts=opts, decoder='json')
             self.bootstrap_client.bootstrap.add(self.client_bootstrap_url % ipfs_node)
-            self.bootstrap_client.get(data, target=self.target, compress=True, opts={"compression-level": 9}, timeout=60)
+            self.bootstrap_client.get(data, target=self.target, compress=True, opts={"compression-level": 9}, timeout=timeout)
             self.cache.add(data)
         except Exception as e:
             self.logger.warning(f"Error while downloading file {data}: {e}")
@@ -121,14 +121,14 @@ class Storage:
         except subprocess.CalledProcessError as e:
             self.logger.warning(f"Failed to restart local IPFS service. Error: {e.stderr.decode().strip()}")
 
-    def download_many(self, lst, attempts=1, delay=0):
+    def download_many(self, lst, attempts=1, delay=0, timeout=600):
         for data in lst:
             self.logger.debug(f'Downloading {data}')
-            if retry(self.download, data, attempts=attempts, delay=delay)[0] is False:
+            if retry(self.download, data, attempts=attempts, delay=delay, timeout=timeout)[0] is False:
                 return False
         return True
 
-    def upload(self, data):
+    def upload(self, data, timeout=600):
         attempt = 0
         while True:
             if attempt == 10:
@@ -136,7 +136,7 @@ class Storage:
             try:
                 ipfs_node = socket.gethostbyname(self.ipfs_host)
                 self.bootstrap_client.bootstrap.add(self.client_bootstrap_url % ipfs_node)
-                response = self.bootstrap_client.add(data, timeout=120)
+                response = self.bootstrap_client.add(data, timeout=timeout)
                 self.cache.add(data)
                 return response['Hash']
             except Exception as e:
