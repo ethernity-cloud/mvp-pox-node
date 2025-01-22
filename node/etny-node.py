@@ -49,31 +49,35 @@ class EtnyPoXNode:
     def __init__(self, network):
 
         self.__address = None
-        self. __privatekey = None
+        self.__privatekey = None
         self.__resultaddress = None
         self.__resultprivatekey = None
-        self. __cpu = None
-        self. __memory = None
-        self.  __storage = None
-        self. __bandwidth = None
-        self. __duration = None
-        self. __endpoint = None
+        self.__cpu = None
+        self.__memory = None
+        self.__storage = None
+        self.__bandwidth = None
+        self.__duration = None
+        self.__endpoint = None
         self.__access_key = None
         self.__secret_key = None
         self.__network = None
-        self.__ipfshost = None
+        self.__ipfs_host = None
+        self.__ipfs_port = None
+        self.__ipfs_id = None
+        self.__ipfs_connect_url = None
+        self.__ipfs_timeout = None
         self.__price = None
         self.__orders = defaultdict(lambda: None)
         self.__do_requests_build_pending = True
 
 
-        logger.info(f"Initializing Ethernity CLOUD Agent v{config.version}");
-
         self.parse_arguments(config.arguments, config.parser)
-        polygonBalance = 0
         self.__network = network.name
         self.logger = NetworkLoggerAdapter(config.logger, self.__network)
         logger = self.logger
+
+        logger.info(f"Initializing Ethernity CLOUD Agent v{config.version}");
+
         logger.info(f"Configured network is: {self.__network}")
         self.__network_config = network
         self.__price = int(network.task_execution_price);
@@ -136,8 +140,8 @@ class EtnyPoXNode:
         logger.info(f"Heartbeat Contract Address: %s", self.__network_config.heartbeat_contract_address);
         logger.info(f"Image Registry Address: %s", self.__network_config.image_registry_contract_address);
         logger.info(f"Minimum reward for order processing: %d %s / hour", self.__price, self.__network_config.token_name);
-        logger.info(f"IPFS Host: %s", self.__ipfshost);
-        logger.info(f"IPFS Local Connect URL: %s", self.__ipfslocal);
+        logger.info(f"IPFS Host: %s", self.__ipfs_host);
+        logger.info(f"IPFS Connect URL: %s", self.__ipfs_connect_url);
         logger.info(f"Node number of cpus: %s", self.__number_of_cpus);
         logger.info(f"Node free memory: %s", self.__free_memory);
         logger.info(f"Node free storage: %s", self.__free_storage);
@@ -145,7 +149,6 @@ class EtnyPoXNode:
 
 
         [enclave_image_hash, _, docker_compose_hash] = self.__image_registry.caller().getLatestTrustedZoneImageCertPublicKey(self.__network_config.integration_test_image, 'v3')
-        logger.info(f"\nIntegration test info:")
         logger.info(f"Docker registry hash: {enclave_image_hash}")
         logger.info(f"Docker composer hash: {docker_compose_hash}")
 
@@ -170,7 +173,7 @@ class EtnyPoXNode:
         self.dpreq_cache = ListCache(self.cache_config.dpreq_cache_limit, self.cache_config.dpreq_filepath)
         self.doreq_cache = ListCache(self.cache_config.doreq_cache_limit, self.cache_config.doreq_filepath)
         self.ipfs_cache = ListCacheWithTimestamp(self.cache_config.ipfs_cache_limit, self.cache_config.ipfs_cache_filepath)
-        self.storage = Storage(self.__ipfshost, self.__ipfslocal, config.client_bootstrap_url,
+        self.storage = Storage(self.__ipfs_host, self.__ipfs_port, self.__ipfs_id, self.__ipfs_timeout, self.__ipfs_connect_url,
                                self.ipfs_cache, logger, self.cache_config.base_path)
         self.merged_orders_cache = MergedOrdersCache(self.cache_config.merged_orders_cache_limit, self.cache_config.merged_orders_cache)
         self.swift_stream_service = SwiftStreamService(self.__endpoint,
@@ -213,7 +216,7 @@ class EtnyPoXNode:
         self.cache_config_legacy = CacheConfig('./')
         self.ipfs_cache_legacy = ListCache(self.cache_config_legacy.ipfs_cache_limit, self.cache_config_legacy.ipfs_cache_filepath)
 
-        self.storage_legacy = Storage(self.__ipfshost, self.__ipfslocal, config.client_bootstrap_url,
+        self.storage_legacy = Storage(self.__ipfs_host, self.__ipfs_port, self.__ipfs_id, self.__ipfs_timeout, self.__ipfs_connect_url,
                                self.ipfs_cache_legacy, logger, self.cache_config_legacy.base_path)
 
         for hash in list(self.ipfs_cache_legacy.get_values):
@@ -636,7 +639,7 @@ class EtnyPoXNode:
 
             if self.process_order_data['process_order_retry_counter'] <= 10:
                 logger.info(f"Fetching task data for DO Request {order.do_req} from IPFS.")
-                if not self.storage.download_many(list_of_ipfs_hashes, attempts=5, delay=3, timeout=config.ipfs_timeout):
+                if not self.storage.download_many(list_of_ipfs_hashes, attempts=5, delay=3):
                     logger.info("Cannot download data from IPFS, cancelling processing")
                     self.ipfs_timeout_cancel(order_id)
                     self.dpreq_cache.add(order.dp_req)
@@ -802,7 +805,7 @@ class EtnyPoXNode:
                 time.sleep(5)
         
     def upload_result_to_ipfs(self, result_file):
-        response = self.storage.upload(result_file, config.ipfs_timeout)
+        response = self.storage.upload(result_file)
         return response
 
     def create_folder_v1(self, order_directory):

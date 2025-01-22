@@ -67,37 +67,34 @@ def get_node_geo():
         return ''
 
 
-
 class Storage:
-    def __init__(self, ipfs_host, client_connect_url, client_bootstrap_url, cache, logger, target):
-        self.client_bootstrap_url = client_bootstrap_url
+    def __init__(self, ipfs_host, ipfs_port, ipfs_id, ipfs_timeout, client_connect_url, cache, logger, target):
+        self.client_bootstrap_url = '/dns4/' + ipfs_host + '/tcp/' + str(ipfs_port) + '/ipfs/' + ipfs_id
         self.ipfs_host = ipfs_host
+        self.ipfs_port = ipfs_port
+        self.ipfs_id = ipfs_id
+        self.ipfs_timeout = ipfs_timeout
         self.target = target
-        ipfs_node = socket.gethostbyname(ipfs_host)
         self.client_connect_url = client_connect_url
         self.bootstrap_client = ipfshttpclient.connect(client_connect_url)
-        self.bootstrap_client.bootstrap.add(client_bootstrap_url % ipfs_node)
+        self.bootstrap_client.bootstrap.add(self.client_bootstrap_url)
         self.bootstrap_client.config.set("Datastore.StorageMax", "3GB")
-        args = ("Swarm.ConnMgr.LowWater", 25)
-        opts = {'json': 'true'}
-        self.bootstrap_client._client.request('/config', args, opts=opts, decoder='json')
-        args = ("Swarm.ConnMgr.HighWater", 50)
-        opts = {'json': 'true'}
+        args = ("Swarm.ConnMgr.LowWater", 25)        opts = {'json': 'true'}
         self.bootstrap_client._client.request('/config', args, opts=opts, decoder='json')
         self.logger = logger
         self.cache = cache
 
-    def download(self, data, timeout):
+    def download(self, data):
         if self.cache.contains(data):
             return
         try:
-            ipfs_node = socket.gethostbyname(self.ipfs_host)
-            address = (self.client_bootstrap_url % ipfs_node)
+            address = self.client_bootstrap_url
             args = (address, address)
             opts = {'json': 'true'}
             self.bootstrap_client._client.request('/swarm/connect', args, opts=opts, decoder='json')
-            self.bootstrap_client.bootstrap.add(self.client_bootstrap_url % ipfs_node)
-            self.bootstrap_client.get(data, target=self.target, compress=True, opts={"compression-level": 9}, timeout=timeout)
+            self.bootstrap_client.bootstrap.add(self.client_bootstrap_url)
+            self.pin_add(data)
+            self.bootstrap_client.get(data, target=self.target, compress=True, opts={"compression-level": 9}, timeout=self.ipfs_timeout)
             self.cache.add(data)
         except Exception as e:
             self.logger.warning(f"Error while downloading file {data}: {e}")
@@ -121,10 +118,10 @@ class Storage:
         except subprocess.CalledProcessError as e:
             self.logger.warning(f"Failed to restart local IPFS service. Error: {e.stderr.decode().strip()}")
 
-    def download_many(self, lst, attempts=1, delay=0, timeout=600):
+    def download_many(self, lst, attempts=1, delay=0):
         for data in lst:
             self.logger.debug(f'Downloading {data}')
-            if retry(self.download, data, attempts=attempts, delay=delay, timeout=timeout)[0] is False:
+            if retry(self.download, data, attempts=attempts, delay=delay)[0] is False:
                 return False
         return True
 
@@ -134,9 +131,8 @@ class Storage:
             if attempt == 10:
                break
             try:
-                ipfs_node = socket.gethostbyname(self.ipfs_host)
-                self.bootstrap_client.bootstrap.add(self.client_bootstrap_url % ipfs_node)
-                response = self.bootstrap_client.add(data, timeout=timeout)
+                self.bootstrap_client.bootstrap.add(self.client_bootstrap_url)
+                response = self.bootstrap_client.add(data, timeout=self.ipfs_timeout)
                 self.cache.add(data)
                 return response['Hash']
             except Exception as e:

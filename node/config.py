@@ -339,19 +339,11 @@ def parse_arguments(network_names: list) -> argparse.ArgumentParser:
         required=False
     )
     parser.add_argument(
-        "-h",
+        "-f",
         "--ipfs_id",
         help="IPFS peer id",
         type=str,
         default=str(ipfs_id_default),
-        required=False
-    )
-    parser.add_argument(
-        "-i",
-        "--ipfs_host",
-        help="Default IPFS gateway",
-        type=str,
-        default=str(ipfs_default),
         required=False
     )
     parser.add_argument(
@@ -378,8 +370,8 @@ parser = parse_arguments(list(NETWORKS.keys()))
 
 arguments = {
     str: [
-       'privatekey', 'endpoint', 'access_key', 'secret_key', 'network', 'ipfshost', 'ipfslocal'
+       'privatekey', 'endpoint', 'access_key', 'secret_key', 'network', 'ipfs_host', 'ipfs_id', 'ipfs_connect_url'
     ],
-    int: ['cpu', 'memory', 'storage', 'bandwidth', 'duration'],
+    int: ['cpu', 'memory', 'storage', 'bandwidth', 'duration', 'ipfs_port', 'ipfs_timeout'],
     float: ['price']
 }
