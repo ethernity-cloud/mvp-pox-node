@@ -19,13 +19,13 @@ from dotenv import load_dotenv
 if os.path.exists('.env'):
     load_dotenv('.env')
 
-version = os.environ.get('VERSION')
-ipfs_host_default = os.environ.get('IPFS_HOST')
-ipfs_port_default = os.environ.get('IPFS_PORT')
-ipfs_id_default = os.environ.get('IPFS_ID')
-ipfs_connect_url_default = os.environ.get('IPFS_CONNECT_URL')
-ipfs_timeout_default = os.environ.get('IPFS_TIMEOUT')
-skip_integration_test = strtobool(os.environ.get('SKIP_INTEGRATION_TEST'))
+version = os.environ.get('VERSION', "LEGACY")
+ipfs_host_default = os.environ.get('IPFS_HOST', "ipfs.ethernity.cloud")
+ipfs_port_default = int(os.environ.get('IPFS_PORT', 4001))
+ipfs_id_default = os.environ.get('IPFS_ID', "QmRBc1eBt4hpJQUqHqn6eA8ixQPD3LFcUDsn6coKBQtia5")
+ipfs_connect_url_default = os.environ.get('IPFS_CONNECT_URL', "/ip4/127.0.0.1/tcp/5001/http")
+ipfs_timeout_default = int(os.environ.get('IPFS_TIMEOUT', 30))
+skip_integration_test = strtobool(os.environ.get('SKIP_INTEGRATION_TEST', "False"))
 
 @dataclass(frozen=True)
 class NetworkConfig:
@@ -334,7 +334,7 @@ def parse_arguments(network_names: list) -> argparse.ArgumentParser:
         "-o",
         "--ipfs_port",
         help="IPFS peer port",
-        type=str,
+        type=int,
         default=str(ipfs_port_default),
         required=False
     )
@@ -358,7 +358,7 @@ def parse_arguments(network_names: list) -> argparse.ArgumentParser:
         "-d",
         "--ipfs_timeout",
         help="IPFS timeout",
-        type=str,
+        type=int,
         default=str(ipfs_timeout_default),
         required=False
     )
