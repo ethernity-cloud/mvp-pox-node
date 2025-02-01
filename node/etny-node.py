@@ -1043,7 +1043,7 @@ class EtnyPoXNode:
                 f"Offset={offset_mod}, required={do_req_id_mod}; "
                 f"waiting {difference_raw} more block(s). Next block: {next_block}."
             )
-            logger.info(f"Request will be processed after block #{next_block}, current block is #{current_block_number}")
+            logger.info(f"DO Request {do_req_id} will be processed after block #{next_block}, current block is #{current_block_number}")
             # Mark __is_first_cycle as False once we pass do_req_id_mod
             self.__is_first_cycle[do_req_id] = False
             return False
@@ -1096,6 +1096,12 @@ class EtnyPoXNode:
             return
 
         req = DPRequest(req_id)
+
+
+        if req.status != RequestStatus.AVAILABLE:
+            logger.debug(
+                f'''Skipping Order, DORequestId = {_doreq[i]}, DPRequestId = {i}, Order has different status: '{RequestStatus._status_as_string(doreq[i].status)}' ''')
+            return
 
         checked = 0
         seconds = 0
@@ -1168,20 +1174,6 @@ class EtnyPoXNode:
                         except Exception as e:
                             logger.warning(f"Failed to read DO request metadata")
 
-                if doreq[i].status != RequestStatus.AVAILABLE:
-                    logger.debug(
-                        f'''Skipping Order, DORequestId = {_doreq[i]}, DPRequestId = {i}, Order has different status: '{RequestStatus._status_as_string(doreq[i].status)}' ''')
-
-                    logger.debug(f"This DO request is matched with another operator")
-                    self.doreq_cache.add(i)
-                    continue
-
-                if req.status != RequestStatus.AVAILABLE:
-                    logger.debug(
-                        f'''Skipping Order, DORequestId = {_doreq[i]}, DPRequestId = {i}, Order has different status: '{RequestStatus._status_as_string(doreq[i].status)}' ''')
-                    continue
-
-
                 if not (doreq[i].cpu <= req.cpu and doreq[i].memory <= req.memory and
                         doreq[i].storage <= req.storage and doreq[i].bandwidth <= req.bandwidth and doreq[i].price >= req.price):
                     self.doreq_cache.add(i)
@@ -1198,6 +1190,26 @@ class EtnyPoXNode:
                     status = self.__can_place_order(self.__dprequest, i)
                     if not status:
                         continue
+
+               while True:
+                    try:
+                        time.sleep(self.__network_config.rpc_delay/1000)
+                        _doreq[i] = self.__etny.caller()._getDORequest(i)
+                        doreq[i] = DORequest(_doreq[i])
+                        break
+                    except Exception as e:
+                        logger.warning(f"Failed to read DO request metadata")
+
+                if not self.can_run_under_sgx:
+                    logger.error('SGX is not enabled or correctly configured, skipping DO request')
+                if doreq[i].status != RequestStatus.AVAILABLE:
+                    logger.debug(
+                        f'''Skipping Order, DORequestId = {_doreq[i]}, DPRequestId = {i}, Order has different status: '{RequestStatus._status_as_string(doreq[i].status)}' ''')
+
+                    logger.info(f"DO request {i} is matched with another operator, skipping processing")
+                    self.doreq_cache.add(i)
+                    continue
+
                 if self._check_installed_drivers():
                     logger.error('SGX configuration error. Both isgx drivers are installed. Skipping order placing ...')
                     self.doreq_cache.add(i)
@@ -1350,6 +1362,17 @@ class EtnyPoXNode:
             if receipt.status == 1:
                 logger.info(f"TXID {_hash} confirmed!")
                 break
+            else:
+              logger.info(f"TXID {_hash} is reverted")
+              _doreq = self.__etny.caller()._getDORequest(doreq)
+
+              doreqid = DORequest(_doreq)
+
+              if doreq.status != RequestStatus.AVAILABLE:
+                  logger.debug(f"DO request {doreqid} is matched with another operator, skipping processing")
+                  self.doreq_cache.add(doreqid)
+                  raise
+
           except (exceptions.ContractLogicError, IndexError) as e:
               logger.warning(f"ContractLogicError: {e}");
               raise
