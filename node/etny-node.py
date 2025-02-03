@@ -1191,7 +1191,7 @@ class EtnyPoXNode:
                     if not status:
                         continue
 
-               while True:
+                while True:
                     try:
                         time.sleep(self.__network_config.rpc_delay/1000)
                         _doreq[i] = self.__etny.caller()._getDORequest(i)
