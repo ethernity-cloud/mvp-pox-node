@@ -167,6 +167,11 @@ class EtnyPoXNode:
            self.__migrate_cache()
            self.network_cache.add("NETWORK","MIGRATED_FROM_POLYGON")
 
+        while get_task_running_on() is not None:
+           time.sleep(1)
+
+        set_task_running_on(self.__network)
+
         os.chdir(self.cache_config.base_path)
 
         self.orders_cache = Cache(self.cache_config.orders_cache_limit, self.cache_config.orders_cache_filepath)
@@ -181,9 +186,6 @@ class EtnyPoXNode:
                                                        self.__secret_key)
         self.process_order_data = {}
 
-
-        while get_task_running_on() is not None:
-           time.sleep(1)
 
         self.__uuid = get_or_generate_uuid(config.uuid_filepath)
 
@@ -202,11 +204,11 @@ class EtnyPoXNode:
 
            self.can_run_under_sgx = True
         else:
-           set_task_running_on(self.__network)
            self.__run_integration_test()
-           reset_task_running_on()
+
 
         self.__clear_ipfs_cache()
+        reset_task_running_on()
 
           
     def __migrate_cache(self):
@@ -652,6 +654,9 @@ class EtnyPoXNode:
             else:
                 input_file = None
 
+
+            os.chdir(self.cache_config.base_path)
+
             logger.info("Task preloaded. Preparing docker environment")
             run_subprocess(
                 ['docker-compose', '-f', f'../docker/docker-compose-swift-stream.yml', 'up', '-d', 'swift-stream'],
@@ -668,6 +673,8 @@ class EtnyPoXNode:
             logger.debug("Stopping previous docker registry")
             run_subprocess(['docker', 'stop', 'registry'], logger)
             logger.debug("Cleaning up docker registry")
+            run_subprocess(['docker', 'stop', 'etny-securelock'], logger)
+            run_subprocess(['docker', 'stop', 'etny-trustedzone'], logger)
             run_subprocess(['docker', 'system', 'prune', '-a', '-f', '--volumes'], logger)
             logger.debug("Running new docker registry")
             logger.debug(str(self.cache_config.base_path) + '/' + enclave_image_hash + ':/var/lib/registry')
@@ -682,12 +689,16 @@ class EtnyPoXNode:
                 'registry:2'
             ], logger)
 
+            os.chdir(self.cache_config.base_path)
             logger.debug("Cleaning up docker container")
             run_subprocess([
                 'docker-compose', '-f', self.order_docker_compose_file, 'down', '-d'
             ], logger)
 
-            logger.debug("Started enclave executon")
+            logger.debug("Started enclave execution")
+
+            os.chdir(self.cache_config.base_path)
+
             run_subprocess([
                 'docker-compose', '-f', self.order_docker_compose_file, 'up', '-d'
             ], logger)
@@ -728,10 +739,6 @@ class EtnyPoXNode:
             logger.debug('Cleaning up SecureLock and TrustedZone containers.')
             run_subprocess([
                 'docker-compose', '-f', self.order_docker_compose_file, 'down'
-            ], logger)
-            logger.debug('Cleaning up swift-stream docker container.')
-            run_subprocess([
-                'docker-compose', '-f', f'../docker/docker-compose-swift-stream.yml', 'down', 'swift-stream'
             ], logger)
 
     def wait_for_enclave(self, timeout=120):
@@ -973,7 +980,8 @@ class EtnyPoXNode:
             "ETNY_SMART_CONTRACT_ADDRESS": self.__network_config.contract_address,
             "ETNY_WEB3_PROVIDER": self.__network_config.rpc_url,
             "ETNY_CLIENT_CHALLENGE": challenge,
-            "ETNY_ORDER_ID": order_id
+            "ETNY_ORDER_ID": order_id,
+            "ETNY_NGROK_AUTHTOKEN": "DEFAULT"
         }
         return env_vars
 
@@ -1075,11 +1083,24 @@ class EtnyPoXNode:
         logger = self.logger
        
         order_details = self._getOrder()
+        timeout_in_seconds = int(self.__network_config.block_time) - 1.3
 
         if order_details is not None:
             [order_id, order] = order_details
             if order.status == OrderStatus.PROCESSING:
                 logger.debug(f"DP request never finished, processing order {order_id}")
+
+                while not stop_event.is_set():
+                    time.sleep(timeout_in_seconds)
+
+                    if stop_event.is_set():
+                        return
+
+                    if get_task_running_on():
+                        continue
+
+                    break
+
                 self.process_order(order_id)
             if order.status == OrderStatus.CLOSED:
                 logger.debug(f"DP request {self.__dprequest} completed successfully!")
@@ -1105,7 +1126,6 @@ class EtnyPoXNode:
 
         checked = 0
         seconds = 0
-        timeout_in_seconds = int(self.__network_config.block_time) - 1.3
 
         self.__total_nodes_count = self.__heart_beat.caller().getNodesCount()
 
@@ -1349,13 +1369,14 @@ class EtnyPoXNode:
         max_retries = 20
         retries = 0
 
+        unicorn_txn = self.__etny.functions._placeOrder(
+                int(doreq),
+                int(self.__dprequest),
+        ).build_transaction(self.get_transaction_build())
+
         while True:
           try:
             time.sleep(self.__network_config.rpc_delay/1000)
-            unicorn_txn = self.__etny.functions._placeOrder(
-                int(doreq),
-                int(self.__dprequest),
-            ).build_transaction(self.get_transaction_build())
             _hash = self.send_transaction(unicorn_txn)
             logger.info(f"TXID {_hash} pending... fingers crossed")
             receipt = self.__w3.eth.wait_for_transaction_receipt(_hash)
@@ -1513,10 +1534,6 @@ class EtnyPoXNode:
             run_subprocess([
                 'docker-compose', '-f', self.order_docker_compose_file, 'down'
             ], logger)
-            logger.debug('Cleaning up swift-stream docker container.')
-            run_subprocess([
-                'docker-compose', '-f', f'../docker/docker-compose-swift-stream.yml', 'down', 'swift-stream'
-            ], logger)
             logger.debug('Cleaning up swift-stream integration bucket.')
             self.swift_stream_service.delete_bucket(self.integration_bucket_name)
         except Exception as e:
@@ -1552,6 +1569,7 @@ class EtnyPoXNode:
 
         docker_compose_file = f'{self.cache_config.base_path}/{docker_compose_hash}'
         logger.debug(f'Preparing prerequisites for integration test')
+
         self.build_prerequisites_integration_test(self.integration_bucket_name, order_id, docker_compose_file)
 
         logger.debug("Stopping previous docker registry and containers")
@@ -1792,6 +1810,8 @@ def initiate_restart(network_configs, task_manager):
 
     # 4) Clear the stop flag
     stop_event.clear()
+
+    reset_task_running_on()
 
     # 5) Start fresh threads (re-using the same TaskManager object)
     task_manager.start_threads(network_configs)

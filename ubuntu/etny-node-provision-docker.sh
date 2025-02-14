@@ -43,6 +43,8 @@ ufw allow to 127.0.0.1/8
 ufw allow out to any port 53
 ufw allow in 22/tcp
 
+ufw allow in from any to 172.17.0.1 port 8080
+
 IP=`getent hosts ipfs.ethernity.cloud | awk '{print $1}'`
 ufw allow out from any to $IP port 4001
 

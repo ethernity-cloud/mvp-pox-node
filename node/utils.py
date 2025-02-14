@@ -130,8 +130,13 @@ class Storage:
         attempt = 0
         while True:
             if attempt == 10:
-               break
+                break
             try:
+                address = self.client_bootstrap_url
+                args = (address, address)
+                opts = {'json': 'true'}
+
+                self.bootstrap_client._client.request('/swarm/connect', args, opts=opts, decoder='json')
                 self.bootstrap_client.bootstrap.add(self.client_bootstrap_url)
                 response = self.bootstrap_client.add(data, timeout=self.ipfs_timeout)
                 self.cache.add(data)
