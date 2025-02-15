@@ -1,7 +1,11 @@
 #!/bin/bash
 set -e
 
-sysctl -p
+grep net.ipv6.conf.all.disable_ipv6 /etc/sysctl.conf || (echo "net.ipv6.conf.all.disable_ipv6 = 1" | sudo tee -a /etc/sysctl.conf)
+grep net.ipv6.conf.default.disable_ipv6 /etc/sysctl.conf || (echo "net.ipv6.conf.default.disable_ipv6 = 1" | sudo tee -a /etc/sysctl.conf)
+grep net.ipv6.conf.lo.disable_ipv6 /etc/sysctl.conf || (echo "net.ipv6.conf.lo.disable_ipv6 = 1" | sudo tee -a /etc/sysctl.conf)
+
+sysctl -p /etc/sysctl.conf
 
 trap 'echo "Installer status: \"${BASH_COMMAND}\"command end with exit code $?."' SIGINT SIGTERM ERR EXIT
 
@@ -38,6 +42,8 @@ ufw allow from 127.0.0.1/8
 ufw allow to 127.0.0.1/8
 ufw allow out to any port 53
 ufw allow in 22/tcp
+
+ufw allow in from any to 172.17.0.1 port 8080
 
 IP=`getent hosts ipfs.ethernity.cloud | awk '{print $1}'`
 ufw allow out from any to $IP port 4001

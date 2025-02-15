@@ -1,3 +1,0 @@
-# Config file generating
-
-

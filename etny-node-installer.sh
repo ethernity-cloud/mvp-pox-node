@@ -13,148 +13,402 @@ else
 fi
 
 choose_network() {
-  echo "#############################################"
-  echo "Please select the network:"
-  echo "1. Automatic"
-  echo "   The node will run only on one of the network where it has gas."
-  echo "   The priority order of the networks are: Polygon Mainnet, bloxberg Mainnet"
-  echo "2. Polygon Mainnet (ECLD)"
-  echo "3. Polygon Testnet (tECLD)"
-  echo "4. bloxberg Mainnet (ETNY)"
-  echo "5. bloxberg Testnet (tETNY)"
-  echo "6. Quit"
-  echo "#############################################"
+    local ini_file="networks.ini"
+    declare -A networks          # Maps option numbers to network names
+    declare -A shortnames        # Maps option numbers to network shortnames
+    declare -A descriptions      # Maps option numbers to descriptions
+    declare -A rpc_vars         # Maps option numbers to RPC environment variable names
+    declare -A rpc_defaults     # Maps option numbers to default RPC URLs
 
-  while true; do
-    read -p "Enter your choice: " choice
-    case $choice in
-        1)  # Check Ubuntu kernel version
-            echo "You selected Automatic. This option will set polygon Mainnet if your wallet has MATIC, otherwise will set bloxberg Mainnet."
-            export NETWORK=AUTO
-	    read -p "Do you want to use the default RPC? [Y/n]: " use_default_rpc
-	    use_default_rpc=${use_default_rpc:-Y}
-            if [[ "$use_default_rpc" =~ ^[Nn]$ ]]; then
-            read -p "Enter your custom RPC for Bloxberg: " custom_bloxberg_rpc
-            export BLOXBERG_RPC_URL=$custom_bloxberg_rpc
-            read -p "Enter your custom RPC for Polygon: " custom_polygon_rpc
-            export POLYGON_RPC_URL=$custom_polygon_rpc
-    	    else
-	    echo "Using default RPC settings."
-	    export BLOXBERG_RPC_URL=https://bloxberg.ethernity.cloud
-	    export POLYGON_RPC_URL=https://polygon-rpc.com
-	    fi
-            break
-            ;;
-        2)  # Check Ubuntu kernel version
-            echo "You selected Mainnet on POLYGON."
-            export NETWORK=POLYGON
-            read -p "Do you want to use the default POLYGON RPC? [Y/n]: " use_default_rpc
-	    use_default_rpc=${use_default_rpc:-Y}
-	    if [[ "$use_default_rpc" =~ ^[Nn]$ ]]; then
-            read -p "Enter your custom RPC for Polygon: " custom_polygon_rpc
-            export POLYGON_RPC_URL=$custom_polygon_rpc
-            else
-            echo "Using default RPC settings."
-	    export POLYGON_RPC_URL=https://polygon-rpc.com
-	    fi
-	    break
-            ;;
-        3)  # Check Ubuntu kernel version
-            echo "You selected Open Beta."
-            export NETWORK=AMOY
-            read -p "Do you want to use the default AMOY RPC? [Y/n]: " use_default_rpc
-  	    use_default_rpc=${use_default_rpc:-Y}
-	    if [[ "$use_default_rpc" =~ ^[Nn]$ ]]; then
-            read -p "Enter your custom RPC for Polygon: " custom_amoy_rpc
-            export AMOY_RPC_URL=$custom_amoy_rpc
-	    else
-            echo "Using default RPC settings."	
-     	    export AMOY_RPC_URL=https://rpc-amoy.polygon.technology
-	    fi
-	    break
-	    ;;
-        4)  # Check Ubuntu kernel version
-            echo "You selected Open Beta."
-            export NETWORK=BLOXBERG
-            read -p "Do you want to use the default Bloxberg RPC? [Y/n]: " use_default_rpc
-            use_default_rpc=${use_default_rpc:-Y}
-            if [[ "$use_default_rpc" =~ ^[Nn]$ ]]; then
-            read -p "Enter your custom RPC for Bloxberg: " custom_bloxberg_rpc
-            export BLOXBERG_RPC_URL=$custom_bloxberg_rpc
-            else
-            echo "Using default RPC settings."
-	    export BLOXBERG_RPC_URL=https://bloxberg.ethernity.cloud
-            fi
-	    break
-            ;;
+    # Associative array to store selected networks' RPC URLs
+    declare -A selected_rpc_urls
+    declare -a selected_choices  # Maintains the order of selections
 
-        5)
-            echo "You selected Testnet."
-       	    export NETWORK=TESTNET
-	    read -p "Do you want to use the default TESTNET RPC? [Y/n]: " use_default_rpc
-            use_default_rpc=${use_default_rpc:-Y}
-            if [[ "$use_default_rpc" =~ ^[Nn]$ ]]; then
-            read -p "Enter your custom RPC for TESTNET: " custom_testnet_rpc
-            export TESTNET_RPC_URL=$custom_testnet_rpc
-            else
-            echo "Using default RPC settings."
-            export TESTNET_RPC_URL=https://bloxberg.ethernity.cloud
+    # Array to store selected network names
+    declare -a selected_networks
+
+    # Array to store selected network short names
+    declare -a selected_shortnames
+
+    declare -A gas_vars         # Maps option numbers to GAS environment variable names
+    declare -A gas_defaults     # Maps option numbers to default GAS values
+    declare -a selected_gas_at_start
+
+
+    # Function to trim whitespace
+    trim() {
+        local var="$*"
+        var="${var#"${var%%[![:space:]]*}"}"   # Remove leading whitespace
+        var="${var%"${var##*[![:space:]]}"}"   # Remove trailing whitespace
+        echo -n "$var"
+    }
+
+    # Parse the ini file
+    current_section=""
+    while IFS= read -r line || [ -n "$line" ]; do
+        # Remove comments and trim
+        line=$(echo "$line" | sed 's/[;#].*$//' | xargs)
+        [[ -z "$line" ]] && continue
+
+        if [[ "$line" =~ ^\[(.*)\]$ ]]; then
+            current_section="${BASH_REMATCH[1]}"
+            continue
+        fi
+
+        if [[ "$current_section" =~ ^[0-9]+$ ]]; then
+            key=$(echo "$line" | cut -d'=' -f1)
+            value=$(echo "$line" | cut -d'=' -f2-)
+            value=$(trim "$value")
+
+            if [[ "$key" == "name" ]]; then
+                networks["$current_section"]="$value"
+            elif [[ "$key" == "shortname" ]]; then
+                shortnames["$current_section"]="$value"
+            elif [[ "$key" == "description" ]]; then
+                descriptions["$current_section"]="$value"
+            elif [[ "$key" == "RPC_URL" ]]; then
+                rpc_vars["$current_section"]="$key"
+                rpc_defaults["$current_section"]="$value"
+            elif [[ "$key" == "MINIMUM_GAS_AT_START" ]]; then
+                gas_vars["$current_section"]="$key"
+                gas_defaults["$current_section"]="$value"
             fi
-            break
-            ;;
-        6)
-            echo "Quitting..."
-            exit 0
-            ;;
-        *)
-            echo "Invalid choice. Please select a valid option."
-            ;;
-    esac
-  done
-}
-task_price_check() {
-    current_price=$(grep "TASK_EXECUTION_PRICE" "$nodefolder/$configfile" | cut -d'=' -f2)
-    if [ "$current_price" != "" ];
-    then
-        echo "Task execution price already exists in the config file and is currently set to $current_price ETNY/hour."
-    export TASK_EXECUTION_PRICE=$current_price
-        echo "Would you like to modify it? (y/N)"
-        read modify
-    if [[ "$modify" =~ ^[Yy]$ ]]; then
-        set_task_price
         fi
-    else
-        echo "The TASK_EXECUTION_PRICE is not set in the config file."
-        echo "Do you want to use the default value of 3 ETNY/hour? (Y/n)"
-        read -r use_default
-        if [[ -z "$use_default" ]] || [[ "$use_default" =~ ^[Yy]$ ]]; then
-            default_price=3
-        export TASK_EXECUTION_PRICE=$default_price
-        else
-            set_task_price
-        fi
+    done < "$ini_file"
+
+    # Check if networks are loaded
+    if [ ${#networks[@]} -eq 0 ]; then
+        echo "No networks found in $ini_file."
+        return 1
     fi
-}
 
-set_task_price() {
+    # Display the menu
+    echo ""
+    echo "##########################  NETWORK SETTINGS  ##########################"
+    echo "Please select one or more networks (separated by spaces or commas):"
+    echo "0. AUTO (Select all networks)"
+    echo "   When AUTO is selected, the node will operate on"
+    echo "   all available networks."
+    for key in $(echo "${!networks[@]}" | tr ' ' '\n' | sort -n); do
+        echo "$key. ${networks[$key]}"
+    done
+    echo ""
+
+    # Prompt user for selection
     while true; do
-        echo -n "Enter the Task Execution Price (Recommended price for executing a task/hour: 1 - 10 ETNY): "
-        read taskprice
-        if [[ $taskprice =~ ^[1-9]$|^10$ ]]; then
+        read -p "Enter your choices separated by comma (default: 0 (AUTO)): " user_input
+
+        if [ "$user_input" == "" ]
+        then
+            user_input="0";
+        fi
+
+        # Replace commas with spaces and split into an array
+        IFS=',' read -ra choices <<< "$user_input"
+        # Trim each choice
+        for i in "${!choices[@]}"; do
+            choices[i]=$(echo "${choices[i]}" | xargs)
+        done
+
+        # Remove empty choices
+        choices=($(printf "%s\n" "${choices[@]}" | grep -v '^$'))
+
+        # Check if AUTO is selected
+        if [[ " ${choices[@]} " =~ " 0 " ]]; then
+            echo "You selected: AUTO (All Networks)"
+            # Select all network keys
+            selected_keys=($(printf "%s\n" "${!networks[@]}" | sort -n))
+            for key in "${selected_keys[@]}"; do
+                selected_networks+=("${networks[$key]}")
+                selected_rpc_urls["$key"]="${rpc_defaults[$key]}"
+                selected_gas_at_start["$key"]="${gas_defaults[$key]}"
+                selected_choices+=("$key")  # Maintain order
+            done
+            export NETWORK="AUTO"
             break
-        else
-            echo "Invalid task execution price. Please enter a valid integer price within the recommended range (1 - 10 ETNY)..."
+        fi
+
+        # Validate all choices
+        valid=true
+        for choice in "${choices[@]}"; do
+            if [[ -z "${networks[$choice]}" ]]; then
+                echo "Invalid choice: $choice. Please try again."
+                valid=false
+                break
+            fi
+        done
+
+        if [ "$valid" = true ]; then
+            # Process selected networks
+            for choice in "${choices[@]}"; do
+                if [[ ! " ${selected_choices[@]} " =~ " $choice " ]]; then
+                    selected_choices+=("$choice")  # Maintain order
+                    selected_name="${networks[$choice]}"
+                    selected_networks+=("$selected_name")
+                    selected_shortnames+=("${shortnames[$choice]}")
+                    selected_rpc_urls["$choice"]="${rpc_defaults[$choice]}"
+                    selected_gas_at_start["$choice"]="${gas_defaults[$choice]}"
+                fi
+            done
+
+            # Export the NETWORK variable as a space-separated list
+            export NETWORK="${selected_shortnames[*]}"
+            break
         fi
     done
-    export TASK_EXECUTION_PRICE=$taskprice
+
+
+
+    # Function to display current RPC settings
+    display_rpc_settings() {
+        echo ""
+        echo "############################  RPC SETTINGS  ############################"
+        for choice in "${selected_choices[@]}"; do
+            rpc_var="${rpc_vars[$choice]}"
+            rpc_url="${selected_rpc_urls[$choice]}"
+            echo "$choice. ${networks[$choice]}: $rpc_url"
+        done
+        echo "0. Continue"
+        echo ""
+    }
+
+    # Initial RPC settings are already set to defaults from ini
+    # Export RPC environment variables
+    for choice in "${selected_choices[@]}"; do
+        rpc_var="${rpc_vars[$choice]}"
+        rpc_url="${selected_rpc_urls[$choice]}"
+        export "$rpc_var"="$rpc_url"
+    done
+
+
+
+    # Loop to allow user to modify RPC settings
+    while true; do
+        # Display current RPC settings
+        display_rpc_settings
+
+        read -p "Enter the number of the network to change its RPC URL, or 0 to continue: " modify_choice
+
+        # Default to 0 if no input
+        modify_choice=${modify_choice:-0}
+
+        if [[ "$modify_choice" == "0" ]]; then
+            echo "Continuing with the current RPC settings."
+            break
+        fi
+
+        # Check if the choice is valid and selected
+        if [[ -z "${networks[$modify_choice]}" ]] || [[ -z "${selected_rpc_urls[$modify_choice]}" ]]; then
+            echo "Invalid choice. Please try again."
+            continue
+        fi
+
+        # Get network details
+        selected_name="${networks[$modify_choice]}"
+        selected_rpc_var="${rpc_vars[$modify_choice]}"
+        current_rpc="${selected_rpc_urls[$modify_choice]}"
+
+
+        # Prompt to change RPC URL
+        while true; do
+                read -p "Enter the new RPC URL for $selected_name: " new_rpc
+                if [[ "$new_rpc" =~ ^https?://.+ ]]; then
+                    selected_rpc_urls["$modify_choice"]="$new_rpc"
+                    export "$selected_rpc_var"="$new_rpc"
+                    break
+                else
+                    echo "Invalid URL format. Please enter a valid URL (e.g., https://example.com)."
+                fi
+        done
+    done
+
+    # Final confirmation of RPC settings
+    echo "Final RPC settings:"
+    for choice in "${!selected_rpc_urls[@]}"; do
+        rpc_var="${rpc_vars[$choice]}"
+        rpc_url="${selected_rpc_urls[$choice]}"
+        echo "$rpc_var=$rpc_url"
+    done
+
+  # ------------------- Export to Ansible and ENV Vars Files -------------------
+    # Define the output vars file path
+    vars_dir="roles/validate_config_file/vars"
+    vars_file="$vars_dir/main.yml"
+
+    # Create the vars directory if it doesn't exist
+    mkdir -p "$vars_dir"
+
+    # Initialize the vars file with the 'networks' key
+    echo "networks:" > "$vars_file"
+
+    # Append each selected network's details in YAML format
+    for choice in "${selected_choices[@]}"; do
+        name="${networks[$choice]}"
+        shortname="${shortnames[$choice]}"
+        description="${descriptions[$choice]}"
+        rpc_url="${selected_rpc_urls[$choice]}"
+        gas_at_start="${selected_gas_at_start[$choice]}"
+
+        echo "  - name: \"$name\"" >> "$vars_file"
+        echo "    shortname: \"$shortname\"" >> "$vars_file"
+        echo "    description: \"$description\"" >> "$vars_file"
+        echo "    rpc_url: \"$rpc_url\"" >> "$vars_file"
+        echo "    minimum_gas_at_start: $gas_at_start" >> "$vars_file"  
+        sed -i "/^${shortnames[$choice]}_RPC_URL=/d" "$nodefolder/$configfile"
+        sed -i "/^${shortnames[$choice]}_MINIMUM_GAS_AT_START=/d" "$nodefolder/$configfile"
+        echo "${shortnames[$choice]}_RPC_URL=${rpc_url}" >> $nodefolder/$configfile
+        echo "${shortnames[$choice]}_MINIMUM_GAS_AT_START=${gas_at_start}" >> $nodefolder/$configfile
+
+        sed -i "/^TASK_EXECUTION_PRICE=/d" "$nodefolder/$configfile"
+        sed -i "/${shortnames[$choice]}_TASK_EXECUTION_PRICE=/d" "$nodefolder/$configfile"
+        echo "${shortnames[$choice]}_TASK_EXECUTION_PRICE=${TASK_EXECUTION_PRICE}" >> "$nodefolder/$configfile"
+
+    done
+
+    echo ""
+
 }
+
+
+task_price_check() {
+    current_price=$(grep "TASK_EXECUTION_PRICE" "$nodefolder/$configfile" | cut -d'=' -f2 | head -1)
+    echo ""
+    if [ "$current_price" == "" ];
+    then
+       current_price=1;
+    fi
+
+    echo "#############################  TASK PRICE  #############################"
+    echo "Current task execution price: $current_price ETNY/ECLD"
+
+    read -p "Please specify the desired task exection price to continue (default: $current_price): " taskprice
+    if [[ $taskprice == "" ]] || [[ $taskprice == 0 ]]; then
+        taskprice=$current_price
+    fi
+
+    echo "Task price set to ${taskprice} ETNY/ECLD"
+
+
+    export TASK_EXECUTION_PRICE=$taskprice
+
+}
+
+config_ipfs() {
+    # Define default values
+    DEFAULT_IPFS_HOST="ipfs.ethernity.cloud"
+    DEFAULT_IPFS_PORT="5001"
+    DEFAULT_IPFS_ID="QmRBc1eBt4hpJQUqHqn6eA8ixQPD3LFcUDsn6coKBQtia5"
+    DEFAULT_IPFS_CONNECT_URL="/ip4/127.0.0.1/tcp/5001/http"
+    DEFAULT_IPFS_TIMEOUT="30"
+
+    # Initialize variables with default values
+    IPFS_HOST="$DEFAULT_IPFS_HOST"
+    IPFS_PORT="$DEFAULT_IPFS_PORT"
+    IPFS_ID="$DEFAULT_IPFS_ID"
+    IPFS_CONNECT_URL="$DEFAULT_IPFS_CONNECT_URL"
+    IPFS_TIMEOUT="$DEFAULT_IPFS_TIMEOUT"
+
+    # Function to display the menu
+    display_ipfs_menu() {
+        echo "###########################  IPFS SETTINGS  ############################"
+        echo "1. IPFS_HOST (Current: $IPFS_HOST)"
+        echo "2. IPFS_PORT (Current: $IPFS_PORT)"
+        echo "3. IPFS_ID (Current: $IPFS_ID)"
+        echo "4. IPFS_CONNECT_URL (Current: $IPFS_CONNECT_URL)"
+        echo "5. IPFS_TIMEOUT (Current: $IPFS_TIMEOUT)"
+        echo "0. Continue without editing"
+        echo ""
+    }
+
+    while true; do
+        display_ipfs_menu
+        read -p "Enter the number of the variable you want to edit (or 0 to continue): " choice
+
+        case "$choice" in
+            1)
+                read -p "Enter new IPFS_HOST (default: $DEFAULT_IPFS_HOST): " input
+                IPFS_HOST="${input:-$DEFAULT_IPFS_HOST}"
+                echo "IPFS_HOST set to $IPFS_HOST."
+                ;;
+            2)
+                while true; do
+                    read -p "Enter new IPFS_PORT (default: $DEFAULT_IPFS_PORT): " input
+                    input="${input:-$DEFAULT_IPFS_PORT}"
+                    if [[ "$input" =~ ^[0-9]+$ ]]; then
+                        IPFS_PORT="$input"
+                        echo "IPFS_PORT set to $IPFS_PORT."
+                        break
+                    else
+                        echo "Invalid input. IPFS_PORT must be a number."
+                    fi
+                done
+                ;;
+            3)
+                read -p "Enter new IPFS_ID (default: $DEFAULT_IPFS_ID): " input
+                IPFS_ID="${input:-$DEFAULT_IPFS_ID}"
+                echo "IPFS_ID set to $IPFS_ID."
+                ;;
+            4)
+                read -p "Enter new IPFS_CONNECT_URL (default: $DEFAULT_IPFS_CONNECT_URL): " input
+                IPFS_CONNECT_URL="${input:-$DEFAULT_IPFS_CONNECT_URL}"
+                echo "IPFS_CONNECT_URL set to $IPFS_CONNECT_URL."
+                ;;
+            5)
+                while true; do
+                    read -p "Enter new IPFS_TIMEOUT (default: $DEFAULT_IPFS_TIMEOUT): " input
+                    input="${input:-$DEFAULT_IPFS_TIMEOUT}"
+                    IPFS_TIMEOUT="$input"
+                    echo "IPFS_TIMEOUT set to $IPFS_TIMEOUT."
+                    break
+                done
+                ;;
+            0)
+                echo "Continuing with setup."
+                break
+                ;;
+            *)
+                if [ "$choice" == "" ]; then
+                    choice=0
+                    break
+                fi
+                echo "Invalid choice. Please enter a number between 1 and 5, or 0 to continue."
+                ;;
+        esac
+    done
+
+    # Export the variables
+    export IPFS_HOST
+    export IPFS_PORT
+    export IPFS_ID
+    export IPFS_CONNECT_URL
+    export IPFS_TIMEOUT
+
+    # Remove existing entries and append the current values
+    sed -i "/^IPFS_HOST=/d" "$nodefolder/$configfile"
+    echo "IPFS_HOST=$IPFS_HOST" >> "$nodefolder/$configfile"
+
+    sed -i "/^IPFS_PORT=/d" "$nodefolder/$configfile"
+    echo "IPFS_PORT=$IPFS_PORT" >> "$nodefolder/$configfile"
+
+    sed -i "/^IPFS_ID=/d" "$nodefolder/$configfile"
+    echo "IPFS_ID=$IPFS_ID" >> "$nodefolder/$configfile"
+
+    sed -i "/^IPFS_CONNECT_URL=/d" "$nodefolder/$configfile"
+    echo "IPFS_CONNECT_URL=$IPFS_CONNECT_URL" >> "$nodefolder/$configfile"
+
+    sed -i "/^IPFS_TIMEOUT=/d" "$nodefolder/$configfile"
+    echo "IPFS_TIMEOUT=$IPFS_TIMEOUT" >> "$nodefolder/$configfile"
+
+}
+
 
 deploy_debian() {
   # Determining if the etny-vagrant service is running
-  echo "$os found. Continuing..." 
-  choose_network
   task_price_check
-  echo "#############################################"
+  choose_network
+  config_ipfs
+  echo "########################################################################"
+  echo ""
   echo "Finding out if etny-vagrant service is already running..."
   systemctl status "$service" 2>/dev/null | grep "active (running)" >/dev/null
   if [ $? -eq 0 ]; then
@@ -180,10 +434,11 @@ deploy_debian() {
 
 deploy_slackware() {
   # Determining if the etny-vagrant service is running
-  echo "$os found. Continuing..."
-  choose_network
   task_price_check
-  echo "#############################################"
+  choose_network
+  config_ipfs
+  echo "########################################################################"
+  echo ""
   echo "Finding out if rc.etny service is already running..."
   /etc/rc.d/rc.etny status >/dev/null
   if [ $? -eq 0 ]; then
@@ -206,72 +461,33 @@ deploy_slackware() {
 }
 
 check_config_file() {
-    if [ -f "$configfile" ]; then
+    if [ -f "$nodefolder/$configfile" ]; then
         echo "Config file found. Checking configuration"
 
-        missing_informations=()
-        if ! grep -q "^ADDRESS=0x[[:xdigit:]]\{40\}$" "$configfile"; then
-            missing_informations+=("ADDRESS")
-        fi
-        if ! grep -q "^PRIVATE_KEY=.\{64\}$" "$configfile"; then
-            missing_informations+=("PRIVATE_KEY")
-        fi
-        if ! grep -q "^RESULT_PRIVATE_KEY=.\{64\}$" "$configfile"; then
-            missing_informations+=("RESULT_PRIVATE_KEY")
-        fi
-        if ! grep -q "^RESULT_ADDRESS=0x[[:xdigit:]]\{40\}$" "$configfile"; then
-            missing_informations+=("RESULT_ADDRESS")
+        # Validate PRIVATE_KEY length
+        private_key=$(grep "^PRIVATE_KEY=" "$nodefolder/$configfile" | cut -d'=' -f2)
+        if [[ ${#private_key} -ne 64 ]]; then
+            echo "Private key invalid or not found in config file. How would you like to continue?"
+            config_file_choice
         fi
 
-        if [ ${#missing_informations[@]} -eq 0 ]; then
-            address=$(grep "^ADDRESS=" "$configfile" | cut -d'=' -f2)
-            private_key=$(grep "^PRIVATE_KEY=" "$configfile" | cut -d'=' -f2)
-            result_private_key=$(grep "^RESULT_PRIVATE_KEY=" "$configfile" | cut -d'=' -f2)
-            result_address=$(grep "^RESULT_ADDRESS=" "$configfile" | cut -d'=' -f2)
+        echo "Configuration check successful!"
+        echo "Writing network and price to the config file"
 
-            if [[ $address =~ ^0x[[:xdigit:]]{40}$ && $result_address =~ ^0x[[:xdigit:]]{40}$ && ${#private_key} -eq 64 && ${#result_private_key} -eq 64 ]]; then
-        echo "Configuration check succesful!"
-            else
-                echo "Invalid ADDRESS, RESULT_ADDRESS, PRIVATE_KEY, or RESULT_PRIVATE_KEY format or length in the config file."
-                echo "Please update the config file with valid information."
-                exit 1
+        # Remove existing entries and append the current values
+        sed -i "/^NETWORK=/d" "$nodefolder/$configfile"
+        echo "NETWORK=$NETWORK" >> "$nodefolder/$configfile"
+
+        # Loop through each RPC variable and write to config file if set
+        for rpc_var in "${rpc_vars[@]}"; do
+            rpc_value="${!rpc_var}"
+            if [[ ! -z "$rpc_value" ]]; then
+                sed -i "/^$rpc_var=/d" "$nodefolder/$configfile"
+                echo "$rpc_var=$rpc_value" >> "$nodefolder/$configfile"
             fi
-        else
-            echo "The following informations are missing or not valid in the config file:"
-            for info in "${missing_informations[@]}"; do
-                echo "$info"
-            done
-            echo "Please update or check the config file."
-            exit 1
-        fi
+        done
 
-    echo "Writing network and price to the config file"
-
-        sed -i "/NETWORK/d" "$nodefolder/$configfile"
-        echo "NETWORK="$NETWORK >> "$nodefolder/$configfile"
-
-        sed -i "/TASK_EXECUTION_PRICE/d" "$nodefolder/$configfile"
-        echo "TASK_EXECUTION_PRICE="$TASK_EXECUTION_PRICE >> "$nodefolder/$configfile"
-
-    if [[ ! -z $BLOXBERG_RPC_URL ]]; then
-        sed -i "/BLOXBERG_RPC_URL/d" "$nodefolder/$configfile"
-        echo "BLOXBERG_RPC_URL="$BLOXBERG_RPC_URL >> "$nodefolder/$configfile"
-    fi
-
-    if [[ ! -z $TESTNET_RPC_URL ]]; then
-        sed -i "/TESTNET_RPC_URL/d" "$nodefolder/$configfile"
-        echo "TESTNET_RPC_URL="$TESTNET_RPC_URL >> "$nodefolder/$configfile"
-    fi
-
-    if [[ ! -z $POLYGON_RPC_URL ]]; then
-        sed -i "/POLYGON_RPC_URL/d" "$nodefolder/$configfile"
-        echo "POLYGON_RPC_URL="$POLYGON_RPC_URL >> "$nodefolder/$configfile"
-    fi
-
-    if [[ ! -z $AMOY_RPC_URL ]]; then
-        sed -i "/AMOY_RPC_URL/d" "$nodefolder/$configfile"
-        echo "AMOY_RPC_URL="$AMOY_RPC_URL >> "$nodefolder/$configfile"
-    fi
+        echo "Configuration updated successfully."
 
     else
         echo "Config file not found. How would you like to continue?"
@@ -333,6 +549,7 @@ check_ansible(){
     fi
 }
 
+
 deploy_ansible(){
 #if we have the right kernel then we run the ansible-playbook and finish installation
     check_config_file
@@ -341,88 +558,48 @@ deploy_ansible(){
 }
 
 config_file_choice(){
-#if the config file doesn't exist we offer the either generate one with random wallets or we get the wallets from input
-echo "1) Type wallets. "
-echo "2) Generate random wallets... "
-echo "3) Exit. Rerun the script when config file exists..."
-echo -n "[Type your choice to continue]:" && read choice
+echo ""
+echo "******************* GENERATE WALLET *******************"
+echo "1. Enter private key"
+echo "2. Generate private key"
+echo "3. Exit"
+
+echo -n "How do you want to setup the private key? (default: 2):" && read choice
 case "$choice" in 
     1) 
         echo "Type/Paste wallet details below..."
-        nodeaddr=("Node Address: " "Node Private Key: " "Result Address: " "Result Private Key: ")
+        nodeaddr=("Node Private Key: ")
         IFS=""
         for address in ${nodeaddr[@]}; do
             case $address in
                 ${nodeaddr[0]})
                 while true
                 do
-                    echo -n $address && read nodeaddress
-                    if [[ $nodeaddress = "" ]]; then echo "Node address cannot be empty."; else break; fi
+                    echo -n $address && read nodeprivatekey 
+                    if [[ $nodeprivatekey = "" ]]; then echo "Node private key cannot be empty."; else break; fi
                 done;;
-                ${nodeaddr[2]})
-                    while true
-                    do
-                        echo -n $address && read resultaddress
-                        if [[ $nodeaddress = $resultaddress ]]
-                        then 
-                            echo "Result address must be different than the node address. Try a different address..."
-                        else break
-                        fi
-                    done;;
-                ${nodeaddr[1]})
-                    while true
-                    do
-                        echo -n $address && read nodeprivatekey
-                        if [[ ${#nodeprivatekey} = 64 && $nodeprivatekey =~ ^[a-zA-Z0-9]*$ ]]
-                        then
-                            break
-                        else echo "Invalid result private key. Please try again..."
-                        fi
-                    done;;
-                ${nodeaddr[3]})
-                    while true
-                    do
-                        echo -n $address && read resultprivatekey
-                        if [[ ${#resultprivatekey} = 64 && $resultprivatekey =~ ^[a-zA-Z0-9]*$ ]]
-                        then
-                            if [[ $nodeprivatekey = $resultprivatekey ]]
-                            then
-                                echo "Result private key must be different than the node private key. Try a different private key..."
-                            else
-                                break
-                            fi
-                        else echo "Invalid result private key. Please try again..."
-                        fi
-                    done;;
-
             esac
         done
-        echo "ADDRESS="$nodeaddress >> $nodefolder/$configfile
+
+        sed -i "/^PRIVATE_KEY=/d" "$nodefolder/$configfile"
+
         echo "PRIVATE_KEY="$nodeprivatekey >> $nodefolder/$configfile
-        echo "RESULT_ADDRESS="$resultaddress >> $nodefolder/$configfile
-        echo "RESULT_PRIVATE_KEY="$resultprivatekey >> $nodefolder/$configfile
-        echo "NETWORK="$NETWORK >> $nodefolder/$configfile
-        echo "TASK_EXECUTION_PRICE="$TASK_EXECUTION_PRICE >> $nodefolder/$configfile
-	if [[ ! -z $BLOXBERG_RPC_URL ]]; then
-	echo "BLOXBERG_RPC_URL=$BLOXBERG_RPC_URL" >> $nodefolder/$configfile
-	fi
-	if [[ ! -z $POLYGON_RPC_URL ]]; then
-	echo "POLYGON_RPC_URL=$POLYGON_RPC_URL" >> $nodefolder/$configfile
-	fi
-	if [[ ! -z $TESTNET_RPC_URL ]]; then
-	echo "TESTNET_RPC_URL=$TESTNET_RPC_URL" >> $nodefolder/$configfile
-	fi
-	if [[ ! -z $AMOY_RPC_URL ]]; then
-	echo "AMOY_RPC_URL=$AMOY_RPC_URL" >> $nodefolder/$configfile
-	fi
-        if [ -f $nodefolder/$configfile ]; then echo "Config file generated successfully. Continuing..."; else echo "Something went wrong. Seek Help!" && exit; fi
     ;;
-    2) 
-        export FILE=generate
+    3) echo "Exiting..." && exit;;
+    *)
+        sed -i "/^PRIVATE_KEY=/d" "$nodefolder/$configfile"
+        GENERATED="`utils/ethkey generate random`"
+        PRIVATE_KEY="`echo ${GENERATED} | awk '{print $2}'`"
+        ADDRESS="`echo ${GENERATED} | awk '{print $6}'`"
+
+        echo "PRIVATE_KEY="$PRIVATE_KEY >> $nodefolder/$configfile
+
+        echo "Add gas to the following address: ${ADDRESS}"
+        read -p "Once the transaction is complete, press any key to continue..." continue
+
         check_ansible
         ansible_playbook;;
-    3) echo "Exiting..." && exit;;
-    *) echo "Invalid choice. Please choose an option below..." && config_file_choice;;
+
 esac
 }
 
@@ -452,7 +629,6 @@ fi
 
 ubuntu(){
 #Getting which version of Ubuntu is instaled
-echo "Ubuntu OS found. Determining version..."
 family='Debian';
 
 case $(awk '/^VERSION_ID=/' /etc/*-release 2>/dev/null | awk -F'=' '{ print tolower($2) }' | tr -d '"') in
@@ -471,7 +647,6 @@ esac
 
 debian(){
 #Getting which version of Debian is instaled
-echo "Debian found. Determining version..."
 family='Debian';
 case $(awk '/^VERSION_ID=/' /etc/*-release 2>/dev/null | awk -F'=' '{ print tolower($2) }' | tr -d '"') in
     12)
@@ -483,7 +658,6 @@ esac
 
 slackware(){
 #Getting which version of Slackware is instaled
-echo "Slackware found. Determining version..."
 family='Slackware';
 case $(awk '/^VERSION_ID=/' /etc/*-release 2>/dev/null | awk -F'=' '{ print tolower($2) }' | tr -d '"') in
     15.0)
@@ -497,16 +671,14 @@ esac
 
 start(){
 #getting which Linux distribution is installed
-echo "Getting distro..."
+echo ""
+echo ""
+echo "#############################  INIT SETUP  #############################"
 case $(awk '/^ID=/' /etc/*-release 2>/dev/null | awk -F'=' '{ print tolower($2) }' | tr -d '"') in
     ubuntu) ubuntu;;
     debian) debian;;
     slackware) slackware;;
 #   centos) echo "centos distro Found. Not Supported. Exiting...";;
-#   manjaro) echo "manjaro distro Found. Not Supported. Exiting...";;
-#   arch) echo "arch distro Found. Not Supported. Exiting...";;
-#   rhel) echo "red hat  distro Found. Not Supported. Exiting...";;
-#   fedora) echo "fedora distro Found. Not Supported. Exiting...";;
     *) echo "Could not determine Distro. Exiting..."
 esac
 }

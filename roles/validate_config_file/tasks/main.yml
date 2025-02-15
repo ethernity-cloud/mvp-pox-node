@@ -12,130 +12,98 @@
     _arr: "{{ config_file_output.stdout.split('\n')|map('trim')|select()|list }}"
     _keys: "{{ _arr|map('regex_replace', '^(.*?)=(.*)$', '\\1')|map('trim')|list }}"
     _vals: "{{ _arr|map('regex_replace', '^(.*?)=(.*)$', '\\2')|map('trim')|list }}"
-  failed_when: config_file_map.ADDRESS is undefined or config_file_map.PRIVATE_KEY is undefined
+  failed_when: config_file_map.PRIVATE_KEY is undefined
+
+
+- name: Get ethkey info with error handling
+  shell: "./ethkey info {{ config_file_map.PRIVATE_KEY }}"
+  args:
+    chdir: "{{ role_path }}/files/"
+  register: ethkey_info
+  failed_when: ethkey_info.rc != 0
+  changed_when: false
+
+- name: Extract public address from ethkey info
+  set_fact:
+    address: "{{ ethkey_info.stdout.split('address:')[-1].strip() }}"
+
 
 - name: Print NETWORK environment variable
   debug:
     msg: "NETWORK environment variable value is {{ lookup('ansible.builtin.env', 'NETWORK') }}"
-  
-- name: Defining bloxberg gas balance request
-  when: lookup('ansible.builtin.env', 'NETWORK') == 'BLOXBERG' or lookup('ansible.builtin.env', 'NETWORK') == 'AUTO' or lookup('ansible.builtin.env', 'NETWORK') == 'TESTNET'
+
+
+- name: Define gas balance request for each network
   uri:
-    url: "{{ config_file_map.BLOXBERG_RPC_URL }}"
+    url: "{{ network.rpc_url }}"
     method: POST
     headers:
       Content-Type: "application/json"
     body_format: json
-    body: '{"method":"eth_getBalance","params":["{{ config_file_map.ADDRESS }}","latest"],"id":1,"jsonrpc":"2.0"}'
-  register: addressbergs
+    body: >
+      {
+        "method": "eth_getBalance",
+        "params": ["{{ address }}", "latest"],
+        "id": 1,
+        "jsonrpc": "2.0"
+      }
+  register: balance_results
   retries: 64
   delay: 3
+  loop: "{{ networks }}"
+  loop_control:
+    loop_var: network
+    label: "{{ network.shortname }} using RPC {{ network.rpc_url }} for {{ address }}"
+  tags: rpc_balance
 
-- name: Defining polygon gas balance request
-  when: lookup('ansible.builtin.env', 'NETWORK') == 'POLYGON' or lookup('ansible.builtin.env', 'NETWORK') == 'AUTO'
-  uri:
-    url: "{{ config_file_map.POLYGON_RPC_URL }}"
-    method: POST
-    headers:
-      Content-Type: "application/json"
-    body_format: json
-    body: '{"method":"eth_getBalance","params":["{{ config_file_map.ADDRESS }}","latest"],"id":1,"jsonrpc":"2.0"}'
-  register: addressmatic
-  retries: 64
-  delay: 3
-
-- name: Defining amoy gas balance request
-  when: lookup('ansible.builtin.env', 'NETWORK') == 'AMOY'
-  uri:
-    url: "{{ config_file_map.AMOY_RPC_URL }}"
-    method: POST
-    headers:
-      Content-Type: "application/json"
-    body_format: json
-    body: '{"method":"eth_getBalance","params":["{{ config_file_map.ADDRESS }}","latest"],"id":1,"jsonrpc":"2.0"}'
-  register: addressamoymatic
-  retries: 64
-  delay: 3
+- name: Pair networks with their balance results
+  set_fact:
+    network_balances: "{{ network_balances | default([]) + [ { 
+      'network': item.0, 
+      'balance_hex': item.1.json.result, 
+      'balance_decimal': item.1.json.result | int(base=16) 
+    } ] }}"
+  loop: "{{ networks | zip(balance_results.results) | list }}"
+  loop_control:
+    loop_var: item
+    label: "{{ item.0.shortname }}"
+  tags: rpc_balance
 
 
-- name: Evaluate bloxberg gas balance message
-  when: lookup('ansible.builtin.env', 'NETWORK') == 'BLOXBERG' or lookup('ansible.builtin.env', 'NETWORK') == 'AUTO' or lookup('ansible.builtin.env', 'NETWORK') == 'TESTNET'
+- name: Set fact for networks with enough gas
+  set_fact:
+    networks_with_enough_gas: "{{ networks_with_enough_gas | default([]) + [ item.network ] }}"
+  when: (item.balance_decimal | int(16)) >= item.network.minimum_gas_at_start
+  loop: "{{ network_balances }}"
+  loop_control:
+    loop_var: item
+  tags: validate
+
+
+- name: Set fact for networks without enough gas
+  set_fact:
+    networks_without_enough_gas: "{{ networks_without_enough_gas | default([]) + [ item.network ] }}"
+  when: item.balance_decimal < item.network.minimum_gas_at_start
+  loop: "{{ network_balances }}"
+  loop_control:
+    loop_var: item
+  tags: validate
+
+
+- name: Display networks without enough gas
   debug:
-    msg: "{{ addressbergs.json }}"
-  failed_when: addressbergs.json == ""
+    msg: "Address {{ address }} does not hold enough gas on {{ network.name }}. {{ network.description }}"
+  loop: "{{ networks_without_enough_gas }}"
+  loop_control:
+    loop_var: network
+    label: "{{ network.shortname }}"
+  tags: validate
 
-- name: Evaluate polygon gas balance message
-  when: lookup('ansible.builtin.env', 'NETWORK') == 'POLYGON' or lookup('ansible.builtin.env', 'NETWORK') == 'AUTO'
-  debug:
-    msg: "{{ addressmatic.json }}"
-  failed_when: addressmatic.json == ""
-
-- name: Evaluate amoy gas balance message
-  when: lookup('ansible.builtin.env', 'NETWORK') == 'AMOY'
-  debug:
-    msg: "{{ addressamoymatic.json }}"
-  failed_when: addressamoymatic.json == ""
-
-- name: Checking gas balance for AUTO
-  debug:
-    msg:
-      - "Node ADDRESS balance: '{{ addressbergs.json.result|int}}' BERG."
-      - "Please get bergs on {{ config_file_map.ADDRESS }} from https://faucet.bloxberg.org/ and try again."
-      - "OR"
-      - "Node ADDRESS balance: '{{ addressbergs.json.result|int}}' MATIC."
-      - "Please sent MATIC to {{ config_file_map.ADDRESS }} and try again."
-  failed_when:
-    - addressbergs.json.result == "0x0"
-    - addressmatic.json.result == "0x0"
-  when:
-    - config_file_map.NETWORK == 'AUTO'
-    - addressbergs.json.result == "0x0"
-    - addressmatic.json.result == "0x0"
-  
-
-- name: Checking gas balance for BLOXBERG
-  debug:
-    msg:
-      - "Node ADDRESS balance: '{{ addressbergs.json.result|int}}' BERG."
-      - "Please get bergs on {{ config_file_map.ADDRESS }} from https://faucet.bloxberg.org/ and try again."
-  failed_when:
-    - addressbergs.json.result == "0x0"
-  when:
-    - config_file_map.NETWORK == 'BLOXBERG'
-    - addressbergs.json.result == "0x0"
-
-- name: Checking gas balance for TESTNET
-  debug:
-    msg:
-      - "Node ADDRESS balance: '{{ addressbergs.json.result|int}}' BERG."
-      - "Please get bergs on {{ config_file_map.ADDRESS }} from https://faucet.bloxberg.org/ and try again."
-  failed_when:
-    - addressbergs.json.result == "0x0"
-  when:
-    - config_file_map.NETWORK == 'TESTNET'
-    - addressbergs.json.result == "0x0"  
-
-- name: Checking gas balance for POLYGON
-  debug:
-    msg:
-      - "Node ADDRESS balance: '{{ addressmatic.json.result|int}}' MATIC."
-      - "Please sent MATIC to {{ config_file_map.ADDRESS }} and try again."
-  failed_when:
-    - addressmatic.json.result == "0x0"
-  when:
-    - config_file_map.NETWORK == 'POLYGON'
-    - addressmatic.json.result == "0x0"
-
-- name: Checking gas balance for AMOY
-  debug:
-    msg:
-      - "Node ADDRESS balance: '{{ addressamoymatic.json.result|int}}' MATIC."
-      - "Please sent MATIC to {{ config_file_map.ADDRESS }} using a amoy faucet and try again."
-  failed_when:
-    - addressamoymatic.json.result == "0x0"
-  when:
-    - config_file_map.NETWORK == 'AMOY'
-    - addressamoymatic.json.result == "0x0"  
+- name: Fail if no networks have enough gas
+  fail:
+    msg: "The configured wallet does not hold the minimum gas network for any configured network."
+  when: networks_with_enough_gas is not defined or networks_with_enough_gas | length == 0
+  tags: validate
 
 - meta: end_play
-  when: (addressmatic.json.result is defined and addressmatic.json.result == '0') and (addressbergs.json.result is defined and addressbergs.json.result == '0')
+  when: networks_with_enough_gas is not defined or networks_with_enough_gas | length == 0

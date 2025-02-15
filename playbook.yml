@@ -44,9 +44,5 @@
       - lookup('ansible.builtin.env', 'FILE') != 'generate'
       - config_file.stat.exists == false
   roles:
-    - role: generate_config_file
-      when: 
-        - lookup('ansible.builtin.env', 'FILE') == 'generate'
-        - config_file.stat.exists == false
     - role: validate_config_file
     - role: ethernity_agent_node

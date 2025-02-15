@@ -1,6 +1,8 @@
 #!/bin/bash
 set -e
 
+sysctl -p /etc/sysctl.conf
+
 trap 'echo "Installer status: \"${BASH_COMMAND}\"command end with exit code $?."' SIGINT SIGTERM ERR EXIT
 
 . /home/vagrant/etny/node/config
@@ -58,25 +60,61 @@ fi
 
 cd /home/vagrant/etny/node/etny-repo/node/
 git fetch origin
-git reset --hard origin/master
+git reset --hard origin/v3.3.3
 git pull
 
-COMMAND_LINE="/home/vagrant/etny/node/etny-repo/node/etny-node.py -a ${ADDRESS} -k ${PRIVATE_KEY} -r ${RESULT_ADDRESS} -j ${RESULT_PRIVATE_KEY} -v ${TASK_EXECUTION_PRICE} -n ${NETWORK} -i ${IPFS_HOST} -l ${IPFS_LOCAL}"
+parse_config_to_args() {
+    local config_file="/home/vagrant/etny/node/config"
+    local args=()
 
-if [ -n "${POLYGON_RPC_URL}" ]; then
-  COMMAND_LINE="${COMMAND_LINE} -y ${POLYGON_RPC_URL}"
-fi
+    # Check if the config file exists and is readable
+    if [[ ! -f "$config_file" ]]; then
+        echo "Error: Config file '$config_file' not found." >&2
+        return 1
+    fi
 
-if [ -n "${BLOXBERG_RPC_URL}" ]; then
-  COMMAND_LINE="${COMMAND_LINE} -x ${BLOXBERG_RPC_URL}"
-fi
+    if [[ ! -r "$config_file" ]]; then
+        echo "Error: Config file '$config_file' is not readable." >&2
+        return 1
+    fi
 
-if [ -n "${TESTNET_RPC_URL}" ]; then
-  COMMAND_LINE="${COMMAND_LINE} -z ${TESTNET_RPC_URL}"
-fi
+    # Read the config file line by line
+    while IFS='=' read -r key value; do
+        # Skip empty lines and lines starting with '#'
+        [[ -z "$key" || "$key" =~ ^# ]] && continue
 
-if [ -n "${AMOY_RPC_URL}" ]; then
-  COMMAND_LINE="${COMMAND_LINE} -w ${AMOY_RPC_URL}"
-fi
+        # Trim whitespace from key and value
+        key=$(echo "$key" | xargs)
+        value=$(echo "$value" | xargs)
+
+        # Ignore the NETWORK parameter
+        if [[ "$key" == "NETWORK" ]] || [[ "$key" == "PRIVATE_KEY" ]]; then
+            continue
+        fi
+
+        # Convert key to lowercase
+        key_lower=$(echo "$key" | tr '[:upper:]' '[:lower:]')
+
+        # Prefix with '--' and handle the value (quote if it contains spaces)
+        if [[ "$value" =~ [[:space:]] ]]; then
+            args+=("--$key_lower" "\"$value\"")
+        else
+            args+=("--$key_lower" "$value")
+        fi
+    done < "$config_file"
+
+    # Join the arguments into a single string
+    local args_str=""
+    for arg in "${args[@]}"; do
+        args_str+="$arg "
+    done
+
+    # Trim trailing space and echo the result
+    echo "${args_str% }"
+}
+
+ARGS=$(parse_config_to_args)
+
+COMMAND_LINE="/home/vagrant/etny/node/etny-repo/node/etny-node.py -k ${PRIVATE_KEY} -n ${NETWORK} ${ARGS}"
 
 $COMMAND_LINE
