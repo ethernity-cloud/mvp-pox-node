@@ -692,7 +692,7 @@ class EtnyPoXNode:
             os.chdir(self.cache_config.base_path)
             logger.debug("Cleaning up docker container")
             run_subprocess([
-                'docker-compose', '-f', self.order_docker_compose_file, 'down', '-d'
+                'docker-compose', '-f', self.order_docker_compose_file, 'down'
             ], logger)
 
             logger.debug("Started enclave execution")
@@ -1562,6 +1562,8 @@ class EtnyPoXNode:
             logger.info("Cannot download data from IPFS, stopping test")
             return
 
+        os.chdir(self.cache_config.base_path)
+
         logger.debug("Running docker swift-stream")
         run_subprocess(
             ['docker-compose', '-f', f'../docker/docker-compose-swift-stream.yml', 'up', '-d', 'swift-stream'],
@@ -1593,6 +1595,17 @@ class EtnyPoXNode:
         ], logger)
 
         logger.debug("Started enclaves by running ETNY docker-compose")
+
+        os.chdir(self.cache_config.base_path)
+
+        logger.debug("Cleaning up docker container")
+        run_subprocess([
+            'docker-compose', '-f', self.order_docker_compose_file, 'down'
+        ], logger)
+
+
+        os.chdir(self.cache_config.base_path)
+
         run_subprocess([
             'docker-compose', '-f', self.order_docker_compose_file, 'up', '-d'
         ], logger)
