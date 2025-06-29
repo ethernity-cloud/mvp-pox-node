@@ -76,6 +76,10 @@ class EtnyPoXNode:
         self.logger = NetworkLoggerAdapter(config.logger, self.__network)
         logger = self.logger
 
+        if stop_event.is_set():
+            return
+
+
         logger.info(f"Initializing Ethernity CLOUD Agent v{config.version}");
 
         logger.info(f"Configured network is: {self.__network}")
@@ -101,12 +105,18 @@ class EtnyPoXNode:
             balance = self.__w3.eth.get_balance(self.__address)
 
             if balance < int(network.minimum_gas_at_start):
-               logger.error(f"Not enough gas at {self.__address} to run node agent, exiting")
-               raise Exception(f"Not enough gas on network {self.__network}: {balance}")
+               logger.error(f"Not enough gas at {self.__address} to run node agent, wating until enough balance is set")
 
+               while not stop_event.is_set() and balance < int(network.minimum_gas_at_start):
+                   balance = self.__w3.eth.get_balance(self.__address)
+
+               if stop_event.is_set():
+                   return
+               
         except Exception as e:
             logger.info(f"Error: {e}")
             raise Exception(e)
+
 
         self.__node_geo = get_node_geo();
         self.__number_of_cpus = int(HardwareInfoProvider.get_number_of_cpus());
