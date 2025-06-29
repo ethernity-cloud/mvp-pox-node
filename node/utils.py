@@ -603,3 +603,115 @@ class HardwareInfoProvider:
     @staticmethod
     def get_free_storage():
         return psutil.disk_usage("/")[2] // (2 ** 30)  # in GB
+
+
+
+def parse_transaction_bytes_ut(contract_abi, bytes_input):
+    import rlp
+    from rlp.sedes import big_endian_int, Binary, binary
+    from eth_utils import keccak, to_checksum_address, decode_hex
+    from eth_keys import keys
+    from web3 import Web3
+
+    # Define the signed transaction class
+    class SignedTransaction(rlp.Serializable):
+        fields = [
+            ("nonce", big_endian_int),
+            ("gasPrice", big_endian_int),
+            ("gas", big_endian_int),
+            ("to", Binary.fixed_length(20, allow_empty=True)),
+            ("value", big_endian_int),
+            ("data", binary),
+            ("v", big_endian_int),
+            ("r", big_endian_int),
+            ("s", big_endian_int),
+        ]
+
+    # Define the unsigned transaction class
+    class UnsignedTransaction(rlp.Serializable):
+        fields = [
+            ("nonce", big_endian_int),
+            ("gasPrice", big_endian_int),
+            ("gas", big_endian_int),
+            ("to", Binary.fixed_length(20, allow_empty=True)),
+            ("value", big_endian_int),
+            ("data", binary),
+        ]
+
+    # Convert hex string to bytes if necessary
+    if isinstance(bytes_input, str):
+        bytes_input = bytes_input.strip()
+        if bytes_input.startswith("0x"):
+            bytes_input = decode_hex(bytes_input)
+        else:
+            bytes_input = bytes.fromhex(bytes_input)
+
+    # Decode the transaction using RLP
+    try:
+        tx = rlp.decode(bytes_input, SignedTransaction)
+    except Exception as e:
+        print(f"Error decoding transaction: {e}")
+        return None
+
+    # Create an unsigned transaction instance
+    unsigned_tx = UnsignedTransaction(
+        nonce=tx.nonce,
+        gasPrice=tx.gasPrice,
+        gas=tx.gas,
+        to=tx.to,
+        value=tx.value,
+        data=tx.data,
+    )
+    # Create a Web3 instance
+    w3 = Web3(Web3.HTTPProvider("https://core.bloxberg.org"))
+    # Compute the transaction hash (the message hash used for signing)
+    tx_hash = keccak(rlp.encode(unsigned_tx))
+
+    # Recover the sender's public key and address
+    v = tx.v
+    if v >= 35:
+        # EIP-155
+        chain_id = (v - 35) // 2
+        v_standard = v - (chain_id * 2 + 35) + 27
+    else:
+        chain_id = None
+        v_standard = v
+
+    try:
+        # Build the signature object
+        # signature = keys.Signature(vrs=(v_standard, tx.r, tx.s))
+
+        # Recover the public key
+        # public_key = signature.recover_public_key_from_msg_hash(tx_hash)
+
+        sender_address = w3.eth.account.recover_transaction(bytes_input)
+    except Exception as e:
+        print(f"Error recovering sender address: {e}")
+        return None
+
+    # Decode the function input data
+    try:
+        contract = w3.eth.contract(abi=contract_abi)
+        decoded_function = contract.decode_function_input(tx.data)
+        function_name = decoded_function[0].fn_name
+        params = decoded_function[1]
+    except Exception as e:
+        print(f"Error decoding function input: {e}")
+        return None
+
+    # Prepare the result
+    result = {
+        "from": sender_address,
+        "to": to_checksum_address(tx.to) if tx.to else None,
+        "nonce": tx.nonce,
+        "gasPrice": tx.gasPrice,
+        "gas": tx.gas,
+        "value": tx.value,
+        "function_name": function_name,
+        "params": params,
+        "transaction_hash": "0x" + keccak(bytes_input).hex(),
+        "result": params["_result"] if "_result" in params else None,
+    }
+
+    return result
+

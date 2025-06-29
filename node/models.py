@@ -46,3 +46,14 @@ class OrderStatus:
     PROCESSING = 1
     CLOSED = 2
     CANCELLED = 3
+
+class ResultStatus:
+    SUCCESS = 0
+    SYSTEM_ERROR = 1
+    KEY_ERROR = 2
+    SYNTAX_WARNING = 3
+    BASE_EXCEPTION = 4
+    PAYLOAD_NOT_DEFINED = 5
+    PAYLOAD_CHECKSUM_ERROR = 6
+    INPUT_CHECKSUM_ERROR = 7
+    EXECVE = 8

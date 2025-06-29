@@ -18,7 +18,7 @@ from web3 import middleware
 from web3.gas_strategies.time_based import fast_gas_price_strategy
 from web3.gas_strategies.rpc import rpc_gas_price_strategy
 
-from utils import get_or_generate_uuid, run_subprocess, retry, Storage, Cache, ListCache, ListCacheWithTimestamp, MergedOrdersCache, subprocess, get_node_geo, HardwareInfoProvider
+from utils import get_or_generate_uuid, run_subprocess, retry, Storage, Cache, ListCache, ListCacheWithTimestamp, MergedOrdersCache, subprocess, get_node_geo, HardwareInfoProvider, parse_transaction_bytes_ut
 from models import *
 from error_messages import errorMessages
 from swift_stream_service import SwiftStreamService
@@ -133,7 +133,7 @@ class EtnyPoXNode:
         self.can_run_under_sgx = False
 
         logger.info(f"NodeID: {self.__address}");
-        logger.info(f"Network: {self.__address}");
+        logger.info(f"Network: {self.__network}");
         logger.info(f"RPC URL: {self.__network_config.rpc_url}");
         logger.info(f"ChainID: {self.__network_config.chain_id}");
         logger.info(f"Protocol Contract Address: %s", self.__network_config.contract_address);
@@ -585,7 +585,7 @@ class EtnyPoXNode:
                     order = Order(self.__etny.caller()._getOrder(order_id))
                     metadata = self.__etny.caller()._getDORequestMetadata(order.do_req)
                     break
-                except Exceptiona as e:
+                except Exception as e:
                     logger.warning(f"Unable to get order metadata: {e}")
                     logger.werning("Retrying")
 
@@ -704,8 +704,25 @@ class EtnyPoXNode:
             ], logger)
 
             logger.info('Docker environment ready. Execution started in SGX enclave')
-            status_enclave = self.wait_for_enclave_v2(bucket_name, 'result.txt', 3600)
+
+            order = Order(self.__etny.caller()._getOrder(order_id))
+            do_req = DORequest(self.__etny.caller()._getDORequest(order.do_req))
+
+            # Track total wait time
+            start_total_wait = time.time()
+
+            # First wait
+            start_wait = time.time()
+            status_enclave = self.wait_for_enclave_v2(bucket_name, 'result.txt', do_req.duration * 3600)
+            elapsed_wait1 = time.time() - start_wait
+
+            # Second wait
+            start_wait = time.time()
             status_enclave = self.wait_for_enclave_v2(bucket_name, 'transaction.txt', 60)
+            elapsed_wait2 = time.time() - start_wait
+
+            total_elapsed_wait = elapsed_wait1 + elapsed_wait2
+
             logger.info('Enclave finished the execution')
 
             if status_enclave == True:
@@ -730,6 +747,29 @@ class EtnyPoXNode:
                 self.add_result_to_order(order_id, result)
                 logger.info("ZK proof added. Task integrity submitted for validation.")
                 self.calculate_reward()
+
+                task_code = 0 
+
+                try:
+                    result = parse_transaction_bytes_ut(self.__contract_abi, transaction_data)
+                    arr = result["result"].split(":")
+                    task_code = arr[1];
+                except Exception as ex:
+                    logger.info("Unable to determine the result_code (return code) from transactiond data")
+
+                if int(task_code) == ResultStatus.EXECVE:
+                    logger.info(f"Process EXECVE is still running")
+
+                    total_duration = do_req.duration * 3600
+                    remaining_sleep = total_duration - total_elapsed_wait
+
+                    logger.info(f"Waiting till the end of execution - {remaining_sleep}")
+
+                    if remaining_sleep > 0:
+                        time.sleep(remaining_sleep)
+                    else:
+                        logger.info(f'No remaining sleep required. Already waited {total_elapsed_wait} seconds.')
+
             else:
                 result = self.build_result_format_v3("[WARN]","Task execution timed out");
                 self.add_result_to_order(order_id, result);
@@ -759,7 +799,7 @@ class EtnyPoXNode:
         logger = self.logger
 
         i = 0
-        logger.debug(f'Checking if object {object_name} exists in bucket {bucket_name}')
+        logger.info(f'Checking if object {object_name} exists in bucket {bucket_name} for {timeout} seconds')
         while True:
             time.sleep(1)
             i = i + 1
@@ -767,7 +807,7 @@ class EtnyPoXNode:
                 break
             (status, result) = self.swift_stream_service.is_object_in_bucket(bucket_name, object_name)
             if status:
-                logger.debug(f'Object found!')
+                logger.info(f'Enclave execution finished!')
                 return True
 
         logger.info('Enclave execution timed out')
@@ -858,53 +898,6 @@ class EtnyPoXNode:
         self.update_enclave_docker_compose(self.order_docker_compose_file, order_id)
         env_content = self.get_enclave_env_dictionary(order_id, challenge)
         self.generate_enclave_env_file(f'{self.order_folder}/.env', env_content)
-
-    def build_prerequisites_v2(self, bucket_name, order_id, payload_file, input_file, docker_compose_file, challenge):
-        logger = self.logger
-
-        logger.debug('Cleaning up swift-stream bucket.')
-        self.swift_stream_service.delete_bucket(bucket_name)
-        logger.debug('Creating new bucket.')
-        self.order_folder = f'./orders/{order_id}/etny-order-{order_id}'
-        self.create_folder_v1(self.order_folder)
-        (status, msg) = self.swift_stream_service.create_bucket(bucket_name)
-        if not status:
-            logger.error(msg)
-
-        self.payload_file_name = "payload.etny"
-        (status, msg) = self.swift_stream_service.upload_file(bucket_name,
-                                                              self.payload_file_name,
-                                                              payload_file)
-        if not status:
-            logger.error(msg)
-
-        self.input_file_name = "input.txt"
-        if input_file is None:
-            (status, msg) = self.swift_stream_service.put_file_content(bucket_name,
-                                                                       self.input_file_name,
-                                                                       "",
-                                                                       io.BytesIO(b""))
-        else:
-            (status, msg) = self.swift_stream_service.upload_file(bucket_name,
-                                                                  self.input_file_name,
-                                                                  input_file)
-        if (not status):
-            logger.error(msg)
-
-        self.order_docker_compose_file = f'./orders/{order_id}/docker-compose.yml'
-        self.copy_order_files(docker_compose_file, self.order_docker_compose_file)
-
-        self.set_retry_policy_on_fail_for_compose()
-        self.update_enclave_docker_compose(self.order_docker_compose_file, order_id)
-
-        env_content = self.get_enclave_env_dictionary(order_id, challenge)
-        self.generate_enclave_env_file(f'{self.order_folder}/.env', env_content)
-
-        (status, msg) = self.swift_stream_service.upload_file(bucket_name,
-                                                              ".env",
-                                                              f'{self.order_folder}/.env')
-        if not status:
-            logger.error(msg)
 
     def build_prerequisites_v3(self, bucket_name, order_id, payload_file, input_file, docker_compose_file, challenge):
         logger = self.logger
@@ -1728,12 +1721,11 @@ def process_network(network):
         return
 
     try:
-        while not stop_event.is_set():
-           app = EtnyPoXNode(network)
-           app.cache_dp_requests()
-           app.resume_pending_dp_requests()
-           app.resume_available_dp_requests()
-           app.resume_processing()
+        app = EtnyPoXNode(network)
+        app.cache_dp_requests()
+        app.resume_pending_dp_requests()
+        app.resume_available_dp_requests()
+        app.resume_processing()
 
         logger.info(f"[{network.name}] Exiting")
         return(f"[{network.name}] Exiting")
@@ -1787,15 +1779,22 @@ class TaskManager:
         self.executor = None
         self.futures = []
 
+    def resilient_process(self, network):
+        while not stop_event.is_set():
+            try:
+                process_network(network)
+            except Exception as e:
+                logger.error(f"[{network.name}] Restarting due to error: {e}")
+                time.sleep(2)  # brief delay before retry
+            else:
+                logger.info(f"[{network.name}] Process exited cleanly. Restarting.")
+                time.sleep(2)  # restart after clean exit
+
     def start_threads(self, network_configs):
-        """
-        Creates a new ThreadPoolExecutor and starts tasks.
-        Stores them in self.executor/self.futures.
-        """
         logger.info("Starting new threads...")
         self.executor = concurrent.futures.ThreadPoolExecutor(max_workers=5)
         self.futures = [
-            self.executor.submit(process_network, net) for net in network_configs
+            self.executor.submit(self.resilient_process, net) for net in network_configs
         ]
 
 def initiate_restart(network_configs, task_manager):
