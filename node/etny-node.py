@@ -109,6 +109,7 @@ class EtnyPoXNode:
 
                while not stop_event.is_set() and balance < int(network.minimum_gas_at_start):
                    balance = self.__w3.eth.get_balance(self.__address)
+                   time.sleep(600)
 
                if stop_event.is_set():
                    return
