@@ -5,13 +5,13 @@ from os.path import expanduser
 from dataclasses import dataclass, fields
 from typing import List
 from pathlib import Path
-from utils import HardwareInfoProvider
 import dependency_manager
 from distutils.util import strtobool
 
 dependency_manager.check_dependencies()
 
 import psutil
+from utils import HardwareInfoProvider
 from minio import Minio
 from dotenv import load_dotenv
 
@@ -25,6 +25,7 @@ ipfs_port_default = int(os.environ.get('IPFS_PORT', 4001))
 ipfs_id_default = os.environ.get('IPFS_ID', "QmRBc1eBt4hpJQUqHqn6eA8ixQPD3LFcUDsn6coKBQtia5")
 ipfs_connect_url_default = os.environ.get('IPFS_CONNECT_URL', "/ip4/127.0.0.1/tcp/5001/http")
 ipfs_timeout_default = int(os.environ.get('IPFS_TIMEOUT', 30))
+ipfs_gateway_url_default=os.environ.get('IPFS_REMOTE_URL', 'https://ipfs.io')
 skip_integration_test = strtobool(os.environ.get('SKIP_INTEGRATION_TEST', "False"))
 
 @dataclass(frozen=True)
@@ -355,6 +356,13 @@ def parse_arguments(network_names: list) -> argparse.ArgumentParser:
         required=False
     )
     parser.add_argument(
+        "--ipfs_gateway_url",
+        help="IPFS gateway URL",
+        type=str,
+        default=str(ipfs_gateway_url_default),
+        required=False
+    )
+    parser.add_argument(
         "-d",
         "--ipfs_timeout",
         help="IPFS timeout",
@@ -370,7 +378,7 @@ parser = parse_arguments(list(NETWORKS.keys()))
 
 arguments = {
     str: [
-       'privatekey', 'endpoint', 'access_key', 'secret_key', 'network', 'ipfs_host', 'ipfs_id', 'ipfs_connect_url'
+       'privatekey', 'endpoint', 'access_key', 'secret_key', 'network', 'ipfs_host', 'ipfs_id', 'ipfs_connect_url', 'ipfs_gateway_url'
     ],
     int: ['cpu', 'memory', 'storage', 'bandwidth', 'duration', 'ipfs_port', 'ipfs_timeout'],
     float: ['price']

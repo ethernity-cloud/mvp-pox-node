@@ -65,6 +65,7 @@ class EtnyPoXNode:
         self.__ipfs_port = None
         self.__ipfs_id = None
         self.__ipfs_connect_url = None
+        self.__ipfs_gateway_url = None
         self.__ipfs_timeout = None
         self.__price = None
         self.__orders = defaultdict(lambda: None)
@@ -153,6 +154,7 @@ class EtnyPoXNode:
         logger.info(f"Minimum reward for order processing: %d %s / hour", self.__price, self.__network_config.token_name);
         logger.info(f"IPFS Host: %s", self.__ipfs_host);
         logger.info(f"IPFS Connect URL: %s", self.__ipfs_connect_url);
+        logger.info(f"IPFS Gateway URL: %s", self.__ipfs_gateway_url);
         logger.info(f"Node number of cpus: %s", self.__number_of_cpus);
         logger.info(f"Node free memory: %s", self.__free_memory);
         logger.info(f"Node free storage: %s", self.__free_storage);
@@ -189,7 +191,7 @@ class EtnyPoXNode:
         self.dpreq_cache = ListCache(self.cache_config.dpreq_cache_limit, self.cache_config.dpreq_filepath)
         self.doreq_cache = ListCache(self.cache_config.doreq_cache_limit, self.cache_config.doreq_filepath)
         self.ipfs_cache = ListCacheWithTimestamp(self.cache_config.ipfs_cache_limit, self.cache_config.ipfs_cache_filepath)
-        self.storage = Storage(self.__ipfs_host, self.__ipfs_port, self.__ipfs_id, self.__ipfs_timeout, self.__ipfs_connect_url,
+        self.storage = Storage(self.__ipfs_host, self.__ipfs_port, self.__ipfs_id, self.__ipfs_timeout, self.__ipfs_connect_url, self.__ipfs_gateway_url,
                                self.ipfs_cache, logger, self.cache_config.base_path)
         self.merged_orders_cache = MergedOrdersCache(self.cache_config.merged_orders_cache_limit, self.cache_config.merged_orders_cache)
         self.swift_stream_service = SwiftStreamService(self.__endpoint,
@@ -229,7 +231,7 @@ class EtnyPoXNode:
         self.cache_config_legacy = CacheConfig('./')
         self.ipfs_cache_legacy = ListCache(self.cache_config_legacy.ipfs_cache_limit, self.cache_config_legacy.ipfs_cache_filepath)
 
-        self.storage_legacy = Storage(self.__ipfs_host, self.__ipfs_port, self.__ipfs_id, self.__ipfs_timeout, self.__ipfs_connect_url,
+        self.storage_legacy = Storage(self.__ipfs_host, self.__ipfs_port, self.__ipfs_id, self.__ipfs_timeout, self.__ipfs_connect_url, self.__ipfs_gateway_url,
                                self.ipfs_cache_legacy, logger, self.cache_config_legacy.base_path)
 
         for hash in list(self.ipfs_cache_legacy.get_values):
@@ -1187,16 +1189,31 @@ class EtnyPoXNode:
                     metadata[i] = [None, None, None, None, None]
 
                 if metadata[i][4] is None:
-                    while True:
-                        try:
-                            time.sleep(self.__network_config.rpc_delay/1000)
-                            _doreq[i] = self.__etny.caller()._getDORequest(i)
-                            doreq[i] = DORequest(_doreq[i])
-                            time.sleep(self.__network_config.rpc_delay/1000)
-                            metadata[i] = self.__etny.caller()._getDORequestMetadata(i)
-                            break
-                        except Exception as e:
-                            logger.warning(f"Failed to read DO request metadata")
+                    logger.debug(f"Fetching DO request and metadata for index {i}")
+
+                    def _fetch_once() -> bool:
+                        raw = self.__etny.caller()._getDORequest(i)
+                        doreq[i] = DORequest(raw)
+                        meta = self.__etny.caller()._getDORequestMetadata(i)
+                        if meta[4] is None:
+                            raise ValueError("metadata field[4] is still None")
+                        metadata[i] = meta
+                        return True
+
+                    attempts = 20
+                    delay_s = self.__network_config.rpc_delay / 1000.0
+
+                    success, _ = retry(_fetch_once, attempts=attempts, delay=delay_s)
+
+                    if not success:
+                        logger.info(
+                            f"Failed to fetch DORequest/metadata after {attempts} attempts; skipping to next DO request"
+                        )
+                        next_dp_request = True
+                        reset_task_running_on()
+                        break
+
+                    logger.debug("Fetch succeeded; proceeding with DO request processing.")
 
                 if not (doreq[i].cpu <= req.cpu and doreq[i].memory <= req.memory and
                         doreq[i].storage <= req.storage and doreq[i].bandwidth <= req.bandwidth and doreq[i].price >= req.price):
@@ -1281,7 +1298,6 @@ class EtnyPoXNode:
                     logger.error(f"Unable to process order {self.__order_id}: {e}")
                     reset_task_running_on()
 
-           
             if self.__do_requests_build_pending and threshold > 0:
                 logger.info(f"Building DO Requests cache: 100%")
                 logger.info("Finished building DO requests cache")
@@ -1796,8 +1812,10 @@ class TaskManager:
                 process_network(network)
             except Exception as e:
                 logger.error(f"[{network.name}] Restarting due to error: {e}")
+                reset_task_running_on()
                 time.sleep(2)  # brief delay before retry
             else:
+                reset_task_running_on()
                 logger.info(f"[{network.name}] Process exited cleanly. Restarting.")
                 time.sleep(2)  # restart after clean exit
 

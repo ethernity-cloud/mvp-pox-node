@@ -8,8 +8,15 @@ import uuid
 import math
 import urllib.request
 import time
+import re
+import requests
+from urllib.parse import urljoin, urlparse
+from bs4 import BeautifulSoup
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from requests.adapters import HTTPAdapter
 
 from collections import OrderedDict
+from collections import deque
 
 import ipfshttpclient
 import psutil
@@ -68,7 +75,7 @@ def get_node_geo():
 
 
 class Storage:
-    def __init__(self, ipfs_host, ipfs_port, ipfs_id, ipfs_timeout, client_connect_url, cache, logger, target):
+    def __init__(self, ipfs_host, ipfs_port, ipfs_id, ipfs_timeout, client_connect_url, gateway_url, cache, logger, target):
         self.client_bootstrap_url = '/dns4/' + ipfs_host + '/tcp/' + str(ipfs_port) + '/ipfs/' + ipfs_id
         self.ipfs_host = ipfs_host
         self.ipfs_port = ipfs_port
@@ -79,23 +86,168 @@ class Storage:
         self.bootstrap_client = ipfshttpclient.connect(client_connect_url)
         self.bootstrap_client.bootstrap.add(self.client_bootstrap_url)
         self.bootstrap_client.config.set("Datastore.StorageMax", "3GB")
+        # optional remote IPFS HTTP‐API (e.g. Infura/Pinata); tried before local
+        self.gateway = gateway_url.rstrip('/')
+        self.session = requests.Session()
+        max_workers = 10
+        adapter = HTTPAdapter(pool_connections=max_workers, pool_maxsize=max_workers)
+        self.session.mount("https://", adapter)
+        self.executor = ThreadPoolExecutor(max_workers=max_workers)
         args = ("Swarm.ConnMgr.LowWater", 25)
         opts = {'json': 'true'}
         self.bootstrap_client._client.request('/config', args, opts=opts, decoder='json')
         self.logger = logger
         self.cache = cache
 
+
+    def _http_request_with_retry(self,
+                                 method: str,
+                                 url: str,
+                                 max_retries: int = 5,
+                                 backoff_factor: float = 1.0,
+                                 retry_on_status: tuple = (429, 500, 502, 503, 504),
+                                 **kwargs) -> requests.Response:
+        """
+        Do a session.request(method, url, **kwargs), retrying on specified status codes.
+        """
+        delay = backoff_factor
+        for attempt in range(1, max_retries + 1):
+            resp = getattr(self.session, method)(url, **kwargs)
+            if resp.status_code not in retry_on_status:
+                resp.raise_for_status()
+                return resp
+            if attempt == max_retries:
+                resp.raise_for_status()
+            self.logger.warning(
+                "[%s/%s] %s %s returned %s, retrying in %.1fs …",
+                attempt, max_retries, method.upper(), url,
+                resp.status_code, delay
+            )
+            time.sleep(delay)
+            delay *= 2
+
+    def is_ipfs_folder(self, path: str) -> bool:
+        """
+        Return True if accessing /ipfs/<path>/ on the gateway yields an HTML
+        directory listing (i.e. it’s a folder), False otherwise.
+        """
+        url = f"{self.gateway}/ipfs/{path}/"
+        try:
+            resp = self._http_request_with_retry('get', url, timeout=10)
+        except Exception:
+            return False
+        return '<a href="/ipfs/' in resp.text
+
+    def download_file(self, path: str, out_path: str) -> None:
+        """
+        Fast, streaming copy of a single file via gateway.
+        """
+        url = f"{self.gateway}/ipfs/{path}"
+        resp = self._http_request_with_retry("get", url, stream=True, timeout=60)
+        resp.raw.decode_content = True
+
+        os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
+        with open(out_path, "wb") as f:
+            shutil.copyfileobj(resp.raw, f)
+
+        self.logger.debug(f"Downloaded file {out_path}")
+
+    def download_folder(self, cid: str, dest_dir: str) -> None:
+        """
+        BFS-crawl the HTML indexes to build a flat list of all file tasks,
+        then download them in parallel.
+        """
+        os.makedirs(dest_dir, exist_ok=True)
+        queue = deque([(cid, dest_dir)])
+        file_tasks = []
+
+        # 1) Crawl directory structure via HTML
+        while queue:
+            prefix, local_path = queue.popleft()
+            index_url = f"{self.gateway}/ipfs/{prefix}/"
+            resp = self._http_request_with_retry("get", index_url, timeout=10)
+            soup = BeautifulSoup(resp.text, "html.parser")
+
+            for link in soup.find_all("a", href=True):
+                href = link["href"]
+                if not href.startswith(f"/ipfs/{prefix}/"):
+                    continue
+                name = href.rstrip("/").split("/")[-1]
+                if name in ("..", ""):
+                    continue
+
+                child_prefix = f"{prefix}/{name}"
+                child_path   = os.path.join(local_path, name)
+
+                # HEAD to detect folder vs file
+                head = self.session.head(f"{self.gateway}/ipfs/{child_prefix}/",
+                                         allow_redirects=True, timeout=5)
+                if head.ok and "text/html" in head.headers.get("Content-Type", ""):
+                    os.makedirs(child_path, exist_ok=True)
+                    queue.append((child_prefix, child_path))
+                else:
+                    file_tasks.append((child_prefix, child_path))
+
+        # 2) Download all files in parallel
+        futures = {
+            self.executor.submit(self.download_file, p, o): (p, o)
+            for p, o in file_tasks
+        }
+        for fut in as_completed(futures):
+            path, out = futures[fut]
+            try:
+                fut.result()
+            except Exception as e:
+                self.logger.error("Failed to download %s → %s: %s", path, out, e)
+
+
+    def fetch_ipfs_content(self, cid: str, output: str = None) -> None:
+        """
+        Detect if CID is a file or folder and download accordingly.
+        """
+        if output is None:
+            output = cid
+        if self.is_ipfs_folder(cid):
+            self.logger.debug(f"{cid} is a folder; downloading into ./{output}/")
+            os.makedirs(output, exist_ok=True)
+            self.download_folder(cid, output)
+        else:
+            self.logger.debug(f"{cid} is a file; downloading as {output}")
+            self.download_file(cid, output)
+
+
+
     def download(self, data):
         if self.cache.contains(data):
+            self.logger.info(f"{data} found in local cache, skipping download")
             return
+
+        if not self.is_pinned(data) and self.gateway is not None:
+            try:
+                self.logger.info(f"{data} is not pinned locally, downloading from IPFS gateway")
+                self.fetch_ipfs_content(data)
+                self.bootstrap_client.add(data, recursive=True, timeout=self.ipfs_timeout)
+                self.pin_add(data)
+                self.cache.add(data)
+                return
+            except Exception as e_remote:
+                self.logger.warning(
+                    f"Remote IPFS fetch failed for {data}: {e_remote}, falling back…"
+                )
+
         try:
             address = self.client_bootstrap_url
-            args = (address, address)
-            opts = {'json': 'true'}
-            self.bootstrap_client._client.request('/swarm/connect', args, opts=opts, decoder='json')
-            self.bootstrap_client.bootstrap.add(self.client_bootstrap_url)
-            self.pin_add(data)
-            self.bootstrap_client.get(data, target=self.target, compress=True, opts={"compression-level": 9}, timeout=self.ipfs_timeout)
+            if not self.is_pinned(data):
+                self.logger.info(f"{data} downloading from IPFS swarm")
+                args = (address, address)
+                opts = {'json': 'true'}
+                self.bootstrap_client._client.request('/swarm/connect', args, opts=opts, decoder='json')
+                self.bootstrap_client.bootstrap.add(self.client_bootstrap_url)
+                self.pin_add(data)
+            else:
+                self.logger.info(f"{data} is pinned locally, from local IPFS")
+                self.bootstrap_client.get(data, target=self.target, compress=True, opts={"compression-level": 9}, timeout=self.ipfs_timeout)
+
             self.cache.add(data)
         except Exception as e:
             self.logger.warning(f"Error while downloading file {data}: {e}")
@@ -139,7 +291,7 @@ class Storage:
                 self.bootstrap_client._client.request('/swarm/connect', args, opts=opts, decoder='json')
                 self.bootstrap_client.bootstrap.add(self.client_bootstrap_url)
                 response = self.bootstrap_client.add(data, timeout=self.ipfs_timeout)
-                self.cache.add(data)
+                self.cache.add(response['Hash'])
                 return response['Hash']
             except Exception as e:
                 self.logger.warn(f"Error while uploading: {e}")
@@ -173,6 +325,39 @@ class Storage:
             if 'not pinned' in error_message or 'pinned indirectly' in error_message:
                 return
             self.logger.info(f'error while removing pin')
+            self.logger.error(e)
+            raise
+
+    def is_pinned(self, cid: str) -> bool:
+        """
+        Check whether a given CID is pinned on this IPFS node.
+
+        Returns:
+          True   – if pinned (directly or indirectly)
+          False  – if not pinned at all
+
+        Raises:
+          Any unexpected exception (e.g. network issues) after logging it.
+        """
+        try:
+            # Try to list the pin status for just this CID
+            self.bootstrap_client.pin.ls(cid)
+            # No exception → it's pinned
+            return True
+
+        except Exception as e:
+            err = str(e).lower()
+
+            # Known “not pinned” error
+            if 'not pinned' in err:
+                return False
+
+            # “pinned indirectly” is still “pinned”
+            if 'pinned indirectly' in err:
+                return True
+
+            # Anything else is unexpected
+            self.logger.info(f'Unexpected error while checking pin status for {cid}')
             self.logger.error(e)
             raise
 

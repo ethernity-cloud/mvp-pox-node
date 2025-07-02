@@ -7,7 +7,8 @@ REQUIRED_PACKAGES = {
     "psutil": "6.1.1",
     "python-dotenv": "1.0.1",
     "minio": "7.2.13",
-    "web3": "7.6.1"
+    "web3": "7.6.1",
+    "bs4": "0.0.2"
 }
 
 
