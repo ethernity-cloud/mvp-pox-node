@@ -83,21 +83,32 @@ class Storage:
         self.ipfs_timeout = ipfs_timeout
         self.target = target
         self.client_connect_url = client_connect_url
-        self.bootstrap_client = ipfshttpclient.connect(client_connect_url)
-        self.bootstrap_client.bootstrap.add(self.client_bootstrap_url)
-        self.bootstrap_client.config.set("Datastore.StorageMax", "3GB")
-        # optional remote IPFS HTTP‐API (e.g. Infura/Pinata); tried before local
+        self.logger = logger
+        self.cache = cache
+        try:
+            logger.info("Initalizing ipfs connection"); 
+            self.bootstrap_client = ipfshttpclient.connect(client_connect_url)
+            self.bootstrap_client.bootstrap.add(self.client_bootstrap_url)
+            if "127.0.0.1" in self.client_connect_url:
+                logger.info("Setting up local IPFS")
+                self.bootstrap_client.config.set("Datastore.StorageMax", "3GB")
+                args = ("Swarm.ConnMgr.LowWater", 25)
+                opts = {'json': 'true'}
+                self.bootstrap_client._client.request('/config', args, opts=opts, decoder='json')
+        except Exception as e:
+            self.logger.warning(f"Error initializing ipfs: {e}")
+            if "127.0.0.1" in self.client_connect_url:
+                self.logger.warning("Restarting IPFS service")
+                self.restart_ipfs_service()
+                raise
+            else:
+                self.logger.warning("Please make sure your IPFS host is working properly")
         self.gateway = gateway_url.rstrip('/')
         self.session = requests.Session()
         max_workers = 10
         adapter = HTTPAdapter(pool_connections=max_workers, pool_maxsize=max_workers)
         self.session.mount("https://", adapter)
         self.executor = ThreadPoolExecutor(max_workers=max_workers)
-        args = ("Swarm.ConnMgr.LowWater", 25)
-        opts = {'json': 'true'}
-        self.bootstrap_client._client.request('/config', args, opts=opts, decoder='json')
-        self.logger = logger
-        self.cache = cache
 
 
     def _http_request_with_retry(self,
@@ -152,14 +163,15 @@ class Storage:
 
         self.logger.debug(f"Downloaded file {out_path}")
 
-    def download_folder(self, cid: str, dest_dir: str) -> None:
+    def download_folder(self, cid: str, dest_dir: str) -> bool:
         """
         BFS-crawl the HTML indexes to build a flat list of all file tasks,
-        then download them in parallel.
+        then download them in parallel. Retry failed downloads up to 10 times.
+        Returns True if all files downloaded successfully, False otherwise.
         """
         os.makedirs(dest_dir, exist_ok=True)
         queue = deque([(cid, dest_dir)])
-        file_tasks = []
+        file_tasks: list[tuple[str, str]] = []
 
         # 1) Crawl directory structure via HTML
         while queue:
@@ -177,29 +189,48 @@ class Storage:
                     continue
 
                 child_prefix = f"{prefix}/{name}"
-                child_path   = os.path.join(local_path, name)
+                child_path = os.path.join(local_path, name)
 
                 # HEAD to detect folder vs file
-                head = self.session.head(f"{self.gateway}/ipfs/{child_prefix}/",
-                                         allow_redirects=True, timeout=5)
+                head = self.session.head(
+                    f"{self.gateway}/ipfs/{child_prefix}/",
+                    allow_redirects=True, timeout=5
+                )
                 if head.ok and "text/html" in head.headers.get("Content-Type", ""):
                     os.makedirs(child_path, exist_ok=True)
                     queue.append((child_prefix, child_path))
                 else:
                     file_tasks.append((child_prefix, child_path))
 
-        # 2) Download all files in parallel
+        # 2) Download all files in parallel with retries
+        def _download_with_retries(prefix: str, out_path: str) -> bool:
+            for attempt in range(1, 11):
+                try:
+                    self.download_file(prefix, out_path)
+                    return True
+                except Exception as e:
+                    self.logger.warning(
+                        "Attempt %d/10 failed for %s → %s: %s",
+                        attempt, prefix, out_path, e
+                    )
+            # All retries failed
+            self.logger.error(
+                "All 10 retries failed for %s → %s", prefix, out_path
+            )
+            return False
+
         futures = {
-            self.executor.submit(self.download_file, p, o): (p, o)
+            self.executor.submit(_download_with_retries, p, o): (p, o)
             for p, o in file_tasks
         }
+        all_success = True
         for fut in as_completed(futures):
-            path, out = futures[fut]
-            try:
-                fut.result()
-            except Exception as e:
-                self.logger.error("Failed to download %s → %s: %s", path, out, e)
+            prefix, out_path = futures[fut]
+            success = fut.result()
+            if not success:
+                all_success = False
 
+        return all_success
 
     def fetch_ipfs_content(self, cid: str, output: str = None) -> None:
         """

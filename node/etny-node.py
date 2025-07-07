@@ -794,35 +794,16 @@ class EtnyPoXNode:
                 'docker-compose', '-f', self.order_docker_compose_file, 'down'
             ], logger)
 
-    def wait_for_enclave(self, timeout=120):
-        logger = self.logger
-
-        i = 0
-        while True:
-            time.sleep(1)
-            i = i + 1
-            if i > timeout:
-                break
-            if os.path.exists(f'{self.order_folder}/result.txt'):
-                break
-
-        logger.info('enclave finished the execution')
-
     def wait_for_enclave_v2(self, bucket_name, object_name, timeout=120):
         logger = self.logger
-
-        i = 0
+        deadline = time.time() + timeout
         logger.info(f'Checking if object {object_name} exists in bucket {bucket_name} for {timeout} seconds')
-        while True:
-            time.sleep(1)
-            i = i + 1
-            if i > timeout:
-                break
-            (status, result) = self.swift_stream_service.is_object_in_bucket(bucket_name, object_name)
-            if status:
-                logger.info(f'Enclave execution finished!')
+        while time.time() < deadline:
+            exists, msg = self.swift_stream_service.is_object_in_bucket(bucket_name, object_name)
+            if exists:
+                logger.info('Enclave execution finished!')
                 return True
-
+            time.sleep(1)
         logger.info('Enclave execution timed out')
         return False
 
