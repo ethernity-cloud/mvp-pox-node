@@ -1612,9 +1612,14 @@ class EtnyPoXNode:
         ], logger)
 
         logger.debug('Waiting for execution of integration test enclave')
-        self.wait_for_enclave_v2(self.integration_bucket_name, integration_test_file, 300)
-        status, result_data = self.swift_stream_service.get_file_content(self.integration_bucket_name,
-                                                                         integration_test_file)
+        status_enclave = self.wait_for_enclave_v2(self.integration_bucket_name, integration_test_file, 300)
+
+        if status_enclave == True:
+            status, result_data = self.swift_stream_service.get_file_content(self.integration_bucket_name,
+                                                                             integration_test_file)
+        else:
+            status = None
+
         if not status:
             logger.warning('The node is not properly running under SGX. Please check the configuration.')
             self.can_run_under_sgx = False
@@ -1623,7 +1628,7 @@ class EtnyPoXNode:
 
         self.can_run_under_sgx = True
         set_integration_test_complete(True)
-        logger.info('Agent SGX capabilities tested and enabled successfuly')
+        logger.info('Agent SGX capabilities tested and enabled successfully')
         self.__clean_up_integration_test()
 
     def __can_run_auto_update(self, file_path, interval):

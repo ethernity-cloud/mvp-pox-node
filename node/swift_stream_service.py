@@ -230,12 +230,13 @@ class SwiftStreamService:
 
     def is_object_in_bucket(self, bucket_name: str, object_name: str) -> (bool, str):
         try:
-            result = self.client.stat_object(bucket_name, object_name)
-            if result:
-                return True, f"{object_name} exists inside {bucket_name}."
-            else:
-                return False, f"{object_name} doesn't exist inside {bucket_name}."
+            self.client.stat_object(bucket_name, object_name)
+            return True, f"{object_name} exists in {bucket_name}."
+            return False, f"{object_name} does not exist in {bucket_name}."
         except S3Error as err:
+            if err.code == "NoSuchKey":
+                return False, f"{object_name} does not exist in {bucket_name}."
+
             if self.restart_etny_swift_stream_and_reconnect():
                 return self.is_object_in_bucket(bucket_name, object_name)
             else:
