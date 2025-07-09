@@ -188,7 +188,7 @@ class EtnyPoXNode:
         os.chdir(self.cache_config.base_path)
 
 
-        logger.info(f"Initalizing swift-stream service")
+        logger.info(f"Initializing swift-stream service")
 
         self.swift_stream_service = SwiftStreamService(logger, self.__endpoint,
                                                        self.__access_key,
@@ -604,7 +604,7 @@ class EtnyPoXNode:
                     break
                 except Exception as e:
                     logger.warning(f"Unable to get order metadata: {e}")
-                    logger.werning("Retrying")
+                    logger.warning("Retrying")
 
         if self.process_order_data['process_order_retry_counter'] > 10:
             if metadata[1].startswith('v1:') == 1:
@@ -886,7 +886,7 @@ class EtnyPoXNode:
         else:
             status = self.__create_empty_file(f'{self.order_folder}/input.txt')
             if not status:
-                raise "Could not create context."
+                raise Exception("Could not create context.")
 
         self.order_docker_compose_file = f'./orders/{order_id}/docker-compose.yml'
 
@@ -1532,7 +1532,7 @@ class EtnyPoXNode:
             if not status:
                 logger.error(msg)
         except Exception as e:
-            logger.warning(f"Unable to preapre for integration test: {e}")
+            raise Exception(f"Unable to preapre for integration test: {e}")
 
     def __clean_up_integration_test(self):
         logger = self.logger
@@ -1558,11 +1558,8 @@ class EtnyPoXNode:
         order_id = 'integration_test'
         integration_test_file = 'context_test.etny'
 
-        try:
-            logger.debug(f"Downloading IPFS Image: {enclave_image_hash}")
-            logger.debug(f"Downloading IPFS docker yml file: {docker_compose_hash}")
-        except Exception as e:
-            logger.warning(str(e))
+        logger.debug(f"Downloading IPFS Image: {enclave_image_hash}")
+        logger.debug(f"Downloading IPFS docker yml file: {docker_compose_hash}")
 
         list_of_ipfs_hashes = [enclave_image_hash, docker_compose_hash]
         if not self.storage.download_many(list_of_ipfs_hashes, attempts=10, delay=3):
@@ -1579,7 +1576,15 @@ class EtnyPoXNode:
         docker_compose_file = f'{self.cache_config.base_path}/{docker_compose_hash}'
         logger.debug(f'Preparing prerequisites for integration test')
 
-        self.build_prerequisites_integration_test(self.integration_bucket_name, order_id, docker_compose_file)
+        try:
+            self.build_prerequisites_integration_test(self.integration_bucket_name, order_id, docker_compose_file)
+        except Exception as e:
+            logger.error("Unable to build prerequisites, cleaning up cache")
+            self.storage.rm(enclave_image_hash)
+            self.ipfs_cache.rem(enclave_image_hash)
+            self.storage.rm(docker_compose_hash)
+            self.ipfs_cache.rem(docker_compose_hash)
+            raise Exception(f"Integration test initialization failed: {e}")
 
         logger.debug("Stopping previous docker registry and containers")
         run_subprocess(['docker', 'stop', 'registry'], logger)

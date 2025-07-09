@@ -91,7 +91,7 @@ class Storage:
         adapter = HTTPAdapter(pool_connections=max_workers, pool_maxsize=max_workers)
         self.session.mount("https://", adapter)
         self.executor = ThreadPoolExecutor(max_workers=max_workers)
-        logger.info("Initalizing ipfs connection");
+        logger.info("Initializing ipfs connection");
         self.connect()
         if "127.0.0.1" in self.client_connect_url:
             logger.info("Setting up local IPFS")
@@ -165,13 +165,16 @@ class Storage:
         """
         Fast, streaming copy of a single file via gateway.
         """
-        url = f"{self.gateway}/ipfs/{path}"
-        resp = self._http_request_with_retry("get", url, stream=True, timeout=60)
-        resp.raw.decode_content = True
+        try:
+            url = f"{self.gateway}/ipfs/{path}"
+            resp = self._http_request_with_retry("get", url, stream=True, timeout=60)
+            resp.raw.decode_content = True
 
-        os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
-        with open(out_path, "wb") as f:
-            shutil.copyfileobj(resp.raw, f)
+            os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
+            with open(out_path, "wb") as f:
+                shutil.copyfileobj(resp.raw, f)
+        except Exception as e:
+            raise Exception("{e}")
 
         self.logger.debug(f"Downloaded file {out_path}")
 
@@ -287,6 +290,7 @@ class Storage:
                 self.bootstrap_client._client.request('/swarm/connect', args, opts=opts, decoder='json')
                 self.bootstrap_client.bootstrap.add(self.client_bootstrap_url)
                 self.pin_add(data)
+                self.bootstrap_client.get(data, target=self.target, compress=True, opts={"compression-level": 9}, timeout=self.ipfs_timeout)
             else:
                 self.logger.info(f"{data} is pinned locally, from local IPFS")
                 self.bootstrap_client.get(data, target=self.target, compress=True, opts={"compression-level": 9}, timeout=self.ipfs_timeout)
@@ -449,7 +453,7 @@ class Storage:
         # Validate the target_directory
         if not os.path.exists(hash) and not os.path.exists(legacy_path):
             self.cache.rem(hash)
-            raise ValueError(f"The paths '{hash}' or '{legacy_path}' do not exist.")
+            logger.warning(f"The paths '{hash}' or '{legacy_path}' do not exist.")
 
         if os.path.exists(hash):
           if not os.path.isdir(hash):
@@ -526,7 +530,7 @@ class Cache:
         try:
             if not os.path.exists(filepath):
                 os.makedirs(os.path.dirname(filepath), exist_ok=True)
-                raise Exception
+                raise
             with open(filepath, 'r') as f:
                 self.mem = store_type(json.load(f))
         except Exception as e:
