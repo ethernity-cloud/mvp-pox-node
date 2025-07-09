@@ -1130,6 +1130,8 @@ class EtnyPoXNode:
             try:
                 self.__call_heart_beat()
 
+                self.storage.connect()
+
                 if get_task_running_on():
                      continue
 

@@ -85,31 +85,43 @@ class Storage:
         self.client_connect_url = client_connect_url
         self.logger = logger
         self.cache = cache
-        try:
-            logger.info("Initalizing ipfs connection"); 
-            self.bootstrap_client = ipfshttpclient.connect(client_connect_url)
-            self.bootstrap_client.bootstrap.add(self.client_bootstrap_url)
-            if "127.0.0.1" in self.client_connect_url:
-                logger.info("Setting up local IPFS")
-                self.bootstrap_client.config.set("Datastore.StorageMax", "3GB")
-                args = ("Swarm.ConnMgr.LowWater", 25)
-                opts = {'json': 'true'}
-                self.bootstrap_client._client.request('/config', args, opts=opts, decoder='json')
-        except Exception as e:
-            self.logger.warning(f"Error initializing ipfs: {e}")
-            if "127.0.0.1" in self.client_connect_url:
-                self.logger.warning("Restarting IPFS service")
-                self.restart_ipfs_service()
-                raise
-            else:
-                self.logger.warning("Please make sure your IPFS host is working properly")
         self.gateway = gateway_url.rstrip('/')
         self.session = requests.Session()
         max_workers = 10
         adapter = HTTPAdapter(pool_connections=max_workers, pool_maxsize=max_workers)
         self.session.mount("https://", adapter)
         self.executor = ThreadPoolExecutor(max_workers=max_workers)
+        logger.info("Initalizing ipfs connection");
+        self.connect()
+        if "127.0.0.1" in self.client_connect_url:
+            logger.info("Setting up local IPFS")
+            self.bootstrap_client.config.set("Datastore.StorageMax", "3GB")
+            args = ("Swarm.ConnMgr.LowWater", 25)
+            opts = {'json': 'true'}
+            self.bootstrap_client._client.request('/config', args, opts=opts, decoder='json')
 
+    def connect(self):
+        attempt = 0
+        while True:
+            if attempt == 10:
+                break
+            try:
+                self.bootstrap_client = ipfshttpclient.connect(self.client_connect_url)
+                self.bootstrap_client.bootstrap.add(self.client_bootstrap_url)
+                address = self.client_bootstrap_url
+                args = (address, address)
+                opts = {'json': 'true'}
+                self.bootstrap_client._client.request('/swarm/connect', args, opts=opts, decoder='json')
+                return True
+            except Exception as e:
+                self.logger.warning(f"Error communicating to ipfs: {e}")
+                if "127.0.0.1" in self.client_connect_url:
+                    self.logger.warning("Restarting IPFS service")
+                    self.restart_ipfs_service()
+                else:
+                    self.logger.warning("Please make sure your IPFS host is working properly")
+            attempt = attempt + 1
+        raise Exception(f"{e}")
 
     def _http_request_with_retry(self,
                                  method: str,
