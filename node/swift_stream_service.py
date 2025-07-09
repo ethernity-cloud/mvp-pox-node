@@ -1,15 +1,21 @@
 from minio import Minio
 from minio.error import S3Error
+from utils import run_subprocess
 import os
 import subprocess
 import time
 
 class SwiftStreamService:
 
-    def __init__(self, endpoint: str, access_key: str, secret_key: str):
+    def __init__(self, logger, endpoint: str, access_key: str, secret_key: str):
         self.endpoint = endpoint
         self.access_key = access_key
         self.secret_key = secret_key
+        self.logger = logger
+
+        run_subprocess(
+            ['docker-compose', '-f', f'../docker/docker-compose-swift-stream.yml', 'up', '-d', 'swift-stream'],
+            self.logger)
 
         if not self.try_connect_minio():
             if not self.restart_etny_swift_stream_and_reconnect():

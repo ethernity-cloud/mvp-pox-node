@@ -187,6 +187,13 @@ class EtnyPoXNode:
 
         os.chdir(self.cache_config.base_path)
 
+
+        logger.info(f"Initalizing swift-stream service")
+
+        self.swift_stream_service = SwiftStreamService(logger, self.__endpoint,
+                                                       self.__access_key,
+                                                       self.__secret_key)
+
         self.orders_cache = Cache(self.cache_config.orders_cache_limit, self.cache_config.orders_cache_filepath)
         self.dpreq_cache = ListCache(self.cache_config.dpreq_cache_limit, self.cache_config.dpreq_filepath)
         self.doreq_cache = ListCache(self.cache_config.doreq_cache_limit, self.cache_config.doreq_filepath)
@@ -194,9 +201,6 @@ class EtnyPoXNode:
         self.storage = Storage(self.__ipfs_host, self.__ipfs_port, self.__ipfs_id, self.__ipfs_timeout, self.__ipfs_connect_url, self.__ipfs_gateway_url,
                                self.ipfs_cache, logger, self.cache_config.base_path)
         self.merged_orders_cache = MergedOrdersCache(self.cache_config.merged_orders_cache_limit, self.cache_config.merged_orders_cache)
-        self.swift_stream_service = SwiftStreamService(self.__endpoint,
-                                                       self.__access_key,
-                                                       self.__secret_key)
         self.process_order_data = {}
 
 

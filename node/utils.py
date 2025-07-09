@@ -311,6 +311,7 @@ class Storage:
                 stderr=subprocess.PIPE   # Capture standard error
             )
             self.logger.info("IPFS service restarted successfully.")
+            self.repo_gc()
         except subprocess.CalledProcessError as e:
             self.logger.warning(f"Failed to restart local IPFS service. Error: {e.stderr.decode().strip()}")
 
@@ -401,6 +402,11 @@ class Storage:
 
             # Anything else is unexpected
             self.logger.info(f'Unexpected error while checking pin status for {cid}')
+
+            if "127.0.0.1" in self.client_connect_url:
+                self.logger.warning("Restarting IPFS service")
+                self.restart_ipfs_service()
+
             self.logger.error(e)
             raise
 
