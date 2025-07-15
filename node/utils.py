@@ -131,35 +131,72 @@ class Storage:
                                  retry_on_status: tuple = (429, 500, 502, 503, 504),
                                  **kwargs) -> requests.Response:
         """
-        Do a session.request(method, url, **kwargs), retrying on specified status codes.
+        Do a session.request(method, url, **kwargs), retrying on specified status codes
+        and on connection-related exceptions.
         """
+        import http.client
+        from requests.exceptions import ConnectionError, Timeout
+
         delay = backoff_factor
+        last_exc = None
+
         for attempt in range(1, max_retries + 1):
-            resp = getattr(self.session, method)(url, **kwargs)
-            if resp.status_code not in retry_on_status:
-                resp.raise_for_status()
-                return resp
+            try:
+                resp = getattr(self.session, method)(url, **kwargs)
+                # If status is OK, return immediately
+                if resp.status_code not in retry_on_status:
+                    resp.raise_for_status()
+                    return resp
+
+            except (ConnectionError, Timeout, http.client.RemoteDisconnected) as e:
+                # Caught a retryable exception
+                last_exc = e
+
+            else:
+                # Received a retryable status code
+                last_exc = None
+
+            # If this was our last attempt, raise appropriately
             if attempt == max_retries:
-                resp.raise_for_status()
+                if last_exc:
+                    raise
+                else:
+                    resp.raise_for_status()
+
+            # Otherwise, log and back off
+            reason = f"exception {last_exc!r}" if last_exc else f"status {resp.status_code}"
             self.logger.warning(
-                "[%s/%s] %s %s returned %s, retrying in %.1fs …",
+                "[%s/%s] %s %s failed with %s; retrying in %.1fs …",
                 attempt, max_retries, method.upper(), url,
-                resp.status_code, delay
+                reason, delay
             )
             time.sleep(delay)
             delay *= 2
+
+        # Should not get here
+        raise RuntimeError("Exceeded max retries in _http_request_with_retry")
+
 
     def is_ipfs_folder(self, path: str) -> bool:
         """
         Return True if accessing /ipfs/<path>/ on the gateway yields an HTML
         directory listing (i.e. it’s a folder), False otherwise.
+        Retries the request up to 10 times if status is not 200.
         """
         url = f"{self.gateway}/ipfs/{path}/"
-        try:
-            resp = self._http_request_with_retry('get', url, timeout=10)
-        except Exception:
-            return False
-        return '<a href="/ipfs/' in resp.text
+
+        for attempt in range(10):
+            try:
+                resp = requests.get(url, timeout=10)
+                if resp.status_code == 200:
+                    if  '<a href="/ipfs/' in resp.text:
+                        self.logger.info(f"IPFS path is a folder")
+                    return '<a href="/ipfs/' in resp.text
+            except requests.RequestException:
+                pass
+            time.sleep(1)  # brief pause before retry
+
+        raise Exception(f"Unable to determine if {path} is file or folder")
 
     def download_file(self, path: str, out_path: str) -> None:
         """
@@ -174,7 +211,7 @@ class Storage:
             with open(out_path, "wb") as f:
                 shutil.copyfileobj(resp.raw, f)
         except Exception as e:
-            raise Exception("{e}")
+            raise Exception(f"{e}")
 
         self.logger.debug(f"Downloaded file {out_path}")
 
@@ -254,11 +291,11 @@ class Storage:
         if output is None:
             output = cid
         if self.is_ipfs_folder(cid):
-            self.logger.debug(f"{cid} is a folder; downloading into ./{output}/")
+            self.logger.info(f"{cid} is a folder; downloading into ./{output}/")
             os.makedirs(output, exist_ok=True)
             self.download_folder(cid, output)
         else:
-            self.logger.debug(f"{cid} is a file; downloading as {output}")
+            self.logger.info(f"{cid} is a file; downloading as {output}")
             self.download_file(cid, output)
 
 

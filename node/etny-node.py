@@ -605,6 +605,8 @@ class EtnyPoXNode:
                 except Exception as e:
                     logger.warning(f"Unable to get order metadata: {e}")
                     logger.warning("Retrying")
+                    timeout_in_seconds = int(self.__network_config.block_time) - 1.3
+                    time.sleep(timeout_in_seconds)
 
         if self.process_order_data['process_order_retry_counter'] > 10:
             if metadata[1].startswith('v1:') == 1:
@@ -722,8 +724,14 @@ class EtnyPoXNode:
 
             logger.info('Docker environment ready. Execution started in SGX enclave')
 
-            order = Order(self.__etny.caller()._getOrder(order_id))
-            do_req = DORequest(self.__etny.caller()._getDORequest(order.do_req))
+            while True:
+               try:
+                   order = Order(self.__etny.caller()._getOrder(order_id))
+                   do_req = DORequest(self.__etny.caller()._getDORequest(order.do_req))
+                   break
+               except Exception as e:
+                   logger.warning(f"Unable to fetch order details: {e}")
+                   time.sleep(1)
 
             # Track total wait time
             start_total_wait = time.time()
@@ -1283,6 +1291,11 @@ class EtnyPoXNode:
                     break
                 except Exception as e:
                     logger.error(f"Unable to process order {self.__order_id}: {e}")
+                    self.doreq_cache.rem(i)
+
+                    # store merged log
+                    self.merged_orders_cache.rem(do_req_id=i, dp_req_id=self.__dprequest, order_id=self.__order_id)
+
                     reset_task_running_on()
 
             if self.__do_requests_build_pending and threshold > 0:
