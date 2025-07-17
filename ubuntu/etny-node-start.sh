@@ -18,10 +18,10 @@ fi
 
 systemctl stop ipfs
 
-if [ -v IPFS_LOCAL_CONNECT_URL ]
+if [ IPFS_CONNECT_URL != "/ip4/127.0.0.1/tcp/5001/http" ]
 then
   systemctl disable ipfs
-  IPFS_LOCAL=${IPFS_LOCAL_CONNECT_URL}
+  IPFS_LOCAL=${IPFS_CONNECT_URL}
 else
   systemctl enable ipfs
   systemctl start ipfs
@@ -49,13 +49,13 @@ then
 
 	resolve_ipfs_host
 
-	until timeout 10 ./ipfs --api=${IPFS_LOCAL_CONNECT_URL} swarm connect /ip4/${IPFS_IP}/tcp/4001/ipfs/QmRBc1eBt4hpJQUqHqn6eA8ixQPD3LFcUDsn6coKBQtia5
+	until timeout 10 ./ipfs --api=${IPFS_LOCAL} swarm connect /ip4/${IPFS_IP}/tcp/4001/ipfs/QmRBc1eBt4hpJQUqHqn6eA8ixQPD3LFcUDsn6coKBQtia5
 	do
         	echo "Unable to connect to IPFS gateway, please check IPFS configuration or restart the service"
 		resolve_ipfs_host
 		sleep 5
 	done
-	./ipfs --api=${IPFS_LOCAL_CONNECT_URL} bootstrap add /ip4/${IPFS_IP}/tcp/4001/ipfs/QmRBc1eBt4hpJQUqHqn6eA8ixQPD3LFcUDsn6coKBQtia5
+	./ipfs --api=${IPFS_LOCAL} bootstrap add /ip4/${IPFS_IP}/tcp/4001/ipfs/QmRBc1eBt4hpJQUqHqn6eA8ixQPD3LFcUDsn6coKBQtia5
 fi
 
 cd /home/vagrant/etny/node/etny-repo/node/

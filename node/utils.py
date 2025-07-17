@@ -554,7 +554,7 @@ class Storage:
         try:
             self.bootstrap_client.repo.gc()
         except Exception as e:
-            self.logger.info(f'error while removing pin')
+            self.logger.info(f'error while performing garbage collect')
             self.logger.error(e)
             raise
 
