@@ -1293,8 +1293,7 @@ class EtnyPoXNode:
                     logger.error(f"Unable to process order {self.__order_id}: {e}")
                     self.doreq_cache.rem(i)
 
-                    # store merged log
-                    self.merged_orders_cache.rem(do_req_id=i, dp_req_id=self.__dprequest, order_id=self.__order_id)
+                    self.merged_orders_cache.rem(order_id=self.__order_id)
 
                     reset_task_running_on()
 

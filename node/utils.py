@@ -352,6 +352,7 @@ class Storage:
                 stderr=subprocess.PIPE   # Capture standard error
             )
             self.logger.info("IPFS service restarted successfully.")
+            self.connect()
             self.repo_gc()
         except subprocess.CalledProcessError as e:
             self.logger.warning(f"Failed to restart local IPFS service. Error: {e.stderr.decode().strip()}")
@@ -586,6 +587,13 @@ class Cache:
         if len(self.mem) == self.items_limit + 1:
             self.mem.popitem(last=False)
         self._update_file()
+
+    def rem(self, key):
+        if key in self.mem:
+            removed_value = self.mem.pop(key)
+            self._update_file()
+            return removed_value
+        return None
 
     def get(self, key):
         return self.mem.get(key)
@@ -864,6 +872,14 @@ class MergedOrdersCache(Cache):
     def add(self, do_req_id, dp_req_id, order_id):
         self.mem.append(dict(do=do_req_id, dp=dp_req_id, order=order_id))
         self._update_file()
+
+    def rem(self, order_id):
+        initial_len = len(self.mem)
+        self.mem = [entry for entry in self.mem if entry.get("order") != order_id]
+        if len(self.mem) < initial_len:
+            self._update_file()
+            return True  # Successfully removed
+        return False  # Not found
 
 
 class HardwareInfoProvider:
