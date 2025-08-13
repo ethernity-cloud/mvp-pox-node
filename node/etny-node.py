@@ -27,8 +27,8 @@ from cache_config import CacheConfig
 logger = config.logger 
 task_running_on = None
 task_lock = threading.Lock()
-integration_test_complete = False
 integration_test_lock = threading.Lock()
+integration_test_complete = {'MAINNET': False, 'TESTNET': False}
 
 stop_event = threading.Event()
 
@@ -206,7 +206,7 @@ class EtnyPoXNode:
 
         self.__uuid = get_or_generate_uuid(config.uuid_filepath)
 
-        if config.skip_integration_test == True or get_integration_test_complete():
+        if config.skip_integration_test == True or get_integration_test_complete(self.__network_config.network_type.upper()):
 
            if config.skip_integration_test:
                logger.warning('Agent skipped SGX integration test, SGX capabilitties overwritten by configuration')
@@ -1644,14 +1644,14 @@ class EtnyPoXNode:
             status = None
 
         if not status:
-            logger.warning('The node is not properly running under SGX. Please check the configuration.')
+            logger.warning('The node is not properly configured to run SGX tasks in production mode. Please check the configuration.')
             self.can_run_under_sgx = False
             self.__clean_up_integration_test()
             return
 
         self.can_run_under_sgx = True
-        set_integration_test_complete(True)
-        logger.info('Agent SGX capabilities tested and enabled successfully')
+        set_integration_test_complete(self.__network_config.network_type.upper(), True)
+        logger.info(f"Agent SGX capabilities tested and enabled successfully for {self.__network_config.network_type.upper()}")
         self.__clean_up_integration_test()
 
     def __can_run_auto_update(self, file_path, interval):
@@ -1794,21 +1794,21 @@ def reset_task_running_on():
     with task_lock:
         task_running_on = None
 
-def set_integration_test_complete(value):
+def set_integration_test_complete(network, value):
     """
     Sets the shared value for integration test in a thread-safe way.
     """
     global integration_test_complete
     with integration_test_lock:
-        integration_test_complete = value
+        integration_test_complete[network.upper()] = value
 
-def get_integration_test_complete():
+def get_integration_test_complete(network):
     """
-    Sets the shared value for integration test in a thread-safe way.
+    Gets the shared value for integration test in a thread-safe way.
     """
     global integration_test_complete
     with integration_test_lock:
-        return integration_test_complete
+        return integration_test_complete.get(network.upper(), False)
 
 class TaskManager:
     def __init__(self):
