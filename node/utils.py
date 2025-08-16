@@ -14,27 +14,19 @@ from urllib.parse import urljoin, urlparse
 from bs4 import BeautifulSoup
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from requests.adapters import HTTPAdapter
-
 from collections import OrderedDict
 from collections import deque
-
 import ipfshttpclient
 import psutil
-
-
-
 def get_or_generate_uuid(filename):
     if os.path.exists(filename):
         with open(filename) as f:
             return f.read()
-
     _uuid = uuid.uuid4().hex
     os.makedirs(os.path.dirname(filename))
     with open(filename, "w+") as f:
         f.write(_uuid)
     return _uuid
-
-
 def run_subprocess(args, logger):
     out = subprocess.Popen(args,
                            stdout=subprocess.PIPE,
@@ -43,8 +35,6 @@ def run_subprocess(args, logger):
     for item in [stdout, stderr]:
         if item:
             logger.debug(item.decode())
-
-
 def retry(func, *func_args, attempts, delay=1, callback=None):
     for _ in range(attempts):
         try:
@@ -52,14 +42,12 @@ def retry(func, *func_args, attempts, delay=1, callback=None):
                 callback(_)
         except Exception as e:
             print('error = ', e)
-
         try:
             resp = func(*func_args)
             return True, resp
         except:
             time.sleep(delay)
     return False, None
-
 def get_node_geo():
     try:
         request = urllib.request.urlopen('https://ipinfo.io/json')
@@ -72,8 +60,6 @@ def get_node_geo():
     except Exception as e:
         print('error = ', e)
         return ''
-
-
 class Storage:
     def __init__(self, ipfs_host, ipfs_port, ipfs_id, ipfs_timeout, client_connect_url, gateway_url, cache, logger, target):
         self.client_bootstrap_url = '/dns4/' + ipfs_host + '/tcp/' + str(ipfs_port) + '/ipfs/' + ipfs_id
@@ -92,19 +78,20 @@ class Storage:
         self.session.mount("https://", adapter)
         self.executor = ThreadPoolExecutor(max_workers=max_workers)
         logger.info("Initializing ipfs connection");
-        self.connect()
+        self.bootstrap_client = None
+        self.connected = self.connect()
+        if not self.connected:
+            logger.error("Failed to connect to IPFS after 10 attempts. Proceeding with limited functionality (gateway downloads only).")
         if "127.0.0.1" in self.client_connect_url:
             logger.info("Setting up local IPFS")
-            self.bootstrap_client.config.set("Datastore.StorageMax", "3GB")
-            args = ("Swarm.ConnMgr.LowWater", 25)
-            opts = {'json': 'true'}
-            self.bootstrap_client._client.request('/config', args, opts=opts, decoder='json')
-
-    def connect(self):
+            if self.connected:
+                self.bootstrap_client.config.set("Datastore.StorageMax", "3GB")
+                args = ("Swarm.ConnMgr.LowWater", 25)
+                opts = {'json': 'true'}
+                self.bootstrap_client._client.request('/config', args, opts=opts, decoder='json')
+    def connect(self, attempts=3):
         attempt = 0
-        while True:
-            if attempt == 10:
-                break
+        while attempt < attempts:
             try:
                 self.bootstrap_client = ipfshttpclient.connect(self.client_connect_url)
                 self.bootstrap_client.bootstrap.add(self.client_bootstrap_url)
@@ -120,9 +107,8 @@ class Storage:
                     self.restart_ipfs_service()
                 else:
                     self.logger.warning("Please make sure your IPFS host is working properly")
-            attempt = attempt + 1
-        raise Exception(f"{e}")
-
+            attempt += 1
+        return False
     def _http_request_with_retry(self,
                                  method: str,
                                  url: str,
@@ -136,10 +122,8 @@ class Storage:
         """
         import http.client
         from requests.exceptions import ConnectionError, Timeout
-
         delay = backoff_factor
         last_exc = None
-
         for attempt in range(1, max_retries + 1):
             try:
                 resp = getattr(self.session, method)(url, **kwargs)
@@ -147,22 +131,18 @@ class Storage:
                 if resp.status_code not in retry_on_status:
                     resp.raise_for_status()
                     return resp
-
             except (ConnectionError, Timeout, http.client.RemoteDisconnected) as e:
                 # Caught a retryable exception
                 last_exc = e
-
             else:
                 # Received a retryable status code
                 last_exc = None
-
             # If this was our last attempt, raise appropriately
             if attempt == max_retries:
                 if last_exc:
                     raise
                 else:
                     resp.raise_for_status()
-
             # Otherwise, log and back off
             reason = f"exception {last_exc!r}" if last_exc else f"status {resp.status_code}"
             self.logger.warning(
@@ -172,11 +152,8 @@ class Storage:
             )
             time.sleep(delay)
             delay *= 2
-
         # Should not get here
         raise RuntimeError("Exceeded max retries in _http_request_with_retry")
-
-
     def is_ipfs_folder(self, path: str) -> bool:
         """
         Return True if accessing /ipfs/<path>/ on the gateway yields an HTML
@@ -184,20 +161,17 @@ class Storage:
         Retries the request up to 10 times if status is not 200.
         """
         url = f"{self.gateway}/ipfs/{path}/"
-
         for attempt in range(10):
             try:
                 resp = requests.get(url, timeout=10)
                 if resp.status_code == 200:
-                    if  '<a href="/ipfs/' in resp.text:
+                    if '<a href="/ipfs/' in resp.text:
                         self.logger.info(f"IPFS path is a folder")
                     return '<a href="/ipfs/' in resp.text
             except requests.RequestException:
                 pass
-            time.sleep(1)  # brief pause before retry
-
+            time.sleep(1) # brief pause before retry
         raise Exception(f"Unable to determine if {path} is file or folder")
-
     def download_file(self, path: str, out_path: str) -> None:
         """
         Fast, streaming copy of a single file via gateway.
@@ -206,15 +180,12 @@ class Storage:
             url = f"{self.gateway}/ipfs/{path}"
             resp = self._http_request_with_retry("get", url, stream=True, timeout=60)
             resp.raw.decode_content = True
-
             os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
             with open(out_path, "wb") as f:
                 shutil.copyfileobj(resp.raw, f)
         except Exception as e:
             raise Exception(f"{e}")
-
         self.logger.debug(f"Downloaded file {out_path}")
-
     def download_folder(self, cid: str, dest_dir: str) -> bool:
         """
         BFS-crawl the HTML indexes to build a flat list of all file tasks,
@@ -224,14 +195,12 @@ class Storage:
         os.makedirs(dest_dir, exist_ok=True)
         queue = deque([(cid, dest_dir)])
         file_tasks: list[tuple[str, str]] = []
-
         # 1) Crawl directory structure via HTML
         while queue:
             prefix, local_path = queue.popleft()
             index_url = f"{self.gateway}/ipfs/{prefix}/"
             resp = self._http_request_with_retry("get", index_url, timeout=10)
             soup = BeautifulSoup(resp.text, "html.parser")
-
             for link in soup.find_all("a", href=True):
                 href = link["href"]
                 if not href.startswith(f"/ipfs/{prefix}/"):
@@ -239,10 +208,8 @@ class Storage:
                 name = href.rstrip("/").split("/")[-1]
                 if name in ("..", ""):
                     continue
-
                 child_prefix = f"{prefix}/{name}"
                 child_path = os.path.join(local_path, name)
-
                 # HEAD to detect folder vs file
                 head = self.session.head(
                     f"{self.gateway}/ipfs/{child_prefix}/",
@@ -253,7 +220,6 @@ class Storage:
                     queue.append((child_prefix, child_path))
                 else:
                     file_tasks.append((child_prefix, child_path))
-
         # 2) Download all files in parallel with retries
         def _download_with_retries(prefix: str, out_path: str) -> bool:
             for attempt in range(1, 11):
@@ -270,7 +236,6 @@ class Storage:
                 "All 10 retries failed for %s → %s", prefix, out_path
             )
             return False
-
         futures = {
             self.executor.submit(_download_with_retries, p, o): (p, o)
             for p, o in file_tasks
@@ -281,9 +246,7 @@ class Storage:
             success = fut.result()
             if not success:
                 all_success = False
-
         return all_success
-
     def fetch_ipfs_content(self, cid: str, output: str = None) -> None:
         """
         Detect if CID is a file or folder and download accordingly.
@@ -291,33 +254,37 @@ class Storage:
         if output is None:
             output = cid
         if self.is_ipfs_folder(cid):
-            self.logger.info(f"{cid} is a folder; downloading into ./{output}/")
+            self.logger.info(f"{cid} is a folder; downloading into {output}")
             os.makedirs(output, exist_ok=True)
             self.download_folder(cid, output)
         else:
             self.logger.info(f"{cid} is a file; downloading as {output}")
             self.download_file(cid, output)
-
-
-
     def download(self, data):
         if self.cache.contains(data):
             self.logger.info(f"{data} found in local cache, skipping download")
             return
-
-        if not self.is_pinned(data) and self.gateway is not None:
+        if self.gateway is not None and (not self.connected or not self.is_pinned(data)):
             try:
                 self.logger.info(f"{data} is not pinned locally, downloading from IPFS gateway")
-                self.fetch_ipfs_content(data)
-                self.bootstrap_client.add(data, recursive=True, timeout=self.ipfs_timeout)
-                self.pin_add(data)
+                self.fetch_ipfs_content(data, output=f"{self.target}/{data}")
+                if self.connected:
+                    try:
+                        self.bootstrap_client.add(data, recursive=True, timeout=10)
+                        self.pin_add(data)
+                    except:
+                        pass
                 self.cache.add(data)
                 return
             except Exception as e_remote:
                 self.logger.warning(
-                    f"Remote IPFS fetch failed for {data}: {e_remote}, falling back…"
+                    f"Remote IPFS fetch failed for {data}: {e_remote}"
                 )
-
+        if not self.connected:
+            if self.connect():
+                self.connected = True
+            else:
+                raise Exception("No IPFS connection and gateway failed")
         try:
             address = self.client_bootstrap_url
             if not self.is_pinned(data):
@@ -331,7 +298,6 @@ class Storage:
             else:
                 self.logger.info(f"{data} is pinned locally, from local IPFS")
                 self.bootstrap_client.get(data, target=self.target, compress=True, opts={"compression-level": 9}, timeout=self.ipfs_timeout)
-
             self.cache.add(data)
         except Exception as e:
             self.logger.warning(f"Error while downloading file {data}: {e}")
@@ -341,56 +307,55 @@ class Storage:
             else:
                 self.logger.warning("Please make sure your IPFS host is working properly")
             raise
-
     def restart_ipfs_service(self):
         try:
             # Execute the systemctl command to restart the ipfs service
             result = subprocess.run(
                 ['systemctl', 'restart', 'ipfs'],
-                check=True,        # Raises CalledProcessError if the command exits with a non-zero status
-                stdout=subprocess.PIPE,  # Capture standard output
-                stderr=subprocess.PIPE   # Capture standard error
+                check=True, # Raises CalledProcessError if the command exits with a non-zero status
+                stdout=subprocess.PIPE, # Capture standard output
+                stderr=subprocess.PIPE # Capture standard error
             )
             self.logger.info("IPFS service restarted successfully.")
             self.connect()
             self.repo_gc()
         except subprocess.CalledProcessError as e:
             self.logger.warning(f"Failed to restart local IPFS service. Error: {e.stderr.decode().strip()}")
-
     def download_many(self, lst, attempts=1, delay=0):
         for data in lst:
             self.logger.debug(f'Downloading {data}')
             if retry(self.download, data, attempts=attempts, delay=delay)[0] is False:
                 return False
         return True
-
     def upload(self, data, timeout=600):
+        if not self.connected:
+            if self.connect():
+                self.connected = True
+            else:
+                raise Exception("Failed to connect to IPFS for upload")
         attempt = 0
-        while True:
-            if attempt == 10:
-                break
+        while attempt < 10:
             try:
                 address = self.client_bootstrap_url
                 args = (address, address)
                 opts = {'json': 'true'}
-
                 self.bootstrap_client._client.request('/swarm/connect', args, opts=opts, decoder='json')
                 self.bootstrap_client.bootstrap.add(self.client_bootstrap_url)
-                response = self.bootstrap_client.add(data, timeout=self.ipfs_timeout)
+                response = self.bootstrap_client.add(data, timeout=10)
                 self.cache.add(response['Hash'])
                 return response['Hash']
             except Exception as e:
-                self.logger.warn(f"Error while uploading: {e}")
+                self.logger.warning(f"Error while uploading: {e}")
                 if "127.0.0.1" in self.client_connect_url:
                     self.logger.warning("Restarting IPFS service")
                     self.restart_ipfs_service()
             attempt += 1
-        raise Exception(f"Error while uploading: {e}")
-
+        raise Exception("Failed to upload after 10 attempts")
     def add(self, hash):
         pass
-
     def pin_add(self, hash):
+        if not self.connected:
+            return
         try:
             self.bootstrap_client.pin.add(hash)
         except Exception as e:
@@ -400,10 +365,10 @@ class Storage:
             self.logger.info(f'error while adding pin')
             self.logger.error(e)
             raise
-
         pass
-
     def pin_rm(self, hash):
+        if not self.connected:
+            return
         try:
             self.bootstrap_client.pin.rm(hash)
         except Exception as e:
@@ -413,154 +378,122 @@ class Storage:
             self.logger.info(f'error while removing pin')
             self.logger.error(e)
             raise
-
     def is_pinned(self, cid: str) -> bool:
         """
         Check whether a given CID is pinned on this IPFS node.
-
         Returns:
-          True   – if pinned (directly or indirectly)
-          False  – if not pinned at all
-
+          True – if pinned (directly or indirectly)
+          False – if not pinned at all
         Raises:
           Any unexpected exception (e.g. network issues) after logging it.
         """
+        if not self.connected:
+            return False
         try:
             # Try to list the pin status for just this CID
-            self.bootstrap_client.pin.ls(cid)
+            self.bootstrap_client.pin.ls(cid, timeout=10)
             # No exception → it's pinned
             return True
-
         except Exception as e:
             err = str(e).lower()
-
             # Known “not pinned” error
             if 'not pinned' in err:
                 return False
-
             # “pinned indirectly” is still “pinned”
             if 'pinned indirectly' in err:
                 return True
 
+            self.connected = False
             # Anything else is unexpected
             self.logger.info(f'Unexpected error while checking pin status for {cid}')
-
             if "127.0.0.1" in self.client_connect_url:
                 self.logger.warning("Restarting IPFS service")
                 self.restart_ipfs_service()
-
             self.logger.error(e)
-            raise
-
+            return False
     def mig(self, hash, base_path):
         prefix = "Qm"
-
         legacy_path = hash
         target_path = base_path / hash
         # Validate the target_directory
-
         if not os.path.exists(legacy_path) and not os.path.exists(base_path):
             self.cache.rem(hash)
             raise ValueError(f"The paths '{hash}' or '{legacy_path}' do not exist.")
-       
         try:
             if os.path.exists(legacy_path):
                 shutil.move(legacy_path, target_path)
         except Exception as e:
             self.cache.rem(hash)
             raise Exception("Unable to migrate '{hash}', deleting from cache.")
-
-
     def rm(self, hash):
         """
         Delete all files and directories within the specified directory whose names start with 'Qm'.
-
         Args:
             hash (str): The path to the file or directory to clean up.
-
         Raises:
             ValueError: If the target_directory does not exist or is not a directory.
             Exception: Re-raises any unexpected exceptions encountered during deletion.
         """
-
         # Define the prefix to look for
         prefix = "Qm"
-
         legacy_path = "../" + hash
-
         # Validate the target_directory
         if not os.path.exists(hash) and not os.path.exists(legacy_path):
             self.cache.rem(hash)
             logger.warning(f"The paths '{hash}' or '{legacy_path}' do not exist.")
-
         if os.path.exists(hash):
           if not os.path.isdir(hash):
             os.remove(hash) if hash.startswith(prefix) else None
             return
-       
         if os.path.exists(legacy_path):
           if not os.path.isdir(legacy_path):
             os.remove(legacy_path) if hash.startswith(prefix) else None
             return
-
         target_directory = hash
-
         # Iterate over all items in the target directory
         if os.path.isdir(target_directory):
           for item_name in os.listdir(target_directory):
             if item_name.startswith(prefix):
                 item_path = os.path.join(target_directory, item_name)
-
                 try:
                     if os.path.isfile(item_path) or os.path.islink(item_path):
                         # If it's a file or a symbolic link, remove it
                         os.remove(item_path)
-
                     elif os.path.isdir(item_path):
                         # If it's a directory, remove it and all its contents
                         shutil.rmtree(item_path)
-
                 except Exception as e:
                     # Log any other exceptions and re-raise
                     self.logger.error(f"Error while removing '{item_path}': {e}")
                     raise
-
         #Deleting legacy cache file
         target_directory = "../" + hash
-
         # Iterate over all items in the target directory
         if os.path.isdir(target_directory):
           for item_name in os.listdir(target_directory):
             if item_name.startswith(prefix):
                 item_path = os.path.join(target_directory, item_name)
-
                 try:
                     if os.path.isfile(item_path) or os.path.islink(item_path):
                         # If it's a file or a symbolic link, remove it
                         os.remove(item_path)
-
                     elif os.path.isdir(item_path):
                         # If it's a directory, remove it and all its contents
                         shutil.rmtree(item_path)
-
                 except Exception as e:
                     # Log any other exceptions and re-raise
                     self.logger.error(f"Error while removing '{item_path}': {e}")
                     raise
-
         self.cache.rem(hash)
-
-
     def repo_gc(self):
+        if not self.connected:
+            return
         try:
             self.bootstrap_client.repo.gc()
         except Exception as e:
             self.logger.info(f'error while performing garbage collect')
             self.logger.error(e)
             raise
-
-
-
 class Cache:
     def __init__(self, items_limit, filepath, store_type=OrderedDict):
         self.items_limit = items_limit
@@ -574,65 +507,51 @@ class Cache:
         except Exception as e:
             self.mem = store_type({})
             self._update_file()
-
     def _update_file(self):
         with open(self.filepath, 'w') as f:
             try:
                 json.dump(self.mem, f)
             except TypeError:
                 json.dump(list(self.mem), f)
-
     def add(self, key, value):
         self.mem[key] = value
         if len(self.mem) == self.items_limit + 1:
             self.mem.popitem(last=False)
         self._update_file()
-
     def rem(self, key):
         if key in self.mem:
             removed_value = self.mem.pop(key)
             self._update_file()
             return removed_value
         return None
-
     def get(self, key):
         return self.mem.get(key)
-
     def get_key(self, value):
         for key, val in self.mem.items():
             if val == value:
                 return key
         return None
-
     def wipe(self):
         self.mem = None
         self._update_file()
-
     @property
     def get_values(self):
         return self.mem.values()
-
-
 class ListCache(Cache):
     def __init__(self, items_limit, filepath, store_type=set):
         super().__init__(items_limit, filepath, store_type)
-
     def add(self, value):
         if value not in self.mem:
             self.mem.add(value)
             self._update_file()
-
     def get(self, value):
         return value if self.contains(value) else None
-
     def rem(self, value):
         if value in self.mem:
             self.mem.remove(value)
             self._update_file()
-
     def contains(self, value):
         return value in self.mem
-
     @property
     def get_values(self):
         """
@@ -654,35 +573,27 @@ class ListCache(Cache):
                 # This should not happen due to type checks in add method
                 converted_values.append(item)
         return converted_values
-
     def __iter__(self):
         """Make the object iterable."""
         return iter(self.mem)
-
     def __len__(self):
         """Return the number of items in the cache."""
         return len(self.mem)
-
     def __contains__(self, item):
         """Check if an item exists in the cache."""
         return item in self.mem
-
-
 class ListCacheWithTimestamp:
     """
     A cache that stores unique items with associated timestamps using OrderedDict.
     It can migrate existing cache files from a JSON list format to a JSON dict format with timestamps.
-
     Attributes:
         items_limit (int): The maximum number of items the cache can hold.
         filepath (str): The path to the JSON file used for persisting the cache.
         mem (OrderedDict): In-memory storage of cache items with timestamps.
     """
-
     def __init__(self, items_limit, filepath):
         """
         Initialize the ListCacheWithTimestamp instance.
-
         Args:
             items_limit (int): The maximum number of items the cache can hold.
             filepath (str): The path to the JSON file used for persisting the cache.
@@ -690,12 +601,10 @@ class ListCacheWithTimestamp:
         self.items_limit = items_limit
         self.filepath = filepath
         self.mem = self._load_cache()
-
     def _load_cache(self):
         """
         Load the cache from the JSON file. If the file contains a list, migrate it to include timestamps.
         If the file does not exist or is corrupted, initialize an empty cache.
-
         Returns:
             OrderedDict: The in-memory cache with items and their timestamps.
         """
@@ -703,11 +612,9 @@ class ListCacheWithTimestamp:
             initial_mem = OrderedDict()
             self._update_file(initial_mem)
             return initial_mem
-
         try:
             with open(self.filepath, 'r', encoding="utf-8") as f:
                 data = json.load(f)
-
                 if isinstance(data, list):
                     # Migrate list to OrderedDict with timestamps
                     current_time = time.time()
@@ -716,7 +623,6 @@ class ListCacheWithTimestamp:
                         entries[item] = {'timestamp': current_time}
                     self._update_file(entries)
                     return entries
-
                 elif isinstance(data, dict):
                     # Ensure all entries have a 'timestamp'
                     updated = False
@@ -727,7 +633,6 @@ class ListCacheWithTimestamp:
                     if updated:
                         self._update_file(data)
                     return OrderedDict(data)
-
                 else:
                     initial_mem = OrderedDict()
                     self._update_file(initial_mem)
@@ -736,11 +641,9 @@ class ListCacheWithTimestamp:
             initial_mem = OrderedDict()
             self._update_file(initial_mem)
             return initial_mem
-
     def _update_file(self, mem=None):
         """
         Update the cache file with the current in-memory data.
-
         Args:
             mem (OrderedDict, optional): The in-memory cache to be saved. Defaults to self.mem.
         """
@@ -751,12 +654,10 @@ class ListCacheWithTimestamp:
                 json.dump(mem, f, indent=4)
         except IOError as e:
             return
-
     def add(self, value):
         """
         Add a unique value to the cache with the current timestamp. If the cache exceeds the items_limit,
         the oldest item is evicted.
-
         Args:
             value (str): The value to add to the cache.
         """
@@ -774,136 +675,106 @@ class ListCacheWithTimestamp:
     def get(self, value):
         """
         Retrieve a value from the cache.
-
         Args:
             value (str): The value to retrieve.
-
         Returns:
             str or None: The value if it exists in the cache; otherwise, None.
         """
         if value in self.mem:
             return value
         return None
-
     def rem(self, value):
         """
         Remove a value from the cache.
-
         Args:
             value (str): The value to remove.
         """
         if value in self.mem:
             del self.mem[value]
             self._update_file()
-
     def contains(self, value):
         """
         Check if a value exists in the cache.
-
         Args:
             value (str): The value to check.
-
         Returns:
             bool: True if the value exists in the cache; otherwise, False.
         """
         presence = value in self.mem
         return presence
-
     @property
     def get_values(self):
         """
         Get all values in the cache.
-
         Returns:
             list: A list of all values in the cache.
         """
         return list(self.mem.keys())
-
     def get_timestamp(self, value):
         """
         Get the timestamp of a specific entry.
-
         Args:
             value (str): The value whose timestamp is to be retrieved.
-
         Returns:
             float or None: The timestamp if the value exists; otherwise, None.
         """
         entry = self.mem.get(value)
         timestamp = entry['timestamp'] if entry else None
         return timestamp
-
     def __iter__(self):
         """
         Make the object iterable over its values.
-
         Returns:
             iterator: An iterator over the cached values.
         """
         return iter(self.mem.keys())
-
     def __len__(self):
         """
         Return the number of items in the cache.
-
         Returns:
             int: The number of items in the cache.
         """
         length = len(self.mem)
         return length
-
     def __contains__(self, item):
         """
         Check if an item exists in the cache.
-
         Args:
             item (str): The item to check.
-
         Returns:
             bool: True if the item exists; otherwise, False.
         """
         presence = item in self.mem
         return presence
-
 class MergedOrdersCache(Cache):
     def __init__(self, items_limit, filepath, store_type=list):
         super().__init__(items_limit, filepath, store_type)
-
     def add(self, do_req_id, dp_req_id, order_id):
         self.mem.append(dict(do=do_req_id, dp=dp_req_id, order=order_id))
         self._update_file()
-
     def rem(self, order_id):
         initial_len = len(self.mem)
         self.mem = [entry for entry in self.mem if entry.get("order") != order_id]
         if len(self.mem) < initial_len:
             self._update_file()
-            return True  # Successfully removed
-        return False  # Not found
-
-
+            return True # Successfully removed
+        return False # Not found
 class HardwareInfoProvider:
     @staticmethod
     def get_number_of_cpus():
         return psutil.cpu_count()
-
     @staticmethod
     def get_free_memory():
-        return math.floor(psutil.virtual_memory()[1] / (2 ** 30))  # in GB
-
+        return math.floor(psutil.virtual_memory()[1] / (2 ** 30)) # in GB
     @staticmethod
     def get_free_storage():
-        return psutil.disk_usage("/")[2] // (2 ** 30)  # in GB
-
-
-
+        return psutil.disk_usage("/")[2] // (2 ** 30) # in GB
 def parse_transaction_bytes_ut(contract_abi, bytes_input):
     import rlp
     from rlp.sedes import big_endian_int, Binary, binary
     from eth_utils import keccak, to_checksum_address, decode_hex
     from eth_keys import keys
     from web3 import Web3
-
     # Define the signed transaction class
     class SignedTransaction(rlp.Serializable):
         fields = [
@@ -917,7 +788,6 @@ def parse_transaction_bytes_ut(contract_abi, bytes_input):
             ("r", big_endian_int),
             ("s", big_endian_int),
         ]
-
     # Define the unsigned transaction class
     class UnsignedTransaction(rlp.Serializable):
         fields = [
@@ -928,7 +798,6 @@ def parse_transaction_bytes_ut(contract_abi, bytes_input):
             ("value", big_endian_int),
             ("data", binary),
         ]
-
     # Convert hex string to bytes if necessary
     if isinstance(bytes_input, str):
         bytes_input = bytes_input.strip()
@@ -936,14 +805,12 @@ def parse_transaction_bytes_ut(contract_abi, bytes_input):
             bytes_input = decode_hex(bytes_input)
         else:
             bytes_input = bytes.fromhex(bytes_input)
-
     # Decode the transaction using RLP
     try:
         tx = rlp.decode(bytes_input, SignedTransaction)
     except Exception as e:
         print(f"Error decoding transaction: {e}")
         return None
-
     # Create an unsigned transaction instance
     unsigned_tx = UnsignedTransaction(
         nonce=tx.nonce,
@@ -957,7 +824,6 @@ def parse_transaction_bytes_ut(contract_abi, bytes_input):
     w3 = Web3(Web3.HTTPProvider("https://core.bloxberg.org"))
     # Compute the transaction hash (the message hash used for signing)
     tx_hash = keccak(rlp.encode(unsigned_tx))
-
     # Recover the sender's public key and address
     v = tx.v
     if v >= 35:
@@ -967,19 +833,15 @@ def parse_transaction_bytes_ut(contract_abi, bytes_input):
     else:
         chain_id = None
         v_standard = v
-
     try:
         # Build the signature object
         # signature = keys.Signature(vrs=(v_standard, tx.r, tx.s))
-
         # Recover the public key
         # public_key = signature.recover_public_key_from_msg_hash(tx_hash)
-
         sender_address = w3.eth.account.recover_transaction(bytes_input)
     except Exception as e:
         print(f"Error recovering sender address: {e}")
         return None
-
     # Decode the function input data
     try:
         contract = w3.eth.contract(abi=contract_abi)
@@ -989,7 +851,6 @@ def parse_transaction_bytes_ut(contract_abi, bytes_input):
     except Exception as e:
         print(f"Error decoding function input: {e}")
         return None
-
     # Prepare the result
     result = {
         "from": sender_address,
@@ -1003,6 +864,4 @@ def parse_transaction_bytes_ut(contract_abi, bytes_input):
         "transaction_hash": "0x" + keccak(bytes_input).hex(),
         "result": params["_result"] if "_result" in params else None,
     }
-
     return result
-

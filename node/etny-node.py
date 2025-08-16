@@ -738,7 +738,7 @@ class EtnyPoXNode:
 
             # First wait
             start_wait = time.time()
-            status_enclave = self.wait_for_enclave_v2(bucket_name, 'result.txt', do_req.duration * 3600)
+            status_enclave = self.wait_for_enclave_v2(bucket_name, 'result.txt', do_req.duration * 3600 + 120)
             elapsed_wait1 = time.time() - start_wait
 
             # Second wait
@@ -1142,7 +1142,7 @@ class EtnyPoXNode:
             try:
                 self.__call_heart_beat()
 
-                self.storage.connect()
+                self.storage.connect(1)
 
                 if get_task_running_on():
                      continue
