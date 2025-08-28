@@ -20,13 +20,13 @@ if os.path.exists('.env'):
     load_dotenv('.env')
 
 version = os.environ.get('VERSION', "LEGACY")
-ipfs_host_default = os.environ.get('IPFS_HOST', "ipfs.ethernity.cloud")
-ipfs_port_default = int(os.environ.get('IPFS_PORT', 4001))
-ipfs_id_default = os.environ.get('IPFS_ID', "QmRBc1eBt4hpJQUqHqn6eA8ixQPD3LFcUDsn6coKBQtia5")
+ipfs_swarm_default = os.environ.get('IPFS_SWARM', "/dns4/ipfs.ethernity.cloud/tcp/4001/p2p/QmRBc1eBt4hpJQUqHqn6eA8ixQPD3LFcUDsn6coKBQtia5")
 ipfs_connect_url_default = os.environ.get('IPFS_CONNECT_URL', "/ip4/127.0.0.1/tcp/5001/http")
 ipfs_timeout_default = int(os.environ.get('IPFS_TIMEOUT', 30))
 ipfs_gateway_url_default=os.environ.get('IPFS_REMOTE_URL', 'https://ipfs.io')
 skip_integration_test = strtobool(os.environ.get('SKIP_INTEGRATION_TEST', "False"))
+kubo_url_default = os.environ.get('KUBO_URL')
+kubo_version_default =  os.environ.get('KUBO_VERSION')
 
 @dataclass(frozen=True)
 class NetworkConfig:
@@ -324,27 +324,26 @@ def parse_arguments(network_names: list) -> argparse.ArgumentParser:
         required=False
     )
     parser.add_argument(
-        "-i",
-        "--ipfs_host",
-        help="IPFS peer",
+        "--ipfs_swarm",
+        help="IPFS swarm peers list",
         type=str,
-        default=str(ipfs_host_default),
+        default=str(ipfs_swarm_default),
         required=False
     )
     parser.add_argument(
         "-o",
-        "--ipfs_port",
-        help="IPFS peer port",
-        type=int,
-        default=str(ipfs_port_default),
+        "--kubo_url",
+        help="Kubo download url",
+        type=str,
+        default=str(kubo_url_default),
         required=False
     )
     parser.add_argument(
         "-f",
-        "--ipfs_id",
-        help="IPFS peer id",
+        "--kubo_version",
+        help="kubo minimum version",
         type=str,
-        default=str(ipfs_id_default),
+        default=str(kubo_version_default),
         required=False
     )
     parser.add_argument(
@@ -378,8 +377,8 @@ parser = parse_arguments(list(NETWORKS.keys()))
 
 arguments = {
     str: [
-       'privatekey', 'endpoint', 'access_key', 'secret_key', 'network', 'ipfs_host', 'ipfs_id', 'ipfs_connect_url', 'ipfs_gateway_url'
+       'privatekey', 'endpoint', 'access_key', 'secret_key', 'network',  'ipfs_connect_url', 'ipfs_gateway_url', 'ipfs_swarm', 'kubo_url', 'kubo_version'
     ],
-    int: ['cpu', 'memory', 'storage', 'bandwidth', 'duration', 'ipfs_port', 'ipfs_timeout'],
+    int: ['cpu', 'memory', 'storage', 'bandwidth', 'duration', 'ipfs_timeout'],
     float: ['price']
 }

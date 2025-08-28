@@ -61,12 +61,12 @@ class EtnyPoXNode:
         self.__access_key = None
         self.__secret_key = None
         self.__network = None
-        self.__ipfs_host = None
-        self.__ipfs_port = None
-        self.__ipfs_id = None
+        self.__ipfs_swarm = None
         self.__ipfs_connect_url = None
         self.__ipfs_gateway_url = None
         self.__ipfs_timeout = None
+        self.__kubo_url = None
+        self.__kubo_version = None
         self.__price = None
         self.__orders = defaultdict(lambda: None)
         self.__do_requests_build_pending = True
@@ -152,7 +152,6 @@ class EtnyPoXNode:
         logger.info(f"Heartbeat Contract Address: %s", self.__network_config.heartbeat_contract_address);
         logger.info(f"Image Registry Address: %s", self.__network_config.image_registry_contract_address);
         logger.info(f"Minimum reward for order processing: %d %s / hour", self.__price, self.__network_config.token_name);
-        logger.info(f"IPFS Host: %s", self.__ipfs_host);
         logger.info(f"IPFS Connect URL: %s", self.__ipfs_connect_url);
         logger.info(f"IPFS Gateway URL: %s", self.__ipfs_gateway_url);
         logger.info(f"Node number of cpus: %s", self.__number_of_cpus);
@@ -167,6 +166,7 @@ class EtnyPoXNode:
 
         self.cache_config = CacheConfig(network.name)
         self.network_cache = Cache(self.cache_config.network_cache_limit, self.cache_config.network_cache_filepath)
+        self.ipfs_version_cache = Cache(self.cache_config.ipfs_version_cache_limit, self.cache_config.ipfs_version_filepath)
 
         if self.network_cache.get("NETWORK") == "BLOXBERG" and self.__network == "bloxberg_mainnet":
            self.__migrate_cache()
@@ -198,8 +198,11 @@ class EtnyPoXNode:
         self.dpreq_cache = ListCache(self.cache_config.dpreq_cache_limit, self.cache_config.dpreq_filepath)
         self.doreq_cache = ListCache(self.cache_config.doreq_cache_limit, self.cache_config.doreq_filepath)
         self.ipfs_cache = ListCacheWithTimestamp(self.cache_config.ipfs_cache_limit, self.cache_config.ipfs_cache_filepath)
-        self.storage = Storage(self.__ipfs_host, self.__ipfs_port, self.__ipfs_id, self.__ipfs_timeout, self.__ipfs_connect_url, self.__ipfs_gateway_url,
-                               self.ipfs_cache, logger, self.cache_config.base_path)
+
+        self.storage = Storage(self.__ipfs_swarm, self.__ipfs_timeout, self.__ipfs_connect_url, self.__ipfs_gateway_url,
+                               self.ipfs_cache, self.ipfs_version_cache, logger, self.cache_config.base_path, self.__kubo_url,
+                               self.__kubo_version, self.__network)
+
         self.merged_orders_cache = MergedOrdersCache(self.cache_config.merged_orders_cache_limit, self.cache_config.merged_orders_cache)
         self.process_order_data = {}
 
@@ -235,8 +238,9 @@ class EtnyPoXNode:
         self.cache_config_legacy = CacheConfig('./')
         self.ipfs_cache_legacy = ListCache(self.cache_config_legacy.ipfs_cache_limit, self.cache_config_legacy.ipfs_cache_filepath)
 
-        self.storage_legacy = Storage(self.__ipfs_host, self.__ipfs_port, self.__ipfs_id, self.__ipfs_timeout, self.__ipfs_connect_url, self.__ipfs_gateway_url,
-                               self.ipfs_cache_legacy, logger, self.cache_config_legacy.base_path)
+        self.storage_legacy = Storage(self.__ipfs_swarm, self.__ipfs_timeout, self.__ipfs_connect_url, self.__ipfs_gateway_url,
+                               self.ipfs_cache_legacy, self.ipfs_version_cache, logger, self.cache_config_legacy.base_path,
+                               self.__kubo_url, self.__kubo_version, self.__network)
 
         for hash in list(self.ipfs_cache_legacy.get_values):
             self.storage_legacy.mig(hash, self.cache_config.base_path)
@@ -1131,7 +1135,11 @@ class EtnyPoXNode:
         _doreq = {}
         doreq = {}
         metadata = {}
-        logger.info(f"System ready for the next DO request")
+
+        if not self.can_run_under_sgx:
+            logger.error('SGX is not enabled or correctly configured. Agent will not perform requests on this network')
+        else:
+            logger.info(f"System ready for the next DO request")
 
         next_dp_request = False
 
@@ -1214,6 +1222,7 @@ class EtnyPoXNode:
                         doreq[i].storage <= req.storage and doreq[i].bandwidth <= req.bandwidth and doreq[i].price >= req.price):
                     self.doreq_cache.add(i)
                     logger.debug("Not enough resources to process this DO request, skipping to next request")
+                    logger.debug(f"resource:requested/available| cpu:{doreq[i].cpu}/{req.cpu} memory:{doreq[i].memory}/{req.memory} storage:{doreq[i].storage}/{req.storage} bandwidth:{doreq[i].bandwidth}/{req.bandwidth} price:{doreq[i].price}/{req.price}");
                     continue
 
 
@@ -1236,8 +1245,6 @@ class EtnyPoXNode:
                     except Exception as e:
                         logger.warning(f"Failed to read DO request metadata")
 
-                if not self.can_run_under_sgx:
-                    logger.error('SGX is not enabled or correctly configured, skipping DO request')
                 if doreq[i].status != RequestStatus.AVAILABLE:
                     logger.debug(
                         f'''Skipping Order, DORequestId = {_doreq[i]}, DPRequestId = {i}, Order has different status: '{RequestStatus._status_as_string(doreq[i].status)}' ''')
@@ -1252,7 +1259,7 @@ class EtnyPoXNode:
                     continue
 
                 if not self.can_run_under_sgx:
-                    logger.error('SGX is not enabled or correctly configured, skipping DO request')
+                    logger.info(f"Ignoring DO Request {i} on {self.__network}")
                     self.doreq_cache.add(i)
                     continue
 
@@ -1381,7 +1388,7 @@ class EtnyPoXNode:
         logger.debug(f"DP request {self.__dprequest} hash no order associated")
         return None
 
-    def place_order(self, doreq):
+    def place_order(self, doreq_id):
         logger = self.logger
 
         order_id = 0
@@ -1389,7 +1396,7 @@ class EtnyPoXNode:
         retries = 0
 
         unicorn_txn = self.__etny.functions._placeOrder(
-                int(doreq),
+                int(doreq_id),
                 int(self.__dprequest),
         ).build_transaction(self.get_transaction_build())
 
@@ -1399,18 +1406,27 @@ class EtnyPoXNode:
             _hash = self.send_transaction(unicorn_txn)
             logger.info(f"TXID {_hash} pending... fingers crossed")
             receipt = self.__w3.eth.wait_for_transaction_receipt(_hash)
+
             if receipt.status == 1:
-                logger.info(f"TXID {_hash} confirmed!")
-                break
+              logger.info(f"TXID {_hash} confirmed!")
+              break
             else:
               logger.info(f"TXID {_hash} is reverted")
-              _doreq = self.__etny.caller()._getDORequest(doreq)
 
-              doreqid = DORequest(_doreq)
+            doreq = self.__etny.caller()._getDORequest(doreq_id)
+            _dpreq = self.__etny.caller()._getDPRequest(self.__dprequest)
 
-              if doreq.status != RequestStatus.AVAILABLE:
-                  logger.debug(f"DO request {doreqid} is matched with another operator, skipping processing")
-                  self.doreq_cache.add(doreqid)
+            doreq = DORequest(_doreq)
+            dpreq = DPRequest(_dpreq)
+
+            if doreq.status != RequestStatus.AVAILABLE:
+                  logger.debug(f"DO request {doreq_id} is matched with another operator, skipping processing")
+                  self.doreq_cache.add(doreq_id)
+                  raise
+
+            if dpreq.status != RequestStatus.AVAILABLE:
+                  logger.debug(f"DP request {self.__dprequest} is matched with another order, skipping processing")
+                  self.doreq_cache.add(doreq_id)
                   raise
 
           except (exceptions.ContractLogicError, IndexError) as e:
@@ -1647,12 +1663,13 @@ class EtnyPoXNode:
             logger.warning('The node is not properly configured to run SGX tasks in production mode. Please check the configuration.')
             self.can_run_under_sgx = False
             self.__clean_up_integration_test()
-            return
+            return False
 
         self.can_run_under_sgx = True
         set_integration_test_complete(self.__network_config.network_type.upper(), True)
         logger.info(f"Agent SGX capabilities tested and enabled successfully for {self.__network_config.network_type.upper()}")
         self.__clean_up_integration_test()
+        return True
 
     def __can_run_auto_update(self, file_path, interval):
         current_timestamp = int(time.time())
@@ -1706,13 +1723,20 @@ class EtnyPoXNode:
             heartbeat_frequency = 12 * 60 * 60 - 60;
 
         if self.__can_run_auto_update(self.cache_config.heart_beat_log_file_path, heartbeat_frequency):
+
+            if not self.can_run_under_sgx:
+                self.__write_auto_update_cache(self.cache_config.heart_beat_log_file_path, heartbeat_frequency);
+                logger.info('Skipping hearbeat on inactive network...');
+                return
+
             logger.info('Calling hearbeat...')
             params = [
-                "v3"
+                "v" + config.version
             ]
 
             max_retries = 20
             retries = 0
+
 
             while True:
               try:

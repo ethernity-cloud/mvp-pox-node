@@ -12,6 +12,7 @@ class CacheConfig:
         self.auto_update_file_path = base_path / 'auto_update.etny'
         self.heart_beat_log_file_path = base_path / 'heartbeat.etny'
         self.network_cache_filepath = Path(__file__).parent / 'network_cache.txt'
+        self.ipfs_version_filepath = Path(__file__).parent / 'ipfs_version.txt'
         self.orders_cache_filepath = base_path / 'orders_cache.txt'
         self.ipfs_cache_filepath = base_path / 'ipfs_cache.txt'
         self.dpreq_filepath = base_path / 'dpreq_cache.txt'
@@ -21,6 +22,7 @@ class CacheConfig:
         
         # Define all cache limits
         self.network_cache_limit = 1
+        self.ipfs_version_cache_limit = 10_000
         self.orders_cache_limit = 10_000_000
         self.ipfs_cache_limit = 10_000_000
         self.dpreq_cache_limit = 10_000_000
