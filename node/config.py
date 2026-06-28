@@ -60,6 +60,7 @@ NETWORKS = {
     "BLOXBERG": ["MAINNET", "TESTNET"],
     "IOTEX": ["TESTNET"],
     "ETHEREUM": ["SEPOLIA"],
+    "LITVM": ["LITEFORGE"],
 }
 
 

@@ -1667,7 +1667,7 @@ class EtnyPoXNode:
 
         self.can_run_under_sgx = True
         set_integration_test_complete(self.__network_config.network_type.upper(), True)
-        logger.info(f"Agent SGX capabilities tested and enabled successfully for {self.__network_config.network_type.upper()}")
+        logger.info(f"Agent SGX capabilities tested and enabled successfully for {self.__network} ({self.__network_config.network_type.upper()})")
         self.__clean_up_integration_test()
         return True
 
