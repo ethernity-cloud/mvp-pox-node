@@ -24,6 +24,16 @@ ipfs_swarm_default = os.environ.get('IPFS_SWARM', "/dns4/ipfs.ethernity.cloud/tc
 ipfs_connect_url_default = os.environ.get('IPFS_CONNECT_URL', "/ip4/127.0.0.1/tcp/5001/http")
 ipfs_timeout_default = int(os.environ.get('IPFS_TIMEOUT', 30))
 ipfs_gateway_url_default=os.environ.get('IPFS_REMOTE_URL', 'https://ipfs.io')
+# How long a locally pinned IPFS object is kept before the periodic cleanup
+# unpins and removes it. Objects the node still needs are exempt regardless of
+# age: the trustedzone images, and any CID that is still the CURRENT ESR state
+# for some enclave/key (only superseded state versions expire).
+# 0 disables age-based cleanup entirely.
+ipfs_pin_retention_days_default = float(os.environ.get('IPFS_PIN_RETENTION_DAYS', 7))
+# Minimum minutes between cleanup runs. The cleanup is triggered from the
+# order-processing loop (the same place that calls the heartbeat), so this
+# throttles it to at most once per interval instead of once per order.
+ipfs_cleanup_interval_minutes_default = float(os.environ.get('IPFS_CLEANUP_INTERVAL_MINUTES', 60))
 skip_integration_test = strtobool(os.environ.get('SKIP_INTEGRATION_TEST', "False"))
 kubo_url_default = os.environ.get('KUBO_URL')
 kubo_version_default =  os.environ.get('KUBO_VERSION')
@@ -76,6 +86,28 @@ abi_filepath = base_path / 'docker/pox.abi'
 image_registry_abi_filepath = base_path / 'image_registry.abi'
 heart_beat_abi_filepath = base_path / 'heart_beat.abi'
 uuid_filepath = Path(expanduser("~")) / "opt/etny/node/UUID"
+
+# --- Enclave State Registry (ESR) ------------------------------------------
+# Enclaves publish an IPFS CID of their encrypted state to this registry. Nodes
+# replicate that state by pinning the CIDs locally, so a dApp's state survives
+# any single node going away.
+esr_abi_filepath = base_path / 'esr.abi'
+# Canonical deployments, keyed by network name as it appears in networks.ini.
+# "" (or an absent entry) means ESR is not deployed on that network and state
+# replication is simply skipped there.
+#
+# Bloxberg mainnet and testnet are the SAME CHAIN (both chainId 8995), separated
+# by different protocol contracts, so both use the one deployment.
+esr_contract_addresses = {
+    "BLOXBERG_MAINNET": os.environ.get('ESR_CONTRACT_ADDRESS', "0x4f6c0Ae54567CAeD372d265fEF412C2B5ed1302A"),
+    "BLOXBERG_TESTNET": os.environ.get('ESR_CONTRACT_ADDRESS', "0x4f6c0Ae54567CAeD372d265fEF412C2B5ed1302A"),
+}
+# How far back to scan for StateCommitted events on the first pass, in blocks.
+# After that the node continues from the last block it processed.
+esr_scan_lookback_blocks = int(os.environ.get('ESR_SCAN_LOOKBACK_BLOCKS', 50_000))
+# Keep pinning replicated state only while at least this much free disk (in GB)
+# remains, so replication can never fill the disk the node needs to run tasks.
+esr_min_free_storage_gb = float(os.environ.get('ESR_MIN_FREE_STORAGE_GB', 10))
 
 # logger
 logger = logging.getLogger("ETNY NODE")

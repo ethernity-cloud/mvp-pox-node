@@ -20,6 +20,8 @@ aches/files during upgrades without unpinning (as upgrade handles it).
 """
 
 from asyncio.log import logger
+import base64
+import hashlib
 import json
 import os
 import io
@@ -674,6 +676,90 @@ class Storage:
                 self.logger.debug(f"Attempt {attempt+1} failed to check if folder: {e}")
             time.sleep(1)
         raise Exception(f"Unable to determine if {path} is file or folder after 10 attempts")
+
+    @staticmethod
+    def cidv1_raw(content_bytes):
+        """CIDv1/raw/sha2-256 for `content_bytes`, computed locally.
+
+        Layout: 'b' + base32( 0x01 0x55 0x12 0x20 || sha256(content) )
+                        CIDv1  raw  sha256  32 bytes
+
+        Matches what `ipfs add --cid-version=1 --raw-leaves` returns, so the CID
+        can be known WITHOUT talking to IPFS at all. That is what lets the node
+        record a result and move on while pinning happens in the background.
+        """
+        digest = hashlib.sha256(content_bytes).digest()
+        raw = bytes([0x01, 0x55, 0x12, 0x20]) + digest
+        return 'b' + base64.b32encode(raw).decode('ascii').lower().rstrip('=')
+
+    def pin_bytes_deferred(self, content_bytes, name='blob', attempts=10, delay=30):
+        """Compute the CID now, return it, and pin in the BACKGROUND.
+
+        `upload()` blocks for up to 10 attempts with an IPFS service restart
+        between failures, and raises if they all fail. On the result path that
+        meant a slow or unhealthy IPFS could stall -- or lose -- an on-chain
+        result submission for work the enclave had already completed correctly,
+        and the stall grows with the size of the result.
+
+        Since the CID is just a hash of the content, it can be computed locally.
+        The caller gets it immediately and proceeds; the actual add/pin is queued
+        on the existing executor and retries on its own without holding anything
+        up.
+
+        Returns the CID (never None, never raises).
+        """
+        cid = self.cidv1_raw(content_bytes)
+
+        def _work():
+            for attempt in range(attempts):
+                try:
+                    stored = self.add_bytes_raw(content_bytes, name=name)
+                    if stored == cid:
+                        self.cache.add(cid)
+                        self.logger.info(f"Pinned {name} -> {cid} (background)")
+                        return
+                    self.logger.warning(
+                        f"Background pin of {name}: IPFS stored {stored}, expected {cid}")
+                    return
+                except Exception as e:
+                    self.logger.warning(
+                        f"Background pin attempt {attempt + 1}/{attempts} for {name} failed: {e}")
+                    time.sleep(delay)
+            self.logger.error(f"Background pin of {name} ({cid}) failed after {attempts} attempts")
+
+        try:
+            self.executor.submit(_work)
+        except Exception as e:
+            # Even losing the worker must not fail the caller: the CID is valid
+            # regardless, and other nodes replicate from the registry/chain.
+            self.logger.warning(f"Could not queue background pin for {name}: {e}")
+        return cid
+
+    def add_bytes_raw(self, content_bytes, name='blob'):
+        """Add bytes as CIDv1 with raw leaves, returning the CID.
+
+        The default `add` produces a CIDv0 dag-pb node (content wrapped in UnixFS
+        framing), whose CID an enclave cannot derive without reimplementing that
+        framing. With cid-version=1 + raw-leaves the CID is simply
+        base32(0x01 0x55 0x12 0x20 || sha256(content)) -- so the enclave can
+        compute it from the bytes it authored and commit THAT to the chain,
+        meaning a hostile node cannot substitute different content for what was
+        committed.
+
+        Returns the CID, or None on failure.
+        """
+        if not self.connected:
+            raise Exception("Not connected")
+        files = {'file': (name, content_bytes)}
+        params = {'cid-version': '1', 'raw-leaves': 'true', 'pin': 'true'}
+        resp = self._api_call('add', params=params, files=files)
+        try:
+            if isinstance(resp, str):
+                resp = json.loads(resp.strip().split('\n')[-1])
+            return resp.get('Hash')
+        except Exception as e:
+            self.logger.warning(f"Could not parse add response for {name}: {e}")
+            return None
 
     def add_path(self, path):
         if not self.connected:

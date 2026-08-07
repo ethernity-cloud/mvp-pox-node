@@ -1,6 +1,7 @@
 #!/usr/bin/python3
 
 import io, os, time, json, sys, argparse, threading
+import base64, hashlib
 from types import SimpleNamespace
 from collections import defaultdict
 import concurrent.futures
@@ -137,6 +138,29 @@ class EtnyPoXNode:
         self.__heart_beat = self.__w3.eth.contract(
             address=self.__w3.to_checksum_address(self.__network_config.heartbeat_contract_address),
             abi=self.__heart_beat_abi)
+
+        # Enclave State Registry (optional): only wired when this network has a
+        # deployment. Absent => state replication is skipped entirely, so a
+        # network without an ESR behaves exactly as before.
+        self.__esr = None
+        self.__esr_last_block = 0
+        try:
+            esr_address = (config.esr_contract_addresses.get(self.__network_config.name) or "").strip()
+            if esr_address:
+                with open(config.esr_abi_filepath) as f:
+                    esr_abi = f.read()
+                self.__esr = self.__w3.eth.contract(
+                    address=self.__w3.to_checksum_address(esr_address),
+                    abi=esr_abi)
+                logger.info(f"Enclave State Registry: {esr_address}")
+            else:
+                logger.info(f"No Enclave State Registry deployed on {self.__network_config.name}; state replication disabled")
+        except Exception as e:
+            # Never let ESR wiring stop the node from starting -- it is an
+            # add-on to replication, not part of task execution.
+            self.__esr = None
+            logger.warning(f"Could not initialise the Enclave State Registry: {e}")
+
         self.__nonce = self.__w3.eth.get_transaction_count(self.__address)
         self.__dprequest = 0
         self.__order_id = 0
@@ -227,6 +251,10 @@ class EtnyPoXNode:
            self.__run_integration_test()
 
 
+        # Tracks when the pin cleanup last ran, so __maybe_clear_ipfs_cache can
+        # throttle the periodic sweep. Set before the first run so the attribute
+        # always exists.
+        self.__last_ipfs_cleanup_at = 0
         self.__clear_ipfs_cache()
         reset_task_running_on()
 
@@ -270,52 +298,229 @@ class EtnyPoXNode:
                 logger.error(f"Failed to copy '{src}' to '{dest}': {e}")
        
 
+    @staticmethod
+    def __looks_like_cid(value):
+        """True for values that plausibly are IPFS CIDs.
+
+        The contract accepts any non-empty string as the pointer, so a buggy
+        writer can commit something that is not a CID at all -- the live registry
+        currently has one entry holding a 0x… digest. That is a defect in
+        whatever wrote it, NOT a format to support: such entries are skipped and
+        logged, never pinned. Handing one to pin/add errors on every cleanup
+        pass, and a client would retry-loop on it forever.
+
+        CIDv0 is 46 chars starting "Qm"; CIDv1 is base32 starting "b".
+        """
+        cid = (value or "").strip()
+        if not cid or cid.startswith("0x"):
+            return False
+        if cid.startswith("Qm") and len(cid) == 46:
+            return True
+        if cid.startswith("b") and len(cid) >= 46 and cid.islower():
+            return True
+        return False
+
+    def __esr_current_state_cids(self):
+        """CIDs that are the CURRENT state for some enclave/key in the registry.
+
+        Scans StateCommitted events, then confirms each (enclave, key) against
+        the contract's live getState. Confirming matters: the newest event we
+        happened to see is not necessarily the newest commit, and pinning
+        decisions must follow the chain, not our scan window.
+
+        Returns a set of CIDs, empty when ESR is unavailable for any reason --
+        an empty set means "protect nothing extra", never "unpin everything".
+        """
+        cids = set()
+        if self.__esr is None:
+            return cids
+        try:
+            latest_block = self.__w3.eth.block_number
+            from_block = self.__esr_last_block or max(0, latest_block - config.esr_scan_lookback_blocks)
+            logs = self.__esr.events.StateCommitted().get_logs(
+                fromBlock=from_block, toBlock=latest_block)
+
+            # Deduplicate to the (enclave, key) pairs seen; the current CID for
+            # each comes from the contract below.
+            pairs = {(l['args']['enclave'], l['args']['key']) for l in logs}
+            for enclave, key in pairs:
+                try:
+                    time.sleep(self.__network_config.rpc_delay / 1000)
+                    cid, version, _updated_at = self.__esr.caller().getState(enclave, key)
+                    # The contract stores the CID as a free-form string and does
+                    # not validate it, so entries that are not CIDs do occur on
+                    # the live registry (e.g. a 0x… hex digest). Only pin things
+                    # that actually look like an IPFS CID; handing anything else
+                    # to pin/add just produces errors on every cleanup pass.
+                    if version and self.__looks_like_cid(cid):
+                        cids.add(cid)
+                    elif version and cid:
+                        # A committed pointer that is not a CID means the writer
+                        # is buggy. Say so once per pass rather than skipping in
+                        # silence -- otherwise the defect stays invisible.
+                        self.logger.warning(
+                            f"ESR entry for {enclave}/{key.hex()[:10]}… is not a valid CID "
+                            f"({cid[:24]}…); skipping. The committing enclave is writing a "
+                            f"non-CID pointer."
+                        )
+                except Exception as e:
+                    self.logger.debug(f"ESR getState failed for {enclave}/{key.hex()}: {e}")
+
+            self.__esr_last_block = latest_block
+        except Exception as e:
+            self.logger.warning(f"ESR state scan failed: {e}")
+            return set()
+        return cids
+
+    def __replicate_esr_state(self):
+        """Pin the current ESR state of every enclave, while disk allows.
+
+        Any node holding a state CID keeps that dApp's state available, so a
+        dApp does not depend on the single node that produced it. Bounded by
+        free disk (ESR_MIN_FREE_STORAGE_GB) so replication can never crowd out
+        the storage the node needs to run tasks -- the node stops pinning new
+        state rather than filling up.
+
+        Never raises: replication is best-effort and must not disturb order
+        processing.
+        """
+        if self.__esr is None:
+            return set()
+        try:
+            current = self.__esr_current_state_cids()
+            if not current:
+                return current
+
+            pinned = 0
+            for cid in current:
+                free_gb = HardwareInfoProvider.get_free_storage()
+                if free_gb < config.esr_min_free_storage_gb:
+                    self.logger.warning(
+                        f"Free storage {free_gb}GB is below ESR_MIN_FREE_STORAGE_GB "
+                        f"({config.esr_min_free_storage_gb}GB); stopping state replication for this round"
+                    )
+                    break
+                try:
+                    if not self.storage.is_pinned(cid):
+                        self.storage.pin_add(cid)
+                        pinned += 1
+                    # Refresh the cache timestamp either way, so a CID that is
+                    # still current is never aged out by the retention sweep.
+                    self.ipfs_cache.add(cid)
+                except Exception as e:
+                    self.logger.debug(f"Could not pin ESR state {cid}: {e}")
+
+            if pinned:
+                self.logger.info(f"Replicated {pinned} ESR state object(s)")
+            return current
+        except Exception as e:
+            self.logger.warning(f"ESR state replication skipped: {e}")
+            return set()
+
+    def __maybe_clear_ipfs_cache(self):
+        """Run the pin cleanup at most once per configured interval.
+
+        Cleanup used to happen only in __init__, so a node that stayed up for
+        weeks never reclaimed anything until it was restarted. This is called
+        from the order-processing loop (alongside the heartbeat) and throttled by
+        IPFS_CLEANUP_INTERVAL_MINUTES so it costs one timestamp comparison per
+        order rather than a full sweep.
+
+        Never raises: reclaiming disk must not be able to interrupt order
+        processing.
+        """
+        try:
+            interval = float(getattr(config, 'ipfs_cleanup_interval_minutes_default', 60)) * 60
+            if interval <= 0:
+                return
+            last = getattr(self, '_EtnyPoXNode__last_ipfs_cleanup_at', 0) or 0
+            if (time.time() - last) < interval:
+                return
+            self.__clear_ipfs_cache()
+        except Exception as e:
+            self.logger.warning(f"Periodic IPFS cleanup skipped: {e}")
+            self.__last_ipfs_cleanup_at = time.time()
+
     def __clear_ipfs_cache(self):
         logger = self.logger
 
         logger.info(f"Cleaning up ipfs cache")
 
-        ONE_WEEK_SECONDS = 7 * 24 * 60 * 60  # Number of seconds in one week
+        # Retention is configurable (IPFS_PIN_RETENTION_DAYS, default 7 days).
+        # 0 disables age-based cleanup entirely.
+        retention_seconds = float(getattr(config, 'ipfs_pin_retention_days_default', 7)) * 24 * 60 * 60
+        if retention_seconds <= 0:
+            logger.info("IPFS pin retention is disabled (IPFS_PIN_RETENTION_DAYS=0); skipping cleanup")
+            self.__last_ipfs_cleanup_at = time.time()
+            return
+
         current_time = time.time()
-        threshold_time = current_time - ONE_WEEK_SECONDS
-        
+
         trustedzone_images = self.__network_config.trustedzone_images.split(',')
 
         keep_hashes = []
 
         for image in trustedzone_images:
-            while True:
+            # Bounded retry: this used to loop forever on RPC failure, which was
+            # survivable at startup but would wedge the order-processing loop now
+            # that cleanup also runs periodically. On failure we skip this round
+            # -- better to keep pins one extra cycle than to stall the node.
+            for _attempt in range(5):
                 try:
                     time.sleep(self.__network_config.rpc_delay/1000)
                     [enclave_image_hash, _,
                      docker_compose_hash] = self.__image_registry.caller().getLatestTrustedZoneImageCertPublicKey(image, 'v3')
+                    keep_hashes.append(enclave_image_hash)
+                    keep_hashes.append(docker_compose_hash)
                     break
                 except Exception as e:
                     continue
+            else:
+                logger.warning(
+                    f"Could not resolve the current image hashes for {image}; skipping this cleanup "
+                    f"round so a transient RPC failure cannot unpin an image that is still in use."
+                )
+                self.__last_ipfs_cleanup_at = time.time()
+                return
 
-            keep_hashes.append(enclave_image_hash)
-            keep_hashes.append(docker_compose_hash)
+        # Replicate current ESR state and protect it from expiry. Only the CIDs
+        # that are STILL the current version for some enclave/key are kept --
+        # superseded versions age out like anything else, so a dApp never loses
+        # live state while stale revisions are still reclaimed.
+        try:
+            keep_hashes.extend(self.__replicate_esr_state())
+        except Exception as e:
+            logger.warning(f"ESR replication skipped during cleanup: {e}")
 
+        retention_hours = retention_seconds / 3600
+        removed = 0
         for hash in list(self.ipfs_cache.get_values):
           if hash not in keep_hashes:
             timestamp = self.ipfs_cache.get_timestamp(hash)
             if timestamp:
                 age = current_time - timestamp
-                if age > ONE_WEEK_SECONDS:
+                if age > retention_seconds:
                     logger.debug(f"Deleting {hash} (Age: {age / 3600:.2f} hours)")
                     try:
                         self.storage.pin_rm(hash)
                         self.storage.rm(hash)
+                        removed += 1
                         logger.debug(f"Successfully deleted {hash}")
                     except Exception as e:
                         logger.debug(f"Failed to delete {hash}: {e}")
                 else:
-                    logger.debug(f"Hash {hash} is not older than one week (Age: {age / 3600:.2f} hours). Keeping pin.")
+                    logger.debug(f"Hash {hash} is within the {retention_hours:.0f}h retention (Age: {age / 3600:.2f} hours). Keeping pin.")
             else:
                 logger.warning(f"No timestamp found for {hash}. Unable to determine age. Skipping deletion.")
           else:
+            # A hash we must keep (current trustedzone image): make sure it stays
+            # pinned and refresh its cache entry so it is not aged out.
             self.storage.pin_add(hash)
             self.ipfs_cache.add(hash)
+
+        if removed:
+            logger.info(f"IPFS cleanup removed {removed} expired pin(s) (retention {retention_hours:.0f}h)")
+        self.__last_ipfs_cleanup_at = time.time()
 
     def generate_process_order_data(self, write=False):
 
@@ -763,8 +968,17 @@ class EtnyPoXNode:
                 with open(f'{self.order_folder}/result.txt', 'w') as f:
                     f.write(result_data)
                 logger.debug(f'[v3] Result file successfully downloaded to {self.order_folder}/result.txt')
-                result_hash = self.upload_result_to_ipfs(f'{self.order_folder}/result.txt')
-                logger.debug(f'[v3] Result file successfully uploaded to IPFS with hash: {result_hash}')
+                # Compute the CID locally and submit on-chain immediately; the
+                # actual IPFS add/pin runs in the background and retries on its
+                # own. Previously this blocked on upload() -- 10 attempts with an
+                # IPFS restart between failures -- so a slow or unhealthy daemon
+                # could stall the submission, and after 10 failures it RAISED,
+                # losing the on-chain result for work the enclave had already
+                # completed. The stall grew with the size of the result.
+                result_hash = self.storage.pin_bytes_deferred(
+                    result_data.encode('utf-8') if isinstance(result_data, str) else result_data,
+                    name=f'result-{order_id}.txt')
+                logger.debug(f'[v3] Result CID {result_hash}; pinning in background')
                 logger.debug(f'Result file successfully uploaded to {enclave_image_name}-{v3} bucket')
                 logger.debug('Reading transaction from file')
                 status, transaction_data = self.swift_stream_service.get_file_content(bucket_name, "transaction.txt")
@@ -814,14 +1028,124 @@ class EtnyPoXNode:
         logger = self.logger
         deadline = time.time() + timeout
         logger.info(f'Checking if object {object_name} exists in bucket {bucket_name} for {timeout} seconds')
+        last_state_poll = 0
         while time.time() < deadline:
             exists, msg = self.swift_stream_service.is_object_in_bucket(bucket_name, object_name)
             if exists:
                 logger.info('Enclave execution finished!')
                 return True
+            # While waiting on the enclave, serve any ESR state it has dropped
+            # for pinning. The enclave blocks on the CID coming back, so this
+            # has to run DURING the wait, not after it. Polled every few seconds
+            # rather than every pass to keep the bucket listing cheap.
+            if self.__esr is not None and (time.time() - last_state_poll) >= 5:
+                last_state_poll = time.time()
+                self.serve_esr_state_pins(bucket_name, deadline)
             time.sleep(1)
         logger.info('Enclave execution timed out')
         return False
+
+    @staticmethod
+    def __cidv1_raw(content_bytes):
+        """CIDv1/raw/sha2-256 for `content_bytes` -- the same CID `ipfs add
+        --cid-version=1 --raw-leaves` produces.
+
+        Layout: multibase 'b' + base32( 0x01 0x55 0x12 0x20 || sha256(content) )
+                                        CIDv1 raw  sha256  32 bytes
+        """
+        digest = hashlib.sha256(content_bytes).digest()
+        raw = bytes([0x01, 0x55, 0x12, 0x20]) + digest
+        return 'b' + base64.b32encode(raw).decode('ascii').lower().rstrip('=')
+
+    def serve_esr_state_pins(self, bucket_name, deadline_ts):
+        """Pin ESR state blobs the enclave drops in the bucket.
+
+        The enclave cannot reach IPFS: the Kubo API binds 127.0.0.1 on the host,
+        so no container can talk to it (unlike MinIO, which is a container on the
+        ethernity network). Rather than exposing the admin API or adding a proxy,
+        the enclave writes the encrypted blob to the bucket it ALREADY uses and
+        the node pins it -- the same shape as the existing result.txt flow.
+
+        Protocol, per key:
+            enclave writes  state.<key>.enc   (encrypted state blob)
+            enclave writes  state.<key>.cid   (the CID IT computed itself)
+            node pins the blob and confirms the CID matches its content
+
+        THE NODE NEVER SUPPLIES THE CID. The node is untrusted: if it returned
+        the CID, a malicious operator could pin the enclave's blob but hand back
+        the CID of different content, and the enclave would sign THAT onto the
+        chain -- clients would then fetch attacker-chosen state believing the
+        enclave authored it. Because a CID is a hash of the content, the enclave
+        derives it from the bytes it just encrypted and commits that. A hostile
+        node can refuse to pin, or pin something else, but it cannot change what
+        was committed: substitution is impossible rather than merely detectable.
+
+        That also means the enclave never waits on this: it commits as soon as it
+        has written the blob, and pinning is fire-and-forget from its point of
+        view. `deadline_ts` only bounds how long the node itself spends here.
+
+        The node still verifies, so it fails loudly instead of pinning a blob
+        whose CID does not match what the enclave published.
+
+        Never raises: a state pin failing must not fail the task itself.
+        """
+        served = {}
+        if not bucket_name:
+            return served
+        try:
+            objects = self.swift_stream_service.list_object_names(bucket_name) or []
+        except Exception:
+            objects = []
+        try:
+            for name in list(objects):
+                if not name or not name.startswith('state.') or not name.endswith('.enc'):
+                    continue
+                key = name[len('state.'):-len('.enc')]
+                cid_object = f'state.{key}.cid'
+                if name in served:
+                    continue
+                if time.time() > deadline_ts:
+                    self.logger.warning('Deadline reached while serving ESR state pins')
+                    break
+
+                # The enclave publishes the CID it computed. Without it there is
+                # nothing to verify against, so wait for it rather than invent one.
+                has_cid, _ = self.swift_stream_service.is_object_in_bucket(bucket_name, cid_object)
+                if not has_cid:
+                    continue
+                ok, declared_cid = self.swift_stream_service.get_file_content(bucket_name, cid_object)
+                declared_cid = (declared_cid or '').strip()
+                if not ok or not declared_cid:
+                    continue
+
+                ok, blob = self.swift_stream_service.get_file_content_bytes(bucket_name, name)
+                if not ok or blob is None:
+                    self.logger.warning(f'Could not read {name} for pinning')
+                    continue
+
+                # Confirm the enclave's CID actually describes this blob. A
+                # mismatch means the blob and the committed pointer disagree --
+                # pinning it would serve content that does not match the chain.
+                computed = self.__cidv1_raw(blob)
+                if computed != declared_cid:
+                    self.logger.warning(
+                        f'ESR state {name}: CID mismatch (enclave published {declared_cid}, '
+                        f'content hashes to {computed}); not pinning'
+                    )
+                    continue
+
+                # Queue the add/pin in the background and move on: a large state
+                # blob must not hold up order processing, and a temporarily
+                # unhealthy IPFS should retry rather than drop the state. The CID
+                # is already known (the enclave computed it, we verified it), so
+                # there is nothing to wait for.
+                self.storage.pin_bytes_deferred(blob, name=name)
+                self.ipfs_cache.add(declared_cid)
+                served[name] = declared_cid
+                self.logger.info(f'ESR state {name} -> {declared_cid} (pinning in background)')
+        except Exception as e:
+            self.logger.warning(f'Serving ESR state pins failed: {e}')
+        return served
 
     def build_result_format_v1(self, result_hash, transaction_hex):
         return f'v1:{transaction_hex}:{result_hash}'
@@ -862,6 +1186,12 @@ class EtnyPoXNode:
                 time.sleep(5)
         
     def upload_result_to_ipfs(self, result_file):
+        """Blocking upload; kept for callers outside the v3 result path.
+
+        The v3 path now uses Storage.pin_bytes_deferred instead: this blocks for
+        up to 10 attempts with an IPFS restart between failures, and raises if
+        they all fail, which could stall or lose an on-chain result submission.
+        """
         response = self.storage.upload(result_file)
         return response
 
@@ -1149,6 +1479,12 @@ class EtnyPoXNode:
 
             try:
                 self.__call_heart_beat()
+
+                # Reclaim expired pins. Throttled internally to at most once per
+                # IPFS_CLEANUP_INTERVAL_MINUTES, so this is a cheap timestamp
+                # check on most passes. Previously cleanup only ran at startup,
+                # so a long-lived node never reclaimed anything.
+                self.__maybe_clear_ipfs_cache()
 
                 self.storage.connect(1)
 

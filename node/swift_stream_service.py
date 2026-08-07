@@ -238,9 +238,12 @@ class SwiftStreamService:
         try:
             self.client.stat_object(bucket_name, object_name)
             return True, f"{object_name} exists in {bucket_name}."
-            return False, f"{object_name} does not exist in {bucket_name}."
         except S3Error as err:
-            if err.code == "NoSuchKey":
+            # "Absent" is a normal answer, not a fault: NoSuchKey is the object
+            # missing, NoSuchBucket the bucket. Neither means the service is
+            # unhealthy, so neither should trigger a MinIO restart -- that used
+            # to happen for a missing bucket and cost a restart per call.
+            if err.code in ("NoSuchKey", "NoSuchBucket"):
                 return False, f"{object_name} does not exist in {bucket_name}."
 
             if self.restart_etny_swift_stream_and_reconnect():
@@ -248,6 +251,25 @@ class SwiftStreamService:
             else:
                 return False, err
 
+
+    def list_object_names(self, bucket_name: str) -> list:
+        """Object names in a bucket, or [] on failure.
+
+        _list_objects below only PRINTS and returns None, so it cannot be used
+        programmatically. This is the callable variant (used to find the ESR
+        state blobs an enclave has dropped for the node to pin).
+        """
+        try:
+            return [obj.object_name for obj in self.client.list_objects(bucket_name)]
+        except S3Error as err:
+            if self.restart_etny_swift_stream_and_reconnect():
+                try:
+                    return [obj.object_name for obj in self.client.list_objects(bucket_name)]
+                except S3Error:
+                    return []
+            return []
+        except Exception:
+            return []
 
     def _list_buckets(self) -> None:
         try:
@@ -261,15 +283,13 @@ class SwiftStreamService:
                 print(f"_list_buckets failed: {err}")
 
     def _list_objects(self, bucket_name: str) -> None:
-        try:
-            objects = self.client.list_objects(bucket_name)
-            for obj in objects:
-                print("-> ", obj.object_name, obj.owner_name)
-        except S3Error as err:
-            if self.restart_etny_swift_stream_and_reconnect():
-                return self._list_objects(bucket_name)
-            else:
-                print(f"_list_objects failed: {err}")
+        """Debug helper: PRINTS the objects in a bucket and returns nothing.
+
+        Use list_object_names() to actually get the names -- this one is for
+        eyeballing state during development only.
+        """
+        for name in self.list_object_names(bucket_name):
+            print("-> ", name)
 
     def _is_bucket(self, bucket_name: str) -> bool:
         try:
