@@ -249,6 +249,25 @@ class SwiftStreamService:
                 return False, err
 
 
+    def list_object_names(self, bucket_name: str) -> list:
+        """Object names in a bucket, or [] on failure.
+
+        _list_objects below only PRINTS and returns None, so it cannot be used
+        programmatically. This is the callable variant (used to find the ESR
+        state blobs an enclave has dropped for the node to pin).
+        """
+        try:
+            return [obj.object_name for obj in self.client.list_objects(bucket_name)]
+        except S3Error as err:
+            if self.restart_etny_swift_stream_and_reconnect():
+                try:
+                    return [obj.object_name for obj in self.client.list_objects(bucket_name)]
+                except S3Error:
+                    return []
+            return []
+        except Exception:
+            return []
+
     def _list_buckets(self) -> None:
         try:
             buckets = self.client.list_buckets()

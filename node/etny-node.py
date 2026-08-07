@@ -1008,14 +1008,80 @@ class EtnyPoXNode:
         logger = self.logger
         deadline = time.time() + timeout
         logger.info(f'Checking if object {object_name} exists in bucket {bucket_name} for {timeout} seconds')
+        last_state_poll = 0
         while time.time() < deadline:
             exists, msg = self.swift_stream_service.is_object_in_bucket(bucket_name, object_name)
             if exists:
                 logger.info('Enclave execution finished!')
                 return True
+            # While waiting on the enclave, serve any ESR state it has dropped
+            # for pinning. The enclave blocks on the CID coming back, so this
+            # has to run DURING the wait, not after it. Polled every few seconds
+            # rather than every pass to keep the bucket listing cheap.
+            if self.__esr is not None and (time.time() - last_state_poll) >= 5:
+                last_state_poll = time.time()
+                self.serve_esr_state_pins(bucket_name, deadline)
             time.sleep(1)
         logger.info('Enclave execution timed out')
         return False
+
+    def serve_esr_state_pins(self, bucket_name, deadline_ts):
+        """Pin ESR state blobs the enclave drops in the bucket, and return CIDs.
+
+        The enclave cannot reach IPFS: the Kubo API binds 127.0.0.1 on the host,
+        so no container can talk to it (unlike MinIO, which is a container on the
+        ethernity network). Rather than exposing the admin API or adding a proxy,
+        the enclave writes the encrypted blob to the bucket it ALREADY uses and
+        the node pins it -- the same shape as the existing result.txt flow.
+
+        Protocol, per key:
+            enclave writes  state.<key>.enc   (encrypted state blob)
+            node pins it and writes  state.<key>.cid   (the IPFS CID)
+            enclave reads the CID and commits it on-chain
+
+        Polled alongside the task wait, until `deadline_ts`. Never raises: a
+        state pin failing must not fail the task itself.
+        """
+        served = {}
+        if not bucket_name:
+            return served
+        try:
+            objects = self.swift_stream_service.list_object_names(bucket_name) or []
+        except Exception:
+            objects = []
+        try:
+            for name in list(objects):
+                if not name or not name.startswith('state.') or not name.endswith('.enc'):
+                    continue
+                key = name[len('state.'):-len('.enc')]
+                cid_object = f'state.{key}.cid'
+                if name in served:
+                    continue
+                # Already answered for this blob: nothing to do.
+                exists, _ = self.swift_stream_service.is_object_in_bucket(bucket_name, cid_object)
+                if exists:
+                    continue
+                if time.time() > deadline_ts:
+                    self.logger.warning('Deadline reached while serving ESR state pins')
+                    break
+
+                local_path = f'{self.order_folder}/{name}'
+                ok, msg = self.swift_stream_service.download_file(bucket_name, name, local_path)
+                if not ok:
+                    self.logger.warning(f'Could not download {name} for pinning: {msg}')
+                    continue
+                cid = self.storage.upload(local_path)
+                if not cid:
+                    self.logger.warning(f'IPFS upload returned no CID for {name}')
+                    continue
+                self.storage.pin_add(cid)
+                self.ipfs_cache.add(cid)
+                self.swift_stream_service.put_file_content(bucket_name, cid_object, '', cid)
+                served[name] = cid
+                self.logger.info(f'Pinned ESR state {name} -> {cid}')
+        except Exception as e:
+            self.logger.warning(f'Serving ESR state pins failed: {e}')
+        return served
 
     def build_result_format_v1(self, result_hash, transaction_hex):
         return f'v1:{transaction_hex}:{result_hash}'
