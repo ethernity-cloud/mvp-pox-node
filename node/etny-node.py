@@ -958,8 +958,17 @@ class EtnyPoXNode:
                 with open(f'{self.order_folder}/result.txt', 'w') as f:
                     f.write(result_data)
                 logger.debug(f'[v3] Result file successfully downloaded to {self.order_folder}/result.txt')
-                result_hash = self.upload_result_to_ipfs(f'{self.order_folder}/result.txt')
-                logger.debug(f'[v3] Result file successfully uploaded to IPFS with hash: {result_hash}')
+                # Compute the CID locally and submit on-chain immediately; the
+                # actual IPFS add/pin runs in the background and retries on its
+                # own. Previously this blocked on upload() -- 10 attempts with an
+                # IPFS restart between failures -- so a slow or unhealthy daemon
+                # could stall the submission, and after 10 failures it RAISED,
+                # losing the on-chain result for work the enclave had already
+                # completed. The stall grew with the size of the result.
+                result_hash = self.storage.pin_bytes_deferred(
+                    result_data.encode('utf-8') if isinstance(result_data, str) else result_data,
+                    name=f'result-{order_id}.txt')
+                logger.debug(f'[v3] Result CID {result_hash}; pinning in background')
                 logger.debug(f'Result file successfully uploaded to {enclave_image_name}-{v3} bucket')
                 logger.debug('Reading transaction from file')
                 status, transaction_data = self.swift_stream_service.get_file_content(bucket_name, "transaction.txt")
@@ -1115,20 +1124,15 @@ class EtnyPoXNode:
                     )
                     continue
 
-                # CIDv1 + raw-leaves so the daemon computes the SAME CID the
-                # enclave did; the default (CIDv0 dag-pb) would not match.
-                uploaded = self.storage.add_bytes_raw(blob, name=name)
-                if uploaded != declared_cid:
-                    self.logger.warning(
-                        f'ESR state {name}: IPFS stored {uploaded}, enclave published '
-                        f'{declared_cid}; not pinning'
-                    )
-                    continue
-
-                self.storage.pin_add(declared_cid)
+                # Queue the add/pin in the background and move on: a large state
+                # blob must not hold up order processing, and a temporarily
+                # unhealthy IPFS should retry rather than drop the state. The CID
+                # is already known (the enclave computed it, we verified it), so
+                # there is nothing to wait for.
+                self.storage.pin_bytes_deferred(blob, name=name)
                 self.ipfs_cache.add(declared_cid)
                 served[name] = declared_cid
-                self.logger.info(f'Pinned ESR state {name} -> {declared_cid}')
+                self.logger.info(f'ESR state {name} -> {declared_cid} (pinning in background)')
         except Exception as e:
             self.logger.warning(f'Serving ESR state pins failed: {e}')
         return served
@@ -1172,6 +1176,12 @@ class EtnyPoXNode:
                 time.sleep(5)
         
     def upload_result_to_ipfs(self, result_file):
+        """Blocking upload; kept for callers outside the v3 result path.
+
+        The v3 path now uses Storage.pin_bytes_deferred instead: this blocks for
+        up to 10 attempts with an IPFS restart between failures, and raises if
+        they all fail, which could stall or lose an on-chain result submission.
+        """
         response = self.storage.upload(result_file)
         return response
 
