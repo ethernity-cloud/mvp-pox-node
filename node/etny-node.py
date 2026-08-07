@@ -227,6 +227,10 @@ class EtnyPoXNode:
            self.__run_integration_test()
 
 
+        # Tracks when the pin cleanup last ran, so __maybe_clear_ipfs_cache can
+        # throttle the periodic sweep. Set before the first run so the attribute
+        # always exists.
+        self.__last_ipfs_cleanup_at = 0
         self.__clear_ipfs_cache()
         reset_task_running_on()
 
@@ -270,52 +274,101 @@ class EtnyPoXNode:
                 logger.error(f"Failed to copy '{src}' to '{dest}': {e}")
        
 
+    def __maybe_clear_ipfs_cache(self):
+        """Run the pin cleanup at most once per configured interval.
+
+        Cleanup used to happen only in __init__, so a node that stayed up for
+        weeks never reclaimed anything until it was restarted. This is called
+        from the order-processing loop (alongside the heartbeat) and throttled by
+        IPFS_CLEANUP_INTERVAL_MINUTES so it costs one timestamp comparison per
+        order rather than a full sweep.
+
+        Never raises: reclaiming disk must not be able to interrupt order
+        processing.
+        """
+        try:
+            interval = float(getattr(config, 'ipfs_cleanup_interval_minutes_default', 60)) * 60
+            if interval <= 0:
+                return
+            last = getattr(self, '_EtnyPoXNode__last_ipfs_cleanup_at', 0) or 0
+            if (time.time() - last) < interval:
+                return
+            self.__clear_ipfs_cache()
+        except Exception as e:
+            self.logger.warning(f"Periodic IPFS cleanup skipped: {e}")
+            self.__last_ipfs_cleanup_at = time.time()
+
     def __clear_ipfs_cache(self):
         logger = self.logger
 
         logger.info(f"Cleaning up ipfs cache")
 
-        ONE_WEEK_SECONDS = 7 * 24 * 60 * 60  # Number of seconds in one week
+        # Retention is configurable (IPFS_PIN_RETENTION_DAYS, default 7 days).
+        # 0 disables age-based cleanup entirely.
+        retention_seconds = float(getattr(config, 'ipfs_pin_retention_days_default', 7)) * 24 * 60 * 60
+        if retention_seconds <= 0:
+            logger.info("IPFS pin retention is disabled (IPFS_PIN_RETENTION_DAYS=0); skipping cleanup")
+            self.__last_ipfs_cleanup_at = time.time()
+            return
+
         current_time = time.time()
-        threshold_time = current_time - ONE_WEEK_SECONDS
-        
+
         trustedzone_images = self.__network_config.trustedzone_images.split(',')
 
         keep_hashes = []
 
         for image in trustedzone_images:
-            while True:
+            # Bounded retry: this used to loop forever on RPC failure, which was
+            # survivable at startup but would wedge the order-processing loop now
+            # that cleanup also runs periodically. On failure we skip this round
+            # -- better to keep pins one extra cycle than to stall the node.
+            for _attempt in range(5):
                 try:
                     time.sleep(self.__network_config.rpc_delay/1000)
                     [enclave_image_hash, _,
                      docker_compose_hash] = self.__image_registry.caller().getLatestTrustedZoneImageCertPublicKey(image, 'v3')
+                    keep_hashes.append(enclave_image_hash)
+                    keep_hashes.append(docker_compose_hash)
                     break
                 except Exception as e:
                     continue
+            else:
+                logger.warning(
+                    f"Could not resolve the current image hashes for {image}; skipping this cleanup "
+                    f"round so a transient RPC failure cannot unpin an image that is still in use."
+                )
+                self.__last_ipfs_cleanup_at = time.time()
+                return
 
-            keep_hashes.append(enclave_image_hash)
-            keep_hashes.append(docker_compose_hash)
-
+        retention_hours = retention_seconds / 3600
+        removed = 0
         for hash in list(self.ipfs_cache.get_values):
           if hash not in keep_hashes:
             timestamp = self.ipfs_cache.get_timestamp(hash)
             if timestamp:
                 age = current_time - timestamp
-                if age > ONE_WEEK_SECONDS:
+                if age > retention_seconds:
                     logger.debug(f"Deleting {hash} (Age: {age / 3600:.2f} hours)")
                     try:
                         self.storage.pin_rm(hash)
                         self.storage.rm(hash)
+                        removed += 1
                         logger.debug(f"Successfully deleted {hash}")
                     except Exception as e:
                         logger.debug(f"Failed to delete {hash}: {e}")
                 else:
-                    logger.debug(f"Hash {hash} is not older than one week (Age: {age / 3600:.2f} hours). Keeping pin.")
+                    logger.debug(f"Hash {hash} is within the {retention_hours:.0f}h retention (Age: {age / 3600:.2f} hours). Keeping pin.")
             else:
                 logger.warning(f"No timestamp found for {hash}. Unable to determine age. Skipping deletion.")
           else:
+            # A hash we must keep (current trustedzone image): make sure it stays
+            # pinned and refresh its cache entry so it is not aged out.
             self.storage.pin_add(hash)
             self.ipfs_cache.add(hash)
+
+        if removed:
+            logger.info(f"IPFS cleanup removed {removed} expired pin(s) (retention {retention_hours:.0f}h)")
+        self.__last_ipfs_cleanup_at = time.time()
 
     def generate_process_order_data(self, write=False):
 
@@ -1149,6 +1202,12 @@ class EtnyPoXNode:
 
             try:
                 self.__call_heart_beat()
+
+                # Reclaim expired pins. Throttled internally to at most once per
+                # IPFS_CLEANUP_INTERVAL_MINUTES, so this is a cheap timestamp
+                # check on most passes. Previously cleanup only ran at startup,
+                # so a long-lived node never reclaimed anything.
+                self.__maybe_clear_ipfs_cache()
 
                 self.storage.connect(1)
 

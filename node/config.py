@@ -24,6 +24,16 @@ ipfs_swarm_default = os.environ.get('IPFS_SWARM', "/dns4/ipfs.ethernity.cloud/tc
 ipfs_connect_url_default = os.environ.get('IPFS_CONNECT_URL', "/ip4/127.0.0.1/tcp/5001/http")
 ipfs_timeout_default = int(os.environ.get('IPFS_TIMEOUT', 30))
 ipfs_gateway_url_default=os.environ.get('IPFS_REMOTE_URL', 'https://ipfs.io')
+# How long a locally pinned IPFS object is kept before the periodic cleanup
+# unpins and removes it. Objects the node still needs are exempt regardless of
+# age: the trustedzone images, and any CID that is still the CURRENT ESR state
+# for some enclave/key (only superseded state versions expire).
+# 0 disables age-based cleanup entirely.
+ipfs_pin_retention_days_default = float(os.environ.get('IPFS_PIN_RETENTION_DAYS', 7))
+# Minimum minutes between cleanup runs. The cleanup is triggered from the
+# order-processing loop (the same place that calls the heartbeat), so this
+# throttles it to at most once per interval instead of once per order.
+ipfs_cleanup_interval_minutes_default = float(os.environ.get('IPFS_CLEANUP_INTERVAL_MINUTES', 60))
 skip_integration_test = strtobool(os.environ.get('SKIP_INTEGRATION_TEST', "False"))
 kubo_url_default = os.environ.get('KUBO_URL')
 kubo_version_default =  os.environ.get('KUBO_VERSION')
