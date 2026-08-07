@@ -1061,11 +1061,14 @@ class EtnyPoXNode:
         node can refuse to pin, or pin something else, but it cannot change what
         was committed: substitution is impossible rather than merely detectable.
 
+        That also means the enclave never waits on this: it commits as soon as it
+        has written the blob, and pinning is fire-and-forget from its point of
+        view. `deadline_ts` only bounds how long the node itself spends here.
+
         The node still verifies, so it fails loudly instead of pinning a blob
         whose CID does not match what the enclave published.
 
-        Polled alongside the task wait, until `deadline_ts`. Never raises: a
-        state pin failing must not fail the task itself.
+        Never raises: a state pin failing must not fail the task itself.
         """
         served = {}
         if not bucket_name:
