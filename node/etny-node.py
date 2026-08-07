@@ -302,13 +302,14 @@ class EtnyPoXNode:
     def __looks_like_cid(value):
         """True for values that plausibly are IPFS CIDs.
 
-        The ESR stores the pointer as an unvalidated string, so the live
-        registry does contain non-CID entries (a 0x-prefixed digest, for
-        instance). Filtering here keeps them out of pin/add, which would
-        otherwise error on every cleanup pass.
+        The contract accepts any non-empty string as the pointer, so a buggy
+        writer can commit something that is not a CID at all -- the live registry
+        currently has one entry holding a 0x… digest. That is a defect in
+        whatever wrote it, NOT a format to support: such entries are skipped and
+        logged, never pinned. Handing one to pin/add errors on every cleanup
+        pass, and a client would retry-loop on it forever.
 
-        CIDv0 is 46 chars starting "Qm"; CIDv1 is base32 starting "b". Anything
-        0x-prefixed is definitely not a CID.
+        CIDv0 is 46 chars starting "Qm"; CIDv1 is base32 starting "b".
         """
         cid = (value or "").strip()
         if not cid or cid.startswith("0x"):
@@ -353,6 +354,15 @@ class EtnyPoXNode:
                     # to pin/add just produces errors on every cleanup pass.
                     if version and self.__looks_like_cid(cid):
                         cids.add(cid)
+                    elif version and cid:
+                        # A committed pointer that is not a CID means the writer
+                        # is buggy. Say so once per pass rather than skipping in
+                        # silence -- otherwise the defect stays invisible.
+                        self.logger.warning(
+                            f"ESR entry for {enclave}/{key.hex()[:10]}… is not a valid CID "
+                            f"({cid[:24]}…); skipping. The committing enclave is writing a "
+                            f"non-CID pointer."
+                        )
                 except Exception as e:
                     self.logger.debug(f"ESR getState failed for {enclave}/{key.hex()}: {e}")
 
