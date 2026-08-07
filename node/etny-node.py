@@ -1,6 +1,7 @@
 #!/usr/bin/python3
 
 import io, os, time, json, sys, argparse, threading
+import base64, hashlib
 from types import SimpleNamespace
 from collections import defaultdict
 import concurrent.futures
@@ -1025,8 +1026,20 @@ class EtnyPoXNode:
         logger.info('Enclave execution timed out')
         return False
 
+    @staticmethod
+    def __cidv1_raw(content_bytes):
+        """CIDv1/raw/sha2-256 for `content_bytes` -- the same CID `ipfs add
+        --cid-version=1 --raw-leaves` produces.
+
+        Layout: multibase 'b' + base32( 0x01 0x55 0x12 0x20 || sha256(content) )
+                                        CIDv1 raw  sha256  32 bytes
+        """
+        digest = hashlib.sha256(content_bytes).digest()
+        raw = bytes([0x01, 0x55, 0x12, 0x20]) + digest
+        return 'b' + base64.b32encode(raw).decode('ascii').lower().rstrip('=')
+
     def serve_esr_state_pins(self, bucket_name, deadline_ts):
-        """Pin ESR state blobs the enclave drops in the bucket, and return CIDs.
+        """Pin ESR state blobs the enclave drops in the bucket.
 
         The enclave cannot reach IPFS: the Kubo API binds 127.0.0.1 on the host,
         so no container can talk to it (unlike MinIO, which is a container on the
@@ -1036,8 +1049,20 @@ class EtnyPoXNode:
 
         Protocol, per key:
             enclave writes  state.<key>.enc   (encrypted state blob)
-            node pins it and writes  state.<key>.cid   (the IPFS CID)
-            enclave reads the CID and commits it on-chain
+            enclave writes  state.<key>.cid   (the CID IT computed itself)
+            node pins the blob and confirms the CID matches its content
+
+        THE NODE NEVER SUPPLIES THE CID. The node is untrusted: if it returned
+        the CID, a malicious operator could pin the enclave's blob but hand back
+        the CID of different content, and the enclave would sign THAT onto the
+        chain -- clients would then fetch attacker-chosen state believing the
+        enclave authored it. Because a CID is a hash of the content, the enclave
+        derives it from the bytes it just encrypted and commits that. A hostile
+        node can refuse to pin, or pin something else, but it cannot change what
+        was committed: substitution is impossible rather than merely detectable.
+
+        The node still verifies, so it fails loudly instead of pinning a blob
+        whose CID does not match what the enclave published.
 
         Polled alongside the task wait, until `deadline_ts`. Never raises: a
         state pin failing must not fail the task itself.
@@ -1057,28 +1082,50 @@ class EtnyPoXNode:
                 cid_object = f'state.{key}.cid'
                 if name in served:
                     continue
-                # Already answered for this blob: nothing to do.
-                exists, _ = self.swift_stream_service.is_object_in_bucket(bucket_name, cid_object)
-                if exists:
-                    continue
                 if time.time() > deadline_ts:
                     self.logger.warning('Deadline reached while serving ESR state pins')
                     break
 
-                local_path = f'{self.order_folder}/{name}'
-                ok, msg = self.swift_stream_service.download_file(bucket_name, name, local_path)
-                if not ok:
-                    self.logger.warning(f'Could not download {name} for pinning: {msg}')
+                # The enclave publishes the CID it computed. Without it there is
+                # nothing to verify against, so wait for it rather than invent one.
+                has_cid, _ = self.swift_stream_service.is_object_in_bucket(bucket_name, cid_object)
+                if not has_cid:
                     continue
-                cid = self.storage.upload(local_path)
-                if not cid:
-                    self.logger.warning(f'IPFS upload returned no CID for {name}')
+                ok, declared_cid = self.swift_stream_service.get_file_content(bucket_name, cid_object)
+                declared_cid = (declared_cid or '').strip()
+                if not ok or not declared_cid:
                     continue
-                self.storage.pin_add(cid)
-                self.ipfs_cache.add(cid)
-                self.swift_stream_service.put_file_content(bucket_name, cid_object, '', cid)
-                served[name] = cid
-                self.logger.info(f'Pinned ESR state {name} -> {cid}')
+
+                ok, blob = self.swift_stream_service.get_file_content_bytes(bucket_name, name)
+                if not ok or blob is None:
+                    self.logger.warning(f'Could not read {name} for pinning')
+                    continue
+
+                # Confirm the enclave's CID actually describes this blob. A
+                # mismatch means the blob and the committed pointer disagree --
+                # pinning it would serve content that does not match the chain.
+                computed = self.__cidv1_raw(blob)
+                if computed != declared_cid:
+                    self.logger.warning(
+                        f'ESR state {name}: CID mismatch (enclave published {declared_cid}, '
+                        f'content hashes to {computed}); not pinning'
+                    )
+                    continue
+
+                # CIDv1 + raw-leaves so the daemon computes the SAME CID the
+                # enclave did; the default (CIDv0 dag-pb) would not match.
+                uploaded = self.storage.add_bytes_raw(blob, name=name)
+                if uploaded != declared_cid:
+                    self.logger.warning(
+                        f'ESR state {name}: IPFS stored {uploaded}, enclave published '
+                        f'{declared_cid}; not pinning'
+                    )
+                    continue
+
+                self.storage.pin_add(declared_cid)
+                self.ipfs_cache.add(declared_cid)
+                served[name] = declared_cid
+                self.logger.info(f'Pinned ESR state {name} -> {declared_cid}')
         except Exception as e:
             self.logger.warning(f'Serving ESR state pins failed: {e}')
         return served

@@ -675,6 +675,32 @@ class Storage:
             time.sleep(1)
         raise Exception(f"Unable to determine if {path} is file or folder after 10 attempts")
 
+    def add_bytes_raw(self, content_bytes, name='blob'):
+        """Add bytes as CIDv1 with raw leaves, returning the CID.
+
+        The default `add` produces a CIDv0 dag-pb node (content wrapped in UnixFS
+        framing), whose CID an enclave cannot derive without reimplementing that
+        framing. With cid-version=1 + raw-leaves the CID is simply
+        base32(0x01 0x55 0x12 0x20 || sha256(content)) -- so the enclave can
+        compute it from the bytes it authored and commit THAT to the chain,
+        meaning a hostile node cannot substitute different content for what was
+        committed.
+
+        Returns the CID, or None on failure.
+        """
+        if not self.connected:
+            raise Exception("Not connected")
+        files = {'file': (name, content_bytes)}
+        params = {'cid-version': '1', 'raw-leaves': 'true', 'pin': 'true'}
+        resp = self._api_call('add', params=params, files=files)
+        try:
+            if isinstance(resp, str):
+                resp = json.loads(resp.strip().split('\n')[-1])
+            return resp.get('Hash')
+        except Exception as e:
+            self.logger.warning(f"Could not parse add response for {name}: {e}")
+            return None
+
     def add_path(self, path):
         if not self.connected:
             raise Exception("Not connected")
