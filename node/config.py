@@ -87,6 +87,28 @@ image_registry_abi_filepath = base_path / 'image_registry.abi'
 heart_beat_abi_filepath = base_path / 'heart_beat.abi'
 uuid_filepath = Path(expanduser("~")) / "opt/etny/node/UUID"
 
+# --- Enclave State Registry (ESR) ------------------------------------------
+# Enclaves publish an IPFS CID of their encrypted state to this registry. Nodes
+# replicate that state by pinning the CIDs locally, so a dApp's state survives
+# any single node going away.
+esr_abi_filepath = base_path / 'esr.abi'
+# Canonical deployments, keyed by network name as it appears in networks.ini.
+# "" (or an absent entry) means ESR is not deployed on that network and state
+# replication is simply skipped there.
+#
+# Bloxberg mainnet and testnet are the SAME CHAIN (both chainId 8995), separated
+# by different protocol contracts, so both use the one deployment.
+esr_contract_addresses = {
+    "BLOXBERG_MAINNET": os.environ.get('ESR_CONTRACT_ADDRESS', "0x4f6c0Ae54567CAeD372d265fEF412C2B5ed1302A"),
+    "BLOXBERG_TESTNET": os.environ.get('ESR_CONTRACT_ADDRESS', "0x4f6c0Ae54567CAeD372d265fEF412C2B5ed1302A"),
+}
+# How far back to scan for StateCommitted events on the first pass, in blocks.
+# After that the node continues from the last block it processed.
+esr_scan_lookback_blocks = int(os.environ.get('ESR_SCAN_LOOKBACK_BLOCKS', 50_000))
+# Keep pinning replicated state only while at least this much free disk (in GB)
+# remains, so replication can never fill the disk the node needs to run tasks.
+esr_min_free_storage_gb = float(os.environ.get('ESR_MIN_FREE_STORAGE_GB', 10))
+
 # logger
 logger = logging.getLogger("ETNY NODE")
 handler = logging.handlers.RotatingFileHandler('/var/log/etny-node.log', maxBytes=2048000, backupCount=5)

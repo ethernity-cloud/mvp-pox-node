@@ -137,6 +137,29 @@ class EtnyPoXNode:
         self.__heart_beat = self.__w3.eth.contract(
             address=self.__w3.to_checksum_address(self.__network_config.heartbeat_contract_address),
             abi=self.__heart_beat_abi)
+
+        # Enclave State Registry (optional): only wired when this network has a
+        # deployment. Absent => state replication is skipped entirely, so a
+        # network without an ESR behaves exactly as before.
+        self.__esr = None
+        self.__esr_last_block = 0
+        try:
+            esr_address = (config.esr_contract_addresses.get(self.__network_config.name) or "").strip()
+            if esr_address:
+                with open(config.esr_abi_filepath) as f:
+                    esr_abi = f.read()
+                self.__esr = self.__w3.eth.contract(
+                    address=self.__w3.to_checksum_address(esr_address),
+                    abi=esr_abi)
+                logger.info(f"Enclave State Registry: {esr_address}")
+            else:
+                logger.info(f"No Enclave State Registry deployed on {self.__network_config.name}; state replication disabled")
+        except Exception as e:
+            # Never let ESR wiring stop the node from starting -- it is an
+            # add-on to replication, not part of task execution.
+            self.__esr = None
+            logger.warning(f"Could not initialise the Enclave State Registry: {e}")
+
         self.__nonce = self.__w3.eth.get_transaction_count(self.__address)
         self.__dprequest = 0
         self.__order_id = 0
@@ -274,6 +297,115 @@ class EtnyPoXNode:
                 logger.error(f"Failed to copy '{src}' to '{dest}': {e}")
        
 
+    @staticmethod
+    def __looks_like_cid(value):
+        """True for values that plausibly are IPFS CIDs.
+
+        The ESR stores the pointer as an unvalidated string, so the live
+        registry does contain non-CID entries (a 0x-prefixed digest, for
+        instance). Filtering here keeps them out of pin/add, which would
+        otherwise error on every cleanup pass.
+
+        CIDv0 is 46 chars starting "Qm"; CIDv1 is base32 starting "b". Anything
+        0x-prefixed is definitely not a CID.
+        """
+        cid = (value or "").strip()
+        if not cid or cid.startswith("0x"):
+            return False
+        if cid.startswith("Qm") and len(cid) == 46:
+            return True
+        if cid.startswith("b") and len(cid) >= 46 and cid.islower():
+            return True
+        return False
+
+    def __esr_current_state_cids(self):
+        """CIDs that are the CURRENT state for some enclave/key in the registry.
+
+        Scans StateCommitted events, then confirms each (enclave, key) against
+        the contract's live getState. Confirming matters: the newest event we
+        happened to see is not necessarily the newest commit, and pinning
+        decisions must follow the chain, not our scan window.
+
+        Returns a set of CIDs, empty when ESR is unavailable for any reason --
+        an empty set means "protect nothing extra", never "unpin everything".
+        """
+        cids = set()
+        if self.__esr is None:
+            return cids
+        try:
+            latest_block = self.__w3.eth.block_number
+            from_block = self.__esr_last_block or max(0, latest_block - config.esr_scan_lookback_blocks)
+            logs = self.__esr.events.StateCommitted().get_logs(
+                fromBlock=from_block, toBlock=latest_block)
+
+            # Deduplicate to the (enclave, key) pairs seen; the current CID for
+            # each comes from the contract below.
+            pairs = {(l['args']['enclave'], l['args']['key']) for l in logs}
+            for enclave, key in pairs:
+                try:
+                    time.sleep(self.__network_config.rpc_delay / 1000)
+                    cid, version, _updated_at = self.__esr.caller().getState(enclave, key)
+                    # The contract stores the CID as a free-form string and does
+                    # not validate it, so entries that are not CIDs do occur on
+                    # the live registry (e.g. a 0x… hex digest). Only pin things
+                    # that actually look like an IPFS CID; handing anything else
+                    # to pin/add just produces errors on every cleanup pass.
+                    if version and self.__looks_like_cid(cid):
+                        cids.add(cid)
+                except Exception as e:
+                    self.logger.debug(f"ESR getState failed for {enclave}/{key.hex()}: {e}")
+
+            self.__esr_last_block = latest_block
+        except Exception as e:
+            self.logger.warning(f"ESR state scan failed: {e}")
+            return set()
+        return cids
+
+    def __replicate_esr_state(self):
+        """Pin the current ESR state of every enclave, while disk allows.
+
+        Any node holding a state CID keeps that dApp's state available, so a
+        dApp does not depend on the single node that produced it. Bounded by
+        free disk (ESR_MIN_FREE_STORAGE_GB) so replication can never crowd out
+        the storage the node needs to run tasks -- the node stops pinning new
+        state rather than filling up.
+
+        Never raises: replication is best-effort and must not disturb order
+        processing.
+        """
+        if self.__esr is None:
+            return set()
+        try:
+            current = self.__esr_current_state_cids()
+            if not current:
+                return current
+
+            pinned = 0
+            for cid in current:
+                free_gb = HardwareInfoProvider.get_free_storage()
+                if free_gb < config.esr_min_free_storage_gb:
+                    self.logger.warning(
+                        f"Free storage {free_gb}GB is below ESR_MIN_FREE_STORAGE_GB "
+                        f"({config.esr_min_free_storage_gb}GB); stopping state replication for this round"
+                    )
+                    break
+                try:
+                    if not self.storage.is_pinned(cid):
+                        self.storage.pin_add(cid)
+                        pinned += 1
+                    # Refresh the cache timestamp either way, so a CID that is
+                    # still current is never aged out by the retention sweep.
+                    self.ipfs_cache.add(cid)
+                except Exception as e:
+                    self.logger.debug(f"Could not pin ESR state {cid}: {e}")
+
+            if pinned:
+                self.logger.info(f"Replicated {pinned} ESR state object(s)")
+            return current
+        except Exception as e:
+            self.logger.warning(f"ESR state replication skipped: {e}")
+            return set()
+
     def __maybe_clear_ipfs_cache(self):
         """Run the pin cleanup at most once per configured interval.
 
@@ -339,6 +471,15 @@ class EtnyPoXNode:
                 )
                 self.__last_ipfs_cleanup_at = time.time()
                 return
+
+        # Replicate current ESR state and protect it from expiry. Only the CIDs
+        # that are STILL the current version for some enclave/key are kept --
+        # superseded versions age out like anything else, so a dApp never loses
+        # live state while stale revisions are still reclaimed.
+        try:
+            keep_hashes.extend(self.__replicate_esr_state())
+        except Exception as e:
+            logger.warning(f"ESR replication skipped during cleanup: {e}")
 
         retention_hours = retention_seconds / 3600
         removed = 0
