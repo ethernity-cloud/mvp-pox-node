@@ -99,12 +99,23 @@ esr_abi_filepath = base_path / 'esr.abi'
 # Bloxberg mainnet and testnet are the SAME CHAIN (both chainId 8995), separated
 # by different protocol contracts, so both use the one deployment.
 esr_contract_addresses = {
-    "BLOXBERG_MAINNET": os.environ.get('ESR_CONTRACT_ADDRESS', "0x4f6c0Ae54567CAeD372d265fEF412C2B5ed1302A"),
-    "BLOXBERG_TESTNET": os.environ.get('ESR_CONTRACT_ADDRESS', "0x4f6c0Ae54567CAeD372d265fEF412C2B5ed1302A"),
+    # Extended registry (adds commitFor: node-relayed, signature-verified state
+    # commits). Replaces the original 0x4f6c... which had no relay path.
+    "BLOXBERG_MAINNET": os.environ.get('ESR_CONTRACT_ADDRESS', "0xF76469A5659670B6ade366dE635e6463aaB8f3D8"),
+    "BLOXBERG_TESTNET": os.environ.get('ESR_CONTRACT_ADDRESS', "0xF76469A5659670B6ade366dE635e6463aaB8f3D8"),
     # LitVM LiteForge (chainId 4441), deployed via pox-smart-contract
     # feature/litvm; selectors verified on-chain after deploy.
-    "LITVM_LITEFORGE": os.environ.get('ESR_CONTRACT_ADDRESS', "0xb0D2C139514C1B4e511c0eB83F22a842979B3ECa"),
+    "LITVM_LITEFORGE": os.environ.get('ESR_CONTRACT_ADDRESS', "0xEF434486C0dbA37A9EaC8Ffe9A91190788D42054"),
 }
+# ESR relay: the enclave signs each state commit (commitFor) and the NODE
+# submits it and pays gas, so no enclave wallet needs funding. To stop a
+# malicious payload from draining the operator, the node caps the CUMULATIVE
+# gas it will spend relaying commits for ONE order, in wei of the native gas
+# token. A commit that would push the order total over this is refused and the
+# refusal is surfaced to the trustedzone as evidence (which terminates the
+# order). 0.1 POL default; on ~free chains (bloxberg, testnets) this is never
+# reached in practice.
+esr_relay_gas_budget_wei = int(os.environ.get('ESR_RELAY_GAS_BUDGET_WEI', 10**17))  # 0.1 * 1e18
 # How far back to scan for StateCommitted events on the first pass, in blocks.
 # After that the node continues from the last block it processed.
 esr_scan_lookback_blocks = int(os.environ.get('ESR_SCAN_LOOKBACK_BLOCKS', 50_000))

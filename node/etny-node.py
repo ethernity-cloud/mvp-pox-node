@@ -959,6 +959,12 @@ class EtnyPoXNode:
 
             logger.info('Enclave finished the execution')
 
+            # Relay any ESR state commits the enclave signed for this order. The
+            # enclave never pays gas: it stages signed commitFor authorizations
+            # (esr.commit.<nonce>.json) and the node submits + pays them, capped
+            # per order so a malicious payload cannot drain the operator.
+            self.__relay_esr_commits(bucket_name, order_id)
+
             if status_enclave == True:
                 logger.debug(f'Uploading result to {enclave_image_name}-{v3} bucket')
                 status, result_data = self.swift_stream_service.get_file_content(bucket_name, "result.txt")
@@ -1831,6 +1837,110 @@ class EtnyPoXNode:
 
         return transaction_options
 
+
+    def __esr_fee(self):
+        """(effective_price_per_gas, tx_fee_fields) for a relayed commit.
+
+        Uses the network's own eip1559 flag (the same one the node uses for its
+        result tx) so Bloxberg gets a legacy gasPrice and LitVM/mainnets get
+        type-2 fields. The effective price is what the budget is measured in, so
+        it matches the trustedzone's independent valuation.
+        """
+        if getattr(self.__network_config, 'eip1559', False):
+            base = self.__w3.eth.get_block('latest')['baseFeePerGas']
+            prio = self.__w3.to_wei(
+                self.__network_config.max_priority_fee_per_gas,
+                self.__network_config.gas_price_measure)
+            max_fee = int(base * 1.1) + prio
+            return max_fee, {'type': 2, 'maxFeePerGas': max_fee, 'maxPriorityFeePerGas': prio}
+        gp = self.__w3.to_wei(self.__network_config.gas_price,
+                              self.__network_config.gas_price_measure)
+        return gp, {'gasPrice': gp}
+
+    def __relay_esr_commits(self, bucket_name, order_id):
+        """Relay the ESR state commits the enclave signed for this order.
+
+        The enclave signs each commit (commitFor) and stages it as
+        esr.commit.<nonce>.json; the NODE submits it and PAYS. To stop a
+        malicious payload from draining the operator, the node keeps a running
+        per-order gas total and REFUSES to relay a commit that would push it over
+        config.esr_relay_gas_budget_wei. A refusal is not fatal here -- the
+        trustedzone independently re-prices the whole ledger and terminates the
+        order, so the node just protects its wallet and moves on.
+        """
+        if self.__esr is None:
+            return  # ESR not deployed on this network
+        try:
+            names = self.swift_stream_service.list_object_names(bucket_name) or []
+        except Exception as e:
+            logger.debug(f"[esr-relay] could not list bucket {bucket_name}: {e}")
+            return
+        commit_files = sorted(
+            (n for n in names if n.startswith('esr.commit.') and n.endswith('.json')),
+            key=lambda n: int(n.split('.')[2]))  # relay in nonce order
+        if not commit_files:
+            return
+
+        budget = int(config.esr_relay_gas_budget_wei)
+        gas_price, fee_fields = self.__esr_fee()
+        spent = 0
+        relayed = 0
+        for name in commit_files:
+            ok, raw = self.swift_stream_service.get_file_content(bucket_name, name)
+            if not ok or not raw:
+                continue
+            try:
+                a = json.loads(raw)
+                enclave = self.__w3.to_checksum_address(a['enclave'])
+                key_hash = bytes.fromhex(a['keyHash'][2:])
+                cid = a['cid']
+                ev = int(a['expectedVersion'])
+                rn = int(a['relayNonce'])
+                sig = bytes.fromhex(a['signature'][2:])
+            except Exception as e:
+                logger.error(f"[esr-relay] {name} malformed ({e}) -- skipping")
+                continue
+
+            fn = self.__esr.functions.commitFor(enclave, key_hash, cid, ev, rn, sig)
+            try:
+                gas_units = fn.estimate_gas({'from': self.__address})
+            except Exception as e:
+                logger.error(f"[esr-relay] {name} estimate_gas failed ({e}) -- skipping")
+                continue
+            cost = gas_units * gas_price
+            if spent + cost > budget:
+                logger.error(
+                    f"[esr-relay] order {order_id}: commit nonce {rn} would exceed the "
+                    f"per-order gas budget ({spent + cost} > {budget} wei); refusing to pay. "
+                    f"The trustedzone will terminate the order (ESR_GAS_LIMIT_EXCEEDED).")
+                break  # stop; nonces are ordered, later ones can't be relayed anyway
+
+            try:
+                opts = {
+                    'from': self.__address,
+                    'nonce': self.__w3.eth.get_transaction_count(self.__address),
+                    'chainId': self.__network_config.chain_id,
+                    'gas': gas_units + 30000,
+                }
+                opts.update(fee_fields)
+                txn = fn.build_transaction(opts)
+                self.__w3.eth.wait_for_transaction_receipt(
+                    self.__w3.eth.send_raw_transaction(
+                        self.__w3.eth.account.sign_transaction(
+                            txn, private_key=self.__acct.key).raw_transaction),
+                    timeout=180)
+                spent += cost
+                relayed += 1
+                logger.info(f"[esr-relay] order {order_id}: relayed ESR commit nonce {rn} "
+                            f"(gas {gas_units}, spent {spent}/{budget} wei)")
+            except Exception as e:
+                logger.error(f"[esr-relay] order {order_id}: relaying nonce {rn} failed ({e})")
+                # A genuine failure (e.g. VersionMismatch) is not abuse; stop
+                # relaying this order's commits to avoid nonce gaps.
+                break
+        if relayed:
+            logger.info(f"[esr-relay] order {order_id}: relayed {relayed} ESR commit(s), "
+                        f"paid for {spent} wei of gas")
 
     def send_transaction(self, unicorn_txn):
         try:

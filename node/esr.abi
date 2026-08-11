@@ -1,14 +1,8 @@
 [
   {
-    "anonymous": false,
-    "inputs": [
-      { "indexed": true,  "internalType": "address", "name": "enclave", "type": "address" },
-      { "indexed": true,  "internalType": "bytes32", "name": "key",     "type": "bytes32" },
-      { "indexed": false, "internalType": "string",  "name": "cid",     "type": "string"  },
-      { "indexed": false, "internalType": "uint256", "name": "version", "type": "uint256" }
-    ],
-    "name": "StateCommitted",
-    "type": "event"
+    "inputs": [],
+    "name": "BadSignature",
+    "type": "error"
   },
   {
     "inputs": [],
@@ -17,17 +11,84 @@
   },
   {
     "inputs": [
-      { "internalType": "uint256", "name": "expected", "type": "uint256" },
-      { "internalType": "uint256", "name": "actual",   "type": "uint256" }
+      {
+        "internalType": "uint256",
+        "name": "expected",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "actual",
+        "type": "uint256"
+      }
+    ],
+    "name": "RelayNonceMismatch",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "expected",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "actual",
+        "type": "uint256"
+      }
     ],
     "name": "VersionMismatch",
     "type": "error"
   },
   {
+    "anonymous": false,
     "inputs": [
-      { "internalType": "bytes32", "name": "key",             "type": "bytes32" },
-      { "internalType": "string",  "name": "newCID",          "type": "string"  },
-      { "internalType": "uint256", "name": "expectedVersion", "type": "uint256" }
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "enclave",
+        "type": "address"
+      },
+      {
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "key",
+        "type": "bytes32"
+      },
+      {
+        "indexed": false,
+        "internalType": "string",
+        "name": "cid",
+        "type": "string"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "version",
+        "type": "uint256"
+      }
+    ],
+    "name": "StateCommitted",
+    "type": "event"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "key",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "string",
+        "name": "newCID",
+        "type": "string"
+      },
+      {
+        "internalType": "uint256",
+        "name": "expectedVersion",
+        "type": "uint256"
+      }
     ],
     "name": "commit",
     "outputs": [],
@@ -36,35 +97,179 @@
   },
   {
     "inputs": [
-      { "internalType": "address", "name": "enclave", "type": "address" },
-      { "internalType": "bytes32", "name": "key",     "type": "bytes32" }
+      {
+        "internalType": "address",
+        "name": "enclave",
+        "type": "address"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "key",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "string",
+        "name": "newCID",
+        "type": "string"
+      },
+      {
+        "internalType": "uint256",
+        "name": "expectedVersion",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "relayNonce",
+        "type": "uint256"
+      }
     ],
-    "name": "exists",
-    "outputs": [ { "internalType": "bool", "name": "", "type": "bool" } ],
+    "name": "commitDigest",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
     "stateMutability": "view",
     "type": "function"
   },
   {
     "inputs": [
-      { "internalType": "address", "name": "enclave", "type": "address" },
-      { "internalType": "bytes32", "name": "key",     "type": "bytes32" }
+      {
+        "internalType": "address",
+        "name": "enclave",
+        "type": "address"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "key",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "string",
+        "name": "newCID",
+        "type": "string"
+      },
+      {
+        "internalType": "uint256",
+        "name": "expectedVersion",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "relayNonce",
+        "type": "uint256"
+      },
+      {
+        "internalType": "bytes",
+        "name": "signature",
+        "type": "bytes"
+      }
+    ],
+    "name": "commitFor",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "enclave",
+        "type": "address"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "key",
+        "type": "bytes32"
+      }
+    ],
+    "name": "exists",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "enclave",
+        "type": "address"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "key",
+        "type": "bytes32"
+      }
     ],
     "name": "getState",
     "outputs": [
-      { "internalType": "string",  "name": "cid",       "type": "string"  },
-      { "internalType": "uint256", "name": "version",   "type": "uint256" },
-      { "internalType": "uint64",  "name": "updatedAt", "type": "uint64"  }
+      {
+        "internalType": "string",
+        "name": "cid",
+        "type": "string"
+      },
+      {
+        "internalType": "uint256",
+        "name": "version",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint64",
+        "name": "updatedAt",
+        "type": "uint64"
+      }
     ],
     "stateMutability": "view",
     "type": "function"
   },
   {
     "inputs": [
-      { "internalType": "address", "name": "enclave", "type": "address" },
-      { "internalType": "bytes32", "name": "key",     "type": "bytes32" }
+      {
+        "internalType": "address",
+        "name": "enclave",
+        "type": "address"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "key",
+        "type": "bytes32"
+      }
     ],
     "name": "getVersion",
-    "outputs": [ { "internalType": "uint256", "name": "", "type": "uint256" } ],
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "enclave",
+        "type": "address"
+      }
+    ],
+    "name": "relayNonce",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
     "stateMutability": "view",
     "type": "function"
   }
