@@ -2305,7 +2305,15 @@ class TaskManager:
 
     def start_threads(self, network_configs):
         logger.info("Starting new threads...")
-        self.executor = concurrent.futures.ThreadPoolExecutor(max_workers=5)
+        # Each resilient_process is an infinite per-network loop that never
+        # returns, so it holds its worker for the life of the process. The pool
+        # must therefore have at least one worker PER network, or the networks
+        # past the cap never get a thread and are silently never processed
+        # (this stranded litvm_liteforge + ethereum_sepolia behind a hardcoded
+        # max_workers=5). Size to the network count so adding a network can
+        # never re-introduce that starvation.
+        worker_count = max(len(network_configs), 1)
+        self.executor = concurrent.futures.ThreadPoolExecutor(max_workers=worker_count)
         self.futures = [
             self.executor.submit(self.resilient_process, net) for net in network_configs
         ]
