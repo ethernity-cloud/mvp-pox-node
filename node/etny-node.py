@@ -145,7 +145,12 @@ class EtnyPoXNode:
         self.__esr = None
         self.__esr_last_block = 0
         try:
-            esr_address = (config.esr_contract_addresses.get(self.__network_config.name) or "").strip()
+            # Network names are lowercase at runtime (e.g. "bloxberg_testnet")
+            # but the config keys are uppercase -- look up case-insensitively so
+            # the ESR actually resolves (a plain .get() silently returned None,
+            # which is why "No ESR deployed" was logged even where one exists).
+            esr_address = (config.esr_contract_addresses.get(
+                (self.__network_config.name or "").upper()) or "").strip()
             if esr_address:
                 with open(config.esr_abi_filepath) as f:
                     esr_abi = f.read()
