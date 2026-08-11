@@ -101,6 +101,9 @@ esr_abi_filepath = base_path / 'esr.abi'
 esr_contract_addresses = {
     "BLOXBERG_MAINNET": os.environ.get('ESR_CONTRACT_ADDRESS', "0x4f6c0Ae54567CAeD372d265fEF412C2B5ed1302A"),
     "BLOXBERG_TESTNET": os.environ.get('ESR_CONTRACT_ADDRESS', "0x4f6c0Ae54567CAeD372d265fEF412C2B5ed1302A"),
+    # LitVM LiteForge (chainId 4441), deployed via pox-smart-contract
+    # feature/litvm; selectors verified on-chain after deploy.
+    "LITVM_LITEFORGE": os.environ.get('ESR_CONTRACT_ADDRESS', "0xb0D2C139514C1B4e511c0eB83F22a842979B3ECa"),
 }
 # How far back to scan for StateCommitted events on the first pass, in blocks.
 # After that the node continues from the last block it processed.
