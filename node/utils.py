@@ -295,9 +295,16 @@ class Storage:
             self.logger.error("Failed to connect to IPFS after 10 attempts. Proceeding with limited functionality (gateway downloads only).")
         if self.connected and "127.0.0.1" in self.client_connect_url:
             try:
-                # Set Datastore.StorageMax to 3GB (in bytes)
-                self._api_call('config', params={'arg': ['Datastore.StorageMax', '3000000000']})
-                self.logger.info("Successfully set Datastore.StorageMax to 3GB")
+                # Each node pins the IPFS hashes it produces/replicates on its OWN
+                # local IPFS (the relay only helps spread them). ESR state blobs
+                # and task results are pinned here, so the local datastore must
+                # have enough room to hold them without GC evicting freshly
+                # pinned content. Default the local StorageMax to 10GB (was 3GB,
+                # which GC-thrashed and dropped fire-and-forget pins). Overridable
+                # via IPFS_STORAGE_MAX (e.g. "20GB" or a byte count).
+                storage_max = os.environ.get('IPFS_STORAGE_MAX', '10GB')
+                self._api_call('config', params={'arg': ['Datastore.StorageMax', storage_max]})
+                self.logger.info(f"Successfully set Datastore.StorageMax to {storage_max}")
                 # Set Swarm.ConnMgr.LowWater to 25
                 self._api_call('config', params={'arg': ['Swarm.ConnMgr.LowWater', '25'], 'json': 'true'})
                 self.logger.info("Successfully set Swarm.ConnMgr.LowWater to 25")
