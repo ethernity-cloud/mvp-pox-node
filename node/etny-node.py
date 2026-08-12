@@ -190,6 +190,12 @@ class EtnyPoXNode:
             self.__esr = None
             logger.warning(f"Could not initialise the Enclave State Registry: {e}")
 
+        # Launch the ESR + protocol-result replication thread here, right after
+        # the registries are wired and BEFORE any blocking init step (the
+        # gas-wait loop and the SGX integration test both run later in __init__
+        # and can block for minutes). Once per network per process, guarded.
+        self.__start_esr_replication_thread()
+
         self.__nonce = self.__w3.eth.get_transaction_count(self.__address)
         self.__dprequest = 0
         self.__order_id = 0
@@ -317,11 +323,6 @@ class EtnyPoXNode:
         self.__last_ipfs_cleanup_at = 0
         self.__clear_ipfs_cache()
         reset_task_running_on()
-
-        # Launch the ESR + protocol-result replication thread once per network
-        # per process. __init__ runs every processing cycle, so a per-network
-        # guard prevents spawning (and leaking) a fresh thread each time.
-        self.__start_esr_replication_thread()
 
           
     def __migrate_cache(self):
