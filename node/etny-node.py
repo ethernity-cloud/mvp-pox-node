@@ -71,7 +71,13 @@ class NetworkLoggerAdapter(logging.LoggerAdapter):
 class EtnyPoXNode:
     logger = None
 
-    def __init__(self, network):
+    def __init__(self, network, replication_only=False):
+
+        # replication_only: build just enough to mirror this network's results +
+        # ESR state (contracts, storage, IPFS) and skip everything that only the
+        # task-executing instance needs -- above all the SGX integration test, so
+        # a replication handle never runs or waits on it.
+        self.__replication_only = replication_only
 
         self.__address = None
         self.__privatekey = None
@@ -130,7 +136,10 @@ class EtnyPoXNode:
 
             balance = self.__w3.eth.get_balance(self.__address)
 
-            if balance < int(network.minimum_gas_at_start):
+            # A replication-only handle never sends transactions, so it must not
+            # block on the gas-wait loop: it should keep mirroring state even on
+            # a gas-starved network (in fact, especially then).
+            if not self.__replication_only and balance < int(network.minimum_gas_at_start):
                logger.error(f"Not enough gas at {self.__address} to run node agent, wating until enough balance is set")
 
                while not stop_event.is_set() and balance < int(network.minimum_gas_at_start):
@@ -189,12 +198,6 @@ class EtnyPoXNode:
             # add-on to replication, not part of task execution.
             self.__esr = None
             logger.warning(f"Could not initialise the Enclave State Registry: {e}")
-
-        # Launch the ESR + protocol-result replication thread here, right after
-        # the registries are wired and BEFORE any blocking init step (the
-        # gas-wait loop and the SGX integration test both run later in __init__
-        # and can block for minutes). Once per network per process, guarded.
-        self.__start_esr_replication_thread()
 
         self.__nonce = self.__w3.eth.get_transaction_count(self.__address)
         self.__dprequest = 0
@@ -286,7 +289,11 @@ class EtnyPoXNode:
         # integration_test_lock (held across the whole check-and-run below)
         # provides the serialization; re-checking completion INSIDE the lock is
         # what makes it first-success-wins rather than every-thread-runs.
-        if config.skip_integration_test == True:
+        if self.__replication_only:
+           # A replication-only handle never executes tasks, so it neither runs
+           # nor waits on the SGX integration test.
+           self.can_run_under_sgx = False
+        elif config.skip_integration_test == True:
            logger.warning('Agent skipped SGX integration test, SGX capabilitties overwritten by configuration')
            self.can_run_under_sgx = True
         else:
@@ -543,34 +550,22 @@ class EtnyPoXNode:
             self.logger.warning(f"Protocol result replication skipped: {e}")
             return kept
 
-    def __start_esr_replication_thread(self):
-        """Start the replication loop once per network per process (idempotent)."""
-        net = self.__network
-        with _esr_replication_lock:
-            if net in _esr_replication_started:
-                return
-            _esr_replication_started.add(net)
-        t = threading.Thread(
-            target=self.__esr_replication_loop,
-            name=f"esr-replication-{net}",
-            daemon=True)  # daemon so it never blocks process exit
-        t.start()
-        self.logger.info(f"[esr-replication] background thread started for {net}")
+    def run_esr_replication_loop(self):
+        """Replication loop for THIS network, paired with its processing thread.
 
-    def __esr_replication_loop(self):
-        """Dedicated background thread: keep ESR state + protocol results pinned.
-
-        Replication used to run only as a side-effect of the hourly IPFS cache
-        cleanup, so newly committed state could sit un-replicated for up to an
-        hour -- long enough for the producing node's own (fire-and-forget) pin to
-        have failed with nothing backing it up. This loop runs on its own
+        Mirrors this network's on-chain results and ESR state hashes into the
+        node's IPFS, using this network's own contracts/RPC. Runs on its own
         cadence (esr_replication_interval_seconds, default 300s) and covers BOTH
         registries: ESR StateCommitted current-version CIDs and protocol-contract
-        order result CIDs. It refreshes their cache timestamps so the retention
+        order result CIDs, refreshing their cache timestamps so the retention
         sweep never ages out live content.
 
-        Best-effort: any error is logged and the loop simply waits for the next
-        tick. Exits when stop_event is set.
+        Previously replication only ran as a side-effect of the hourly IPFS
+        cache cleanup (ESR-only, and dead until the fromBlock fix), so freshly
+        committed state could sit un-replicated for up to an hour.
+
+        Best-effort: any error is logged and the loop waits for the next tick.
+        Exits when stop_event is set.
         """
         interval = float(getattr(config, 'esr_replication_interval_seconds', 300))
         while not stop_event.is_set():
@@ -2505,6 +2500,40 @@ def reset_task_running_on():
     with task_lock:
         task_running_on = None
 
+def start_esr_replication_for_network(network):
+    """Start the ESR + protocol-result replication thread for one network.
+
+    Paired with the network's resilient_process thread: it mirrors THIS
+    network's on-chain results and ESR state hashes into the node's IPFS, using
+    that network's own contracts/RPC. Started exactly once per network per
+    process (guarded); the worker owns a dedicated EtnyPoXNode built for
+    replication so it never contends with the order-processing instance.
+    """
+    net_name = network.name
+    with _esr_replication_lock:
+        if net_name in _esr_replication_started:
+            return
+        _esr_replication_started.add(net_name)
+
+    def _worker():
+        # Build a dedicated node handle for this network's replication. The SGX
+        # integration test is skipped for a replication-only handle (it does not
+        # execute tasks), so this never blocks on the test; the gas-wait loop in
+        # __init__ is the only thing that can delay it, which is acceptable -- a
+        # gas-starved network has nothing to replicate onto anyway.
+        try:
+            node = EtnyPoXNode(network, replication_only=True)
+        except Exception as e:
+            config.logger.warning(f"[esr-replication:{net_name}] could not start: {e}")
+            with _esr_replication_lock:
+                _esr_replication_started.discard(net_name)
+            return
+        config.logger.info(f"[esr-replication:{net_name}] paired replication thread started")
+        node.run_esr_replication_loop()
+
+    t = threading.Thread(target=_worker, name=f"esr-replication-{net_name}", daemon=True)
+    t.start()
+
 def set_integration_test_complete(network, value):
     """
     Sets the shared value for integration test in a thread-safe way.
@@ -2534,6 +2563,14 @@ class TaskManager:
         self.futures = []
 
     def resilient_process(self, network):
+        # Pair an ESR + protocol-result replication thread with THIS network's
+        # processing thread: it mirrors the results and ESR state hashes for
+        # this network only (its own contracts, RPC and IPFS), keeping them
+        # pinned in the node's IPFS. Started once here, alongside the network
+        # loop, rather than from EtnyPoXNode.__init__ (which is re-created every
+        # cycle and blocks on the gas-wait / integration test before it could
+        # launch anything). Daemon so it never blocks shutdown.
+        start_esr_replication_for_network(network)
         while not stop_event.is_set():
             try:
                 process_network(network)
