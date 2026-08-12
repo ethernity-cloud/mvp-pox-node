@@ -793,6 +793,22 @@ class EtnyPoXNode:
 
         if removed:
             logger.info(f"IPFS cleanup removed {removed} expired pin(s) (retention {retention_hours:.0f}h)")
+
+        # Unpinning above only REMOVES pins; the underlying blocks are not
+        # reclaimed until a garbage collection runs. Without a periodic GC the
+        # local datastore keeps growing with unpinned/expired content until it
+        # passes StorageMax and IPFS GC-thrashes -- which drops fresh
+        # fire-and-forget pins (the state-blob / result 404s). Run GC here, as
+        # part of the same throttled cleanup pass, so expired data is actually
+        # freed on a schedule. Best-effort: a GC failure must never disturb
+        # order processing. Opt out with IPFS_PERIODIC_GC=0.
+        if str(os.environ.get('IPFS_PERIODIC_GC', '1')).strip() not in ('0', 'false', 'False'):
+            try:
+                logger.info("Running periodic IPFS garbage collection to reclaim unpinned data")
+                self.storage.repo_gc()
+            except Exception as gc_err:
+                logger.warning(f"Periodic IPFS garbage collection skipped: {gc_err}")
+
         self.__last_ipfs_cleanup_at = time.time()
 
     def generate_process_order_data(self, write=False):
