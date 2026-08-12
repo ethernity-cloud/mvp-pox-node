@@ -274,6 +274,11 @@ class EtnyPoXNode:
         self.dpreq_cache = ListCache(self.cache_config.dpreq_cache_limit, self.cache_config.dpreq_filepath)
         self.doreq_cache = ListCache(self.cache_config.doreq_cache_limit, self.cache_config.doreq_filepath)
         self.ipfs_cache = ListCacheWithTimestamp(self.cache_config.ipfs_cache_limit, self.cache_config.ipfs_cache_filepath)
+        # Resumable replication progress (per network): last scanned block/order
+        # and last pinned version per (enclave,key). Loaded from disk so a
+        # restart resumes at the right height instead of re-scanning from zero.
+        self.esr_progress = Cache(10_000_000, self.cache_config.esr_progress_filepath)
+        self.__esr_last_block = int(self.esr_progress.get('esr_last_block') or 0)
 
         self.storage = Storage(self.__ipfs_swarm, self.__ipfs_timeout, self.__ipfs_connect_url, self.__ipfs_gateway_url,
                                self.ipfs_cache, self.ipfs_version_cache, logger, self.cache_config.base_path, self.__kubo_url,
@@ -423,46 +428,113 @@ class EtnyPoXNode:
         Returns a set of CIDs, empty when ESR is unavailable for any reason --
         an empty set means "protect nothing extra", never "unpin everything".
         """
-        cids = set()
+        # Records for EVERY enclave/key seen in the registry -- replication is a
+        # network-wide durability service, so we mirror the state of all
+        # enclaves that committed to the ESR, not only enclaves whose tasks
+        # happen to run on this node. Each record is
+        # {enclave, key, cid, version}; enclave IS the ESR identity address
+        # (the enclave signs commits with its identity key, so acct.address ==
+        # the ESR address), which makes (enclave, key) the unambiguous identity
+        # under which progress (last-pinned version) is tracked.
         if self.__esr is None:
-            return cids
+            return []
+        # Preferred: enumerate the registry directly (upgraded contract). One
+        # batched call per page gives every enclave/key with its current
+        # cid/version -- no event scanning, no block-range limits, no cursors to
+        # keep. Falls back to the log scan when the deployed contract predates
+        # the enumeration API.
+        records = self.__esr_records_via_enumeration()
+        if records is not None:
+            return records
+        return self.__esr_records_via_log_scan()
+
+    def __esr_records_via_enumeration(self):
+        """Full registry via entryCount()/getEntriesFrom(). None if unsupported."""
+        try:
+            total = int(self.__esr.caller().entryCount())
+        except Exception:
+            return None  # old contract: no enumeration API -> caller falls back
+        records = []
+        page = 200
+        start = 0
+        while start < total:
+            try:
+                time.sleep(self.__network_config.rpc_delay / 1000)
+                enclaves, keys, cids, versions, updated_ats, _tot = \
+                    self.__esr.caller().getEntriesFrom(start, page)
+            except Exception as e:
+                self.logger.warning(f"ESR getEntriesFrom({start}) failed: {e}")
+                break
+            got = len(enclaves)
+            if got == 0:
+                break
+            for i in range(got):
+                cid = cids[i]
+                version = int(versions[i])
+                if version and self.__looks_like_cid(cid):
+                    key = keys[i]
+                    records.append({
+                        'enclave': enclaves[i],
+                        'key': key.hex() if hasattr(key, 'hex') else str(key),
+                        'cid': cid,
+                        'version': version,
+                    })
+            start += got
+        return records
+
+    def __esr_records_via_log_scan(self):
+        """Fallback for pre-enumeration contracts: reconstruct from events."""
+        records = []
         try:
             latest_block = self.__w3.eth.block_number
             from_block = self.__esr_last_block or max(0, latest_block - config.esr_scan_lookback_blocks)
-            logs = self.__esr.events.StateCommitted().get_logs(
-                from_block=from_block, to_block=latest_block)
+            logs = self.__esr_state_committed_logs(from_block, latest_block)
 
-            # Deduplicate to the (enclave, key) pairs seen; the current CID for
-            # each comes from the contract below.
             pairs = {(l['args']['enclave'], l['args']['key']) for l in logs}
             for enclave, key in pairs:
                 try:
                     time.sleep(self.__network_config.rpc_delay / 1000)
                     cid, version, _updated_at = self.__esr.caller().getState(enclave, key)
-                    # The contract stores the CID as a free-form string and does
-                    # not validate it, so entries that are not CIDs do occur on
-                    # the live registry (e.g. a 0x… hex digest). Only pin things
-                    # that actually look like an IPFS CID; handing anything else
-                    # to pin/add just produces errors on every cleanup pass.
                     if version and self.__looks_like_cid(cid):
-                        cids.add(cid)
+                        records.append({
+                            'enclave': enclave,
+                            'key': key.hex() if hasattr(key, 'hex') else str(key),
+                            'cid': cid,
+                            'version': int(version),
+                        })
                     elif version and cid:
-                        # A committed pointer that is not a CID means the writer
-                        # is buggy. Say so once per pass rather than skipping in
-                        # silence -- otherwise the defect stays invisible.
                         self.logger.warning(
                             f"ESR entry for {enclave}/{key.hex()[:10]}… is not a valid CID "
-                            f"({cid[:24]}…); skipping. The committing enclave is writing a "
-                            f"non-CID pointer."
-                        )
+                            f"({cid[:24]}…); skipping.")
                 except Exception as e:
                     self.logger.debug(f"ESR getState failed for {enclave}/{key.hex()}: {e}")
 
             self.__esr_last_block = latest_block
+            try:
+                self.esr_progress.add('esr_last_block', latest_block)
+            except Exception:
+                pass
         except Exception as e:
             self.logger.warning(f"ESR state scan failed: {e}")
-            return set()
-        return cids
+            return []
+        return records
+
+    def __esr_state_committed_logs(self, from_block, to_block, chunk=9000):
+        """StateCommitted logs for [from_block, to_block], scanned in chunks.
+
+        Some RPCs (e.g. LitVM) time out or cap the block range on a single
+        get_logs over a large window. Chunking keeps each call small and lets a
+        big lookback complete without a -32002 timeout.
+        """
+        out = []
+        start = max(0, int(from_block))
+        end = int(to_block)
+        while start <= end:
+            stop = min(start + chunk, end)
+            out.extend(self.__esr.events.StateCommitted().get_logs(
+                from_block=start, to_block=stop))
+            start = stop + 1
+        return out
 
     def __replicate_esr_state(self):
         """Pin the current ESR state of every enclave, while disk allows.
@@ -479,12 +551,26 @@ class EtnyPoXNode:
         if self.__esr is None:
             return set()
         try:
-            current = self.__esr_current_state_cids()
-            if not current:
-                return current
+            records = self.__esr_current_state_cids()
+            if not records:
+                return set()
 
+            pinned_versions = self.esr_progress.get('pinned_versions') or {}
             pinned = 0
-            for cid in current:
+            kept = set()
+            for rec in records:
+                cid = rec['cid']
+                kept.add(cid)
+                # Progress key: enclave ESR address + state key. Skip an entry
+                # whose version we have already pinned -- the CID is
+                # content-addressed and immutable, so an unchanged version means
+                # nothing new to pin. This is the resumable "ESR height" per
+                # (enclave, key).
+                prog_key = f"{rec['enclave']}/{rec['key']}"
+                if pinned_versions.get(prog_key) == rec['version'] and self.storage.is_pinned(cid):
+                    self.ipfs_cache.add(cid)  # keep it fresh against retention
+                    continue
+
                 free_gb = HardwareInfoProvider.get_free_storage()
                 if free_gb < config.esr_min_free_storage_gb:
                     self.logger.warning(
@@ -496,15 +582,19 @@ class EtnyPoXNode:
                     if not self.storage.is_pinned(cid):
                         self.storage.pin_add(cid)
                         pinned += 1
-                    # Refresh the cache timestamp either way, so a CID that is
-                    # still current is never aged out by the retention sweep.
                     self.ipfs_cache.add(cid)
+                    # Record that we have this enclave/key at this version.
+                    pinned_versions[prog_key] = rec['version']
                 except Exception as e:
                     self.logger.debug(f"Could not pin ESR state {cid}: {e}")
 
+            try:
+                self.esr_progress.add('pinned_versions', pinned_versions)
+            except Exception:
+                pass
             if pinned:
-                self.logger.info(f"Replicated {pinned} ESR state object(s)")
-            return current
+                self.logger.info(f"Replicated {pinned} ESR state object(s) across {len(records)} enclave/key entries")
+            return kept
         except Exception as e:
             self.logger.warning(f"ESR state replication skipped: {e}")
             return set()
@@ -1282,7 +1372,8 @@ class EtnyPoXNode:
             return 0
         staged = 0
         try:
-            cids = self.__esr_current_state_cids()
+            records = self.__esr_current_state_cids()
+            cids = {r['cid'] for r in records}
         except Exception as e:
             self.logger.debug(f"[esr-read] could not resolve current state CIDs: {e}")
             return 0
