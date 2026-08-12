@@ -391,7 +391,7 @@ class EtnyPoXNode:
             latest_block = self.__w3.eth.block_number
             from_block = self.__esr_last_block or max(0, latest_block - config.esr_scan_lookback_blocks)
             logs = self.__esr.events.StateCommitted().get_logs(
-                fromBlock=from_block, toBlock=latest_block)
+                from_block=from_block, to_block=latest_block)
 
             # Deduplicate to the (enclave, key) pairs seen; the current CID for
             # each comes from the contract below.
