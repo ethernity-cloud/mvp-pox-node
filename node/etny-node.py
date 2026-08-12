@@ -54,6 +54,16 @@ integration_test_done = {'MAINNET': threading.Event(), 'TESTNET': threading.Even
 # lock so re-created instances don't each spawn a new (leaking) thread.
 _esr_replication_lock = threading.Lock()
 _esr_replication_started = set()  # network names whose replication thread is running
+_esr_replication_slots = [0]      # monotonically increasing stagger counter
+
+
+def _esr_replication_stagger_slot(step_seconds=8):
+    """Return an increasing per-launch delay so replication handles for the
+    different networks do not all construct at the same instant."""
+    with _esr_replication_lock:
+        slot = _esr_replication_slots[0]
+        _esr_replication_slots[0] += 1
+    return slot * step_seconds
 
 stop_event = threading.Event()
 
@@ -2515,12 +2525,19 @@ def start_esr_replication_for_network(network):
             return
         _esr_replication_started.add(net_name)
 
+    # Stagger the replication-handle construction across networks. Each handle
+    # builds a small node (w3 + contracts + storage); doing all of them at once,
+    # in parallel with the order-processing instances also constructing, made
+    # them slow to reach their loop. A short per-network delay smooths that out.
+    delay = _esr_replication_stagger_slot()
+
     def _worker():
+        if delay:
+            time.sleep(delay)
+        config.logger.info(f"[esr-replication:{net_name}] building replication handle (delay {delay}s)")
         # Build a dedicated node handle for this network's replication. The SGX
-        # integration test is skipped for a replication-only handle (it does not
-        # execute tasks), so this never blocks on the test; the gas-wait loop in
-        # __init__ is the only thing that can delay it, which is acceptable -- a
-        # gas-starved network has nothing to replicate onto anyway.
+        # integration test and the gas-wait loop are both skipped for a
+        # replication-only handle, so construction never blocks on them.
         try:
             node = EtnyPoXNode(network, replication_only=True)
         except Exception as e:
