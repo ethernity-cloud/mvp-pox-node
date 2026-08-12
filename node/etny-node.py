@@ -48,6 +48,13 @@ integration_test_lock = threading.RLock()
 integration_test_complete = {'MAINNET': False, 'TESTNET': False}
 integration_test_done = {'MAINNET': threading.Event(), 'TESTNET': threading.Event()}
 
+# process_network re-creates EtnyPoXNode every processing-loop cycle, so the ESR
+# replication background thread must be launched exactly ONCE per network per
+# process, not once per cycle. Guard the launch with a per-network flag under a
+# lock so re-created instances don't each spawn a new (leaking) thread.
+_esr_replication_lock = threading.Lock()
+_esr_replication_started = set()  # network names whose replication thread is running
+
 stop_event = threading.Event()
 
 class NetworkLoggerAdapter(logging.LoggerAdapter):
@@ -311,6 +318,11 @@ class EtnyPoXNode:
         self.__clear_ipfs_cache()
         reset_task_running_on()
 
+        # Launch the ESR + protocol-result replication thread once per network
+        # per process. __init__ runs every processing cycle, so a per-network
+        # guard prevents spawning (and leaking) a fresh thread each time.
+        self.__start_esr_replication_thread()
+
           
     def __migrate_cache(self):
         logger = self.logger
@@ -469,6 +481,109 @@ class EtnyPoXNode:
         except Exception as e:
             self.logger.warning(f"ESR state replication skipped: {e}")
             return set()
+
+    def __replicate_protocol_results(self, scan_limit=None):
+        """Pin the result CIDs of recent protocol-contract orders.
+
+        Every completed order has a result recorded on-chain by
+        _addResultToOrder in the form 'v<n>:<transaction_hex>:<result_cid>' (see
+        build_result_format_v3). The result blob lives on IPFS at result_cid, and
+        the same durability argument that applies to ESR state applies here: if
+        only the producing node pinned it, the result disappears when that node
+        does. Replicating recent result CIDs keeps them available network-wide.
+
+        Best-effort and bounded (scan_limit recent orders, free-disk gated).
+        Returns the set of CIDs it kept, so the caller can protect them from the
+        retention sweep. Never raises.
+        """
+        kept = set()
+        if self.__etny is None:
+            return kept
+        try:
+            try:
+                total = self.__etny.caller()._getOrdersCount()
+                total = total.toNumber() if hasattr(total, 'toNumber') else int(total)
+            except Exception as e:
+                self.logger.debug(f"protocol replication: _getOrdersCount failed ({e})")
+                return kept
+
+            limit = scan_limit if scan_limit is not None else int(
+                getattr(config, 'esr_result_scan_orders', 200))
+            start = max(0, total - limit)
+            for order_id in range(total - 1, start - 1, -1):
+                free_gb = HardwareInfoProvider.get_free_storage()
+                if free_gb < config.esr_min_free_storage_gb:
+                    self.logger.warning(
+                        f"Free storage {free_gb}GB below ESR_MIN_FREE_STORAGE_GB; "
+                        f"stopping protocol-result replication for this round")
+                    break
+                try:
+                    time.sleep(self.__network_config.rpc_delay / 1000)
+                    result = self.__etny.caller()._getResultFromOrder(order_id)
+                except Exception:
+                    continue
+                if not result:
+                    continue
+                # 'v<n>:<tx_hex>:<result_cid>' -- the CID is the last field.
+                cid = result.rsplit(':', 1)[-1].strip()
+                if not self.__looks_like_cid(cid):
+                    continue
+                try:
+                    if not self.storage.is_pinned(cid):
+                        self.storage.pin_add(cid)
+                    self.ipfs_cache.add(cid)
+                    kept.add(cid)
+                except Exception as e:
+                    self.logger.debug(f"Could not pin protocol result {cid}: {e}")
+            if kept:
+                self.logger.info(f"Replicated {len(kept)} protocol result object(s)")
+            return kept
+        except Exception as e:
+            self.logger.warning(f"Protocol result replication skipped: {e}")
+            return kept
+
+    def __start_esr_replication_thread(self):
+        """Start the replication loop once per network per process (idempotent)."""
+        net = self.__network
+        with _esr_replication_lock:
+            if net in _esr_replication_started:
+                return
+            _esr_replication_started.add(net)
+        t = threading.Thread(
+            target=self.__esr_replication_loop,
+            name=f"esr-replication-{net}",
+            daemon=True)  # daemon so it never blocks process exit
+        t.start()
+        self.logger.info(f"[esr-replication] background thread started for {net}")
+
+    def __esr_replication_loop(self):
+        """Dedicated background thread: keep ESR state + protocol results pinned.
+
+        Replication used to run only as a side-effect of the hourly IPFS cache
+        cleanup, so newly committed state could sit un-replicated for up to an
+        hour -- long enough for the producing node's own (fire-and-forget) pin to
+        have failed with nothing backing it up. This loop runs on its own
+        cadence (esr_replication_interval_seconds, default 300s) and covers BOTH
+        registries: ESR StateCommitted current-version CIDs and protocol-contract
+        order result CIDs. It refreshes their cache timestamps so the retention
+        sweep never ages out live content.
+
+        Best-effort: any error is logged and the loop simply waits for the next
+        tick. Exits when stop_event is set.
+        """
+        interval = float(getattr(config, 'esr_replication_interval_seconds', 300))
+        while not stop_event.is_set():
+            try:
+                if self.__esr is not None:
+                    self.__replicate_esr_state()
+                self.__replicate_protocol_results()
+            except Exception as e:
+                self.logger.warning(f"[esr-replication] round failed: {e}")
+            # Sleep in short slices so stop_event is honored promptly.
+            waited = 0.0
+            while waited < interval and not stop_event.is_set():
+                time.sleep(2)
+                waited += 2
 
     def __maybe_clear_ipfs_cache(self):
         """Run the pin cleanup at most once per configured interval.
@@ -1087,6 +1202,17 @@ class EtnyPoXNode:
         logger = self.logger
         deadline = time.time() + timeout
         logger.info(f'Checking if object {object_name} exists in bucket {bucket_name} for {timeout} seconds')
+        # Deliver prior ESR state INTO this order's bucket before the enclave
+        # tries to read it. The enclave's _fetch reads state.<cid>.enc from the
+        # bucket (it cannot reach IPFS), but each order gets a fresh bucket -- so
+        # without this, get() of state committed by a PREVIOUS order finds
+        # nothing and raises "Could not read state object". Stage the current
+        # (per getState) version's blob from IPFS so the read hits.
+        if self.__esr is not None:
+            try:
+                self.stage_esr_state_for_read(bucket_name)
+            except Exception as e:
+                logger.debug(f'[esr-read] staging skipped: {e}')
         last_state_poll = 0
         while time.time() < deadline:
             exists, msg = self.swift_stream_service.is_object_in_bucket(bucket_name, object_name)
@@ -1115,6 +1241,67 @@ class EtnyPoXNode:
         digest = hashlib.sha256(content_bytes).digest()
         raw = bytes([0x01, 0x55, 0x12, 0x20]) + digest
         return 'b' + base64.b32encode(raw).decode('ascii').lower().rstrip('=')
+
+    def stage_esr_state_for_read(self, bucket_name):
+        """Deliver current ESR state into the bucket so the enclave can read it.
+
+        The enclave's StateRegistry.get() reads the CID from the chain
+        (getState = the last committed value + version) and then fetches the
+        blob from the SwiftStream bucket as state.<cid>.enc -- it cannot reach
+        IPFS itself. Each task runs in a FRESH bucket, so state committed by a
+        previous order is not present, and get() raises "Could not read state
+        object". This bridges that gap: for every (enclave, key) whose current
+        on-chain version points at a real CID, fetch that blob from IPFS (where
+        replication keeps it pinned) and write it into this order's bucket as
+        state.<cid>.enc. The enclave's _fetch already looks for exactly that
+        name, so no enclave-side change is needed.
+
+        Staging by the CID getState returns means we always deliver the LAST
+        committed value for the current version, never a stale one. The enclave
+        still verifies the blob against the on-chain CID, so a wrong or corrupted
+        stage is rejected rather than trusted.
+
+        Best-effort and bounded by free disk; never raises.
+        """
+        if self.__esr is None or not bucket_name:
+            return 0
+        staged = 0
+        try:
+            cids = self.__esr_current_state_cids()
+        except Exception as e:
+            self.logger.debug(f"[esr-read] could not resolve current state CIDs: {e}")
+            return 0
+        for cid in cids:
+            object_name = f"state.{cid}.enc"
+            try:
+                # Already delivered for this order? skip.
+                present, _ = self.swift_stream_service.is_object_in_bucket(bucket_name, object_name)
+                if present:
+                    continue
+                if HardwareInfoProvider.get_free_storage() < config.esr_min_free_storage_gb:
+                    self.logger.warning("[esr-read] low disk; stopping state staging this round")
+                    break
+                # Pull the blob from IPFS to local, then read the bytes back.
+                self.storage.download(cid)
+                blob_path = os.path.join(self.storage.target, cid)
+                if not os.path.isfile(blob_path):
+                    self.logger.warning(f"[esr-read] {cid} not retrievable from IPFS; cannot stage")
+                    continue
+                with open(blob_path, "rb") as fh:
+                    blob = fh.read()
+                # Verify the delivered bytes actually hash to the committed CID
+                # before handing them to the enclave -- never stage substituted
+                # content, even though the enclave re-checks too.
+                if self.__cidv1_raw(blob) != cid:
+                    self.logger.warning(f"[esr-read] {cid}: fetched content hashes differently; not staging")
+                    continue
+                self.swift_stream_service.put_file_content(
+                    bucket_name, object_name, "", io.BytesIO(blob))
+                staged += 1
+                self.logger.info(f"[esr-read] staged {object_name} into {bucket_name}")
+            except Exception as e:
+                self.logger.debug(f"[esr-read] could not stage {object_name}: {e}")
+        return staged
 
     def serve_esr_state_pins(self, bucket_name, deadline_ts):
         """Pin ESR state blobs the enclave drops in the bucket.
