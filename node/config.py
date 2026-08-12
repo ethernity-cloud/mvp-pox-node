@@ -101,11 +101,16 @@ esr_abi_filepath = base_path / 'esr.abi'
 esr_contract_addresses = {
     # Extended registry (adds commitFor: node-relayed, signature-verified state
     # commits). Replaces the original 0x4f6c... which had no relay path.
+    #
+    # Bloxberg MAINNET stays on the pre-enumeration contract until mainnet is
+    # redeployed; the TESTNETS below run the enumerable upgrade (commitSeq +
+    # entryCount/getEntriesFrom) so replication can mirror all enclaves' state
+    # without event scanning.
     "BLOXBERG_MAINNET": os.environ.get('ESR_CONTRACT_ADDRESS', "0xF76469A5659670B6ade366dE635e6463aaB8f3D8"),
-    "BLOXBERG_TESTNET": os.environ.get('ESR_CONTRACT_ADDRESS', "0xF76469A5659670B6ade366dE635e6463aaB8f3D8"),
-    # LitVM LiteForge (chainId 4441), deployed via pox-smart-contract
-    # feature/litvm; selectors verified on-chain after deploy.
-    "LITVM_LITEFORGE": os.environ.get('ESR_CONTRACT_ADDRESS', "0xEF434486C0dbA37A9EaC8Ffe9A91190788D42054"),
+    # Enumerable ESR, deployed 2026-08-12 on bloxberg_testnet (chain 8995).
+    "BLOXBERG_TESTNET": os.environ.get('ESR_CONTRACT_ADDRESS', "0xda5e68Bb5e68ee14D73b8de2a4D3Ca15736fACfb"),
+    # Enumerable ESR, deployed 2026-08-12 on LitVM LiteForge (chain 4441).
+    "LITVM_LITEFORGE": os.environ.get('ESR_CONTRACT_ADDRESS', "0xbAa7F9E3287ff95D177104eD469E6d0Fd19dBB0F"),
 }
 # ESR relay: the enclave signs each state commit (commitFor) and the NODE
 # submits it and pays gas, so no enclave wallet needs funding. To stop a
