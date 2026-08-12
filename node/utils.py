@@ -387,11 +387,11 @@ class Storage:
         self.logger.error("Failed to connect to IPFS swarm after all attempts")
         return False
 
-    def _api_call(self, command, params=None, files=None, data=None, stream=False):
+    def _api_call(self, command, params=None, files=None, data=None, stream=False, timeout=None):
         if params is None:
             params = {}
         url = f"{self.api_base}/api/v0/{command}"
-        kwargs = {'params': params, 'timeout': self.ipfs_timeout}
+        kwargs = {'params': params, 'timeout': self.ipfs_timeout if timeout is None else timeout}
         if files:
             kwargs['files'] = files
         if data:
@@ -880,11 +880,11 @@ class Storage:
     def add(self, hash):
         pass
 
-    def pin_add(self, hash):
+    def pin_add(self, hash, timeout=None):
         if not self.connected:
             return
         try:
-            self._api_call('pin/add', params={'arg': hash})
+            self._api_call('pin/add', params={'arg': hash}, timeout=timeout)
         except Exception as e:
             error_message = str(e).lower()
             if 'not pinned' in error_message or 'pinned indirectly' in error_message:

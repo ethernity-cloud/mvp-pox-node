@@ -142,6 +142,14 @@ esr_result_scan_orders = int(os.environ.get('ESR_RESULT_SCAN_ORDERS', 200))
 # after which the CID is marked failed and never retried again.
 esr_pin_attempts_per_cycle = int(os.environ.get('ESR_PIN_ATTEMPTS_PER_CYCLE', 2))
 esr_pin_max_attempts = int(os.environ.get('ESR_PIN_MAX_ATTEMPTS', 10))
+# Per-attempt timeout (seconds) for replication pin_add. A replicated ESR/result
+# CID may not be fetchable yet; pinning it forces a bitswap fetch that otherwise
+# blocks for the full IPFS timeout (600s). With many replication threads sharing
+# one local daemon, those long blocks pile up and starve the order-processing
+# threads' own pins. Keep this SHORT so a not-yet-available CID fails fast,
+# counts as one attempt, and frees the daemon -- the retry policy handles the
+# rest across cycles.
+esr_pin_attempt_timeout_seconds = int(os.environ.get('ESR_PIN_ATTEMPT_TIMEOUT_SECONDS', 30))
 
 # logger
 logger = logging.getLogger("ETNY NODE")

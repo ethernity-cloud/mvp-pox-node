@@ -614,7 +614,12 @@ class EtnyPoXNode:
                         break
                     pin_attempts[cid] = pin_attempts.get(cid, 0) + 1
                     try:
-                        self.storage.pin_add(cid)
+                        # Short per-attempt timeout: a not-yet-fetchable CID must
+                        # fail fast rather than block the shared IPFS daemon for
+                        # the full 600s and starve order-processing pins.
+                        self.storage.pin_add(
+                            cid,
+                            timeout=int(getattr(config, 'esr_pin_attempt_timeout_seconds', 30)))
                         got = True
                         break
                     except Exception as e:
@@ -695,7 +700,12 @@ class EtnyPoXNode:
                     continue
                 try:
                     if not self.storage.is_pinned(cid):
-                        self.storage.pin_add(cid)
+                        # Short per-attempt timeout so an unfetchable result CID
+                        # fails fast instead of blocking the shared IPFS daemon
+                        # for the full 600s (see __replicate_esr_state).
+                        self.storage.pin_add(
+                            cid,
+                            timeout=int(getattr(config, 'esr_pin_attempt_timeout_seconds', 30)))
                     self.ipfs_cache.add(cid)
                     kept.add(cid)
                 except Exception as e:
