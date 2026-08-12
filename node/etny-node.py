@@ -28,7 +28,11 @@ from cache_config import CacheConfig
 logger = config.logger 
 task_running_on = None
 task_lock = threading.Lock()
-integration_test_lock = threading.Lock()
+# Reentrant: create() holds this lock across the whole integration-test
+# check-and-run to serialize the test (one at a time, first-success-wins), and
+# __run_integration_test -> set_integration_test_complete re-acquires it while
+# the same thread still holds it. A plain Lock would self-deadlock there.
+integration_test_lock = threading.RLock()
 integration_test_complete = {'MAINNET': False, 'TESTNET': False}
 
 stop_event = threading.Event()
@@ -238,32 +242,41 @@ class EtnyPoXNode:
 
         self.__uuid = get_or_generate_uuid(config.uuid_filepath)
 
-        if config.skip_integration_test == True or get_integration_test_complete(self.__network_config.network_type.upper()):
-
-           if config.skip_integration_test:
-               logger.warning('Agent skipped SGX integration test, SGX capabilitties overwritten by configuration')
-           else:
-               logger.info('SGX integration test completed already')
-
-           # The integration test verifies the trustedzone enclave produces the
-           # expected result, and the trustedzone result is identical across all
-           # networks of the same type -- so the completion flag is (correctly)
-           # per network_type (TESTNET/MAINNET). Once ONE network of a type has
-           # passed, the SGX capability is proven for every same-type network; we
-           # do NOT need to run it again.
-           #
-           # The previous code re-ran build_prerequisites_integration_test +
-           # __clean_up_integration_test here, which only builds integration-test
-           # scaffolding and immediately tears it down -- the sole durable effect
-           # is can_run_under_sgx = True. Worse, it copied a PER-NETWORK compose
-           # (docker_compose_hash) that this branch never downloaded, so on any
-           # network other than the one that actually ran the test the file was
-           # missing and the agent crash-looped on "No such file ...
-           # integration_test/docker-compose.yml". Since the result is uniform
-           # per type, just record the capability and move on.
+        # SGX integration test policy, per network_type (TESTNET / MAINNET):
+        #
+        #   * The test verifies the trustedzone enclave produces the expected
+        #     result, and that result is identical across all networks of the
+        #     same type -- so completion is tracked per type, not per network.
+        #   * The test must be SERIALIZED: only one integration test runs at a
+        #     time (running two enclave tests concurrently fights over the same
+        #     docker/swift-stream integration scaffolding and SGX device).
+        #   * FIRST SUCCESS WINS: as soon as one network of a type passes, every
+        #     remaining same-type network skips the test and just records the
+        #     capability.
+        #   * ON FAILURE, TRY THE NEXT: a failing network leaves the type flag
+        #     False, so the next same-type thread acquires the lock and attempts
+        #     it, until one succeeds.
+        #
+        # integration_test_lock (held across the whole check-and-run below)
+        # provides the serialization; re-checking completion INSIDE the lock is
+        # what makes it first-success-wins rather than every-thread-runs.
+        if config.skip_integration_test == True:
+           logger.warning('Agent skipped SGX integration test, SGX capabilitties overwritten by configuration')
            self.can_run_under_sgx = True
         else:
-           self.__run_integration_test()
+           net_type = self.__network_config.network_type.upper()
+           with integration_test_lock:
+               if get_integration_test_complete(net_type):
+                   # Another same-type network already passed while we waited for
+                   # the lock -- capability proven, nothing to run or download.
+                   logger.info('SGX integration test completed already')
+                   self.can_run_under_sgx = True
+               else:
+                   # We hold the lock: no other integration test can run until we
+                   # finish. On success __run_integration_test sets the type flag
+                   # (so waiters above skip); on failure it leaves it False and
+                   # the next waiter tries.
+                   self.__run_integration_test()
 
 
         # Tracks when the pin cleanup last ran, so __maybe_clear_ipfs_cache can
