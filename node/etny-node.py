@@ -28,12 +28,25 @@ from cache_config import CacheConfig
 logger = config.logger 
 task_running_on = None
 task_lock = threading.Lock()
-# Reentrant: create() holds this lock across the whole integration-test
-# check-and-run to serialize the test (one at a time, first-success-wins), and
-# __run_integration_test -> set_integration_test_complete re-acquires it while
-# the same thread still holds it. A plain Lock would self-deadlock there.
+# SGX integration-test coordination, per network_type (TESTNET / MAINNET).
+#
+# The test verifies the trustedzone enclave's result, which is identical across
+# all networks of a type -- so it must run to success exactly ONCE per type, and
+# every other same-type network must WAIT for that outcome and then skip (never
+# run its own, and never re-run on later processing-loop cycles).
+#
+#   integration_test_lock    Reentrant. Held across the whole check-and-run so
+#                            only one test runs at a time; reentrant because
+#                            __run_integration_test -> set_integration_test_complete
+#                            re-acquires it on the same thread.
+#   integration_test_done    Per-type Event, SET once that type's test passes.
+#                            Waiters block on it instead of skipping unresolved,
+#                            and once set no network ever runs or re-runs the
+#                            test for that type again (survives the per-network
+#                            resilient_process loop re-creating EtnyPoXNode).
 integration_test_lock = threading.RLock()
 integration_test_complete = {'MAINNET': False, 'TESTNET': False}
+integration_test_done = {'MAINNET': threading.Event(), 'TESTNET': threading.Event()}
 
 stop_event = threading.Event()
 
@@ -265,18 +278,30 @@ class EtnyPoXNode:
            self.can_run_under_sgx = True
         else:
            net_type = self.__network_config.network_type.upper()
-           with integration_test_lock:
-               if get_integration_test_complete(net_type):
-                   # Another same-type network already passed while we waited for
-                   # the lock -- capability proven, nothing to run or download.
-                   logger.info('SGX integration test completed already')
-                   self.can_run_under_sgx = True
-               else:
-                   # We hold the lock: no other integration test can run until we
-                   # finish. On success __run_integration_test sets the type flag
-                   # (so waiters above skip); on failure it leaves it False and
-                   # the next waiter tries.
-                   self.__run_integration_test()
+           done_event = integration_test_done[net_type]
+
+           # Fast path: this type's test already passed (this run, on any network,
+           # including an earlier cycle of THIS network). Never run or re-run it.
+           if done_event.is_set():
+               logger.info('SGX integration test completed already')
+               self.can_run_under_sgx = True
+           else:
+               # Serialize: only one integration test runs at a time. A network
+               # that arrives while another is mid-test blocks here on the lock
+               # rather than skipping unresolved.
+               with integration_test_lock:
+                   if done_event.is_set():
+                       # The network that held the lock before us passed -- the
+                       # capability is proven for the whole type, so skip.
+                       logger.info('SGX integration test completed already')
+                       self.can_run_under_sgx = True
+                   else:
+                       # We hold the lock and the type is still unproven: run it.
+                       # On success __run_integration_test marks it done (which
+                       # sets done_event, permanently unblocking + skipping every
+                       # other same-type network). On failure it leaves it unset
+                       # and the next thread to take the lock attempts it.
+                       self.__run_integration_test()
 
 
         # Tracks when the pin cleanup last ran, so __maybe_clear_ipfs_cache can
@@ -2295,10 +2320,17 @@ def reset_task_running_on():
 def set_integration_test_complete(network, value):
     """
     Sets the shared value for integration test in a thread-safe way.
+
+    Setting it True also SETS the per-type Event, which permanently unblocks
+    every same-type network waiting on the test and makes them skip it (now and
+    on later processing-loop cycles). We only ever set the Event, never clear it:
+    a passed SGX capability does not become unproven within a process lifetime.
     """
     global integration_test_complete
     with integration_test_lock:
         integration_test_complete[network.upper()] = value
+        if value:
+            integration_test_done[network.upper()].set()
 
 def get_integration_test_complete(network):
     """
