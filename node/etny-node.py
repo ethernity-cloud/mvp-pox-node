@@ -556,6 +556,21 @@ class EtnyPoXNode:
                 return set()
 
             pinned_versions = self.esr_progress.get('pinned_versions') or {}
+            # Per-CID pin-attempt counter, PERSISTED across cycles/restarts. An
+            # ESR state blob is produced by another node and must propagate to
+            # ours; it may not be fetchable on the first try. Policy:
+            #   - up to PINS_PER_CYCLE (2) fetch attempts PER replication cycle
+            #     (a quick double-tap for propagation delay), then
+            #   - keep trying on each subsequent cycle -- the counter persists,
+            #     so retries accumulate across cycle restarts -- until
+            #   - MAX_PIN_ATTEMPTS (10) total, after which the CID is marked
+            #     FAILED and never retried (give up after a long time rather
+            #     than hammering an unfetchable CID forever).
+            PINS_PER_CYCLE = int(getattr(config, 'esr_pin_attempts_per_cycle', 2))
+            MAX_PIN_ATTEMPTS = int(getattr(config, 'esr_pin_max_attempts', 10))
+            pin_attempts = self.esr_progress.get('pin_attempts') or {}
+            pin_failed = set(self.esr_progress.get('pin_failed') or [])
+
             pinned = 0
             kept = set()
             for rec in records:
@@ -571,6 +586,18 @@ class EtnyPoXNode:
                     self.ipfs_cache.add(cid)  # keep it fresh against retention
                     continue
 
+                # Already pinned (e.g. by serve_esr_state_pins on the producing
+                # node): record progress and clear any attempt bookkeeping.
+                if self.storage.is_pinned(cid):
+                    self.ipfs_cache.add(cid)
+                    pinned_versions[prog_key] = rec['version']
+                    pin_attempts.pop(cid, None)
+                    continue
+
+                # Given up on this CID already -> do not retry.
+                if cid in pin_failed:
+                    continue
+
                 free_gb = HardwareInfoProvider.get_free_storage()
                 if free_gb < config.esr_min_free_storage_gb:
                     self.logger.warning(
@@ -578,18 +605,39 @@ class EtnyPoXNode:
                         f"({config.esr_min_free_storage_gb}GB); stopping state replication for this round"
                     )
                     break
-                try:
-                    if not self.storage.is_pinned(cid):
+
+                # Up to PINS_PER_CYCLE quick attempts this cycle, but never past
+                # the persisted MAX_PIN_ATTEMPTS total.
+                got = False
+                for _ in range(PINS_PER_CYCLE):
+                    if pin_attempts.get(cid, 0) >= MAX_PIN_ATTEMPTS:
+                        break
+                    pin_attempts[cid] = pin_attempts.get(cid, 0) + 1
+                    try:
                         self.storage.pin_add(cid)
-                        pinned += 1
+                        got = True
+                        break
+                    except Exception as e:
+                        self.logger.debug(
+                            f"ESR pin attempt {pin_attempts[cid]}/{MAX_PIN_ATTEMPTS} "
+                            f"for {cid} failed: {e}")
+                if got:
+                    pinned += 1
                     self.ipfs_cache.add(cid)
-                    # Record that we have this enclave/key at this version.
                     pinned_versions[prog_key] = rec['version']
-                except Exception as e:
-                    self.logger.debug(f"Could not pin ESR state {cid}: {e}")
+                    pin_attempts.pop(cid, None)
+                elif pin_attempts.get(cid, 0) >= MAX_PIN_ATTEMPTS:
+                    # Exhausted all retries across cycles -> mark failed, stop.
+                    pin_failed.add(cid)
+                    pin_attempts.pop(cid, None)
+                    self.logger.warning(
+                        f"ESR state {cid} not fetchable after {MAX_PIN_ATTEMPTS} "
+                        f"attempts across cycles; marking failed and giving up.")
 
             try:
                 self.esr_progress.add('pinned_versions', pinned_versions)
+                self.esr_progress.add('pin_attempts', pin_attempts)
+                self.esr_progress.add('pin_failed', list(pin_failed))
             except Exception:
                 pass
             if pinned:
@@ -2691,6 +2739,28 @@ def start_esr_replication_for_network(network):
             with _esr_replication_lock:
                 _esr_replication_started.discard(net_name)
             return
+
+        # Do not replicate until the SGX integration test has completed for this
+        # network's type. Replication fetches/pins ESR blobs and touches IPFS;
+        # holding it until the node has proven it can actually run tasks keeps
+        # startup focused on the integration test (which gates order processing)
+        # and avoids competing for IPFS/CPU before the node is operational.
+        # The test is per-type, so any same-type network passing it unblocks us.
+        if not getattr(config, 'skip_integration_test', False):
+            net_type = network.network_type.upper()
+            done_event = integration_test_done.get(net_type)
+            if done_event is not None:
+                config.logger.info(
+                    f"[esr-replication:{net_name}] waiting for {net_type} integration "
+                    f"test before starting replication")
+                while not stop_event.is_set() and not done_event.wait(timeout=5):
+                    pass
+                if stop_event.is_set():
+                    return
+                config.logger.info(
+                    f"[esr-replication:{net_name}] {net_type} integration test complete; "
+                    f"starting replication")
+
         config.logger.info(f"[esr-replication:{net_name}] paired replication thread started")
         node.run_esr_replication_loop()
 

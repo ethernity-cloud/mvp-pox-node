@@ -135,6 +135,13 @@ esr_replication_interval_seconds = int(os.environ.get('ESR_REPLICATION_INTERVAL_
 # How many of the most recent protocol orders the replication thread scans for
 # result CIDs each round.
 esr_result_scan_orders = int(os.environ.get('ESR_RESULT_SCAN_ORDERS', 200))
+# ESR state blobs are produced on another node and must propagate to ours.
+# Per replication cycle we try a missing CID up to esr_pin_attempts_per_cycle
+# times (a quick double-tap for propagation lag); the attempt counter persists
+# across cycle restarts, so retries accumulate until esr_pin_max_attempts total,
+# after which the CID is marked failed and never retried again.
+esr_pin_attempts_per_cycle = int(os.environ.get('ESR_PIN_ATTEMPTS_PER_CYCLE', 2))
+esr_pin_max_attempts = int(os.environ.get('ESR_PIN_MAX_ATTEMPTS', 10))
 
 # logger
 logger = logging.getLogger("ETNY NODE")
