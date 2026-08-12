@@ -450,11 +450,21 @@ class Storage:
         Main download function: Checks cache, attempts gateway if not local, then local IPFS/swarm.
         Handles files (with gzip check) and directories (via tar).
         """
-        if self.cache.contains(data):
+        out_path = os.path.join(self.target, data)
+
+        # The cache flag only says "we fetched this once" -- it does NOT
+        # guarantee the bytes are still on disk. Periodic GC / eviction or a
+        # cleared cache dir can remove the file while the flag lingers, so
+        # trusting the flag alone made download() a no-op that returned with no
+        # content (the integration-test image / compose then 'missing', failing
+        # the SGX check). Only skip the fetch when the flag is set AND the file
+        # actually exists on disk; otherwise fall through and REFETCH.
+        if self.cache.contains(data) and os.path.exists(out_path):
             self.logger.info(f"{data} found in local cache, skipping download")
             return
+        if self.cache.contains(data):
+            self.logger.info(f"{data} cache flag set but file missing on disk; refetching")
 
-        out_path = os.path.join(self.target, data)
         os.makedirs(os.path.dirname(out_path), exist_ok=True)
 
         if self._try_download_from_gateway(data, out_path):
