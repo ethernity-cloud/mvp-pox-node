@@ -2714,6 +2714,49 @@ def reset_task_running_on():
     with task_lock:
         task_running_on = None
 
+def terminate_stale_enclave_containers():
+    """Force-remove any enclave containers left over from a previous run.
+
+    The node agent may be restarted at any point in an order's lifecycle (manual
+    restart, crash, deploy). If it restarts while an order's enclaves are up, the
+    old containers survive -- and a stale container can poison the next order: a
+    leftover integration-test trustedzone (which loads the integration .env, runs
+    the test and exits) satisfies the container name the order compose expects, so
+    the real order's trustedzone never runs, no payload.securelock is produced,
+    and securelock waits forever while the node polls result.txt until it expires.
+
+    Running this ONCE at process startup, before any network thread launches an
+    enclave, guarantees every order starts from a clean slate. las is left running
+    only if it is the shared, always-on attestation service; the per-order enclave
+    containers are always removed. Best-effort: never raises.
+    """
+    logger = config.logger
+    # Fixed container_name values from the enclave docker-compose files. 'las'
+    # is the per-order Local Attestation Service the order compose starts (exact
+    # name 'las'); it is distinct from the shared, always-on 'las_Qm...' service,
+    # which is matched by a different name and therefore untouched here.
+    names = ['etny-securelock', 'etny-trustedzone', 'etny-validator', 'las']
+    try:
+        for name in names:
+            run_subprocess(['docker', 'rm', '-f', name], logger)
+        # Sweep any other stragglers by image, in case a name ever changes: any
+        # container built from a localhost:5000/etny-* enclave image.
+        try:
+            out = subprocess.Popen(
+                ['docker', 'ps', '-aq', '--filter', 'ancestor=localhost:5000/etny-securelock',
+                 '--filter', 'ancestor=localhost:5000/etny-trustedzone',
+                 '--filter', 'ancestor=localhost:5000/etny-validator'],
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+            ids, _ = out.communicate()
+            ids = [i for i in ids.decode().split() if i] if ids else []
+            for cid in ids:
+                run_subprocess(['docker', 'rm', '-f', cid], logger)
+        except Exception:
+            pass
+        logger.info("Startup cleanup: removed any stale enclave containers")
+    except Exception as e:
+        logger.warning(f"Startup enclave-container cleanup skipped: {e}")
+
 def start_esr_replication_for_network(network):
     """Start the ESR + protocol-result replication thread for one network.
 
@@ -2896,6 +2939,12 @@ if __name__ == '__main__':
     try:
         sgx = SGXDriver()
         network_configs = config.parse_networks(args, parser, network_names)
+
+        # Clean slate: remove any enclave containers left over from a previous
+        # run BEFORE any network thread can launch an order's enclaves. A restart
+        # mid-order otherwise leaves stale containers (e.g. an integration-test
+        # trustedzone) that poison the next order's enclave handshake.
+        terminate_stale_enclave_containers()
 
         # Create a TaskManager to hold executor/futures
         task_manager = TaskManager()
