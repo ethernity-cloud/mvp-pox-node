@@ -2714,6 +2714,9 @@ def reset_task_running_on():
     with task_lock:
         task_running_on = None
 
+_enclave_cleanup_lock = threading.Lock()
+_enclave_cleanup_done = False
+
 def terminate_stale_enclave_containers():
     """Force-remove any enclave containers left over from a previous run.
 
@@ -2725,11 +2728,20 @@ def terminate_stale_enclave_containers():
     the real order's trustedzone never runs, no payload.securelock is produced,
     and securelock waits forever while the node polls result.txt until it expires.
 
-    Running this ONCE at process startup, before any network thread launches an
-    enclave, guarantees every order starts from a clean slate. las is left running
-    only if it is the shared, always-on attestation service; the per-order enclave
-    containers are always removed. Best-effort: never raises.
+    Runs AT MOST ONCE per process (guarded by _enclave_cleanup_done): it is a
+    startup-only clean slate. Any later call is a no-op -- critically, this stops
+    it from ever tearing down enclaves of an order that is legitimately running,
+    and keeps it from interfering with the periodic scheduler / thread restarts.
+    Must therefore be invoked once, before any network thread launches an enclave.
+    las is left running only if it is the shared, always-on attestation service;
+    the per-order enclave containers are always removed. Best-effort: never raises.
     """
+    global _enclave_cleanup_done
+    with _enclave_cleanup_lock:
+        if _enclave_cleanup_done:
+            return
+        _enclave_cleanup_done = True
+
     logger = config.logger
     # Fixed container_name values from the enclave docker-compose files. 'las'
     # is the per-order Local Attestation Service the order compose starts (exact
