@@ -1232,6 +1232,21 @@ class EtnyPoXNode:
 
             logger.info('Enclave finished the execution')
 
+            # Pin any ESR state blobs the enclave wrote at the END of execution.
+            # serve_esr_state_pins runs on a 5s cadence DURING the wait loops,
+            # but the enclave typically writes state.<key>.enc at the same moment
+            # as result.txt -- which ends the wait loop -- so the final state
+            # blob can land in the bucket AFTER the last in-loop poll and never
+            # get pinned. Without this sweep the pointer is committed on-chain
+            # but the blob is only in Swift, so a later task's get() 404s. Do a
+            # final pass here (before the relay puts the pointer on-chain) so the
+            # blob is durable.
+            if self.__esr is not None:
+                try:
+                    self.serve_esr_state_pins(bucket_name, time.time() + 60)
+                except Exception as e:
+                    logger.debug(f'[esr] final state-pin sweep skipped: {e}')
+
             # Relay any ESR state commits the enclave signed for this order. The
             # enclave never pays gas: it stages signed commitFor authorizations
             # (esr.commit.<nonce>.json) and the node submits + pays them, capped
