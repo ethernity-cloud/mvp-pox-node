@@ -1344,7 +1344,11 @@ class EtnyPoXNode:
         # without this, get() of state committed by a PREVIOUS order finds
         # nothing and raises "Could not read state object". Stage the current
         # (per getState) version's blob from IPFS so the read hits.
-        if self.__esr is not None:
+        #
+        # Skip for the integration-test bucket: the SGX self-test runs a fixed
+        # payload that never reads ESR state, and staging there would only make
+        # the capability check depend on ESR/IPFS availability.
+        if self.__esr is not None and bucket_name != getattr(self, 'integration_bucket_name', 'etny-bucket-integration'):
             try:
                 self.stage_esr_state_for_read(bucket_name)
             except Exception as e:
@@ -1418,11 +1422,22 @@ class EtnyPoXNode:
                 if HardwareInfoProvider.get_free_storage() < config.esr_min_free_storage_gb:
                     self.logger.warning("[esr-read] low disk; stopping state staging this round")
                     break
-                # Pull the blob from IPFS to local, then read the bytes back.
+                # Only stage a blob that is already pinned LOCALLY (this node, or
+                # replicated to it). is_pinned is a fast local check. If it is not
+                # here, DO NOT call the blocking download()/gateway fetch: a CID
+                # that no node ever pinned (e.g. a historical commit whose pin
+                # failed) is unfetchable, and download() would retry for a long
+                # time -- stalling the order's execution wait and, when staging
+                # runs during the integration test, the whole SGX check. Skipping
+                # is safe: staging is best-effort; a missing prior state just
+                # means the enclave's get() returns default, not a hang.
+                if not self.storage.is_pinned(cid):
+                    self.logger.debug(f"[esr-read] {cid} not pinned locally; skipping stage (non-blocking)")
+                    continue
                 self.storage.download(cid)
                 blob_path = os.path.join(self.storage.target, cid)
                 if not os.path.isfile(blob_path):
-                    self.logger.warning(f"[esr-read] {cid} not retrievable from IPFS; cannot stage")
+                    self.logger.debug(f"[esr-read] {cid} not retrievable; skipping")
                     continue
                 with open(blob_path, "rb") as fh:
                     blob = fh.read()
