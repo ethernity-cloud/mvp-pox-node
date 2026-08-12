@@ -245,24 +245,22 @@ class EtnyPoXNode:
            else:
                logger.info('SGX integration test completed already')
 
-           order_id = 'integration_test'
-           docker_compose_file = f'{self.cache_config.base_path}/{docker_compose_hash}'
-           self.integration_bucket_name = 'etny-bucket-integration'
-           # The integration-test completion flag is per network_type (TESTNET/
-           # MAINNET), so once ONE network of a type passes, every other network
-           # of the same type takes this shortcut branch. But the compose file is
-           # per-network (a different image_name/hash each), and this branch only
-           # copies it -- it never downloaded it. On any network other than the
-           # first to run, {base_path}/{docker_compose_hash} does not exist and
-           # build_prerequisites crashes with "No such file". Pull the compose
-           # (and its image) here, exactly like __run_integration_test does, so
-           # the copy has a source regardless of which network ran the real test.
-           if not self.storage.download_many([enclave_image_hash, docker_compose_hash], attempts=10, delay=3):
-               logger.info("Cannot download integration-test compose from IPFS, stopping test")
-               return
-           self.build_prerequisites_integration_test(self.integration_bucket_name, order_id, docker_compose_file)
-           self.__clean_up_integration_test()
-
+           # The integration test verifies the trustedzone enclave produces the
+           # expected result, and the trustedzone result is identical across all
+           # networks of the same type -- so the completion flag is (correctly)
+           # per network_type (TESTNET/MAINNET). Once ONE network of a type has
+           # passed, the SGX capability is proven for every same-type network; we
+           # do NOT need to run it again.
+           #
+           # The previous code re-ran build_prerequisites_integration_test +
+           # __clean_up_integration_test here, which only builds integration-test
+           # scaffolding and immediately tears it down -- the sole durable effect
+           # is can_run_under_sgx = True. Worse, it copied a PER-NETWORK compose
+           # (docker_compose_hash) that this branch never downloaded, so on any
+           # network other than the one that actually ran the test the file was
+           # missing and the agent crash-looped on "No such file ...
+           # integration_test/docker-compose.yml". Since the result is uniform
+           # per type, just record the capability and move on.
            self.can_run_under_sgx = True
         else:
            self.__run_integration_test()
