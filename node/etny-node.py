@@ -248,6 +248,18 @@ class EtnyPoXNode:
            order_id = 'integration_test'
            docker_compose_file = f'{self.cache_config.base_path}/{docker_compose_hash}'
            self.integration_bucket_name = 'etny-bucket-integration'
+           # The integration-test completion flag is per network_type (TESTNET/
+           # MAINNET), so once ONE network of a type passes, every other network
+           # of the same type takes this shortcut branch. But the compose file is
+           # per-network (a different image_name/hash each), and this branch only
+           # copies it -- it never downloaded it. On any network other than the
+           # first to run, {base_path}/{docker_compose_hash} does not exist and
+           # build_prerequisites crashes with "No such file". Pull the compose
+           # (and its image) here, exactly like __run_integration_test does, so
+           # the copy has a source regardless of which network ran the real test.
+           if not self.storage.download_many([enclave_image_hash, docker_compose_hash], attempts=10, delay=3):
+               logger.info("Cannot download integration-test compose from IPFS, stopping test")
+               return
            self.build_prerequisites_integration_test(self.integration_bucket_name, order_id, docker_compose_file)
            self.__clean_up_integration_test()
 
