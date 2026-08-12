@@ -252,10 +252,14 @@ class EtnyPoXNode:
            self.__migrate_cache()
            self.network_cache.add("NETWORK","MIGRATED_FROM_POLYGON")
 
-        while get_task_running_on() is not None:
-           time.sleep(1)
-
-        set_task_running_on(self.__network)
+        # task_running_on is a single global mutex that serializes the ONE
+        # task-executing instance. A replication-only handle executes no tasks,
+        # so it must NOT wait on or take this mutex -- otherwise it blocks here
+        # forever while the processing instances keep re-acquiring it.
+        if not self.__replication_only:
+            while get_task_running_on() is not None:
+               time.sleep(1)
+            set_task_running_on(self.__network)
 
         os.chdir(self.cache_config.base_path)
 
@@ -338,8 +342,13 @@ class EtnyPoXNode:
         # throttle the periodic sweep. Set before the first run so the attribute
         # always exists.
         self.__last_ipfs_cleanup_at = 0
-        self.__clear_ipfs_cache()
-        reset_task_running_on()
+        if not self.__replication_only:
+            # The processing instance runs the cleanup/replication sweep at
+            # startup. A replication-only handle skips it here (its own loop does
+            # the replication) so construction stays fast and never blocks on an
+            # IPFS download during startup.
+            self.__clear_ipfs_cache()
+            reset_task_running_on()
 
           
     def __migrate_cache(self):
