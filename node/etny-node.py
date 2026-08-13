@@ -2068,6 +2068,17 @@ class EtnyPoXNode:
                 except (exceptions.ContractLogicError, IndexError) as e:
                     logger.warning(f"Falied placing order: {e}")
                     reset_task_running_on()
+                    # If OUR DP request is the matched/consumed one, no further
+                    # order can ever be placed with it -- break out so a fresh
+                    # DP request is created. Continuing here made every
+                    # subsequent placement fail with 'DP request already
+                    # matched' and the node stopped taking orders entirely.
+                    if 'DP request' in str(e) and 'already matched' in str(e):
+                        logger.info(
+                            f"DP request {self.__dprequest} is consumed; "
+                            f"moving to a new DP request")
+                        next_dp_request = True
+                        break
                     continue
 
                 if metadata[i][4] == '':
