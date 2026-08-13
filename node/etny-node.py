@@ -2187,14 +2187,19 @@ class EtnyPoXNode:
         max_retries = 20
         retries = 0
 
-        unicorn_txn = self.__etny.functions._placeOrder(
-                int(doreq_id),
-                int(self.__dprequest),
-        ).build_transaction(self.get_transaction_build())
-
         while True:
           try:
             time.sleep(self.__network_config.rpc_delay/1000)
+            # Build the transaction INSIDE the retry loop so every attempt gets a
+            # fresh nonce. A reverted transaction still consumes its nonce, so
+            # re-sending the same pre-built txn after a revert (or after any
+            # other transaction from this account) fails every retry with
+            # "Transaction nonce is too low" until max_retries aborts the
+            # placement -- observed live as a 20x nonce-too-low cascade.
+            unicorn_txn = self.__etny.functions._placeOrder(
+                    int(doreq_id),
+                    int(self.__dprequest),
+            ).build_transaction(self.get_transaction_build())
             _hash = self.send_transaction(unicorn_txn)
             logger.info(f"TXID {_hash} pending... fingers crossed")
             receipt = self.__w3.eth.wait_for_transaction_receipt(_hash)
@@ -2205,21 +2210,25 @@ class EtnyPoXNode:
             else:
               logger.info(f"TXID {_hash} is reverted")
 
-            doreq = self.__etny.caller()._getDORequest(doreq_id)
+            _doreq = self.__etny.caller()._getDORequest(doreq_id)
             _dpreq = self.__etny.caller()._getDPRequest(self.__dprequest)
 
             doreq = DORequest(_doreq)
             dpreq = DPRequest(_dpreq)
 
+            # Raise ContractLogicError so the handler below PROPAGATES the skip
+            # instead of swallowing it into the generic retry path (a bare
+            # `raise` here has no active exception -> RuntimeError -> 20 futile
+            # reverted placements against an already-matched request).
             if doreq.status != RequestStatus.AVAILABLE:
-                  logger.debug(f"DO request {doreq_id} is matched with another operator, skipping processing")
+                  logger.info(f"DO request {doreq_id} is matched with another operator, skipping processing")
                   self.doreq_cache.add(doreq_id)
-                  raise
+                  raise exceptions.ContractLogicError(f"DO request {doreq_id} already matched")
 
             if dpreq.status != RequestStatus.AVAILABLE:
-                  logger.debug(f"DP request {self.__dprequest} is matched with another order, skipping processing")
+                  logger.info(f"DP request {self.__dprequest} is matched with another order, skipping processing")
                   self.doreq_cache.add(doreq_id)
-                  raise
+                  raise exceptions.ContractLogicError(f"DP request {self.__dprequest} already matched")
 
           except (exceptions.ContractLogicError, IndexError) as e:
               logger.warning(f"ContractLogicError: {e}");
