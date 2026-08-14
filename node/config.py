@@ -107,8 +107,11 @@ esr_contract_addresses = {
     # entryCount/getEntriesFrom) so replication can mirror all enclaves' state
     # without event scanning.
     "BLOXBERG_MAINNET": os.environ.get('ESR_CONTRACT_ADDRESS', "0xF76469A5659670B6ade366dE635e6463aaB8f3D8"),
-    # Enumerable ESR, deployed 2026-08-12 on bloxberg_testnet (chain 8995).
-    "BLOXBERG_TESTNET": os.environ.get('ESR_CONTRACT_ADDRESS', "0xda5e68Bb5e68ee14D73b8de2a4D3Ca15736fACfb"),
+    # Nonce-aware enumerable ESR, deployed 2026-08-15 on bloxberg_testnet
+    # (chain 8995). Adds the PUBLIC per-(enclave, key) idempotency nonce
+    # (getNonce view, strictly in-order per key). Replaces the 2026-08-12
+    # enumerable deployment 0xda5e...ACfb.
+    "BLOXBERG_TESTNET": os.environ.get('ESR_CONTRACT_ADDRESS', "0xdfDD088b9cB998280685aF4E93DC0b37952aB08e"),
     # Enumerable ESR, deployed 2026-08-12 on LitVM LiteForge (chain 4441).
     "LITVM_LITEFORGE": os.environ.get('ESR_CONTRACT_ADDRESS', "0xbAa7F9E3287ff95D177104eD469E6d0Fd19dBB0F"),
 }
