@@ -2366,12 +2366,16 @@ class EtnyPoXNode:
                 cid = a['cid']
                 ev = int(a['expectedVersion'])
                 rn = int(a['relayNonce'])
+                # PUBLIC idempotency nonce (0 = no guard). Signature-bound: it
+                # is part of the digest the enclave signed, so altering or
+                # stripping it here would just make commitFor revert.
+                idem = int(a.get('nonce', 0) or 0)
                 sig = bytes.fromhex(a['signature'][2:])
             except Exception as e:
                 logger.error(f"[esr-relay] {name} malformed ({e}) -- skipping")
                 continue
 
-            fn = self.__esr.functions.commitFor(enclave, key_hash, cid, ev, rn, sig)
+            fn = self.__esr.functions.commitFor(enclave, key_hash, cid, ev, rn, idem, sig)
             try:
                 gas_units = fn.estimate_gas({'from': self.__address})
             except Exception as e:
