@@ -2366,10 +2366,12 @@ class EtnyPoXNode:
                 cid = a['cid']
                 ev = int(a['expectedVersion'])
                 rn = int(a['relayNonce'])
-                # PUBLIC idempotency nonce (0 = no guard). Required field --
-                # every authorization carries it. Signature-bound: it is part
-                # of the digest the enclave signed, so altering or stripping
-                # it here would just make commitFor revert.
+                # PUBLIC idempotency nonce. 0 = omitted: the registry assigns
+                # the next value in sequence itself; non-zero is client-pinned
+                # and must be exactly stored + 1. Required field -- every
+                # authorization carries it. Signature-bound: part of the
+                # digest the enclave signed, so altering or stripping it here
+                # would just make commitFor revert.
                 idem = int(a['nonce'])
                 sig = bytes.fromhex(a['signature'][2:])
             except Exception as e:
