@@ -101,11 +101,12 @@ esr_abi_filepath = base_path / 'esr.abi'
 esr_contract_addresses = {
     # Nonce-aware enumerable registries (2026-08-15): commitFor relay, the
     # enumeration API (commitSeq + entryCount/getEntriesFrom) and the PUBLIC
-    # per-(enclave, key) idempotency nonce (getNonce view), enforced strictly
-    # sequentially per key -- exactly stored + 1, no gaps, no reuse.
-    "BLOXBERG_MAINNET": os.environ.get('ESR_CONTRACT_ADDRESS', "0xDaFa1e3CAF370765275d853cd86dDEd671Ce29Dd"),
-    "BLOXBERG_TESTNET": os.environ.get('ESR_CONTRACT_ADDRESS', "0xD7a7Cb9cbb0Ca1adFb2B8405382f299EA1c6132f"),
-    "LITVM_LITEFORGE": os.environ.get('ESR_CONTRACT_ADDRESS', "0x213aA794F29EA717B9226dF81F7317334Ac36169"),
+    # per-(enclave, key) nonce (getNonce view), advancing by exactly 1 on
+    # every commit -- omitted (wire 0) is auto-assigned by the registry, a
+    # pinned value must be exactly stored + 1 (no gaps, no reuse).
+    "BLOXBERG_MAINNET": os.environ.get('ESR_CONTRACT_ADDRESS', "0x54e0dD4201F530703c7988427d3b7c70c1dCeC94"),
+    "BLOXBERG_TESTNET": os.environ.get('ESR_CONTRACT_ADDRESS', "0x421E216087eEc1e27b82188C23E490b0E2cA384d"),
+    "LITVM_LITEFORGE": os.environ.get('ESR_CONTRACT_ADDRESS', "0x5f427A78A0f2Bd7379b99A09C7D8fE51DD7E54D7"),
 }
 # ESR relay: the enclave signs each state commit (commitFor) and the NODE
 # submits it and pays gas, so no enclave wallet needs funding. To stop a
