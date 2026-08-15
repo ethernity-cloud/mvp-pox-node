@@ -101,16 +101,11 @@ esr_abi_filepath = base_path / 'esr.abi'
 esr_contract_addresses = {
     # Nonce-aware enumerable registries (2026-08-15): commitFor relay, the
     # enumeration API (commitSeq + entryCount/getEntriesFrom) and the PUBLIC
-    # per-(enclave, key) idempotency nonce (getNonce, strictly in-order).
-    "BLOXBERG_MAINNET": os.environ.get('ESR_CONTRACT_ADDRESS', "0x39d6f2A98f7FFF9866AAaa0EAa9aEd8bcf6f728E"),
-    # Nonce-aware enumerable ESR, deployed 2026-08-15 on bloxberg_testnet
-    # (chain 8995). Adds the PUBLIC per-(enclave, key) idempotency nonce
-    # (getNonce view, strictly in-order per key). Replaces the 2026-08-12
-    # enumerable deployment 0xda5e...ACfb.
-    "BLOXBERG_TESTNET": os.environ.get('ESR_CONTRACT_ADDRESS', "0xdfDD088b9cB998280685aF4E93DC0b37952aB08e"),
-    # Nonce-aware enumerable ESR, deployed 2026-08-15 on LitVM LiteForge
-    # (chain 4441). Replaces the 2026-08-12 enumerable deployment 0xbAa7...BB0F.
-    "LITVM_LITEFORGE": os.environ.get('ESR_CONTRACT_ADDRESS', "0x71a4bb5AC4c8F37ea0d9394fB29bBC06eEC28000"),
+    # per-(enclave, key) idempotency nonce (getNonce view), enforced strictly
+    # sequentially per key -- exactly stored + 1, no gaps, no reuse.
+    "BLOXBERG_MAINNET": os.environ.get('ESR_CONTRACT_ADDRESS', "0xDaFa1e3CAF370765275d853cd86dDEd671Ce29Dd"),
+    "BLOXBERG_TESTNET": os.environ.get('ESR_CONTRACT_ADDRESS', "0xD7a7Cb9cbb0Ca1adFb2B8405382f299EA1c6132f"),
+    "LITVM_LITEFORGE": os.environ.get('ESR_CONTRACT_ADDRESS', "0x213aA794F29EA717B9226dF81F7317334Ac36169"),
 }
 # ESR relay: the enclave signs each state commit (commitFor) and the NODE
 # submits it and pays gas, so no enclave wallet needs funding. To stop a
