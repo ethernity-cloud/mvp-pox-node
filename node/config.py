@@ -104,9 +104,9 @@ esr_contract_addresses = {
     # per-(enclave, key) nonce (getNonce view), advancing by exactly 1 on
     # every commit -- omitted (wire 0) is auto-assigned by the registry, a
     # pinned value must be exactly stored + 1 (no gaps, no reuse).
-    "BLOXBERG_MAINNET": os.environ.get('ESR_CONTRACT_ADDRESS', "0x54e0dD4201F530703c7988427d3b7c70c1dCeC94"),
-    "BLOXBERG_TESTNET": os.environ.get('ESR_CONTRACT_ADDRESS', "0x421E216087eEc1e27b82188C23E490b0E2cA384d"),
-    "LITVM_LITEFORGE": os.environ.get('ESR_CONTRACT_ADDRESS', "0x5f427A78A0f2Bd7379b99A09C7D8fE51DD7E54D7"),
+    "BLOXBERG_MAINNET": os.environ.get('ESR_CONTRACT_ADDRESS', "0x4Bf5cDE3BFD73dd10B707f8B123Ba631D2EBEAD2"),
+    "BLOXBERG_TESTNET": os.environ.get('ESR_CONTRACT_ADDRESS', "0x0Ea1728EAE108FD3B9340ae91451348E2Cc6b4E4"),
+    "LITVM_LITEFORGE": os.environ.get('ESR_CONTRACT_ADDRESS', "0x709052Fe77Af543d3d9FE2Ac06a15c635c8D4Be5"),
 }
 # ESR relay: the enclave signs each state commit (commitFor) and the NODE
 # submits it and pays gas, so no enclave wallet needs funding. To stop a
