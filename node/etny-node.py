@@ -1337,17 +1337,60 @@ class EtnyPoXNode:
             # trustedzone attested into the result (content-addressed =>
             # trustless delivery); without this pin the validator cannot
             # verify the order and will invalidate it.
+            #
+            # Whether this order made commits at all is read from the ATTESTED
+            # result inside transaction.txt (fields 5-7 of the result string:
+            # merkleRoot:countByte:ledgerCid) -- not inferred from bucket
+            # contents. Zero root = the trustedzone attested "no commits";
+            # nothing is fetched or pinned. When commits exist, the staged
+            # ledger bytes are verified against the attested CID before
+            # pinning, so a corrupted staging file is never pinned under the
+            # wrong identity.
             if self.__esr is not None:
                 try:
-                    exists, _m = self.swift_stream_service.is_object_in_bucket(
-                        bucket_name, 'esr.authorizations.json')
-                    ok, ledger_raw = (self.swift_stream_service.get_file_content(
-                        bucket_name, 'esr.authorizations.json')
-                        if exists else (False, None))
-                    if ok and ledger_raw:
-                        lb = ledger_raw.encode('utf-8') if isinstance(ledger_raw, str) else ledger_raw
-                        cidl = self.storage.pin_bytes_deferred(lb, name=f'esr-ledger-{order_id}.json')
-                        logger.info(f'[esr] pinned authorizations ledger for order {order_id}: {cidl}')
+                    esr_root, esr_cid = '', ''
+                    try:
+                        ok_tx, tx_raw = self.swift_stream_service.get_file_content(
+                            bucket_name, 'transaction.txt')
+                        if ok_tx and tx_raw:
+                            parsed = parse_transaction_bytes_ut(self.__contract_abi, tx_raw)
+                            parts = str(parsed.get('result', '')).split(':')
+                            if len(parts) > 6:
+                                esr_root, esr_cid = parts[4], parts[6]
+                    except Exception as e:
+                        logger.debug(f'[esr] could not parse attested result ({e}); '
+                                     f'falling back to bucket probe')
+
+                    if esr_root and set(esr_root) == {'0'}:
+                        logger.debug(f'[esr] order {order_id}: attested zero ESR '
+                                     f'commits -- nothing to pin')
+                    else:
+                        exists, _m = self.swift_stream_service.is_object_in_bucket(
+                            bucket_name, 'esr.authorizations.json')
+                        if not exists:
+                            if esr_root:
+                                logger.error(
+                                    f'[esr] order {order_id}: result attests ESR '
+                                    f'commits (ledger {esr_cid}) but no staged '
+                                    f'ledger exists -- cannot pin; the validator '
+                                    f'will fail this order')
+                        else:
+                            ok, ledger_raw = self.swift_stream_service.get_file_content(
+                                bucket_name, 'esr.authorizations.json')
+                            if ok and ledger_raw:
+                                lb = ledger_raw.encode('utf-8') if isinstance(ledger_raw, str) else ledger_raw
+                                local_cid = self.__cidv1_raw(lb)
+                                if esr_cid and local_cid != esr_cid:
+                                    logger.error(
+                                        f'[esr] order {order_id}: staged ledger '
+                                        f'({local_cid}) does not match the attested '
+                                        f'CID ({esr_cid}) -- refusing to pin '
+                                        f'mismatched bytes')
+                                else:
+                                    cidl = self.storage.pin_bytes_deferred(
+                                        lb, name=f'esr-ledger-{order_id}.json')
+                                    logger.info(f'[esr] pinned authorizations ledger '
+                                                f'for order {order_id}: {cidl}')
                 except Exception as e:
                     logger.error(f'[esr] ledger pin failed for order {order_id}: {e}')
 
