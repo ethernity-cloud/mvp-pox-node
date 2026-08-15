@@ -885,12 +885,50 @@ class Storage:
             return
         try:
             self._api_call('pin/add', params={'arg': hash}, timeout=timeout)
+            self._pin_fail_streak = 0
         except Exception as e:
             error_message = str(e).lower()
             if 'not pinned' in error_message or 'pinned indirectly' in error_message:
+                self._pin_fail_streak = 0
                 return
             self.logger.info(f'error while adding pin')
             self.logger.error(e)
+            # A single pin timeout is NORMAL (replication fail-fast on CIDs
+            # that have not propagated yet), so it must never restart the
+            # daemon by itself. But a long CONSECUTIVE streak across
+            # different CIDs is the signature of a daemon that still accepts
+            # connections yet answers nothing -- the one wedge state none of
+            # the other restart triggers catch. Escalate: past the streak
+            # threshold, run a cheap health probe; if even that times out,
+            # restart the local daemon (rate-limited).
+            self._pin_fail_streak = getattr(self, '_pin_fail_streak', 0) + 1
+            if (self._pin_fail_streak >= 10
+                    and "127.0.0.1" in self.client_connect_url):
+                import time as _time
+                last = getattr(self, '_pin_wedge_restart_at', 0)
+                if _time.time() - last >= 600:  # at most once per 10 min
+                    healthy = False
+                    try:
+                        self._api_call('version', timeout=10)
+                        healthy = True
+                    except Exception:
+                        pass
+                    if not healthy:
+                        self.logger.warning(
+                            f"IPFS daemon unresponsive ({self._pin_fail_streak} "
+                            f"consecutive pin failures and health probe timed "
+                            f"out) -- restarting IPFS service")
+                        self._pin_wedge_restart_at = _time.time()
+                        self._pin_fail_streak = 0
+                        try:
+                            self.restart_ipfs_service()
+                        except Exception as restart_error:
+                            self.logger.error(f"Failed to restart IPFS service: {restart_error}")
+                    else:
+                        # Daemon answers cheap calls: not wedged, just busy
+                        # or the CIDs are unavailable. Reset the streak so we
+                        # only escalate on a fresh unbroken run of failures.
+                        self._pin_fail_streak = 0
             raise
 
     def pin_rm(self, hash):
