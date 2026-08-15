@@ -1294,12 +1294,15 @@ class EtnyPoXNode:
 
             # First wait
             start_wait = time.time()
-            status_enclave = self.wait_for_enclave_v2(bucket_name, 'result.txt', do_req.duration * 3600 + 120)
+            status_enclave = self.wait_for_enclave_v2(bucket_name, 'result.txt', do_req.duration * 3600 + 120, order_id=order_id)
             elapsed_wait1 = time.time() - start_wait
 
             # Second wait
             start_wait = time.time()
-            status_enclave = self.wait_for_enclave_v2(bucket_name, 'transaction.txt', 60)
+            # The trustedzone's landed-check waits up to 5 blocks per started
+            # 64 commits (max 20 blocks for a full 256-commit run), so allow
+            # generous headroom on top of the relay work itself.
+            status_enclave = self.wait_for_enclave_v2(bucket_name, 'transaction.txt', 300, order_id=order_id)
             elapsed_wait2 = time.time() - start_wait
 
             total_elapsed_wait = elapsed_wait1 + elapsed_wait2
@@ -1323,9 +1326,27 @@ class EtnyPoXNode:
 
             # Relay any ESR state commits the enclave signed for this order. The
             # enclave never pays gas: it stages signed commitFor authorizations
-            # (esr.commit.<nonce>.json) and the node submits + pays them, capped
-            # per order so a malicious payload cannot drain the operator.
+            # (esr.commit.<key16>.<relayNonce>.json) and the node submits + pays
+            # them, capped per order so a malicious payload cannot drain the
+            # operator. (Also runs in-loop during the enclave wait; this is the
+            # final sweep.)
             self.__relay_esr_commits(bucket_name, order_id)
+
+            # Pin the signed authorization ledger to IPFS. The validator runs
+            # on an ISOLATED box and fetches the ledger BY THE CID the
+            # trustedzone attested into the result (content-addressed =>
+            # trustless delivery); without this pin the validator cannot
+            # verify the order and will invalidate it.
+            if self.__esr is not None:
+                try:
+                    ok, ledger_raw = self.swift_stream_service.get_file_content(
+                        bucket_name, 'esr.authorizations.json')
+                    if ok and ledger_raw:
+                        lb = ledger_raw.encode('utf-8') if isinstance(ledger_raw, str) else ledger_raw
+                        cidl = self.storage.pin_bytes_deferred(lb, name=f'esr-ledger-{order_id}.json')
+                        logger.info(f'[esr] pinned authorizations ledger for order {order_id}: {cidl}')
+                except Exception as e:
+                    logger.error(f'[esr] ledger pin failed for order {order_id}: {e}')
 
             if status_enclave == True:
                 logger.debug(f'Uploading result to {enclave_image_name}-{v3} bucket')
@@ -1392,7 +1413,7 @@ class EtnyPoXNode:
                 'docker-compose', '-f', self.order_docker_compose_file, 'down'
             ], logger)
 
-    def wait_for_enclave_v2(self, bucket_name, object_name, timeout=120):
+    def wait_for_enclave_v2(self, bucket_name, object_name, timeout=120, order_id=None):
         logger = self.logger
         deadline = time.time() + timeout
         logger.info(f'Checking if object {object_name} exists in bucket {bucket_name} for {timeout} seconds')
@@ -1424,6 +1445,16 @@ class EtnyPoXNode:
             if self.__esr is not None and (time.time() - last_state_poll) >= 5:
                 last_state_poll = time.time()
                 self.serve_esr_state_pins(bucket_name, deadline)
+                # Relay staged ESR commits AS THEY APPEAR: the trustedzone
+                # verifies (up to 5 blocks) that every signed commit landed
+                # on the registry before it signs the result, so the relay
+                # must run DURING its wait, not after. Idempotent -- already-
+                # relayed files are skipped.
+                if order_id is not None:
+                    try:
+                        self.__relay_esr_commits(bucket_name, order_id)
+                    except Exception as e:
+                        logger.debug(f'[esr-relay] in-loop relay skipped: {e}')
             time.sleep(1)
         logger.info('Enclave execution timed out')
         return False
@@ -2331,29 +2362,63 @@ class EtnyPoXNode:
         """Relay the ESR state commits the enclave signed for this order.
 
         The enclave signs each commit (commitFor) and stages it as
-        esr.commit.<nonce>.json; the NODE submits it and PAYS. To stop a
-        malicious payload from draining the operator, the node keeps a running
-        per-order gas total and REFUSES to relay a commit that would push it over
+        esr.commit.<key16>.<relayNonce>.json; the NODE submits it and PAYS.
+        Relay nonces are PER (enclave, key): each key's commits relay strictly
+        in order, different keys are independent. To stop a malicious payload
+        from draining the operator, the node keeps a running per-order gas
+        total and REFUSES to relay a commit that would push it over
         config.esr_relay_gas_budget_wei. A refusal is not fatal here -- the
         trustedzone independently re-prices the whole ledger and terminates the
         order, so the node just protects its wallet and moves on.
+
+        IDEMPOTENT and called REPEATEDLY: the enclave stages commits during
+        execution and the trustedzone waits (up to 5 blocks) for them to land
+        before signing the result, so this runs from inside the enclave-wait
+        loop as files appear, plus once more as a final sweep. Already-relayed
+        files are tracked per order and skipped.
         """
         if self.__esr is None:
             return  # ESR not deployed on this network
+        if not hasattr(self, '_esr_relayed_files') or self._esr_relay_order != order_id:
+            self._esr_relayed_files = set()
+            self._esr_relay_spent = 0
+            self._esr_relay_order = order_id
         try:
             names = self.swift_stream_service.list_object_names(bucket_name) or []
         except Exception as e:
             logger.debug(f"[esr-relay] could not list bucket {bucket_name}: {e}")
             return
+
+        def _order_key(n):
+            # esr.commit.<key16>.<rn>.json -> (key16, rn); legacy
+            # esr.commit.<rn>.json -> ('', rn). Per-key order is what matters.
+            parts = n.split('.')
+            try:
+                if len(parts) == 5:
+                    return (parts[2], int(parts[3]))
+                return ('', int(parts[2]))
+            except (ValueError, IndexError):
+                return ('~', 0)
+
         commit_files = sorted(
-            (n for n in names if n.startswith('esr.commit.') and n.endswith('.json')),
-            key=lambda n: int(n.split('.')[2]))  # relay in nonce order
+            (n for n in names if n.startswith('esr.commit.') and n.endswith('.json')
+             and n not in self._esr_relayed_files),
+            key=_order_key)
+        # PER-RUN CAP: never relay more than 256 commits for one order -- the
+        # trustedzone fails the task (code 38) beyond that anyway, so paying
+        # for the excess would be pure waste.
+        already = len(self._esr_relayed_files)
+        if already + len(commit_files) > 256:
+            keep = max(0, 256 - already)
+            logger.error(f"[esr-relay] order {order_id}: {already + len(commit_files)} staged "
+                         f"commits exceed the per-run cap of 256; relaying only {keep} more")
+            commit_files = commit_files[:keep]
         if not commit_files:
             return
 
         budget = int(config.esr_relay_gas_budget_wei)
         gas_price, fee_fields = self.__esr_fee()
-        spent = 0
+        spent = self._esr_relay_spent
         relayed = 0
         for name in commit_files:
             ok, raw = self.swift_stream_service.get_file_content(bucket_name, name)
@@ -2407,17 +2472,26 @@ class EtnyPoXNode:
                             txn, private_key=self.__acct.key).raw_transaction),
                     timeout=180)
                 spent += cost
+                self._esr_relay_spent = spent
                 relayed += 1
-                logger.info(f"[esr-relay] order {order_id}: relayed ESR commit nonce {rn} "
+                self._esr_relayed_files.add(name)
+                logger.info(f"[esr-relay] order {order_id}: relayed ESR commit {name} "
                             f"(gas {gas_units}, spent {spent}/{budget} wei)")
             except Exception as e:
-                logger.error(f"[esr-relay] order {order_id}: relaying nonce {rn} failed ({e})")
-                # A genuine failure (e.g. VersionMismatch) is not abuse; stop
-                # relaying this order's commits to avoid nonce gaps.
-                break
+                logger.error(f"[esr-relay] order {order_id}: relaying {name} failed ({e})")
+                # A genuine failure (e.g. VersionMismatch) is not abuse; skip
+                # THIS KEY's remaining commits (its relay nonces are now
+                # gapped) but keep relaying other keys -- per-key nonces make
+                # them independent.
+                failed_key = _order_key(name)[0]
+                self._esr_relayed_files.add(name)
+                for later in commit_files:
+                    if later != name and _order_key(later)[0] == failed_key:
+                        self._esr_relayed_files.add(later)
+                continue
         if relayed:
             logger.info(f"[esr-relay] order {order_id}: relayed {relayed} ESR commit(s), "
-                        f"paid for {spent} wei of gas")
+                        f"paid for {spent} wei of gas total this order")
 
     def send_transaction(self, unicorn_txn):
         try:
