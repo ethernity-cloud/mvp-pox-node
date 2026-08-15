@@ -99,21 +99,18 @@ esr_abi_filepath = base_path / 'esr.abi'
 # Bloxberg mainnet and testnet are the SAME CHAIN (both chainId 8995), separated
 # by different protocol contracts, so both use the one deployment.
 esr_contract_addresses = {
-    # Extended registry (adds commitFor: node-relayed, signature-verified state
-    # commits). Replaces the original 0x4f6c... which had no relay path.
-    #
-    # Bloxberg MAINNET stays on the pre-enumeration contract until mainnet is
-    # redeployed; the TESTNETS below run the enumerable upgrade (commitSeq +
-    # entryCount/getEntriesFrom) so replication can mirror all enclaves' state
-    # without event scanning.
-    "BLOXBERG_MAINNET": os.environ.get('ESR_CONTRACT_ADDRESS', "0xF76469A5659670B6ade366dE635e6463aaB8f3D8"),
+    # Nonce-aware enumerable registries (2026-08-15): commitFor relay, the
+    # enumeration API (commitSeq + entryCount/getEntriesFrom) and the PUBLIC
+    # per-(enclave, key) idempotency nonce (getNonce, strictly in-order).
+    "BLOXBERG_MAINNET": os.environ.get('ESR_CONTRACT_ADDRESS', "0x39d6f2A98f7FFF9866AAaa0EAa9aEd8bcf6f728E"),
     # Nonce-aware enumerable ESR, deployed 2026-08-15 on bloxberg_testnet
     # (chain 8995). Adds the PUBLIC per-(enclave, key) idempotency nonce
     # (getNonce view, strictly in-order per key). Replaces the 2026-08-12
     # enumerable deployment 0xda5e...ACfb.
     "BLOXBERG_TESTNET": os.environ.get('ESR_CONTRACT_ADDRESS', "0xdfDD088b9cB998280685aF4E93DC0b37952aB08e"),
-    # Enumerable ESR, deployed 2026-08-12 on LitVM LiteForge (chain 4441).
-    "LITVM_LITEFORGE": os.environ.get('ESR_CONTRACT_ADDRESS', "0xbAa7F9E3287ff95D177104eD469E6d0Fd19dBB0F"),
+    # Nonce-aware enumerable ESR, deployed 2026-08-15 on LitVM LiteForge
+    # (chain 4441). Replaces the 2026-08-12 enumerable deployment 0xbAa7...BB0F.
+    "LITVM_LITEFORGE": os.environ.get('ESR_CONTRACT_ADDRESS', "0x71a4bb5AC4c8F37ea0d9394fB29bBC06eEC28000"),
 }
 # ESR relay: the enclave signs each state commit (commitFor) and the NODE
 # submits it and pays gas, so no enclave wallet needs funding. To stop a
