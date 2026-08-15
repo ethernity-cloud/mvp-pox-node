@@ -1339,8 +1339,11 @@ class EtnyPoXNode:
             # verify the order and will invalidate it.
             if self.__esr is not None:
                 try:
-                    ok, ledger_raw = self.swift_stream_service.get_file_content(
+                    exists, _m = self.swift_stream_service.is_object_in_bucket(
                         bucket_name, 'esr.authorizations.json')
+                    ok, ledger_raw = (self.swift_stream_service.get_file_content(
+                        bucket_name, 'esr.authorizations.json')
+                        if exists else (False, None))
                     if ok and ledger_raw:
                         lb = ledger_raw.encode('utf-8') if isinstance(ledger_raw, str) else ledger_raw
                         cidl = self.storage.pin_bytes_deferred(lb, name=f'esr-ledger-{order_id}.json')

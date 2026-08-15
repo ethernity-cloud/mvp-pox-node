@@ -40,6 +40,20 @@ class SwiftStreamService:
             return False
 
     def restart_etny_swift_stream_and_reconnect(self):
+        # RECURSION BRAKE: every method in this file retries by calling this
+        # and then recursing into itself. A PERSISTENT S3 error (e.g. a key
+        # that simply does not exist) therefore used to recurse forever, at
+        # ~35s per level (observed live: an order thread wedged for hours).
+        # Cap the restart attempts inside a rolling window; past the cap this
+        # returns False and every caller falls through to its error return.
+        import time as _time
+        now = _time.time()
+        recent = [t for t in getattr(self, '_restart_times', []) if now - t < 300]
+        if len(recent) >= 3:
+            return False
+        recent.append(now)
+        self._restart_times = recent
+
         max_attempts = 10
         sleep_seconds = 5
 
@@ -195,6 +209,10 @@ class SwiftStreamService:
             for data in response.stream(amt=1024 * 1024):
                 _d = _d + data
         except S3Error as err:
+            # A missing key/bucket is a legitimate answer, not a service
+            # failure: restarting MinIO cannot make the object exist.
+            if getattr(err, 'code', '') in ('NoSuchKey', 'NoSuchBucket'):
+                return False, err
             if self.restart_etny_swift_stream_and_reconnect():
                 return self.get_file_content_bytes(bucket_name, file_name)
             else:
