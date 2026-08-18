@@ -131,6 +131,9 @@ esr_replication_interval_seconds = int(os.environ.get('ESR_REPLICATION_INTERVAL_
 # How many of the most recent protocol orders the replication thread scans for
 # result CIDs each round.
 esr_result_scan_orders = int(os.environ.get('ESR_RESULT_SCAN_ORDERS', 200))
+# How many of the most recent DO requests the replication thread scans for
+# payload/input/challenge/image CIDs to pin network-wide (0 disables).
+do_request_scan_requests = int(os.environ.get('DO_REQUEST_SCAN_REQUESTS', 200))
 # ESR state blobs are produced on another node and must propagate to ours.
 # Per replication cycle we try a missing CID up to esr_pin_attempts_per_cycle
 # times (a quick double-tap for propagation lag); the attempt counter persists

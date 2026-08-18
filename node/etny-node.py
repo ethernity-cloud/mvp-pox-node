@@ -717,6 +717,74 @@ class EtnyPoXNode:
             self.logger.warning(f"Protocol result replication skipped: {e}")
             return kept
 
+    def __replicate_do_request_inputs(self, scan_limit=None):
+        """Pin the IPFS objects referenced by recent DO requests.
+
+        Every DO request carries colon-separated metadata whose fields
+        reference the enclave image, docker-compose, encrypted challenge,
+        encrypted payload and encrypted input CIDs. Only the wallet that
+        created the request is guaranteed to have pinned them; if that
+        runner's IPFS endpoint disappears, the task can no longer be
+        reproduced or verified. Replicating recent requests keeps their
+        objects available network-wide. All content is ciphertext and its
+        integrity is bound by on-chain checksums, so pinning blindly is safe.
+
+        Best-effort and bounded (scan_limit recent requests, free-disk
+        gated). Returns the set of CIDs it kept so the caller can protect
+        them from the retention sweep. Never raises.
+        """
+        kept = set()
+        if self.__etny is None:
+            return kept
+        try:
+            try:
+                total = self.__etny.caller()._getDORequestsCount()
+                total = total.toNumber() if hasattr(total, 'toNumber') else int(total)
+            except Exception as e:
+                self.logger.debug(f"do-request replication: _getDORequestsCount failed ({e})")
+                return kept
+
+            limit = scan_limit if scan_limit is not None else int(
+                getattr(config, 'do_request_scan_requests', 200))
+            start = max(0, total - limit)
+            for req_id in range(total - 1, start - 1, -1):
+                free_gb = HardwareInfoProvider.get_free_storage()
+                if free_gb < config.esr_min_free_storage_gb:
+                    self.logger.warning(
+                        f"Free storage {free_gb}GB below ESR_MIN_FREE_STORAGE_GB; "
+                        f"stopping do-request replication for this round")
+                    break
+                try:
+                    time.sleep(self.__network_config.rpc_delay / 1000)
+                    meta = self.__etny.caller()._getDORequestMetadata(req_id)
+                except Exception:
+                    continue
+                # (downer, metadata1..metadata4): every colon-separated token
+                # that looks like a CID is an IPFS object the request needs.
+                for field in meta[1:]:
+                    for token in str(field or '').split(':'):
+                        cid = token.strip()
+                        if not self.__looks_like_cid(cid) or cid in kept:
+                            continue
+                        try:
+                            if not self.storage.is_pinned(cid):
+                                # Short per-attempt timeout: fail fast on an
+                                # unfetchable CID instead of blocking the
+                                # shared IPFS daemon (see __replicate_esr_state).
+                                self.storage.pin_add(
+                                    cid,
+                                    timeout=int(getattr(config, 'esr_pin_attempt_timeout_seconds', 30)))
+                            self.ipfs_cache.add(cid)
+                            kept.add(cid)
+                        except Exception as e:
+                            self.logger.debug(f"Could not pin do-request object {cid}: {e}")
+            if kept:
+                self.logger.info(f"Replicated {len(kept)} DO-request object(s)")
+            return kept
+        except Exception as e:
+            self.logger.warning(f"DO-request replication skipped: {e}")
+            return kept
+
     def run_esr_replication_loop(self):
         """Replication loop for THIS network, paired with its processing thread.
 
@@ -740,6 +808,7 @@ class EtnyPoXNode:
                 if self.__esr is not None:
                     self.__replicate_esr_state()
                 self.__replicate_protocol_results()
+                self.__replicate_do_request_inputs()
             except Exception as e:
                 self.logger.warning(f"[esr-replication] round failed: {e}")
             # Sleep in short slices so stop_event is honored promptly.
