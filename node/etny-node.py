@@ -785,6 +785,92 @@ class EtnyPoXNode:
             self.logger.warning(f"DO-request replication skipped: {e}")
             return kept
 
+    def __replicate_session_rows(self, scan_limit=None):
+        """Pin the IPFS objects referenced by recent interactive sessions.
+
+        For every session-flagged order in the scan window, pin the input
+        ciphertext CIDs from its DO request's etny-si rows and the output
+        ciphertext CIDs from its DP request's etny-so rows, so a session
+        transcript's data plane survives both the data owner's IPFS endpoint
+        and the operator node that produced it. Everything is chain-anchored
+        ciphertext with an on-chain digest, so pinning blindly is safe.
+        Bounded: <=256 rows x 2 channels per session inside the window.
+        Never raises.
+        """
+        kept = set()
+        if self.__etny is None:
+            return kept
+        try:
+            try:
+                total = self.__etny.caller()._getOrdersCount()
+                total = total.toNumber() if hasattr(total, 'toNumber') else int(total)
+            except Exception as e:
+                self.logger.debug(f"session replication: _getOrdersCount failed ({e})")
+                return kept
+
+            limit = scan_limit if scan_limit is not None else int(
+                getattr(config, 'esr_result_scan_orders', 200))
+            start = max(0, total - limit)
+
+            def pin(cid):
+                if not self.__looks_like_cid(cid) or cid in kept:
+                    return
+                try:
+                    if not self.storage.is_pinned(cid):
+                        self.storage.pin_add(
+                            cid,
+                            timeout=int(getattr(config, 'esr_pin_attempt_timeout_seconds', 30)))
+                    self.ipfs_cache.add(cid)
+                    kept.add(cid)
+                except Exception as e:
+                    self.logger.debug(f"Could not pin session object {cid}: {e}")
+
+            for order_id in range(total - 1, start - 1, -1):
+                free_gb = HardwareInfoProvider.get_free_storage()
+                if free_gb < config.esr_min_free_storage_gb:
+                    self.logger.warning(
+                        f"Free storage {free_gb}GB below ESR_MIN_FREE_STORAGE_GB; "
+                        f"stopping session replication for this round")
+                    break
+                try:
+                    time.sleep(self.__network_config.rpc_delay / 1000)
+                    order = Order(self.__etny.caller()._getOrder(order_id))
+                    meta = self.__etny.caller()._getDORequestMetadata(order.do_req)
+                except Exception:
+                    continue
+                if str(meta[3] or '').split(':')[0] != 'v3s':
+                    continue
+                # Input rows: v1:<seq>:<orderId>:<cid>:<sha256>
+                try:
+                    count = int(self.__etny.caller()._getMetadataCountForRequest(order.do_req))
+                    for i in range(count):
+                        key, value = self.__etny.caller()._getMetadataValueForRequest(order.do_req, i)
+                        if key != 'etny-si':
+                            continue
+                        parts = str(value or '').split(':')
+                        if len(parts) == 5 and parts[0] == 'v1':
+                            pin(parts[3].strip())
+                except Exception as e:
+                    self.logger.debug(f"session replication: input rows for order {order_id} failed: {e}")
+                # Output rows: v1:<seq>:<orderId>:<ack>:<status>:<cid>:<sha256>:<sig>
+                try:
+                    count = int(self.__etny.caller()._getMetadataCountForDPRequest(order.dp_req))
+                    for i in range(count):
+                        key, value = self.__etny.caller()._getMetadataValueForDPRequest(order.dp_req, i)
+                        if key != 'etny-so':
+                            continue
+                        parts = str(value or '').split(':')
+                        if len(parts) == 8 and parts[0] == 'v1' and parts[4] == 'ok':
+                            pin(parts[5].strip())
+                except Exception as e:
+                    self.logger.debug(f"session replication: output rows for order {order_id} failed: {e}")
+            if kept:
+                self.logger.info(f"Replicated {len(kept)} session object(s)")
+            return kept
+        except Exception as e:
+            self.logger.warning(f"Session replication skipped: {e}")
+            return kept
+
     def run_esr_replication_loop(self):
         """Replication loop for THIS network, paired with its processing thread.
 
@@ -809,6 +895,7 @@ class EtnyPoXNode:
                     self.__replicate_esr_state()
                 self.__replicate_protocol_results()
                 self.__replicate_do_request_inputs()
+                self.__replicate_session_rows()
             except Exception as e:
                 self.logger.warning(f"[esr-replication] round failed: {e}")
             # Sleep in short slices so stop_event is honored promptly.
