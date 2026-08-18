@@ -1401,6 +1401,15 @@ class EtnyPoXNode:
             # final sweep.)
             self.__relay_esr_commits(bucket_name, order_id)
 
+            # Final session sweep: deliver any raced inputs, pin remaining
+            # outputs and broadcast their signed rows (late notices included)
+            # BEFORE the result transaction goes out, so the notices and the
+            # completion land back-to-back -- same block in practice.
+            try:
+                self.__serve_session(bucket_name, order_id)
+            except Exception as e:
+                logger.debug(f'[session] final sweep skipped: {e}')
+
             # Pin the signed authorization ledger to IPFS. The validator runs
             # on an ISOLATED box and fetches the ledger BY THE CID the
             # trustedzone attested into the result (content-addressed =>
@@ -1548,6 +1557,7 @@ class EtnyPoXNode:
             except Exception as e:
                 logger.debug(f'[esr-read] staging skipped: {e}')
         last_state_poll = 0
+        last_session_poll = 0
         while time.time() < deadline:
             exists, msg = self.swift_stream_service.is_object_in_bucket(bucket_name, object_name)
             if exists:
@@ -1570,6 +1580,14 @@ class EtnyPoXNode:
                         self.__relay_esr_commits(bucket_name, order_id)
                     except Exception as e:
                         logger.debug(f'[esr-relay] in-loop relay skipped: {e}')
+            # Interactive-session transport runs on its own cadence and does
+            # NOT depend on ESR being deployed on this network.
+            if order_id is not None and (time.time() - last_session_poll) >= 5:
+                last_session_poll = time.time()
+                try:
+                    self.__serve_session(bucket_name, order_id)
+                except Exception as e:
+                    logger.debug(f'[session] in-loop serve skipped: {e}')
             time.sleep(1)
         logger.info('Enclave execution timed out')
         return False
@@ -2472,6 +2490,164 @@ class EtnyPoXNode:
         gp = self.__w3.to_wei(self.__network_config.gas_price,
                               self.__network_config.gas_price_measure)
         return gp, {'gasPrice': gp}
+
+    def __serve_session(self, bucket_name, order_id):
+        """Transport for interactive sessions: deliver etny-si inputs from
+        IPFS into the enclave bucket, and broadcast the enclave's signed
+        etny-so output proofs as DP-request metadata rows.
+
+        The node is a PURE RELAY here: inputs are authenticated by the chain
+        (only the data owner's wallet can write the rows) and verified
+        against their on-chain digests before delivery; outputs are signed by
+        the task wallet inside the enclave, so this node can delay but never
+        read, alter or inject session traffic. Idempotent, called from the
+        enclave-wait loop plus once as a final sweep before the result tx so
+        late notices and the completion land back-to-back.
+        """
+        if not hasattr(self, '_session_state') or self._session_order != order_id:
+            self._session_order = order_id
+            order = Order(self.__etny.caller()._getOrder(order_id))
+            meta = self.__etny.caller()._getDORequestMetadata(order.do_req)
+            is_session = str(meta[3] or '').split(':')[0] == 'v3s'
+            self._session_state = {
+                'active': is_session,
+                'do_req': int(order.do_req),
+                'dp_req': int(order.dp_req),
+                'rows_seen': 0,
+                'delivered': set(),
+                'proof_next': 0,
+                'spent': 0,
+            }
+            if is_session:
+                logger.info(f"[session] order {order_id}: interactive session detected "
+                            f"(request {order.do_req}, dp request {order.dp_req})")
+        st = self._session_state
+        if not st['active']:
+            return
+        self.__session_deliver_inputs(bucket_name, order_id, st)
+        self.__session_relay_outputs(bucket_name, order_id, st)
+
+    def __session_deliver_inputs(self, bucket_name, order_id, st):
+        """Fetch newly committed input CIDs and drop the ciphertext into the
+        bucket as session.input.<seq>. A row whose content is not yet
+        fetchable is retried next tick; a row whose content contradicts its
+        on-chain digest is never delivered."""
+        try:
+            count = int(self.__etny.caller()._getMetadataCountForRequest(st['do_req']))
+        except Exception as e:
+            logger.debug(f"[session] order {order_id}: metadata count read failed: {e}")
+            return
+        while st['rows_seen'] < count:
+            i = st['rows_seen']
+            try:
+                key, value = self.__etny.caller()._getMetadataValueForRequest(st['do_req'], i)
+            except Exception as e:
+                logger.debug(f"[session] order {order_id}: row {i} read failed: {e}")
+                return
+            st['rows_seen'] = i + 1
+            if key != 'etny-si':
+                continue
+            parts = str(value or '').split(':')
+            if len(parts) != 5 or parts[0] != 'v1':
+                continue  # close rows and foreign formats are for the enclave
+            try:
+                seq, row_order = int(parts[1]), int(parts[2])
+                cid, sha_hex = parts[3].strip(), parts[4].strip().lower()
+            except ValueError:
+                continue
+            if row_order != order_id or seq in st['delivered']:
+                continue
+            object_name = f"session.input.{seq}"
+            present, _ = self.swift_stream_service.is_object_in_bucket(bucket_name, object_name)
+            if present:
+                st['delivered'].add(seq)
+                continue
+            try:
+                self.storage.download(cid)
+                path = os.path.join(self.storage.target, cid)
+                with open(path, 'rb') as fh:
+                    blob = fh.read()
+            except Exception as e:
+                logger.warning(f"[session] order {order_id}: input {seq} ({cid}) "
+                               f"not fetchable yet: {e}")
+                st['rows_seen'] = i  # retry this row next tick
+                return
+            if hashlib.sha256(blob).hexdigest() != sha_hex:
+                logger.error(f"[session] order {order_id}: input {seq} content does not "
+                             f"match its on-chain digest; refusing to deliver")
+                st['delivered'].add(seq)
+                continue
+            self.swift_stream_service.put_file_content(
+                bucket_name, object_name, '', io.BytesIO(blob))
+            st['delivered'].add(seq)
+            logger.info(f"[session] order {order_id}: delivered input {seq}")
+
+    def __session_relay_outputs(self, bucket_name, order_id, st):
+        """Pin each staged output ciphertext (verified against the CID the
+        enclave attested inside its signed proof) and broadcast the proof as
+        a DP-request metadata row from this node's wallet. Strictly in proof
+        order; shares the ESR relay's per-order gas budget discipline."""
+        budget = int(config.esr_relay_gas_budget_wei)
+        while True:
+            proof_name = f"session.output.{st['proof_next']}.proof"
+            ok, proof = self.swift_stream_service.get_file_content(bucket_name, proof_name)
+            if not ok or not proof:
+                return
+            proof = proof.strip()
+            parts = proof.split(':')
+            # v1:<seq>:<orderId>:<ack>:<status>:<cid>:<sha256>:<sig>
+            if len(parts) != 8 or parts[0] != 'v1':
+                logger.error(f"[session] order {order_id}: malformed proof {proof_name}; skipping")
+                st['proof_next'] += 1
+                continue
+            status_field, cid = parts[4], parts[5]
+            if status_field == 'ok' and cid:
+                okb, blob = self.swift_stream_service.get_file_content_bytes(
+                    bucket_name, f"session.output.{st['proof_next']}.bin")
+                if not okb or blob is None:
+                    return  # ciphertext not staged yet; retry next tick
+                if self.__cidv1_raw(blob) != cid:
+                    logger.error(f"[session] order {order_id}: output {st['proof_next']} bytes "
+                                 f"do not match the attested CID; refusing to pin")
+                else:
+                    self.storage.pin_bytes_deferred(
+                        blob, name=f"session-output-{order_id}-{st['proof_next']}")
+            fn = self.__etny.functions._addMetadataToDPRequest(st['dp_req'], 'etny-so', proof)
+            gas_price, fee_fields = self.__esr_fee()
+            try:
+                gas_units = fn.estimate_gas({'from': self.__address})
+            except Exception as e:
+                logger.error(f"[session] order {order_id}: proof {st['proof_next']} "
+                             f"estimate_gas failed ({e}); retrying next tick")
+                return
+            cost = gas_units * gas_price
+            if st['spent'] + cost > budget:
+                logger.error(f"[session] order {order_id}: output relay would exceed the "
+                             f"per-order gas budget ({st['spent'] + cost} > {budget} wei); "
+                             f"stopping relay")
+                return
+            try:
+                opts = {
+                    'from': self.__address,
+                    'nonce': self.__w3.eth.get_transaction_count(self.__address),
+                    'chainId': self.__network_config.chain_id,
+                    'gas': gas_units + 30000,
+                }
+                opts.update(fee_fields)
+                txn = fn.build_transaction(opts)
+                self.__w3.eth.wait_for_transaction_receipt(
+                    self.__w3.eth.send_raw_transaction(
+                        self.__w3.eth.account.sign_transaction(
+                            txn, private_key=self.__acct.key).raw_transaction),
+                    timeout=180)
+                st['spent'] += cost
+                logger.info(f"[session] order {order_id}: broadcast output row "
+                            f"{st['proof_next']} ({status_field}, gas {gas_units})")
+                st['proof_next'] += 1
+            except Exception as e:
+                logger.error(f"[session] order {order_id}: broadcasting output "
+                             f"{st['proof_next']} failed ({e})")
+                return
 
     def __relay_esr_commits(self, bucket_name, order_id):
         """Relay the ESR state commits the enclave signed for this order.
