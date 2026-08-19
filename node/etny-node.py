@@ -852,7 +852,9 @@ class EtnyPoXNode:
                             pin(parts[3].strip())
                 except Exception as e:
                     self.logger.debug(f"session replication: input rows for order {order_id} failed: {e}")
-                # Output rows: v1:<seq>:<orderId>:<ack>:<status>:<cid>:<sha256>:<sig>
+                # Output rows: v1:<seq>:<orderId>:<ack>:<status>:<code>:<cid>:<sha256>:<sig>
+                # -- 'ok' and 'error' rows both carry a payload CID (reply or
+                # encrypted explanation); 'late' rows have none.
                 try:
                     count = int(self.__etny.caller()._getMetadataCountForDPRequest(order.dp_req))
                     for i in range(count):
@@ -860,8 +862,8 @@ class EtnyPoXNode:
                         if key != 'etny-so':
                             continue
                         parts = str(value or '').split(':')
-                        if len(parts) == 8 and parts[0] == 'v1' and parts[4] == 'ok':
-                            pin(parts[5].strip())
+                        if len(parts) == 9 and parts[0] == 'v1' and parts[6].strip():
+                            pin(parts[6].strip())
                 except Exception as e:
                     self.logger.debug(f"session replication: output rows for order {order_id} failed: {e}")
             if kept:
@@ -2682,13 +2684,13 @@ class EtnyPoXNode:
                 return
             proof = proof.strip()
             parts = proof.split(':')
-            # v1:<seq>:<orderId>:<ack>:<status>:<cid>:<sha256>:<sig>
-            if len(parts) != 8 or parts[0] != 'v1':
+            # v1:<seq>:<orderId>:<ack>:<status>:<code>:<cid>:<sha256>:<sig>
+            if len(parts) != 9 or parts[0] != 'v1':
                 logger.error(f"[session] order {order_id}: malformed proof {proof_name}; skipping")
                 st['proof_next'] += 1
                 continue
-            status_field, cid = parts[4], parts[5]
-            if status_field == 'ok' and cid:
+            status_field, cid = parts[4], parts[6]
+            if cid:
                 okb, blob = self.swift_stream_service.get_file_content_bytes(
                     bucket_name, f"session.output.{st['proof_next']}.bin")
                 if not okb or blob is None:
