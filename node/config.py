@@ -129,7 +129,7 @@ cas_session_registry_scan_blocks = int(os.environ.get('CAS_SESSION_REGISTRY_SCAN
 # SCONE_CAS_ADDR in the order's compose. "" / absent = keep the compose's
 # baked-in CAS address (the pre-Sprint-4 behaviour).
 validator_registry_addresses = {
-    "BLOXBERG_TESTNET": os.environ.get('VALIDATOR_REGISTRY_ADDRESS', "0xFBED6103EFfc73dadD79101A6Be34c089BfFcd27"),
+    "BLOXBERG_TESTNET": os.environ.get('VALIDATOR_REGISTRY_ADDRESS', "0xc20cf41744166bA8725d7Ad2A28AE9f906007e73"),
 }
 # Probe timeout per endpoint, seconds.
 cas_resolver_probe_timeout = int(os.environ.get('CAS_RESOLVER_PROBE_TIMEOUT', 10))
