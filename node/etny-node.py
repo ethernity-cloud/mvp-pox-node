@@ -219,7 +219,10 @@ class EtnyPoXNode:
             if sr_address:
                 # Minimal inline ABI: the record(bytes32) auto-getter is all
                 # replication needs (events are matched by topic, not ABI).
-                sr_abi = ('[{"type":"function","name":"record","stateMutability":"view",'
+                sr_abi = ('[{"type":"function","name":"latest","stateMutability":"view",'
+                          '"inputs":[{"name":"name","type":"string"}],'
+                          '"outputs":[{"type":"bytes32"}]},'
+                          '{"type":"function","name":"record","stateMutability":"view",'
                           '"inputs":[{"name":"sessionHash","type":"bytes32"}],'
                           '"outputs":[{"type":"bytes32"},{"type":"address"},'
                           '{"type":"string"},{"type":"uint32"},{"type":"string"},'
@@ -561,6 +564,104 @@ class EtnyPoXNode:
             start = stop + 1
         return out
 
+    # ------------------------------------------------------------------
+    # Shared pin bookkeeping for the replicators that previously retried
+    # dead CIDs forever (results, DO inputs, ESR session rows, CAS
+    # sessions). Same discipline as __replicate_esr_state: N attempts
+    # across rounds, then a PERSISTED give-up set, so a dead CID stops
+    # costing a 30s timeout every round. The give-up set is RESET whenever
+    # the validator set changes -- a new validator is a new potential
+    # provider, so give-up decisions go stale the moment the fleet grows.
+    # ------------------------------------------------------------------
+
+    def __repl_pin(self, cid, label):
+        """One bookkept pin attempt. Returns True when the CID is pinned.
+
+        Self-contained: reads and persists its attempt/give-up state in
+        esr_progress, so call sites stay one line. A CID past its budget
+        (esr_pin_max_attempts, default 10) lands in the give-up set and is
+        skipped until the next validator-set change resets it.
+        """
+        try:
+            failed = set(self.esr_progress.get('repl_pin_failed') or [])
+            if cid in failed:
+                return False
+            if self.storage.is_pinned(cid):
+                return True
+            attempts = self.esr_progress.get('repl_pin_attempts') or {}
+            cap = int(getattr(config, 'esr_pin_max_attempts', 10))
+            if attempts.get(cid, 0) >= cap:
+                failed.add(cid)
+                attempts.pop(cid, None)
+                self.esr_progress.add('repl_pin_failed', list(failed))
+                self.esr_progress.add('repl_pin_attempts', attempts)
+                self.logger.warning(
+                    f"{label}: {cid} not fetchable after {cap} attempts across "
+                    f"rounds; giving up until the validator set changes")
+                return False
+            attempts[cid] = attempts.get(cid, 0) + 1
+            self.esr_progress.add('repl_pin_attempts', attempts)
+            try:
+                self.storage.pin_add(
+                    cid,
+                    timeout=int(getattr(
+                        config, 'esr_pin_attempt_timeout_seconds', 30)))
+                attempts.pop(cid, None)
+                self.esr_progress.add('repl_pin_attempts', attempts)
+                return True
+            except Exception as e:
+                self.logger.debug(
+                    f"{label}: pin attempt {attempts.get(cid)} for {cid} failed ({e})")
+                return False
+        except Exception as e:
+            self.logger.debug(f"{label}: pin bookkeeping failed for {cid} ({e})")
+            return False
+
+    def __validator_set_fingerprint(self):
+        """Fingerprint of the ACTIVE CAS validator set, or None when unknown.
+
+        The CasRegistry (validator identity + votes) is not deployed yet; when
+        it is, this reads the active member list and hashes it, so the reset
+        below activates without further agent changes. Until then None means
+        "cannot tell" and no reset ever fires -- give-up sets behave as
+        permanent, exactly like the pre-existing ESR one.
+        """
+        try:
+            addr = (getattr(config, 'cas_validator_registry_addresses', {}) or {}).get(
+                (self.__network_config.name or "").upper())
+            if not addr:
+                return None
+            # Future: enumerate active validators from the registry and hash
+            # the sorted address list. Returning None until the contract
+            # exists keeps behaviour unchanged.
+            return None
+        except Exception:
+            return None
+
+    def __reset_giveups_on_validator_change(self):
+        """Clear every give-up set when the validator set changes.
+
+        A new validator mirrors sessions and state, so CIDs that were
+        unfetchable may now have a provider; keeping the old give-up
+        decisions would ignore that new capacity forever.
+        """
+        try:
+            fp = self.__validator_set_fingerprint()
+            if fp is None:
+                return
+            if self.esr_progress.get('pin_failed_validator_fp') == fp:
+                return
+            self.logger.info(
+                "[replication] validator set changed; resetting all pin "
+                "give-up bookkeeping so new providers get a chance")
+            self.esr_progress.add('repl_pin_attempts', {})
+            self.esr_progress.add('repl_pin_failed', [])
+            self.esr_progress.add('pin_attempts', {})
+            self.esr_progress.add('pin_failed', [])
+            self.esr_progress.add('pin_failed_validator_fp', fp)
+        except Exception as e:
+            self.logger.debug(f"validator-set reset check failed ({e})")
+
     def __replicate_esr_state(self):
         """Pin the current ESR state of every enclave, while disk allows.
 
@@ -724,15 +825,9 @@ class EtnyPoXNode:
                 if not self.__looks_like_cid(cid):
                     continue
                 try:
-                    if not self.storage.is_pinned(cid):
-                        # Short per-attempt timeout so an unfetchable result CID
-                        # fails fast instead of blocking the shared IPFS daemon
-                        # for the full 600s (see __replicate_esr_state).
-                        self.storage.pin_add(
-                            cid,
-                            timeout=int(getattr(config, 'esr_pin_attempt_timeout_seconds', 30)))
-                    self.ipfs_cache.add(cid)
-                    kept.add(cid)
+                    if self.__repl_pin(cid, "protocol result"):
+                        self.ipfs_cache.add(cid)
+                        kept.add(cid)
                 except Exception as e:
                     self.logger.debug(f"Could not pin protocol result {cid}: {e}")
             if kept:
@@ -792,15 +887,9 @@ class EtnyPoXNode:
                         if not self.__looks_like_cid(cid) or cid in kept:
                             continue
                         try:
-                            if not self.storage.is_pinned(cid):
-                                # Short per-attempt timeout: fail fast on an
-                                # unfetchable CID instead of blocking the
-                                # shared IPFS daemon (see __replicate_esr_state).
-                                self.storage.pin_add(
-                                    cid,
-                                    timeout=int(getattr(config, 'esr_pin_attempt_timeout_seconds', 30)))
-                            self.ipfs_cache.add(cid)
-                            kept.add(cid)
+                            if self.__repl_pin(cid, "DO input"):
+                                self.ipfs_cache.add(cid)
+                                kept.add(cid)
                         except Exception as e:
                             self.logger.debug(f"Could not pin do-request object {cid}: {e}")
             if kept:
@@ -841,12 +930,9 @@ class EtnyPoXNode:
                 if not self.__looks_like_cid(cid) or cid in kept:
                     return
                 try:
-                    if not self.storage.is_pinned(cid):
-                        self.storage.pin_add(
-                            cid,
-                            timeout=int(getattr(config, 'esr_pin_attempt_timeout_seconds', 30)))
-                    self.ipfs_cache.add(cid)
-                    kept.add(cid)
+                    if self.__repl_pin(cid, "ESR session object"):
+                        self.ipfs_cache.add(cid)
+                        kept.add(cid)
                 except Exception as e:
                     self.logger.debug(f"Could not pin session object {cid}: {e}")
 
@@ -916,6 +1002,13 @@ class EtnyPoXNode:
         kept = set()
         if self.__cas_session_registry is None:
             return kept
+        # Names whose LATEST body this round should ensure. Persisted, so a
+        # name discovered once keeps being checked for new versions even when
+        # no new event lands inside the current scan window.
+        try:
+            names_seen = set(self.esr_progress.get('cas_session_names') or [])
+        except Exception:
+            names_seen = set()
         try:
             head = self.__w3.eth.block_number
             start = self.__cas_sessreg_last_block
@@ -952,19 +1045,41 @@ class EtnyPoXNode:
                         #  hashAlgo, registeredAt, exists)
                         if not rec[8]:
                             continue
-                        body_cid = rec[4]
-                        if not body_cid:
-                            continue
-                        self.storage.pin_add(body_cid)
-                        kept.add(body_cid)
-                        self.logger.info(
-                            f"[cas-session-registry] pinned {rec[2]} v{rec[3]} "
-                            f"body {body_cid}")
+                        # LATEST-ONLY: a name's events are just discovery; the
+                        # body that gets pinned is the LATEST version's, so
+                        # superseded session definitions never cost a fetch.
+                        names_seen.add(rec[2])
                     except Exception as e:
                         self.logger.debug(
-                            f"cas-session-registry record/pin failed ({e})")
+                            f"cas-session-registry record failed ({e})")
                 frm = to + 1
             self.__cas_sessreg_last_block = head + 1
+
+            # Resolve and pin the LATEST body per known name.
+            try:
+                self.esr_progress.add('cas_session_names', list(names_seen))
+            except Exception:
+                pass
+            for name in sorted(names_seen):
+                try:
+                    latest_hash = self.__cas_session_registry.functions.latest(
+                        name).call()
+                    if not latest_hash or set(latest_hash) == {0}:
+                        continue
+                    rec = self.__cas_session_registry.functions.record(
+                        latest_hash).call()
+                    if not rec[8] or not rec[4]:
+                        continue
+                    body_cid = rec[4]
+                    if self.__repl_pin(body_cid, "CAS session body"):
+                        if body_cid not in kept:
+                            self.logger.info(
+                                f"[cas-session-registry] pinned {name} "
+                                f"v{rec[3]} (latest) body {body_cid}")
+                        kept.add(body_cid)
+                except Exception as e:
+                    self.logger.debug(
+                        f"cas-session-registry latest({name}) failed ({e})")
         except Exception as e:
             self.logger.debug(f"cas-session-registry replication failed ({e})")
         return kept
@@ -989,6 +1104,7 @@ class EtnyPoXNode:
         interval = float(getattr(config, 'esr_replication_interval_seconds', 300))
         while not stop_event.is_set():
             try:
+                self.__reset_giveups_on_validator_change()
                 if self.__esr is not None:
                     self.__replicate_esr_state()
                 self.__replicate_protocol_results()
