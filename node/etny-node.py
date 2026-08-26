@@ -211,10 +211,10 @@ class EtnyPoXNode:
 
         # ethernity-cas SessionRegistry -- same wiring pattern as the ESR
         # above: resolved per network, and never allowed to stop the node.
-        self.__session_registry = None
-        self.__sessreg_last_block = 0
+        self.__cas_session_registry = None
+        self.__cas_sessreg_last_block = 0
         try:
-            sr_address = (config.session_registry_addresses.get(
+            sr_address = (config.cas_session_registry_addresses.get(
                 (self.__network_config.name or "").upper()) or "").strip()
             if sr_address:
                 # Minimal inline ABI: the record(bytes32) auto-getter is all
@@ -225,14 +225,14 @@ class EtnyPoXNode:
                           '{"type":"string"},{"type":"uint32"},{"type":"string"},'
                           '{"type":"string"},{"type":"uint8"},{"type":"uint64"},'
                           '{"type":"bool"}]}]')
-                self.__session_registry = self.__w3.eth.contract(
+                self.__cas_session_registry = self.__w3.eth.contract(
                     address=self.__w3.to_checksum_address(sr_address), abi=sr_abi)
-                logger.info(f"Session Registry: {sr_address}")
+                logger.info(f"CAS Session Registry: {sr_address}")
             else:
-                logger.info(f"No Session Registry deployed on {self.__network_config.name}; session replication disabled")
+                logger.info(f"No CAS Session Registry deployed on {self.__network_config.name}; session replication disabled")
         except Exception as e:
-            self.__session_registry = None
-            logger.warning(f"Could not initialise the Session Registry: {e}")
+            self.__cas_session_registry = None
+            logger.warning(f"Could not initialise the CAS Session Registry: {e}")
 
         self.__nonce = self.__w3.eth.get_transaction_count(self.__address)
         self.__dprequest = 0
@@ -898,7 +898,7 @@ class EtnyPoXNode:
             self.logger.warning(f"Session replication skipped: {e}")
             return kept
 
-    def __replicate_session_registry(self):
+    def __replicate_cas_session_registry(self):
         """Pin the body of every session registered in the SessionRegistry.
 
         CAS sessions are registered ON-CHAIN with their body on IPFS as
@@ -910,20 +910,20 @@ class EtnyPoXNode:
         after a pipeline deployment instead of depending on the pin node.
 
         Incremental: scans SessionRegistered logs from where the last round
-        stopped (first round reaches back session_registry_scan_blocks).
+        stopped (first round reaches back cas_session_registry_scan_blocks).
         Never raises.
         """
         kept = set()
-        if self.__session_registry is None:
+        if self.__cas_session_registry is None:
             return kept
         try:
             head = self.__w3.eth.block_number
-            start = self.__sessreg_last_block
+            start = self.__cas_sessreg_last_block
             if start <= 0:
-                window = int(getattr(config, 'session_registry_scan_blocks', 200000))
+                window = int(getattr(config, 'cas_session_registry_scan_blocks', 200000))
                 start = max(0, head - window)
             if start > head:
-                self.__sessreg_last_block = head
+                self.__cas_sessreg_last_block = head
                 return kept
             topic0 = self.__w3.keccak(
                 text="SessionRegistered(bytes32,string,uint32,address,uint8)").hex()
@@ -935,18 +935,18 @@ class EtnyPoXNode:
                 to = min(frm + chunk - 1, head)
                 try:
                     logs = self.__w3.eth.get_logs({
-                        'address': self.__session_registry.address,
+                        'address': self.__cas_session_registry.address,
                         'topics': [topic0],
                         'fromBlock': frm, 'toBlock': to,
                     })
                 except Exception as e:
                     self.logger.debug(
-                        f"session-registry logs {frm}-{to} failed ({e})")
+                        f"cas-session-registry logs {frm}-{to} failed ({e})")
                     break
                 for lg in logs:
                     try:
                         session_hash = lg['topics'][1]
-                        rec = self.__session_registry.functions.record(
+                        rec = self.__cas_session_registry.functions.record(
                             session_hash).call()
                         # (hash, creator, name, version, bodyCid, imageCid,
                         #  hashAlgo, registeredAt, exists)
@@ -958,15 +958,15 @@ class EtnyPoXNode:
                         self.storage.pin_add(body_cid)
                         kept.add(body_cid)
                         self.logger.info(
-                            f"[session-registry] pinned {rec[2]} v{rec[3]} "
+                            f"[cas-session-registry] pinned {rec[2]} v{rec[3]} "
                             f"body {body_cid}")
                     except Exception as e:
                         self.logger.debug(
-                            f"session-registry record/pin failed ({e})")
+                            f"cas-session-registry record/pin failed ({e})")
                 frm = to + 1
-            self.__sessreg_last_block = head + 1
+            self.__cas_sessreg_last_block = head + 1
         except Exception as e:
-            self.logger.debug(f"session-registry replication failed ({e})")
+            self.logger.debug(f"cas-session-registry replication failed ({e})")
         return kept
 
     def run_esr_replication_loop(self):
@@ -994,7 +994,7 @@ class EtnyPoXNode:
                 self.__replicate_protocol_results()
                 self.__replicate_do_request_inputs()
                 self.__replicate_session_rows()
-                self.__replicate_session_registry()
+                self.__replicate_cas_session_registry()
             except Exception as e:
                 self.logger.warning(f"[esr-replication] round failed: {e}")
             # Sleep in short slices so stop_event is honored promptly.
