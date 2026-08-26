@@ -21,8 +21,10 @@ is NOT verified here (that is the enclave's own duty, Sprint 5, and the
 enclave re-attests the CAS itself); what the node establishes is that the
 answering endpoint speaks for the on-chain validator identity it claims.
 
-Multiaddrs advertise the ENCLAVE port (18765). The REST/identity port is
-assumed to be 8081 on the same host -- the fixed CAS layout.
+Multiaddrs advertise the ENCLAVE port. The REST/identity port follows the
+PAIRING CONVENTION `rest = 8081 + (enclave - 18765)`: co-hosted CAS instances
+stack as 18765/8081, 18766/8082, 18767/8083, ... so one advert names both
+listeners. Enclave ports outside [18765, 18965) fall back to REST 8081.
 """
 
 import json
@@ -89,8 +91,15 @@ def order_endpoints(multiaddrs):
     return onion + rest
 
 
-def _fetch_identity(host, timeout):
-    url = f'http://{host}:{CAS_REST_PORT}/validator/identity'
+def rest_port_for(enclave_port):
+    """The pairing convention (see module docstring)."""
+    if CAS_ENCLAVE_PORT <= enclave_port < CAS_ENCLAVE_PORT + 200:
+        return CAS_REST_PORT + (enclave_port - CAS_ENCLAVE_PORT)
+    return CAS_REST_PORT
+
+
+def _fetch_identity(host, timeout, rest_port=CAS_REST_PORT):
+    url = f'http://{host}:{rest_port}/validator/identity'
     with urllib.request.urlopen(url, timeout=timeout) as r:
         return json.loads(r.read().decode('utf-8', 'replace'))
 
@@ -172,10 +181,11 @@ def resolve_cas(w3, registry_address, logger, probe_timeout=10,
                 if kind == 'onion3' and not tor_available:
                     logger.debug(f"CAS resolver: skipping {host} (no Tor)")
                     continue
+                rp = rest_port_for(port)
                 try:
-                    identity = _fetch_identity(host, probe_timeout)
+                    identity = _fetch_identity(host, probe_timeout, rp)
                 except Exception as e:
-                    logger.info(f"CAS resolver: {host}:{CAS_REST_PORT} did not "
+                    logger.info(f"CAS resolver: {host}:{rp} did not "
                                 f"answer ({e}); trying next")
                     continue
                 reason = _attest(identity, v, mrenclave, cert_hash)
