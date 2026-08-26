@@ -122,6 +122,18 @@ cas_session_registry_addresses = {
 # incrementally from where the previous one stopped).
 cas_session_registry_scan_blocks = int(os.environ.get('CAS_SESSION_REGISTRY_SCAN_BLOCKS', 200000))
 
+# ethernity-cas ValidatorRegistry (validator identity + governance + endpoints).
+# When set for a network, the node RESOLVES its CAS from chain before each v3
+# task: enumerate active validators, dial their published multiaddrs (onion
+# first), attest the answerer against its on-chain record, and rewrite
+# SCONE_CAS_ADDR in the order's compose. "" / absent = keep the compose's
+# baked-in CAS address (the pre-Sprint-4 behaviour).
+validator_registry_addresses = {
+    "BLOXBERG_TESTNET": os.environ.get('VALIDATOR_REGISTRY_ADDRESS', "0xFBED6103EFfc73dadD79101A6Be34c089BfFcd27"),
+}
+# Probe timeout per endpoint, seconds.
+cas_resolver_probe_timeout = int(os.environ.get('CAS_RESOLVER_PROBE_TIMEOUT', 10))
+
 # ESR relay: the enclave signs each state commit (commitFor) and the NODE
 # submits it and pays gas, so no enclave wallet needs funding. To stop a
 # malicious payload from draining the operator, the node caps the CUMULATIVE

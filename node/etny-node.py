@@ -2320,8 +2320,43 @@ class EtnyPoXNode:
             contents = f.read()
 
         contents = contents.replace('[ETNY_ORDER_ID]', str(order))
+
+        # Sprint 4: when this network names a ValidatorRegistry, the CAS is
+        # RESOLVED from chain and attested before the task launches; the
+        # compose's baked-in SCONE_CAS_ADDR is rewritten to the winner. No
+        # resolution -> the compose default stands (logged by the resolver).
+        resolved = self.__resolve_cas_for_task()
+        if resolved is not None:
+            import re
+            contents = re.sub(r'SCONE_CAS_ADDR=[^\s]+',
+                              f"SCONE_CAS_ADDR={resolved['scone_cas_addr']}",
+                              contents)
+            self.logger.info(
+                f"Task CAS resolved from chain: {resolved['scone_cas_addr']} "
+                f"(validator {resolved['address']})")
+
         with open(docker_compose_file, 'w') as f:
             f.write(contents)
+
+    def __resolve_cas_for_task(self):
+        """Chain-resolved CAS for this network, or None (use compose default).
+
+        Never raises: CAS resolution must not be able to stop task
+        processing that worked before Sprint 4.
+        """
+        try:
+            reg_address = (config.validator_registry_addresses.get(
+                (self.__network_config.name or "").upper()) or "").strip()
+            if not reg_address:
+                return None
+            import cas_resolver
+            return cas_resolver.resolve_cas(
+                self.__w3, reg_address, self.logger,
+                probe_timeout=config.cas_resolver_probe_timeout)
+        except Exception as e:
+            self.logger.warning(f"CAS resolver failed ({e}); using the "
+                                f"compose's baked-in CAS address")
+            return None
 
     def _getOrder(self):
         logger = self.logger
