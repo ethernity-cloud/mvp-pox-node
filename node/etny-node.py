@@ -574,6 +574,10 @@ class EtnyPoXNode:
     # provider, so give-up decisions go stale the moment the fleet grows.
     # ------------------------------------------------------------------
 
+    def __repl_log_kept(self, kept, label):
+        if kept:
+            self.logger.info(f"Replicated {len(kept)} {label} object(s)")
+
     def __order_status(self, order_id):
         """OrderStatus for order_id, or None on any failure.
 
@@ -875,7 +879,35 @@ class EtnyPoXNode:
         kept = set()
         if self.__etny is None:
             return kept
+
+        def pin_request_inputs(req_id):
+            # (downer, metadata1..metadata4): every colon-separated token
+            # that looks like a CID is an IPFS object the request needs.
+            try:
+                meta = self.__etny.caller()._getDORequestMetadata(req_id)
+            except Exception:
+                return
+            for field in meta[1:]:
+                for token in str(field or '').split(':'):
+                    cid = token.strip()
+                    if not self.__looks_like_cid(cid) or cid in kept:
+                        continue
+                    try:
+                        if self.__repl_pin(cid, "DO input"):
+                            self.ipfs_cache.add(cid)
+                            kept.add(cid)
+                    except Exception as e:
+                        self.logger.debug(f"Could not pin do-request object {cid}: {e}")
+
         try:
+            # 1. AVAILABLE requests, from the request scan. A request that is
+            #    not yet booked has no order, but its inputs must already be
+            #    replicated so ANY node can pick the task up. BOOKED requests
+            #    are deliberately skipped here: they have an order, and the
+            #    order scan below decides by ORDER STATUS -- the authoritative
+            #    lifecycle -- instead of the request's stale BOOKED flag (which
+            #    stays BOOKED forever after the order closes). CANCELED is
+            #    finished work.
             try:
                 total = self.__etny.caller()._getDORequestsCount()
                 total = total.toNumber() if hasattr(total, 'toNumber') else int(total)
@@ -896,31 +928,41 @@ class EtnyPoXNode:
                 try:
                     time.sleep(self.__network_config.rpc_delay / 1000)
                     dreq = DORequest(self.__etny.caller()._getDORequest(req_id))
-                    meta = self.__etny.caller()._getDORequestMetadata(req_id)
                 except Exception:
                     continue
-                # OPEN-TASK ONLY: an input still needs a replica while its task
-                # can run or be re-run. A CANCELED request, or one whose order
-                # is CLOSED/CANCELLED, is finished -- its input CIDs no longer
-                # need refreshing. AVAILABLE (not yet booked) and BOOKED both
-                # count as open.
-                if dreq.status == RequestStatus.CANCELED:
+                if dreq.status != RequestStatus.AVAILABLE:
                     continue
-                # (downer, metadata1..metadata4): every colon-separated token
-                # that looks like a CID is an IPFS object the request needs.
-                for field in meta[1:]:
-                    for token in str(field or '').split(':'):
-                        cid = token.strip()
-                        if not self.__looks_like_cid(cid) or cid in kept:
-                            continue
-                        try:
-                            if self.__repl_pin(cid, "DO input"):
-                                self.ipfs_cache.add(cid)
-                                kept.add(cid)
-                        except Exception as e:
-                            self.logger.debug(f"Could not pin do-request object {cid}: {e}")
-            if kept:
-                self.logger.info(f"Replicated {len(kept)} DO-request object(s)")
+                pin_request_inputs(req_id)
+
+            # 2. BOOKED work, from the ORDER scan: the order links to its
+            #    do_req and carries the real lifecycle. Inputs are refreshed
+            #    only while the order is OPEN or PROCESSING; CLOSED/CANCELLED
+            #    is finished work whose inputs no longer need a fresh replica.
+            try:
+                ototal = self.__etny.caller()._getOrdersCount()
+                ototal = ototal.toNumber() if hasattr(ototal, 'toNumber') else int(ototal)
+            except Exception as e:
+                self.logger.debug(f"do-request replication: _getOrdersCount failed ({e})")
+                self.__repl_log_kept(kept, "DO-request")
+                return kept
+            ostart = max(0, ototal - limit)
+            for order_id in range(ototal - 1, ostart - 1, -1):
+                free_gb = HardwareInfoProvider.get_free_storage()
+                if free_gb < config.esr_min_free_storage_gb:
+                    self.logger.warning(
+                        f"Free storage {free_gb}GB below ESR_MIN_FREE_STORAGE_GB; "
+                        f"stopping do-request order scan for this round")
+                    break
+                try:
+                    time.sleep(self.__network_config.rpc_delay / 1000)
+                    order = Order(self.__etny.caller()._getOrder(order_id))
+                except Exception:
+                    continue
+                if order.status not in (OrderStatus.OPEN, OrderStatus.PROCESSING):
+                    continue
+                pin_request_inputs(order.do_req)
+
+            self.__repl_log_kept(kept, "DO-request")
             return kept
         except Exception as e:
             self.logger.warning(f"DO-request replication skipped: {e}")
