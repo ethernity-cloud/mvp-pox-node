@@ -209,6 +209,31 @@ class EtnyPoXNode:
             self.__esr = None
             logger.warning(f"Could not initialise the Enclave State Registry: {e}")
 
+        # ethernity-cas SessionRegistry -- same wiring pattern as the ESR
+        # above: resolved per network, and never allowed to stop the node.
+        self.__session_registry = None
+        self.__sessreg_last_block = 0
+        try:
+            sr_address = (config.session_registry_addresses.get(
+                (self.__network_config.name or "").upper()) or "").strip()
+            if sr_address:
+                # Minimal inline ABI: the record(bytes32) auto-getter is all
+                # replication needs (events are matched by topic, not ABI).
+                sr_abi = ('[{"type":"function","name":"record","stateMutability":"view",'
+                          '"inputs":[{"name":"sessionHash","type":"bytes32"}],'
+                          '"outputs":[{"type":"bytes32"},{"type":"address"},'
+                          '{"type":"string"},{"type":"uint32"},{"type":"string"},'
+                          '{"type":"string"},{"type":"uint8"},{"type":"uint64"},'
+                          '{"type":"bool"}]}]')
+                self.__session_registry = self.__w3.eth.contract(
+                    address=self.__w3.to_checksum_address(sr_address), abi=sr_abi)
+                logger.info(f"Session Registry: {sr_address}")
+            else:
+                logger.info(f"No Session Registry deployed on {self.__network_config.name}; session replication disabled")
+        except Exception as e:
+            self.__session_registry = None
+            logger.warning(f"Could not initialise the Session Registry: {e}")
+
         self.__nonce = self.__w3.eth.get_transaction_count(self.__address)
         self.__dprequest = 0
         self.__order_id = 0
@@ -873,6 +898,77 @@ class EtnyPoXNode:
             self.logger.warning(f"Session replication skipped: {e}")
             return kept
 
+    def __replicate_session_registry(self):
+        """Pin the body of every session registered in the SessionRegistry.
+
+        CAS sessions are registered ON-CHAIN with their body on IPFS as
+        CIDv1/raw/sha2-256 (the ESR blob recipe), so the CID is the content
+        digest and pinning by CID is safe without refetching or rehashing --
+        the same chain-anchored reasoning as the other replicators here. Any
+        node holding the body keeps the session fetchable for every CAS
+        validator, so session material distributes across operator nodes
+        after a pipeline deployment instead of depending on the pin node.
+
+        Incremental: scans SessionRegistered logs from where the last round
+        stopped (first round reaches back session_registry_scan_blocks).
+        Never raises.
+        """
+        kept = set()
+        if self.__session_registry is None:
+            return kept
+        try:
+            head = self.__w3.eth.block_number
+            start = self.__sessreg_last_block
+            if start <= 0:
+                window = int(getattr(config, 'session_registry_scan_blocks', 200000))
+                start = max(0, head - window)
+            if start > head:
+                self.__sessreg_last_block = head
+                return kept
+            topic0 = self.__w3.keccak(
+                text="SessionRegistered(bytes32,string,uint32,address,uint8)").hex()
+            if not topic0.startswith('0x'):
+                topic0 = '0x' + topic0
+            chunk = 9000
+            frm = start
+            while frm <= head:
+                to = min(frm + chunk - 1, head)
+                try:
+                    logs = self.__w3.eth.get_logs({
+                        'address': self.__session_registry.address,
+                        'topics': [topic0],
+                        'fromBlock': frm, 'toBlock': to,
+                    })
+                except Exception as e:
+                    self.logger.debug(
+                        f"session-registry logs {frm}-{to} failed ({e})")
+                    break
+                for lg in logs:
+                    try:
+                        session_hash = lg['topics'][1]
+                        rec = self.__session_registry.functions.record(
+                            session_hash).call()
+                        # (hash, creator, name, version, bodyCid, imageCid,
+                        #  hashAlgo, registeredAt, exists)
+                        if not rec[8]:
+                            continue
+                        body_cid = rec[4]
+                        if not body_cid:
+                            continue
+                        self.storage.pin_add(body_cid)
+                        kept.add(body_cid)
+                        self.logger.info(
+                            f"[session-registry] pinned {rec[2]} v{rec[3]} "
+                            f"body {body_cid}")
+                    except Exception as e:
+                        self.logger.debug(
+                            f"session-registry record/pin failed ({e})")
+                frm = to + 1
+            self.__sessreg_last_block = head + 1
+        except Exception as e:
+            self.logger.debug(f"session-registry replication failed ({e})")
+        return kept
+
     def run_esr_replication_loop(self):
         """Replication loop for THIS network, paired with its processing thread.
 
@@ -898,6 +994,7 @@ class EtnyPoXNode:
                 self.__replicate_protocol_results()
                 self.__replicate_do_request_inputs()
                 self.__replicate_session_rows()
+                self.__replicate_session_registry()
             except Exception as e:
                 self.logger.warning(f"[esr-replication] round failed: {e}")
             # Sleep in short slices so stop_event is honored promptly.

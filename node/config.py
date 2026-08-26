@@ -108,6 +108,19 @@ esr_contract_addresses = {
     "BLOXBERG_TESTNET": os.environ.get('ESR_CONTRACT_ADDRESS', "0x0Ea1728EAE108FD3B9340ae91451348E2Cc6b4E4"),
     "LITVM_LITEFORGE": os.environ.get('ESR_CONTRACT_ADDRESS', "0x709052Fe77Af543d3d9FE2Ac06a15c635c8D4Be5"),
 }
+# ethernity-cas SessionRegistry: CAS sessions registered ON-CHAIN, bodies on
+# IPFS as CIDv1/raw/sha2-256 (the ESR blob recipe). The replication loop pins
+# every registered session body so the material distributes across operator
+# nodes after a pipeline deployment. Same chain note as the ESR: bloxberg
+# mainnet and testnet share chainId 8995. "" / absent = not deployed there,
+# replication skipped.
+session_registry_addresses = {
+    "BLOXBERG_TESTNET": os.environ.get('SESSION_REGISTRY_ADDRESS', "0xc57D8099D991395FeC9E7ED6bD7dDbB7E370aFf8"),
+}
+# How far back the FIRST SessionRegistered scan reaches (later rounds continue
+# incrementally from where the previous one stopped).
+session_registry_scan_blocks = int(os.environ.get('SESSION_REGISTRY_SCAN_BLOCKS', 200000))
+
 # ESR relay: the enclave signs each state commit (commitFor) and the NODE
 # submits it and pays gas, so no enclave wallet needs funding. To stop a
 # malicious payload from draining the operator, the node caps the CUMULATIVE
