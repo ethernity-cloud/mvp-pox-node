@@ -574,6 +574,20 @@ class EtnyPoXNode:
     # provider, so give-up decisions go stale the moment the fleet grows.
     # ------------------------------------------------------------------
 
+    def __order_status(self, order_id):
+        """OrderStatus for order_id, or None on any failure.
+
+        Used to scope replication to LIVE work: inputs/sessions only while the
+        task is open, results only while validation is still pending. A dead
+        task's ciphertext no longer needs a fresh replica -- pinning it was the
+        bulk of the wasted 30s pin timeouts.
+        """
+        try:
+            time.sleep(self.__network_config.rpc_delay / 1000)
+            return Order(self.__etny.caller()._getOrder(order_id)).status
+        except Exception:
+            return None
+
     def __repl_pin(self, cid, label):
         """One bookkept pin attempt. Returns True when the CID is pinned.
 
@@ -813,6 +827,11 @@ class EtnyPoXNode:
                         f"Free storage {free_gb}GB below ESR_MIN_FREE_STORAGE_GB; "
                         f"stopping protocol-result replication for this round")
                     break
+                # PENDING-VALIDATION ONLY: replicate a result while the order
+                # is still PROCESSING (submitted, not yet validated). Once
+                # CLOSED it is validated and done; CANCELLED never will be.
+                if self.__order_status(order_id) != OrderStatus.PROCESSING:
+                    continue
                 try:
                     time.sleep(self.__network_config.rpc_delay / 1000)
                     result = self.__etny.caller()._getResultFromOrder(order_id)
@@ -876,8 +895,16 @@ class EtnyPoXNode:
                     break
                 try:
                     time.sleep(self.__network_config.rpc_delay / 1000)
+                    dreq = DORequest(self.__etny.caller()._getDORequest(req_id))
                     meta = self.__etny.caller()._getDORequestMetadata(req_id)
                 except Exception:
+                    continue
+                # OPEN-TASK ONLY: an input still needs a replica while its task
+                # can run or be re-run. A CANCELED request, or one whose order
+                # is CLOSED/CANCELLED, is finished -- its input CIDs no longer
+                # need refreshing. AVAILABLE (not yet booked) and BOOKED both
+                # count as open.
+                if dreq.status == RequestStatus.CANCELED:
                     continue
                 # (downer, metadata1..metadata4): every colon-separated token
                 # that looks like a CID is an IPFS object the request needs.
@@ -950,6 +977,12 @@ class EtnyPoXNode:
                 except Exception:
                     continue
                 if str(meta[3] or '').split(':')[0] != 'v3s':
+                    continue
+                # OPEN-SESSION ONLY: a session transcript's data plane needs a
+                # replica while the session/task is live. A CLOSED or CANCELLED
+                # order is a finished session -- its rows no longer need
+                # refreshing.
+                if order.status in (OrderStatus.CLOSED, OrderStatus.CANCELLED):
                     continue
                 # Input rows: v1:<seq>:<orderId>:<cid>:<sha256>
                 try:
