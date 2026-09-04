@@ -2345,18 +2345,14 @@ class EtnyPoXNode:
         processing that worked before Sprint 4.
         """
         try:
-            net = (self.__network_config.name or "").upper()
-            reg_address = (config.validator_registry_addresses.get(net) or "").strip()
+            reg_address = (config.validator_registry_addresses.get(
+                (self.__network_config.name or "").upper()) or "").strip()
             if not reg_address:
                 return None
-            # Endpoints live in the CasKeyStore rather than on the validator
-            # record; the registry still answers membership.
-            store_address = (config.cas_key_store_addresses.get(net) or "").strip()
             import cas_resolver
             return cas_resolver.resolve_cas(
                 self.__w3, reg_address, self.logger,
-                probe_timeout=config.cas_resolver_probe_timeout,
-                key_store_address=store_address)
+                probe_timeout=config.cas_resolver_probe_timeout)
         except Exception as e:
             self.logger.warning(f"CAS resolver failed ({e}); using the "
                                 f"compose's baked-in CAS address")
