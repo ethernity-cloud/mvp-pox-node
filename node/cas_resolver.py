@@ -55,6 +55,12 @@ VALIDATOR_REGISTRY_ABI = [
                  {"name": "active", "type": "bool"},
                  {"name": "admittedBlock", "type": "uint64"},
                  {"name": "lastVoteBlock", "type": "uint64"}]},
+]
+
+# Endpoints live in CasKeyStore, not on the validator record: they describe how
+# to REACH a validator rather than who it is, and the registry is against the
+# EIP-170 ceiling. The registry still answers membership.
+CAS_KEY_STORE_ABI = [
     {"name": "multiaddrsOf", "type": "function", "stateMutability": "view",
      "inputs": [{"type": "address"}], "outputs": [{"type": "string[]"}]},
     {"name": "ensNamesOf", "type": "function", "stateMutability": "view",
@@ -147,12 +153,22 @@ def _attest(identity, expected_address, expected_mrenclave, expected_cert):
 
 
 def resolve_cas(w3, registry_address, logger, probe_timeout=10,
-                tor_available=False):
+                tor_available=False, key_store_address=None):
     """Pick a CAS for task provisioning. Returns
     {'address', 'host', 'port', 'scone_cas_addr', 'mrenclave', 'cert_hash'}
-    for the FIRST endpoint that answers AND attests, or None."""
+    for the FIRST endpoint that answers AND attests, or None.
+
+    Membership comes from the registry; ENDPOINTS come from the CasKeyStore,
+    which is where they live. Without a key store address there is nowhere to
+    read them from, so resolution is skipped rather than guessed at."""
     reg = w3.eth.contract(address=w3.to_checksum_address(registry_address),
                           abi=VALIDATOR_REGISTRY_ABI)
+    if not key_store_address:
+        logger.warning("CAS resolver: no key store address configured; "
+                       "endpoints cannot be read")
+        return None
+    store = w3.eth.contract(address=w3.to_checksum_address(key_store_address),
+                            abi=CAS_KEY_STORE_ABI)
     try:
         total = _chain(lambda: reg.caller().validatorCount())
     except Exception as e:
@@ -169,7 +185,7 @@ def resolve_cas(w3, registry_address, logger, probe_timeout=10,
             # ENS names first, per the design. Resolution needs an ENS
             # registry on this chain; where there is none (bloxberg), the
             # names are recorded but cannot be dialed.
-            for name in _chain(lambda: reg.caller().ensNamesOf(v)):
+            for name in _chain(lambda: store.caller().ensNamesOf(v)):
                 try:
                     resolved = w3.ens.address(name)  # noqa: F841
                     logger.info(f"CAS resolver: ENS {name} resolvable but ENS "
@@ -177,7 +193,7 @@ def resolve_cas(w3, registry_address, logger, probe_timeout=10,
                 except Exception:
                     logger.debug(f"CAS resolver: no ENS resolution for {name}")
             for kind, host, port in order_endpoints(
-                    _chain(lambda: reg.caller().multiaddrsOf(v))):
+                    _chain(lambda: store.caller().multiaddrsOf(v))):
                 if kind == 'onion3' and not tor_available:
                     logger.debug(f"CAS resolver: skipping {host} (no Tor)")
                     continue

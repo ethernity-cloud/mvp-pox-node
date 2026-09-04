@@ -131,6 +131,15 @@ cas_session_registry_scan_blocks = int(os.environ.get('CAS_SESSION_REGISTRY_SCAN
 validator_registry_addresses = {
     "BLOXBERG_TESTNET": os.environ.get('VALIDATOR_REGISTRY_ADDRESS', "0xC4Fcd83743b76fB3081328cFe354De89995eaECD"),
 }
+# ethernity-cas CasKeyStore. Holds each validator's ENDPOINTS (where enclaves
+# reach it, and separately where peers reach its CAS-to-CAS channel), its
+# X25519 wrapping key, and the sealed key blobs. Endpoints moved off the
+# validator record because they describe how to reach a validator rather than
+# who it is, and the registry is against the EIP-170 ceiling.
+# "" / absent = not deployed there, so chain CAS resolution is skipped.
+cas_key_store_addresses = {
+    "BLOXBERG_TESTNET": os.environ.get('CAS_KEY_STORE_ADDRESS', ""),
+}
 # Probe timeout per endpoint, seconds.
 cas_resolver_probe_timeout = int(os.environ.get('CAS_RESOLVER_PROBE_TIMEOUT', 10))
 
