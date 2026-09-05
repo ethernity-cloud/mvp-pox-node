@@ -132,7 +132,13 @@ class EtnyPoXNode:
             with open(config.abi_filepath) as f:
                 self.__contract_abi = f.read()
 
-            self.__w3 = Web3(Web3.HTTPProvider(self.__network_config.rpc_url, request_kwargs={'timeout': 120}))
+            # (connect, read): requests applies a bare timeout to both phases.
+            # Each network has one processing thread, so a stalled RPC stalls
+            # that network. Reads stay longer than connects because get_logs
+            # and receipt polls do real server-side work.
+            self.__w3 = Web3(Web3.HTTPProvider(
+                self.__network_config.rpc_url,
+                request_kwargs={'timeout': (3, 30)}))
 
             if network.middleware is not None:
                 self.__w3.middleware_onion.inject(ExtraDataToPOAMiddleware, layer=0)
