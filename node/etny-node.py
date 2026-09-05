@@ -28,6 +28,12 @@ from cache_config import CacheConfig
 logger = config.logger 
 task_running_on = None
 task_lock = threading.Lock()
+# Longest a network waits for the shared task slot before giving up its cycle.
+# One global slot means a thread here waits on whichever network holds it; if
+# that network is also waiting, nothing clears the flag. Ten minutes is well
+# past a normal task and short enough that a stuck flag costs one cycle rather
+# than the process.
+TASK_SLOT_WAIT_SECONDS = 600
 # SGX integration-test coordination, per network_type (TESTNET / MAINNET).
 #
 # The test verifies the trustedzone enclave's result, which is identical across
@@ -2490,13 +2496,30 @@ class EtnyPoXNode:
             if order.status == OrderStatus.PROCESSING:
                 logger.debug(f"DP request never finished, processing order {order_id}")
 
+                # task_running_on is ONE global shared by every network, so a
+                # thread waiting here is waiting on whichever network claimed
+                # it. If that network's own thread is also parked here, nobody
+                # clears the flag and all of them wait forever: observed with
+                # three network threads in this loop at once, zero CPU, and no
+                # log output for 25 minutes.
+                #
+                # Bounded so a network that never gets its turn gives up and
+                # lets resilient_process recycle it, which calls
+                # reset_task_running_on and breaks the cycle.
+                waited = 0
                 while not stop_event.is_set():
                     time.sleep(timeout_in_seconds)
+                    waited += timeout_in_seconds
 
                     if stop_event.is_set():
                         return
 
                     if get_task_running_on():
+                        if waited >= TASK_SLOT_WAIT_SECONDS:
+                            logger.info(
+                                f"waited {int(waited)}s for the task slot held by "
+                                f"{get_task_running_on()}; giving up this cycle")
+                            return
                         continue
 
                     break
