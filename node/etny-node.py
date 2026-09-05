@@ -81,6 +81,35 @@ class NetworkLoggerAdapter(logging.LoggerAdapter):
 class EtnyPoXNode:
     logger = None
 
+    def close(self):
+        """Close the HTTP sessions this handle opened.
+
+        A new handle is built on every process_network iteration, each with its
+        own HTTPProvider and connection pool. Dropping the reference does not
+        close the sockets: when the server sends FIN first they stay in
+        CLOSE-WAIT until the process exits, and the leaked descriptors
+        accumulate on the network that stays connected longest.
+
+        web3 7.x keeps sessions in provider._request_session_manager.
+        session_cache; there is no public close-all, so the cache is drained
+        directly. Best effort -- a failure here must not take down a caller
+        that has finished its work.
+        """
+        provider = getattr(getattr(self, '_EtnyPoXNode__w3', None), 'provider', None)
+        manager = getattr(provider, '_request_session_manager', None)
+        cache = getattr(manager, 'session_cache', None)
+        if cache is None:
+            return
+        try:
+            for _, session in list(cache.items()):
+                try:
+                    session.close()
+                except Exception:
+                    pass
+            cache.clear()
+        except Exception as e:
+            config.logger.debug(f"session cleanup: {e}")
+
     def __init__(self, network, replication_only=False):
 
         # replication_only: build just enough to mirror this network's results +
@@ -3486,6 +3515,7 @@ def process_network(network):
         config.logger.warning(f"[{network.name}] Stopping network processing due to interrupt.")
         return
 
+    app = None
     try:
         app = EtnyPoXNode(network)
         app.cache_dp_requests()
@@ -3499,6 +3529,12 @@ def process_network(network):
     except Exception as e:
         logger.error(f"[{network.name}] An error occurred: {e}")
         raise  # Re-raise the exception after logging
+    finally:
+        # This loop re-enters immediately, building another handle. Closing on
+        # both the clean and the error path is what stops one pool per
+        # iteration accumulating in CLOSE-WAIT.
+        if app is not None:
+            app.close()
 
 def set_task_running_on(name):
     """
