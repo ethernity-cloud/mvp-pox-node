@@ -48,6 +48,12 @@ import gzip
 import threading
 upgrade_lock = threading.Lock()
 global_version_lock = threading.Lock()
+# Serializes `systemctl restart ipfs` across network threads. The list holds
+# the last restart time so it can be mutated under the lock without a global
+# declaration at each use.
+_ipfs_restart_lock = threading.Lock()
+_ipfs_last_restart = [0.0]
+IPFS_RESTART_COOLDOWN = 60
 
 def get_or_generate_uuid(filename):
     if os.path.exists(filename):
@@ -726,23 +732,48 @@ class Storage:
         Returns the CID (never None, never raises).
         """
         cid = self.cidv1_raw(content_bytes)
+        # Spool the content before returning. In-memory retries die with the
+        # process, and the result is then unrecoverable: the CID is on chain
+        # but no node holds the bytes. Written first so a crash between here
+        # and the first attempt still leaves the queue able to finish the pin.
+        self._spool_pending_pin(cid, content_bytes, name)
 
         def _work():
             for attempt in range(attempts):
                 try:
+                    # add_bytes_raw raises "Not connected" off self.connected
+                    # without calling the API, so a stale flag fails every
+                    # attempt identically no matter how healthy the daemon is.
+                    # Re-establish it here the way upload() does.
+                    if not self.connected:
+                        if self.connect():
+                            self.connected = True
+                        else:
+                            raise Exception("Failed to connect to IPFS for background pin")
                     stored = self.add_bytes_raw(content_bytes, name=name)
                     if stored == cid:
                         self.cache.add(cid)
+                        self._unspool_pending_pin(cid)
                         self.logger.info(f"Pinned {name} -> {cid} (background)")
                         return
+                    # Keep the spool: the bytes are still unpinned under the CID
+                    # the caller published, so this needs looking at rather than
+                    # discarding.
                     self.logger.warning(
                         f"Background pin of {name}: IPFS stored {stored}, expected {cid}")
                     return
                 except Exception as e:
                     self.logger.warning(
                         f"Background pin attempt {attempt + 1}/{attempts} for {name} failed: {e}")
+                    # Drop the flag so the next attempt reconnects instead of
+                    # replaying the same dead state.
+                    self.connected = False
                     time.sleep(delay)
-            self.logger.error(f"Background pin of {name} ({cid}) failed after {attempts} attempts")
+            # The spool stays on disk: drain_pending_pins picks it up on the
+            # next cycle or after a restart.
+            self.logger.error(
+                f"Background pin of {name} ({cid}) failed after {attempts} attempts; "
+                f"queued for retry")
 
         try:
             self.executor.submit(_work)
@@ -751,6 +782,104 @@ class Storage:
             # regardless, and other nodes replicate from the registry/chain.
             self.logger.warning(f"Could not queue background pin for {name}: {e}")
         return cid
+
+    def _pending_pin_dir(self):
+        d = os.path.join(self.target, 'pending_pins')
+        os.makedirs(d, exist_ok=True)
+        return d
+
+    def _spool_pending_pin(self, cid, content_bytes, name):
+        """Persist content that still needs pinning, keyed by CID.
+
+        Written via a temp file + rename so a crash mid-write cannot leave a
+        truncated blob that would later be re-added under the wrong CID.
+        """
+        try:
+            path = os.path.join(self._pending_pin_dir(), cid)
+            if os.path.exists(path):
+                return
+            tmp = f"{path}.tmp"
+            with open(tmp, 'wb') as f:
+                f.write(content_bytes)
+            os.replace(tmp, path)
+            meta = os.path.join(self._pending_pin_dir(), f"{cid}.name")
+            with open(meta, 'w') as f:
+                f.write(name)
+        except Exception as e:
+            # Never fail the caller: the in-memory retry still runs, this only
+            # costs durability across a restart.
+            self.logger.warning(f"Could not spool pending pin for {name} ({cid}): {e}")
+
+    def _unspool_pending_pin(self, cid):
+        for suffix in ('', '.name', '.tmp'):
+            try:
+                os.remove(os.path.join(self._pending_pin_dir(), f"{cid}{suffix}"))
+            except FileNotFoundError:
+                pass
+            except Exception as e:
+                self.logger.warning(f"Could not clear spooled pin {cid}{suffix}: {e}")
+
+    def drain_pending_pins(self, limit=25):
+        """Re-attempt every spooled pin. Safe to call on any cycle.
+
+        This is what makes a failed pin survive an IPFS outage or a node
+        restart: the content is on disk, so the pin is retried until it lands
+        instead of being lost with the process that queued it.
+
+        Verifies the bytes still hash to the CID they are filed under -- a
+        corrupted spool must not be published under a CID the chain already
+        references.
+        """
+        try:
+            d = self._pending_pin_dir()
+            names = [n for n in os.listdir(d)
+                     if not n.endswith('.name') and not n.endswith('.tmp')]
+        except Exception as e:
+            self.logger.warning(f"Could not list pending pins: {e}")
+            return 0
+        if not names:
+            return 0
+        if not self.connected:
+            if self.connect():
+                self.connected = True
+            else:
+                self.logger.info(
+                    f"{len(names)} pin(s) still queued; IPFS unreachable, will retry")
+                return 0
+        done = 0
+        for cid in names[:limit]:
+            path = os.path.join(d, cid)
+            try:
+                with open(path, 'rb') as f:
+                    content = f.read()
+            except Exception as e:
+                self.logger.warning(f"Could not read spooled pin {cid}: {e}")
+                continue
+            if self.cidv1_raw(content) != cid:
+                self.logger.error(
+                    f"Spooled content for {cid} does not hash to its CID; discarding")
+                self._unspool_pending_pin(cid)
+                continue
+            try:
+                label = cid
+                meta = os.path.join(d, f"{cid}.name")
+                if os.path.exists(meta):
+                    with open(meta) as f:
+                        label = f.read().strip() or cid
+                stored = self.add_bytes_raw(content, name=label)
+                if stored == cid:
+                    self.cache.add(cid)
+                    self._unspool_pending_pin(cid)
+                    self.logger.info(f"Pinned queued {label} -> {cid}")
+                    done += 1
+                else:
+                    self.logger.warning(
+                        f"Queued pin {label}: IPFS stored {stored}, expected {cid}")
+            except Exception as e:
+                self.logger.warning(f"Queued pin {cid} failed: {e}")
+                self.connected = False
+                break
+        return done
 
     def add_bytes_raw(self, content_bytes, name='blob'):
         """Add bytes as CIDv1 with raw leaves, returning the CID.
@@ -837,6 +966,23 @@ class Storage:
         return files
 
     def restart_ipfs_service(self):
+        # One daemon is shared by every network thread, and each decides to
+        # restart it on its own errors. Unsynchronized, that is a storm: the
+        # first restart makes every other thread's call fail with connection
+        # refused, and each of those failures triggers another restart.
+        # Observed at 21:20:09 -- four networks restarting ipfs within 6s.
+        #
+        # The lock serializes them; the cooldown makes the followers skip
+        # entirely, since a restart that just happened is what broke their
+        # call in the first place.
+        with _ipfs_restart_lock:
+            since = time.time() - _ipfs_last_restart[0]
+            if since < IPFS_RESTART_COOLDOWN:
+                self.logger.info(
+                    f"IPFS restarted {since:.1f}s ago; reconnecting instead of restarting again.")
+                self.connected = self.connect()
+                return
+            _ipfs_last_restart[0] = time.time()
         try:
             result = subprocess.run(
                 ['systemctl', 'restart', 'ipfs'],
@@ -845,7 +991,11 @@ class Storage:
                 stderr=subprocess.PIPE
             )
             self.logger.info("IPFS service restarted successfully.")
-            self.connect()
+            self.connected = self.connect()
+            # Drain before repo_gc, not after: gc reclaims unpinned data, and
+            # queued results are by definition unpinned. Pinning them first is
+            # what stops the collector from taking them.
+            self.drain_pending_pins()
             self.repo_gc()
         except subprocess.CalledProcessError as e:
             self.logger.warning(f"Failed to restart local IPFS service. Error: {e.stderr.decode().strip()}")
@@ -956,7 +1106,14 @@ class Storage:
                 return False
             if 'pinned indirectly' in err:
                 return True
-            self.connected = False
+            # A failed pin/ls for one CID says nothing about the connection,
+            # so do not latch the client off here. Clearing self.connected
+            # makes every later add/pin raise "Not connected" without calling
+            # the API, and nothing sets it back: observed at 21:20:09, one
+            # error disabled result pinning node-wide for 6h.
+            self.logger.warning(
+                f'Pin status check failed for {cid!r}: {e}')
+            return False
             self.logger.info(f'Unexpected error while checking pin status for {cid}')
             if "127.0.0.1" in self.client_connect_url:
                 self.logger.warning("Restarting IPFS service")

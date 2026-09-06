@@ -28,12 +28,10 @@ from cache_config import CacheConfig
 logger = config.logger 
 task_running_on = None
 task_lock = threading.Lock()
-# Longest a network waits for the shared task slot before giving up its cycle.
-# One global slot means a thread here waits on whichever network holds it; if
-# that network is also waiting, nothing clears the flag. Ten minutes is well
-# past a normal task and short enough that a stuck flag costs one cycle rather
-# than the process.
-TASK_SLOT_WAIT_SECONDS = 600
+# Wraps task_lock so acquire_task_slot can wait for a release instead of
+# polling. Sharing the lock keeps get_task_running_on and the acquire/release
+# pair mutually exclusive.
+task_cond = threading.Condition(task_lock)
 # SGX integration-test coordination, per network_type (TESTNET / MAINNET).
 #
 # The test verifies the trustedzone enclave's result, which is identical across
@@ -326,9 +324,7 @@ class EtnyPoXNode:
         # so it must NOT wait on or take this mutex -- otherwise it blocks here
         # forever while the processing instances keep re-acquiring it.
         if not self.__replication_only:
-            while get_task_running_on() is not None:
-               time.sleep(1)
-            set_task_running_on(self.__network)
+            acquire_task_slot(self.__network)
 
         os.chdir(self.cache_config.base_path)
 
@@ -422,7 +418,7 @@ class EtnyPoXNode:
             # the replication) so construction stays fast and never blocks on an
             # IPFS download during startup.
             self.__clear_ipfs_cache()
-            reset_task_running_on()
+            release_task_slot(self.__network)
 
           
     def __migrate_cache(self):
@@ -1263,6 +1259,16 @@ class EtnyPoXNode:
         logger = self.logger
 
         logger.info(f"Cleaning up ipfs cache")
+
+        # Before any retention work: retry results whose pin never landed.
+        # Ahead of the retention early-return below, because a queued pin must
+        # still drain when age-based cleanup is switched off.
+        try:
+            drained = self.storage.drain_pending_pins()
+            if drained:
+                logger.info(f"Pinned {drained} previously queued result(s)")
+        except Exception as e:
+            logger.warning(f"Pending-pin drain failed: {e}")
 
         # Retention is configurable (IPFS_PIN_RETENTION_DAYS, default 7 days).
         # 0 disables age-based cleanup entirely.
@@ -2496,30 +2502,13 @@ class EtnyPoXNode:
             if order.status == OrderStatus.PROCESSING:
                 logger.debug(f"DP request never finished, processing order {order_id}")
 
-                # task_running_on is ONE global shared by every network, so a
-                # thread waiting here is waiting on whichever network claimed
-                # it. If that network's own thread is also parked here, nobody
-                # clears the flag and all of them wait forever: observed with
-                # three network threads in this loop at once, zero CPU, and no
-                # log output for 25 minutes.
-                #
-                # Bounded so a network that never gets its turn gives up and
-                # lets resilient_process recycle it, which calls
-                # reset_task_running_on and breaks the cycle.
-                waited = 0
                 while not stop_event.is_set():
                     time.sleep(timeout_in_seconds)
-                    waited += timeout_in_seconds
 
                     if stop_event.is_set():
                         return
 
                     if get_task_running_on():
-                        if waited >= TASK_SLOT_WAIT_SECONDS:
-                            logger.info(
-                                f"waited {int(waited)}s for the task slot held by "
-                                f"{get_task_running_on()}; giving up this cycle")
-                            return
                         continue
 
                     break
@@ -2639,7 +2628,7 @@ class EtnyPoXNode:
                             f"Failed to fetch DORequest/metadata after {attempts} attempts; skipping to next DO request"
                         )
                         next_dp_request = True
-                        reset_task_running_on()
+                        release_task_slot(self.__network)
                         break
 
                     logger.debug("Fetch succeeded; proceeding with DO request processing.")
@@ -2689,7 +2678,7 @@ class EtnyPoXNode:
                     self.doreq_cache.add(i)
                     continue
 
-                set_task_running_on(self.__network)
+                acquire_task_slot(self.__network)
 
                 logger.info(f"DO Request {i} detected. Starting order placement. ")
                 try:
@@ -2701,7 +2690,7 @@ class EtnyPoXNode:
 
                 except (exceptions.ContractLogicError, IndexError) as e:
                     logger.warning(f"Falied placing order: {e}")
-                    reset_task_running_on()
+                    release_task_slot(self.__network)
                     # If OUR DP request is the matched/consumed one, no further
                     # order can ever be placed with it -- break out so a fresh
                     # DP request is created. Continuing here made every
@@ -2721,7 +2710,7 @@ class EtnyPoXNode:
                     if retry(self.wait_for_order_approval, attempts=attempts, delay=self.__network_config.block_time)[0] is False:
                         logger.info(f"Order was not approved in the last ~{attempts} blocks, skipping to next DP request")
                         next_dp_request = True
-                        reset_task_running_on()
+                        release_task_slot(self.__network)
                         break
 
                     logger.info(f"Approval granted. Order processing continues.")
@@ -2730,7 +2719,7 @@ class EtnyPoXNode:
                     self.process_order(self.__order_id)
                     logger.info(
                         f"Order {self.__order_id} (DO request {i}, DP request {self.__dprequest}) completed.")
-                    reset_task_running_on()
+                    release_task_slot(self.__network)
                     next_dp_request = True
                     break
                 except Exception as e:
@@ -2739,7 +2728,7 @@ class EtnyPoXNode:
 
                     self.merged_orders_cache.rem(order_id=self.__order_id)
 
-                    reset_task_running_on()
+                    release_task_slot(self.__network)
 
             if self.__do_requests_build_pending and threshold > 0:
                 logger.info(f"Building DO Requests cache: 100%")
@@ -3559,14 +3548,6 @@ def process_network(network):
         if app is not None:
             app.close()
 
-def set_task_running_on(name):
-    """
-    Sets the shared network name in a thread-safe way.
-    """
-    global task_running_on
-    with task_lock:
-        task_running_on = name
-
 def get_task_running_on():
     """
     Gets the shared network name in a thread-safe way.
@@ -3577,11 +3558,56 @@ def get_task_running_on():
 
 def reset_task_running_on():
     """
-    Resets the shared network name to None in a thread-safe way.
+    Clears the task slot regardless of who holds it.
+
+    Only for the restart path, which runs after executor.shutdown(wait=True)
+    when no thread holds the slot. Everything else must use release_task_slot
+    so it cannot clear another network's ownership.
+
+    notify_all, not notify: this drops ownership without handing off to a
+    specific waiter, and a waiter parked in acquire_task_slot is only woken by
+    a notify on task_cond.
     """
     global task_running_on
-    with task_lock:
+    with task_cond:
         task_running_on = None
+        task_cond.notify_all()
+
+
+def acquire_task_slot(name):
+    """
+    Blocks until the task slot is free, then takes it for `name`.
+
+    The test and the take happen under a single hold of task_lock. Testing in
+    a polling loop and then taking the slot in a second call releases the lock
+    in between, so two networks can both observe None and both take the slot --
+    and the second one's release then clears the first one's ownership.
+
+    task_cond is notified by release_task_slot, so a waiter wakes on release
+    rather than polling.
+    """
+    global task_running_on
+    with task_cond:
+        while task_running_on is not None:
+            task_cond.wait()
+        task_running_on = name
+
+
+def release_task_slot(name):
+    """
+    Releases the task slot, but only if `name` still holds it.
+
+    The ownership test is what keeps a late release from clearing a slot that
+    another network has since taken. Returns True if this caller actually
+    released it.
+    """
+    global task_running_on
+    with task_cond:
+        if task_running_on != name:
+            return False
+        task_running_on = None
+        task_cond.notify()
+        return True
 
 _enclave_cleanup_lock = threading.Lock()
 _enclave_cleanup_done = False
@@ -3743,10 +3769,10 @@ class TaskManager:
                 process_network(network)
             except Exception as e:
                 logger.error(f"[{network.name}] Restarting due to error: {e}")
-                reset_task_running_on()
+                release_task_slot(network.name)
                 time.sleep(2)  # brief delay before retry
             else:
-                reset_task_running_on()
+                release_task_slot(network.name)
                 logger.info(f"[{network.name}] Process exited cleanly. Restarting.")
                 time.sleep(2)  # restart after clean exit
 
