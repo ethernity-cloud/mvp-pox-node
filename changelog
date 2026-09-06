@@ -1,3 +1,18 @@
+v3.5.0
+fixed result pinning: retries never reconnected, so a stale connection
+  flag failed every attempt against a healthy IPFS daemon
+one failed pin/ls no longer disables pinning node-wide
+serialised IPFS restarts across network threads (lock + 60s cooldown),
+  which stops one thread's restart from breaking the others' calls
+results that fail to pin are queued on disk and retried after an IPFS
+  outage or a node restart, instead of being lost with the process
+CAS endpoints are read from CasKeyStore rather than the registry, which
+  no longer forwards them (requires a registry exposing keyStore())
+3s RPC connect timeout, replacing 120s applied to both phases
+HTTP sessions are closed when a network iteration ends
+the shared task slot is acquired atomically, so two networks can no
+  longer hold it at once or clear each other's ownership
+
 v0.7.3
 fixed installation issue on Ubuntu 20.04
 
