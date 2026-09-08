@@ -2641,12 +2641,23 @@ class EtnyPoXNode:
                     continue
 
 
-                if metadata[i][4] != '' and metadata[i][4] != self.__address:
+                # An unpinned request carries no node: the contract stores that
+                # as the zero address, while an older client may leave the
+                # field empty. Both mean "any node may take it" -- treating the
+                # zero address as a delegation silently skipped every unpinned
+                # request and cached it as ineligible forever.
+                delegated_to = (metadata[i][4] or '').strip()
+                try:
+                    unpinned = delegated_to == '' or int(delegated_to, 16) == 0
+                except ValueError:
+                    unpinned = False
+
+                if not unpinned and delegated_to.lower() != self.__address.lower():
                     logger.debug(f'Skipping DO Request: {i}. Request is delegated to a different Node.')
                     self.doreq_cache.add(i)
                     continue
 
-                if metadata[i][4] == '':
+                if unpinned:
                     status = self.__can_place_order(self.__dprequest, i)
                     if not status:
                         continue
