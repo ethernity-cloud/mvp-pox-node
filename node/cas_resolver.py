@@ -235,7 +235,11 @@ def resolve_cas(w3, registry_address, logger, probe_timeout=10,
                     logger.warning(f"CAS resolver: {host} FAILED attestation: "
                                    f"{reason}; trying next")
                     continue
-                scone_addr = host if port == CAS_ENCLAVE_PORT else f'{host}:{port}'
+                # ALWAYS carry the port. SCONE defaults SCONE_CAS_ADDR to
+                # 18765 when none is given, and our endpoints are published on
+                # 19765+, so a bare host sends the enclave to a port nothing
+                # listens on.
+                scone_addr = f'{host}:{port}'
                 logger.info(f"CAS resolver: selected {host} (validator {v}, "
                             f"MRENCLAVE {mrenclave[:16]}…)")
                 return {'address': v, 'host': host, 'port': port,
