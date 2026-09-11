@@ -23,9 +23,13 @@ enclave re-attests the CAS itself); what the node establishes is that the
 answering endpoint speaks for the on-chain validator identity it claims.
 
 Multiaddrs advertise the ENCLAVE port. The REST/identity port follows the
-PAIRING CONVENTION `rest = 9081 + (enclave - 18765)`: co-hosted CAS instances
-stack as 18765/9081, 18766/9082, 18767/9083, ... so one advert names both
-listeners. Enclave ports outside [18765, 18965) fall back to REST 9081.
+PAIRING CONVENTION `rest = 9081 + (enclave - 19765)`: co-hosted CAS instances
+stack as 19765/9081, 19766/9082, 19767/9083, ... so one advert names both
+listeners. Enclave ports outside [19765, 19965) fall back to REST 9081.
+
+Both ranges are chosen to be forwardable as a block (9081-9091 and
+19765-19775): a published port outside what the CAS host's router forwards
+resolves to an endpoint no node can dial.
 """
 
 import json
@@ -41,7 +45,7 @@ _MRENCLAVE = (_BODY + 64, _BODY + 96)
 _REPORT_DATA = (_BODY + 320, _BODY + 384)
 
 CAS_REST_PORT = 9081
-CAS_ENCLAVE_PORT = 18765
+CAS_ENCLAVE_PORT = 19765
 
 VALIDATOR_REGISTRY_ABI = [
     {"name": "validatorCount", "type": "function", "stateMutability": "view",
