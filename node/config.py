@@ -116,7 +116,7 @@ esr_contract_addresses = {
 # mainnet and testnet share chainId 8995. "" / absent = not deployed there,
 # replication skipped.
 cas_session_registry_addresses = {
-    "BLOXBERG_TESTNET": os.environ.get('CAS_SESSION_REGISTRY_ADDRESS', "0xc57D8099D991395FeC9E7ED6bD7dDbB7E370aFf8"),
+    "BLOXBERG_TESTNET": os.environ.get('CAS_SESSION_REGISTRY_ADDRESS', "0x683A16F3d284dF29AD0d24b424F72BcBaAe9317a"),
 }
 # How far back the FIRST SessionRegistered scan reaches (later rounds continue
 # incrementally from where the previous one stopped).
@@ -129,7 +129,7 @@ cas_session_registry_scan_blocks = int(os.environ.get('CAS_SESSION_REGISTRY_SCAN
 # SCONE_CAS_ADDR in the order's compose. "" / absent = keep the compose's
 # baked-in CAS address (the pre-Sprint-4 behaviour).
 validator_registry_addresses = {
-    "BLOXBERG_TESTNET": os.environ.get('VALIDATOR_REGISTRY_ADDRESS', "0xC4Fcd83743b76fB3081328cFe354De89995eaECD"),
+    "BLOXBERG_TESTNET": os.environ.get('VALIDATOR_REGISTRY_ADDRESS', "0xC1b86708a61421129f4715a9b390f5Af968e5645"),
 }
 # Probe timeout per endpoint, seconds.
 cas_resolver_probe_timeout = int(os.environ.get('CAS_RESOLVER_PROBE_TIMEOUT', 10))

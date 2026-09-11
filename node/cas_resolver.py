@@ -3,7 +3,8 @@
 
 A node with NO configured CAS address discovers one from chain:
 
-  1. enumerate the ACTIVE validators in the ValidatorRegistry;
+  1. enumerate the ACTIVE validators in the ValidatorRegistry, starting the
+     sweep at a rotating offset so the set shares the provisioning load;
   2. gather each validator's endpoints -- ENS names first (resolved to
      multiaddrs where an ENS registry exists), then literal multiaddrs,
      with /onion3 preferred over everything else at each step;
@@ -22,12 +23,13 @@ enclave re-attests the CAS itself); what the node establishes is that the
 answering endpoint speaks for the on-chain validator identity it claims.
 
 Multiaddrs advertise the ENCLAVE port. The REST/identity port follows the
-PAIRING CONVENTION `rest = 8081 + (enclave - 18765)`: co-hosted CAS instances
-stack as 18765/8081, 18766/8082, 18767/8083, ... so one advert names both
-listeners. Enclave ports outside [18765, 18965) fall back to REST 8081.
+PAIRING CONVENTION `rest = 9081 + (enclave - 18765)`: co-hosted CAS instances
+stack as 18765/9081, 18766/9082, 18767/9083, ... so one advert names both
+listeners. Enclave ports outside [18765, 18965) fall back to REST 9081.
 """
 
 import json
+import random
 import urllib.request
 
 # DCAP quote layout (fixed offsets, version 3 ECDSA quote):
@@ -38,7 +40,7 @@ _BODY = 48
 _MRENCLAVE = (_BODY + 64, _BODY + 96)
 _REPORT_DATA = (_BODY + 320, _BODY + 384)
 
-CAS_REST_PORT = 8081
+CAS_REST_PORT = 9081
 CAS_ENCLAVE_PORT = 18765
 
 VALIDATOR_REGISTRY_ABI = [
@@ -156,10 +158,20 @@ def _attest(identity, expected_address, expected_mrenclave, expected_cert):
 
 
 def resolve_cas(w3, registry_address, logger, probe_timeout=10,
-                tor_available=False):
+                tor_available=False, start_at=None):
     """Pick a CAS for task provisioning. Returns
     {'address', 'host', 'port', 'scone_cas_addr', 'mrenclave', 'cert_hash'}
-    for the FIRST endpoint that answers AND attests, or None."""
+    for the first endpoint that answers AND attests, or None.
+
+    The sweep starts at a ROTATING offset rather than index 0, so the set
+    shares the provisioning load: scanning from 0 every time would send every
+    node on the network to the same validator, leaving the rest idle and that
+    one a single point of failure. Order within the sweep is otherwise
+    unchanged, so a validator that does not answer still falls through to the
+    next -- rotation spreads the load, it does not weaken the failover.
+
+    `start_at` fixes the offset (tests, and pinning a node to one CAS);
+    None picks one per call."""
     reg = w3.eth.contract(address=w3.to_checksum_address(registry_address),
                           abi=VALIDATOR_REGISTRY_ABI)
     try:
@@ -179,7 +191,13 @@ def resolve_cas(w3, registry_address, logger, probe_timeout=10,
         logger.warning(f"CAS resolver: keyStore() failed: {e}")
         return None
 
-    for i in range(total):
+    if total == 0:
+        logger.warning("CAS resolver: the registry has no validators")
+        return None
+    offset = random.randrange(total) if start_at is None else start_at % total
+
+    for step in range(total):
+        i = (offset + step) % total
         try:
             v = _chain(lambda: reg.caller().validatorSet(i))
             if not _chain(lambda: reg.caller().isValidator(v)):
