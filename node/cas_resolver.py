@@ -54,13 +54,17 @@ VALIDATOR_REGISTRY_ABI = [
      "inputs": [{"type": "uint256"}], "outputs": [{"type": "address"}]},
     {"name": "isValidator", "type": "function", "stateMutability": "view",
      "inputs": [{"type": "address"}], "outputs": [{"type": "bool"}]},
+    # The registry's Validator struct: the measurement is `bytes` at its
+    # platform width (32 for SGX MRENCLAVE, 48 for SEV-SNP), not bytes32.
     {"name": "validators", "type": "function", "stateMutability": "view",
      "inputs": [{"type": "address"}],
-     "outputs": [{"name": "mrenclave", "type": "bytes32"},
+     "outputs": [{"name": "measurement", "type": "bytes"},
                  {"name": "certHash", "type": "bytes32"},
                  {"name": "active", "type": "bool"},
                  {"name": "admittedBlock", "type": "uint64"},
-                 {"name": "lastVoteBlock", "type": "uint64"}]},
+                 {"name": "lastVoteBlock", "type": "uint64"},
+                 {"name": "teeType", "type": "uint16"},
+                 {"name": "operator", "type": "address"}]},
     # Endpoints live in CasKeyStore. The registry used to forward reads to it,
     # but those forwarders were removed when the contract hit the EIP-170 size
     # limit, so the address is resolved here and the store is read directly.
