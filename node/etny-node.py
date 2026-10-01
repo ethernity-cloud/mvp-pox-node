@@ -1579,7 +1579,9 @@ class EtnyPoXNode:
 
         params = [
             self._limited_arg(self.__number_of_cpus),
-            self._limited_arg(self.__free_memory),
+            # The contract rejects a request below 1 GB, and available memory
+            # on a 2 GB VM floors to 0 once its page cache fills.
+            self._limited_arg(max(self.__free_memory, 1)),
             self._limited_arg(self.__free_storage),
             self._limited_arg(self.__bandwidth),
             self.__duration,
@@ -1601,11 +1603,12 @@ class EtnyPoXNode:
             _hash = self.send_transaction(unicorn_txn)
             logger.info(f"TXID {_hash} pending... ")
             receipt = self.__w3.eth.wait_for_transaction_receipt(_hash)
+            if receipt.status != 1:
+                raise Exception(f"TXID {_hash} reverted with parameters {params[:6]}")
             processed_logs = self.__etny.events._addDPRequestEV().process_receipt(receipt)
             self.__dprequest = processed_logs[0].args._rowNumber
-            if receipt.status == 1:
-                logger.info(f"TXID {_hash} confirmed!")
-                break
+            logger.info(f"TXID {_hash} confirmed!")
+            break
           except Exception as ex:
             retries += 1
             logger.warning(f"Warning while adding DP request. Retry {retries}/{max_retries}. Message: {ex}")
