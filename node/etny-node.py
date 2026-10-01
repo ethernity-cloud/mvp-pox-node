@@ -329,11 +329,15 @@ class EtnyPoXNode:
         os.chdir(self.cache_config.base_path)
 
 
-        logger.info(f"Initializing swift-stream service")
-
-        self.swift_stream_service = SwiftStreamService(logger, self.__endpoint,
-                                                       self.__access_key,
-                                                       self.__secret_key)
+        # The object store is the enclaves' side channel; a replication-only
+        # handle runs no enclave and starts no container for it.
+        if self.__replication_only:
+            self.swift_stream_service = None
+        else:
+            logger.info(f"Initializing swift-stream service")
+            self.swift_stream_service = SwiftStreamService(logger, self.__endpoint,
+                                                           self.__access_key,
+                                                           self.__secret_key)
 
         self.orders_cache = Cache(self.cache_config.orders_cache_limit, self.cache_config.orders_cache_filepath)
         self.dpreq_cache = ListCache(self.cache_config.dpreq_cache_limit, self.cache_config.dpreq_filepath)
