@@ -1579,9 +1579,7 @@ class EtnyPoXNode:
 
         params = [
             self._limited_arg(self.__number_of_cpus),
-            # The contract rejects a request below 1 GB, and available memory
-            # on a 2 GB VM floors to 0 once its page cache fills.
-            self._limited_arg(max(self.__free_memory, 1)),
+            self._limited_arg(self.__free_memory),
             self._limited_arg(self.__free_storage),
             self._limited_arg(self.__bandwidth),
             self.__duration,
