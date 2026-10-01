@@ -93,7 +93,7 @@
 - name: Display networks without enough gas
   debug:
     msg: "Address {{ address }} does not hold enough gas on {{ network.name }}. {{ network.description }}"
-  loop: "{{ networks_without_enough_gas }}"
+  loop: "{{ networks_without_enough_gas | default([]) }}"
   loop_control:
     loop_var: network
     label: "{{ network.shortname }}"
