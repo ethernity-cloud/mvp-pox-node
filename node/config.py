@@ -131,6 +131,15 @@ cas_session_registry_scan_blocks = int(os.environ.get('CAS_SESSION_REGISTRY_SCAN
 validator_registry_addresses = {
     "BLOXBERG_TESTNET": os.environ.get('VALIDATOR_REGISTRY_ADDRESS', "0xC40102c0b3f87663C925083861F38e2498C2038F"),
 }
+# ethernity-cas ValidatorIpfsEndpoints: where each validator's IPFS node is
+# reached (multiaddrs with peer id). When set for a network, the node keeps
+# every active validator's IPFS node in its Kubo peering list, refreshed every
+# IPFS_PEER_SYNC_SECONDS, so task artefacts and results travel directly between
+# the node and the validators. "" / absent = peer only with IPFS_SWARM.
+ipfs_endpoints_addresses = {
+    "BLOXBERG_TESTNET": os.environ.get('IPFS_ENDPOINTS_ADDRESS', "0x534123b11590b1A7c77b2A34409E10aF1b60Dbf2"),
+}
+ipfs_peer_sync_seconds = int(os.environ.get('IPFS_PEER_SYNC_SECONDS', 300))
 # Probe timeout per endpoint, seconds.
 cas_resolver_probe_timeout = int(os.environ.get('CAS_RESOLVER_PROBE_TIMEOUT', 10))
 

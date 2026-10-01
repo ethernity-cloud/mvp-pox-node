@@ -141,6 +141,13 @@ class Storage:
         self.kubo_version = kubo_version
         self.ipfs_version_cache = ipfs_version_cache
         self.network_name = network_name
+        # Validators' IPFS peers taken from chain: {peer id: [multiaddrs]}.
+        # Kept apart from IPFS_SWARM so a validator leaving the set is removed
+        # from the peering list without touching the configured entries.
+        self._chain_peers = {}
+        # (cid, time) of blocks this instance pinned recently, re-announced to
+        # the DHT by reprovide_recent.
+        self._recent_pins = deque(maxlen=200)
 
         self._setup_session_and_executor()
         logger.info("Initializing ipfs connection")
@@ -415,14 +422,87 @@ class Storage:
         return addrs
 
     def _swarm_peers(self):
-        """{peer id: [configured multiaddrs]} for the swarm entries that end in
-        /p2p/<id>, in configured order."""
+        """{peer id: [multiaddrs]} for the swarm entries that end in /p2p/<id>,
+        in configured order, followed by the validators' peers from chain."""
         peers = {}
         for addr in self._swarm_addrs():
             m = re.search(r'/p2p/([^/]+)$', addr)
             if m:
                 peers.setdefault(m.group(1), []).append(addr)
+        for pid, addrs in self._chain_peers.items():
+            known = peers.setdefault(pid, [])
+            known.extend(a for a in addrs if a not in known)
         return peers
+
+    @staticmethod
+    def _group_by_peer(multiaddrs):
+        """{peer id: [multiaddrs]} for the entries that end in /p2p/<id>."""
+        peers = {}
+        for addr in multiaddrs:
+            m = re.search(r'/p2p/([^/]+)$', addr)
+            if m:
+                peers.setdefault(m.group(1), []).append(addr)
+        return peers
+
+    def sync_chain_peers(self, multiaddrs):
+        """Make Kubo's peering list carry exactly the validators' IPFS peers in
+        `multiaddrs`, beside the configured IPFS_SWARM entries: new peers are
+        added with swarm/peering/add, peers this method added before and that
+        are no longer listed are removed with swarm/peering/rm. Configured
+        entries are never removed. Never raises."""
+        if not self.connected:
+            return
+        wanted = self._group_by_peer(multiaddrs)
+        configured = set(self._group_by_peer(self._swarm_addrs()))
+        try:
+            listed = self._api_call('swarm/peering/ls', timeout=10)
+            present = {addr for p in listed.get('Peers', []) for addr in p.get('Addrs', [])}
+        except Exception as e:
+            self.logger.warning(f"ipfs-peers: swarm/peering/ls failed: {e}")
+            return
+        for pid, addrs in wanted.items():
+            for addr in addrs:
+                if addr in present:
+                    continue
+                try:
+                    self._api_call('swarm/peering/add', params={'arg': addr}, timeout=10)
+                    self.logger.info(f"ipfs-peers: peering with validator IPFS {addr}")
+                except Exception as e:
+                    self.logger.warning(f"ipfs-peers: swarm/peering/add {addr} failed: {e}")
+        for pid in list(self._chain_peers):
+            if pid in wanted or pid in configured:
+                continue
+            try:
+                self._api_call('swarm/peering/rm', params={'arg': pid}, timeout=10)
+                self.logger.info(f"ipfs-peers: validator IPFS {pid} left the set; peering removed")
+            except Exception as e:
+                self.logger.warning(f"ipfs-peers: swarm/peering/rm {pid} failed: {e}")
+        self._chain_peers = wanted
+
+    def provide(self, cid, remember=True):
+        """Announce `cid` to the DHT now (routing/provide), so a peer that is
+        not connected to this node can still find it. With remember=True the
+        CID joins the recent list that reprovide_recent re-announces. Never
+        raises: a failed announce leaves the block to bitswap and to Kubo's
+        own reprovider."""
+        if not self.connected:
+            return
+        try:
+            self._api_call('routing/provide', params={'arg': cid}, timeout=60)
+            self.logger.debug(f"ipfs-provide: announced {cid}")
+        except Exception as e:
+            self.logger.debug(f"ipfs-provide: {cid}: {e}")
+        if remember:
+            self._recent_pins.append((cid, time.time()))
+
+    def reprovide_recent(self, max_age=3600):
+        """Re-announce every CID pinned within the last `max_age` seconds and
+        drop the older ones from the list."""
+        cutoff = time.time() - max_age
+        while self._recent_pins and self._recent_pins[0][1] < cutoff:
+            self._recent_pins.popleft()
+        for cid, _ in list(self._recent_pins):
+            self.provide(cid, remember=False)
 
     def _api_call(self, command, params=None, files=None, data=None, stream=False, timeout=None):
         if params is None:
@@ -788,6 +868,7 @@ class Storage:
                         self.cache.add(cid)
                         self._unspool_pending_pin(cid)
                         self.logger.info(f"Pinned {name} -> {cid} (background)")
+                        self.provide(cid)
                         return
                     # Keep the spool: the bytes are still unpinned under the CID
                     # the caller published, so this needs looking at rather than
@@ -904,6 +985,7 @@ class Storage:
                     self.cache.add(cid)
                     self._unspool_pending_pin(cid)
                     self.logger.info(f"Pinned queued {label} -> {cid}")
+                    self.provide(cid)
                     done += 1
                 else:
                     self.logger.warning(

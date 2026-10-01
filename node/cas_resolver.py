@@ -80,6 +80,39 @@ CAS_KEY_STORE_ABI = [
      "inputs": [{"type": "address"}], "outputs": [{"type": "string[]"}]},
 ]
 
+# ValidatorIpfsEndpoints: where each validator's IPFS node is reached, as
+# multiaddrs carrying the peer id (`/ip4/.../tcp/4001/p2p/<id>`).
+IPFS_ENDPOINTS_ABI = [
+    {"name": "ipfsMultiaddrsOf", "type": "function", "stateMutability": "view",
+     "inputs": [{"type": "address"}], "outputs": [{"type": "string[]"}]},
+]
+
+
+def validator_ipfs_multiaddrs(w3, registry_address, endpoints_address, logger):
+    """The IPFS multiaddrs of every ACTIVE validator, in registry order, with
+    entries that carry no `/p2p/<id>` dropped. Several validators sharing one
+    Kubo publish the same multiaddr; the list keeps one copy. Raises on a
+    chain read that fails after retries, so the caller keeps its previous
+    peer set rather than dropping peers on an RPC hiccup."""
+    reg = w3.eth.contract(address=w3.to_checksum_address(registry_address),
+                          abi=VALIDATOR_REGISTRY_ABI)
+    endpoints = w3.eth.contract(address=w3.to_checksum_address(endpoints_address),
+                                abi=IPFS_ENDPOINTS_ABI)
+    total = _chain(lambda: reg.caller().validatorCount())
+    out = []
+    for i in range(total):
+        v = _chain(lambda: reg.caller().validatorSet(i))
+        if not _chain(lambda: reg.caller().isValidator(v)):
+            continue
+        for ma in _chain(lambda: endpoints.caller().ipfsMultiaddrsOf(v)):
+            ma = str(ma).strip()
+            if '/p2p/' not in ma:
+                logger.debug(f"IPFS peers: validator {v} publishes {ma!r} without a peer id; skipped")
+                continue
+            if ma not in out:
+                out.append(ma)
+    return out
+
 
 def parse_multiaddr(ma):
     """/dns4|ip4/HOST/tcp/PORT or /onion3/ADDR/tcp/PORT -> (kind, host, port).

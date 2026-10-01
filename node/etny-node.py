@@ -1248,6 +1248,39 @@ class EtnyPoXNode:
             self.logger.warning(f"Periodic IPFS cleanup skipped: {e}")
             self.__last_ipfs_cleanup_at = time.time()
 
+    def __maybe_sync_ipfs_peers(self):
+        """Keep Kubo peered with every active validator's IPFS node and
+        re-announce the blocks pinned in the last hour, at most once per
+        IPFS_PEER_SYNC_SECONDS. The validators' multiaddrs come from the
+        ValidatorIpfsEndpoints contract of this network; a network without one
+        keeps the configured IPFS_SWARM peers only. A chain read that fails
+        leaves the previous peer set in place.
+
+        Never raises: peering upkeep must not be able to interrupt order
+        processing.
+        """
+        try:
+            interval = int(getattr(config, 'ipfs_peer_sync_seconds', 300))
+            if interval <= 0:
+                return
+            last = getattr(self, '_EtnyPoXNode__last_ipfs_peer_sync_at', 0) or 0
+            if (time.time() - last) < interval:
+                return
+            self.__last_ipfs_peer_sync_at = time.time()
+            net = (self.__network_config.name or "").upper()
+            registry = (config.validator_registry_addresses.get(net) or "").strip()
+            endpoints = (config.ipfs_endpoints_addresses.get(net) or "").strip()
+            if registry and endpoints:
+                import cas_resolver
+                addrs = cas_resolver.validator_ipfs_multiaddrs(
+                    self.__w3, registry, endpoints, self.logger)
+                self.storage.sync_chain_peers(addrs)
+            # Each announce is a DHT walk; off the order thread so a slow DHT
+            # cannot hold up order processing.
+            self.storage.executor.submit(self.storage.reprovide_recent)
+        except Exception as e:
+            self.logger.warning(f"IPFS peer sync skipped: {e}")
+
     def __clear_ipfs_cache(self):
         logger = self.logger
 
@@ -2563,6 +2596,10 @@ class EtnyPoXNode:
                 # check on most passes. Previously cleanup only ran at startup,
                 # so a long-lived node never reclaimed anything.
                 self.__maybe_clear_ipfs_cache()
+
+                # Peering with the validators' IPFS nodes and re-announcing
+                # recent pins; throttled to IPFS_PEER_SYNC_SECONDS.
+                self.__maybe_sync_ipfs_peers()
 
                 self.storage.connect(1)
 
