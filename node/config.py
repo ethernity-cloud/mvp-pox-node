@@ -140,6 +140,21 @@ ipfs_endpoints_addresses = {
     "BLOXBERG_TESTNET": os.environ.get('IPFS_ENDPOINTS_ADDRESS', "0x534123b11590b1A7c77b2A34409E10aF1b60Dbf2"),
 }
 ipfs_peer_sync_seconds = int(os.environ.get('IPFS_PEER_SYNC_SECONDS', 300))
+
+# REPLICATION_ONLY=True runs the agent as a mirror: no SGX, no DP requests, no
+# task execution. For every configured network it pins recent results, ESR
+# state and CAS session bodies from chain into the local Kubo, and keeps that
+# Kubo peered with the validators' IPFS nodes. The bootnode runs this mode. A
+# private key is still required for the chain reads' account context; it
+# sends no transaction.
+replication_only = strtobool(os.environ.get('REPLICATION_ONLY', "False"))
+# IPFS_INTAKE_BIND=host:port starts the payload intake (ipfs_intake.py) in a
+# replication-only agent: runners deliver task artefacts to
+# POST /payload/<network>/<doRequestId>/<cid>, accepted only when the DO
+# request on chain names the CID and the bytes hash to it. "" = no intake.
+ipfs_intake_bind = os.environ.get('IPFS_INTAKE_BIND', '')
+ipfs_intake_max_bytes = int(os.environ.get('IPFS_INTAKE_MAX_BYTES', 100 * 1024 * 1024))
+ipfs_intake_retention_seconds = int(os.environ.get('IPFS_INTAKE_RETENTION_SECONDS', 24 * 3600))
 # Probe timeout per endpoint, seconds.
 cas_resolver_probe_timeout = int(os.environ.get('CAS_RESOLVER_PROBE_TIMEOUT', 10))
 

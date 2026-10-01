@@ -1189,6 +1189,11 @@ class EtnyPoXNode:
             self.logger.debug(f"cas-session-registry replication failed ({e})")
         return kept
 
+    def intake_backend(self):
+        """What the payload intake needs from this network's handle: the PoX
+        contract, the Kubo client and the network logger."""
+        return self.__etny, self.storage, self.logger
+
     def run_esr_replication_loop(self):
         """Replication loop for THIS network, paired with its processing thread.
 
@@ -1216,6 +1221,10 @@ class EtnyPoXNode:
                 self.__replicate_do_request_inputs()
                 self.__replicate_session_rows()
                 self.__replicate_cas_session_registry()
+                # A replication-only process has no order loop, so its peering
+                # upkeep and re-announcing run from here; the throttle inside
+                # keeps this to once per IPFS_PEER_SYNC_SECONDS.
+                self.__maybe_sync_ipfs_peers()
             except Exception as e:
                 self.logger.warning(f"[esr-replication] round failed: {e}")
             # Sleep in short slices so stop_event is honored promptly.
@@ -3711,6 +3720,11 @@ def terminate_stale_enclave_containers():
     except Exception as e:
         logger.warning(f"Startup enclave-container cleanup skipped: {e}")
 
+# The payload intake of a replication-only process (ipfs_intake.PayloadIntake),
+# or None. Each network's replication handle registers its contract and Kubo
+# with it as it comes up.
+_payload_intake = None
+
 def start_esr_replication_for_network(network):
     """Start the ESR + protocol-result replication thread for one network.
 
@@ -3747,13 +3761,18 @@ def start_esr_replication_for_network(network):
                 _esr_replication_started.discard(net_name)
             return
 
+        if _payload_intake is not None:
+            _payload_intake.register_network(net_name, *node.intake_backend())
+
         # Do not replicate until the SGX integration test has completed for this
         # network's type. Replication fetches/pins ESR blobs and touches IPFS;
         # holding it until the node has proven it can actually run tasks keeps
         # startup focused on the integration test (which gates order processing)
         # and avoids competing for IPFS/CPU before the node is operational.
         # The test is per-type, so any same-type network passing it unblocks us.
-        if not getattr(config, 'skip_integration_test', False):
+        # A replication-only process runs no test, so it never waits for one.
+        if not getattr(config, 'skip_integration_test', False) \
+                and not getattr(config, 'replication_only', False):
             net_type = network.network_type.upper()
             done_event = integration_test_done.get(net_type)
             if done_event is not None:
@@ -3891,6 +3910,25 @@ if __name__ == '__main__':
        config.logger.warning(f"Ignored unrecognized arguments: {' '.join(unknown_args)}")
 
     try:
+        if config.replication_only:
+            # A mirror: no SGX driver, no enclave containers, no order loop.
+            # Every configured network gets its replication thread, and the
+            # payload intake when IPFS_INTAKE_BIND is set.
+            network_configs = config.parse_networks(args, parser, network_names)
+            if config.ipfs_intake_bind:
+                import ipfs_intake
+                _payload_intake = ipfs_intake.PayloadIntake(
+                    ledger_path=str(config.base_path / 'ipfs_intake_ledger.json'),
+                    bind=config.ipfs_intake_bind, logger=config.logger,
+                    max_bytes=config.ipfs_intake_max_bytes,
+                    retention_seconds=config.ipfs_intake_retention_seconds)
+                _payload_intake.start()
+            for network in network_configs:
+                start_esr_replication_for_network(network)
+            logger.info("Replication-only agent running. Press Ctrl+C to stop.")
+            while True:
+                time.sleep(1)
+
         sgx = SGXDriver()
         network_configs = config.parse_networks(args, parser, network_names)
 
