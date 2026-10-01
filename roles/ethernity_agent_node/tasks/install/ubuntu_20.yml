@@ -26,18 +26,19 @@
     repo: 'ppa:ethernity-cloud/qemu-sgx'
     codename: focal
   failed_when: "update_result.failed and 'unknown reason' not in update_result.msg|lower"
-- name:  Ubuntu 20.04 | vagrant add key  
-  apt_key:
-    url: https://apt.releases.hashicorp.com/gpg
-- name: Ubuntu 20.04 | vagrant repo
-  apt_repository:
-    repo: "deb [arch=amd64] https://apt.releases.hashicorp.com {{ ansible_distribution_release }} main"
+# apt.releases.hashicorp.com publishes no packages for focal, so the release
+# package is fetched from releases.hashicorp.com and checked against the
+# digest in vagrant_2.4.1_SHA256SUMS.
+- name: Ubuntu 20.04 | vagrant download
+  get_url:
+    url: https://releases.hashicorp.com/vagrant/2.4.1/vagrant_2.4.1-1_amd64.deb
+    dest: /tmp/vagrant_2.4.1-1_amd64.deb
+    checksum: sha256:7d379e99eb757b81f31993634b34a3317d2b79607e2a20dab9b7071f4b278810
 
 - name: Ubuntu 20.04 | vagrant install
   apt:
     allow_downgrade: yes
-    pkg:
-    - vagrant=2.4.1-1
+    deb: /tmp/vagrant_2.4.1-1_amd64.deb
 
 - name: Ubuntu 20.04 | vagrant hold
   ansible.builtin.dpkg_selections:
