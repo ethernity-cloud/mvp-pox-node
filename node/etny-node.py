@@ -19,7 +19,7 @@ from web3 import middleware
 from web3.gas_strategies.time_based import fast_gas_price_strategy
 from web3.gas_strategies.rpc import rpc_gas_price_strategy
 
-from utils import get_or_generate_uuid, run_subprocess, retry, Storage, Cache, ListCache, ListCacheWithTimestamp, MergedOrdersCache, subprocess, get_node_geo, HardwareInfoProvider, parse_transaction_bytes_ut
+from utils import get_or_generate_uuid, run_subprocess, retry, Storage, Cache, ListCache, ListCacheWithTimestamp, MergedOrdersCache, subprocess, get_node_geo, HardwareInfoProvider, parse_transaction_bytes_ut, looks_like_cid
 from models import *
 from error_messages import errorMessages
 from swift_stream_service import SwiftStreamService
@@ -473,15 +473,7 @@ class EtnyPoXNode:
 
         CIDv0 is 46 chars starting "Qm"; CIDv1 is base32 starting "b".
         """
-        cid = (value or "").strip()
-        if not cid or cid.startswith("0x"):
-            return False
-        if cid.startswith("Qm") and len(cid) == 46:
-            return True
-        # CIDv1 in its base32 text form: 'b' followed by at least 58 characters
-        # of the lowercase base32 alphabet (a-z and 2-7).
-        return (cid.startswith("b") and len(cid) >= 59
-                and set(cid[1:]) <= set("abcdefghijklmnopqrstuvwxyz234567"))
+        return looks_like_cid(value)
 
     def __esr_current_state_cids(self):
         """CIDs that are the CURRENT state for some enclave/key in the registry.

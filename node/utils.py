@@ -69,6 +69,18 @@ IPFS_HEAL_MAX_COOLDOWN = 1800
 # instances of the process; held across the two bounded API calls it covers.
 _ipfs_storage_lock = threading.Lock()
 
+def looks_like_cid(value):
+    """True for the text forms of an IPFS CID: CIDv0 is 46 characters starting
+    "Qm"; CIDv1 is 'b' followed by at least 58 characters of the lowercase
+    base32 alphabet (a-z and 2-7). An empty value, a 0x hex digest or the repr
+    of a bytes value is not a CID."""
+    cid = value.strip() if isinstance(value, str) else ""
+    if cid.startswith("Qm") and len(cid) == 46:
+        return True
+    return (cid.startswith("b") and len(cid) >= 59
+            and set(cid[1:]) <= set("abcdefghijklmnopqrstuvwxyz234567"))
+
+
 def get_or_generate_uuid(filename):
     if os.path.exists(filename):
         with open(filename) as f:
@@ -1574,19 +1586,26 @@ class ListCacheWithTimestamp:
                     current_time = time.time()
                     entries = OrderedDict()
                     for item in data:
-                        entries[item] = {'timestamp': current_time}
+                        if looks_like_cid(item):
+                            entries[item] = {'timestamp': current_time}
                     self._update_file(entries)
                     return entries
                 elif isinstance(data, dict):
-                    # Ensure all entries have a 'timestamp'
+                    # Ensure all entries have a 'timestamp'. The cache names
+                    # pins, so a key that is not a CID is left out.
+                    entries = OrderedDict()
                     updated = False
                     for key, value in data.items():
-                        if not isinstance(value, dict) or 'timestamp' not in value:
-                            data[key] = {'timestamp': time.time()}
+                        if not looks_like_cid(key):
                             updated = True
+                            continue
+                        if not isinstance(value, dict) or 'timestamp' not in value:
+                            value = {'timestamp': time.time()}
+                            updated = True
+                        entries[key] = value
                     if updated:
-                        self._update_file(data)
-                    return OrderedDict(data)
+                        self._update_file(entries)
+                    return entries
                 else:
                     initial_mem = OrderedDict()
                     self._update_file(initial_mem)
@@ -1615,6 +1634,9 @@ class ListCacheWithTimestamp:
         Args:
             value (str): The value to add to the cache.
         """
+        # The cache names pins; a value that is not a CID is not recorded.
+        if not looks_like_cid(value):
+            return
         current_time = time.time()
         if value in self.mem:
             # Update the timestamp for existing value
