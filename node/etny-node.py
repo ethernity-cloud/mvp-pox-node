@@ -1319,6 +1319,12 @@ class EtnyPoXNode:
         retention_hours = retention_seconds / 3600
         removed = 0
         for hash in list(self.ipfs_cache.get_values):
+          if not self.__looks_like_cid(hash):
+            # The cache names pins, and pin/rm rejects anything that is not a
+            # CID, so an entry that is not one is dropped from the cache.
+            logger.warning(f"Dropping {hash!r} from the pin cache: not a CID")
+            self.ipfs_cache.rem(hash)
+            continue
           if hash not in keep_hashes:
             timestamp = self.ipfs_cache.get_timestamp(hash)
             if timestamp:
