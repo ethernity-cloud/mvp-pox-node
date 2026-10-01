@@ -54,6 +54,20 @@ global_version_lock = threading.Lock()
 _ipfs_restart_lock = threading.Lock()
 _ipfs_last_restart = [0.0]
 IPFS_RESTART_COOLDOWN = 60
+# Bookkeeping of the local daemon's self-heal, shared by every Storage instance
+# in the process (one daemon): the last redial and the current cooldown per
+# swarm peer. A peer is redialed at most once per its cooldown, which doubles
+# on each failed redial up to IPFS_HEAL_MAX_COOLDOWN and resets on success.
+# The lock is held only while these stamps are read and written, never across
+# an API call.
+_ipfs_heal_lock = threading.Lock()
+_ipfs_last_redial = {}
+_ipfs_redial_cooldown = {}
+IPFS_HEAL_COOLDOWN = 120
+IPFS_HEAL_MAX_COOLDOWN = 1800
+# Serializes the read-compare-write of Datastore.StorageMax across the Storage
+# instances of the process; held across the two bounded API calls it covers.
+_ipfs_storage_lock = threading.Lock()
 
 def get_or_generate_uuid(filename):
     if os.path.exists(filename):
@@ -301,23 +315,13 @@ class Storage:
             self.logger.error("Failed to connect to IPFS after 10 attempts. Proceeding with limited functionality (gateway downloads only).")
         if self.connected and "127.0.0.1" in self.client_connect_url:
             try:
-                # Each node pins the IPFS hashes it produces/replicates on its OWN
-                # local IPFS (the relay only helps spread them). ESR state blobs
-                # and task results are pinned here, so the local datastore must
-                # have enough room to hold them without GC evicting freshly
-                # pinned content. Default the local StorageMax to 10GB (was 3GB,
-                # which GC-thrashed and dropped fire-and-forget pins). Overridable
-                # via IPFS_STORAGE_MAX (e.g. "20GB" or a byte count).
-                storage_max = os.environ.get('IPFS_STORAGE_MAX', '10GB')
-                self._api_call('config', params={'arg': ['Datastore.StorageMax', storage_max]})
-                self.logger.info(f"Successfully set Datastore.StorageMax to {storage_max}")
-                # Set Swarm.ConnMgr.LowWater to 25
                 self._api_call('config', params={'arg': ['Swarm.ConnMgr.LowWater', '25'], 'json': 'true'})
                 self.logger.info("Successfully set Swarm.ConnMgr.LowWater to 25")
             except Exception as config_error:
                 self.logger.error(f"Failed to set IPFS config: {config_error}")
-                # Optionally, decide whether to proceed or fail
-                # For now, log the error and continue
+            # IPFS_STORAGE_MAX is the floor for Datastore.StorageMax; the value
+            # is only ever raised to it, never lowered.
+            self._ensure_storage_max()
 
     def _parse_multiaddr(self, ma):
         match = re.match(r'/ip4/([\d.]+)/tcp/(\d+)/http', ma)
@@ -344,19 +348,10 @@ class Storage:
                 # Get existing peering connections
                 peering_list = self._api_call('swarm/peering/ls')
                 existing_addrs = {addr for peer in peering_list.get('Peers', []) for addr in peer.get('Addrs', [])}
-                # Ensure ipfs_swarm is a list of multiaddrs
-                if isinstance(self.ipfs_swarm, str):
-                    # Split by newlines, spaces, or commas
-                    swarm_list = []
-                    # First, split by newlines
-                    for line in self.ipfs_swarm.split('\n'):
-                        # Then split by spaces or commas within each line
-                        line_addrs = line.split() if ' ' in line else line.split(',')
-                        swarm_list.extend(addr.strip() for addr in line_addrs if addr.strip())
-                elif isinstance(self.ipfs_swarm, list):
-                    swarm_list = self.ipfs_swarm
-                else:
-                    self.logger.error("Invalid ipfs_swarm format: must be a string or list of multiaddrs")
+                try:
+                    swarm_list = self._swarm_addrs()
+                except ValueError as e:
+                    self.logger.error(str(e))
                     return False
 
                 # Process each multiaddr individually
@@ -392,6 +387,30 @@ class Storage:
                     time.sleep(1)
         self.logger.error("Failed to connect to IPFS swarm after all attempts")
         return False
+
+    def _swarm_addrs(self):
+        """The configured swarm multiaddrs as a list. IPFS_SWARM is one string
+        of newline-separated entries, each split on whitespace when it contains
+        a space and on commas otherwise, or already a list."""
+        if isinstance(self.ipfs_swarm, list):
+            return list(self.ipfs_swarm)
+        if not isinstance(self.ipfs_swarm, str):
+            raise ValueError("Invalid ipfs_swarm format: must be a string or list of multiaddrs")
+        addrs = []
+        for line in self.ipfs_swarm.split('\n'):
+            parts = line.split() if ' ' in line else line.split(',')
+            addrs.extend(p.strip() for p in parts if p.strip())
+        return addrs
+
+    def _swarm_peers(self):
+        """{peer id: [configured multiaddrs]} for the swarm entries that end in
+        /p2p/<id>, in configured order."""
+        peers = {}
+        for addr in self._swarm_addrs():
+            m = re.search(r'/p2p/([^/]+)$', addr)
+            if m:
+                peers.setdefault(m.group(1), []).append(addr)
+        return peers
 
     def _api_call(self, command, params=None, files=None, data=None, stream=False, timeout=None):
         if params is None:
@@ -536,10 +555,12 @@ class Storage:
 
     def _prepare_local_download(self, data):
         """
-        Prepare for local download by pinning if not already pinned.
+        Prepare for local download by pinning if not already pinned; the swarm
+        fetch is preceded by the provider connection check.
         """
         if not self.is_pinned(data):
             self.logger.info(f"{data} is not pinned locally, downloading from IPFS swarm")
+            self._ensure_provider_path()
             self.pin_add(data)
         else:
             self.logger.info(f"{data} is pinned locally, downloading from local IPFS")
@@ -965,6 +986,236 @@ class Storage:
             raise ValueError(f"Path {path} is neither file nor directory")
         return files
 
+    # Self-heal of the local daemon, run before a swarm fetch and after a failed
+    # pin. The configured swarm peers are kept on a TCP or QUIC connection: a
+    # connection relayed through a circuit is limited and bitswap opens no
+    # stream over it, and a connection over a browser transport (webrtc-direct,
+    # webtransport) is replaced by a TCP or QUIC one. `swarm connect` reports
+    # success as soon as any connection to the peer exists and Kubo's peering
+    # service keeps whichever connection it has, so the heal reads swarm/peers,
+    # closes indirect connections beside a direct one, redials a peer whose
+    # connections are all indirect and, after a failed pin, one whose direct
+    # connection neither receives nor answers a ping. A peer with no connection
+    # at all is left to the peering service, which redials it on its own, until
+    # a pin fails. Redials are rate-limited per peer; detection never is.
+
+    @staticmethod
+    def _is_direct_addr(addr):
+        """True for a TCP or QUIC connection: not relayed through a circuit and
+        not over a browser transport (webrtc-direct, webtransport). swarm/peers
+        reports resolved ip4/ip6 addresses; a relayed one ends in
+        /p2p/<relay>/p2p-circuit."""
+        return not any(t in addr for t in ('/p2p-circuit', '/webrtc-direct', '/webtransport'))
+
+    def _peer_conns(self, peer_ids):
+        """{peer id: [Addr, ...]} of the open connections to the given peers,
+        one entry per connection as swarm/peers lists them; Addr is the remote
+        multiaddr without the /p2p/<id> suffix."""
+        conns = {}
+        for p in self._api_call('swarm/peers', timeout=10).get('Peers') or []:
+            if p.get('Peer') in peer_ids:
+                conns.setdefault(p['Peer'], []).append(p.get('Addr', ''))
+        return conns
+
+    def _close_conns(self, pid, addrs):
+        """Close the listed connections to the peer one at a time. swarm/disconnect
+        with a full multiaddr closes the connection whose remote multiaddr
+        equals it, limited or not; a per-address failure is reported inside
+        Strings with HTTP 200."""
+        for addr in addrs:
+            try:
+                reply = self._api_call('swarm/disconnect', params={'arg': f'{addr}/p2p/{pid}'}, timeout=10)
+                strings = reply.get('Strings', []) if isinstance(reply, dict) else [str(reply)]
+                if any('success' in s for s in strings):
+                    self.logger.info(f"ipfs-heal[transport] {pid}: closed {addr}")
+                else:
+                    self.logger.debug(f"ipfs-heal[transport] {pid}: swarm/disconnect {addr}: {strings}")
+            except Exception as e:
+                self.logger.debug(f"ipfs-heal[transport] {pid}: swarm/disconnect {addr}: {e}")
+
+    def _peer_is_dead(self, pid):
+        """True when nothing has been received from the peer lately and a ping
+        gets no pong. stats/bw RateIn is the decaying average of the bytes
+        received from the peer over every protocol, so a non-zero value means
+        bytes arrived within roughly the last half minute and the peer is kept
+        without a ping. A pong is a ping line with Success true and Time > 0;
+        the leading 'PING <id>.' line also carries Success true, with Time 0.
+        An unparseable ping reply counts as alive."""
+        try:
+            if float(self._api_call('stats/bw', params={'peer': pid}, timeout=10).get('RateIn', 0)) > 0:
+                return False
+        except Exception as e:
+            self.logger.debug(f"ipfs-heal[transport] {pid}: stats/bw: {e}")
+        try:
+            reply = self._api_call('ping', params={'arg': pid, 'count': '1'}, timeout=15)
+        except Exception as e:
+            self.logger.debug(f"ipfs-heal[transport] {pid}: ping: {e}")
+            return True
+        try:
+            lines = [reply] if isinstance(reply, dict) else [json.loads(l) for l in str(reply).splitlines() if l.strip()]
+        except ValueError:
+            self.logger.warning(f"ipfs-heal[transport] {pid}: unparseable ping reply: {reply!r}")
+            return False
+        return not any(l.get('Success') and int(l.get('Time') or 0) > 0 for l in lines)
+
+    @staticmethod
+    def _redial_candidates(pid, addrs):
+        """The configured multiaddrs of the peer plus the udp/<port>/quic-v1 twin
+        of each tcp address. All are passed to one swarm/connect, which dials
+        them together with the peerstore's addresses: quic-v1 at once, tcp
+        250 ms later, relay 500 ms later (go-libp2p's default dial ranker)."""
+        candidates = list(addrs)
+        for addr in addrs:
+            m = re.match(r'^(.*)/tcp/(\d+)/p2p/[^/]+$', addr)
+            if m:
+                twin = f'{m.group(1)}/udp/{m.group(2)}/quic-v1/p2p/{pid}'
+                if twin not in candidates:
+                    candidates.append(twin)
+        return candidates
+
+    @staticmethod
+    def _redial_recent(pid):
+        """True while the last redial of the peer is within its cooldown."""
+        return time.time() - _ipfs_last_redial.get(pid, 0.0) < _ipfs_redial_cooldown.get(pid, IPFS_HEAL_COOLDOWN)
+
+    @staticmethod
+    def _claim_redial(pid):
+        """Stamp a redial of the peer now; False when one is within its cooldown."""
+        with _ipfs_heal_lock:
+            if Storage._redial_recent(pid):
+                return False
+            _ipfs_last_redial[pid] = time.time()
+            return True
+
+    @staticmethod
+    def _settle_redial(pid, ok):
+        """Reset the peer's cooldown to IPFS_HEAL_COOLDOWN on success; double it
+        up to IPFS_HEAL_MAX_COOLDOWN on failure. Returns the new cooldown."""
+        with _ipfs_heal_lock:
+            current = _ipfs_redial_cooldown.get(pid, IPFS_HEAL_COOLDOWN)
+            _ipfs_redial_cooldown[pid] = IPFS_HEAL_COOLDOWN if ok else min(2 * current, IPFS_HEAL_MAX_COOLDOWN)
+            return _ipfs_redial_cooldown[pid]
+
+    def _redial_provider(self, pid, candidates):
+        """Close every connection to the peer and dial the candidates. host.Connect
+        returns without dialing while any non-limited connection exists, and the
+        swarm reuses an existing limited connection, so the peer must be fully
+        disconnected first. 'connect ... success' only means some connection
+        exists; swarm/peers is re-read and a direct address is required. Indirect
+        connections that completed alongside the direct one are closed.
+        Returns True when the peer ends with a direct connection."""
+        current = self._peer_conns([pid]).get(pid, [])
+        self._close_conns(pid, current)
+        if current:
+            try:
+                self._api_call('swarm/disconnect', params={'arg': f'/p2p/{pid}'}, timeout=10)
+            except Exception as e:
+                self.logger.debug(f"ipfs-heal[transport] {pid}: swarm/disconnect /p2p/{pid}: {e}")
+        try:
+            self._api_call('swarm/connect', params={'arg': candidates, 'timeout': '10s'}, timeout=15)
+        except Exception as e:
+            self.logger.warning(f"ipfs-heal[transport] {pid}: swarm/connect {candidates} failed: {e}")
+            return False
+        now = self._peer_conns([pid]).get(pid, [])
+        direct = [a for a in now if self._is_direct_addr(a)]
+        if not direct:
+            self.logger.warning(f"ipfs-heal[transport] {pid}: no direct connection after redial ({now or 'not connected'})")
+            return False
+        self._close_conns(pid, [a for a in now if a not in direct])
+        self.logger.info(f"ipfs-heal[transport] {pid}: connected via {direct}")
+        return True
+
+    def _check_provider(self, pid, addrs, have, suspect):
+        """One peer: keep a direct connection and close the indirect ones beside
+        it; redial when every connection is indirect, when the direct one is
+        dead (suspect=True), or when there is none and a pin just failed
+        (suspect=True). One redial per peer per cooldown."""
+        direct = [a for a in have if self._is_direct_addr(a)]
+        if direct:
+            self._close_conns(pid, [a for a in have if a not in direct])
+            if not suspect or self._redial_recent(pid) or not self._peer_is_dead(pid):
+                return
+            reason = f"direct connection {direct} is dead"
+        elif have:
+            reason = f"no direct connection ({have})"
+        elif suspect:
+            reason = "not connected"
+        else:
+            return
+        if not self._claim_redial(pid):
+            self.logger.debug(f"ipfs-heal[transport] {pid}: {reason}; redialed within cooldown, skipping")
+            return
+        candidates = self._redial_candidates(pid, addrs)
+        self.logger.warning(f"ipfs-heal[transport] {pid}: {reason}; redialing {candidates}")
+        ok = False
+        try:
+            ok = self._redial_provider(pid, candidates)
+        except Exception as e:
+            self.logger.warning(f"ipfs-heal[transport] {pid}: redial failed: {e}")
+        cooldown = self._settle_redial(pid, ok)
+        if cooldown != IPFS_HEAL_COOLDOWN:
+            self.logger.info(f"ipfs-heal[transport] {pid}: next redial no sooner than {cooldown}s")
+
+    def _ensure_provider_path(self, suspect=False):
+        """Keep every configured swarm peer on a direct connection: indirect
+        connections beside a direct one are closed and a peer whose connections
+        are all indirect is redialed. With suspect=True (a pin just failed) a
+        direct connection is kept only while _peer_is_dead says it answers, and
+        a peer with no connection is redialed too; otherwise that peer is left
+        to the peering service. Skipped for a remote daemon and within
+        IPFS_RESTART_COOLDOWN of a daemon restart, while the peering service is
+        redialing on its own. Never raises."""
+        if "127.0.0.1" not in self.client_connect_url:
+            return
+        if time.time() - _ipfs_last_restart[0] < IPFS_RESTART_COOLDOWN:
+            return
+        try:
+            peers = self._swarm_peers()
+            conns = self._peer_conns(peers)
+        except Exception as e:
+            self.logger.warning(f"ipfs-heal[transport] swarm/peers failed: {e}")
+            return
+        for pid, addrs in peers.items():
+            try:
+                self._check_provider(pid, addrs, conns.get(pid, []), suspect)
+            except Exception as e:
+                self.logger.warning(f"ipfs-heal[transport] {pid}: check failed: {e}")
+
+    @staticmethod
+    def _parse_byte_size(text):
+        """Bytes for a Kubo size string such as '10GB', '512MiB' or '12345':
+        decimal multipliers for K/M/G/T/P, binary for the Ki/Mi/Gi/Ti/Pi forms,
+        as Kubo parses Datastore.StorageMax."""
+        m = re.fullmatch(r'\s*(\d+(?:\.\d+)?)\s*([KMGTP]?)(i?)B?\s*', str(text), re.IGNORECASE)
+        if not m:
+            raise ValueError(f"Invalid size: {text!r}")
+        number, prefix, binary = m.groups()
+        exponent = 'KMGTP'.index(prefix.upper()) + 1 if prefix else 0
+        return int(float(number) * (1024 if binary else 1000) ** exponent)
+
+    def _ensure_storage_max(self):
+        """Raise Datastore.StorageMax to the IPFS_STORAGE_MAX floor (default
+        10GB) when it is below it; a higher value is kept. Kubo reads the cap
+        only when started with --enable-gc, as the input of its periodic
+        garbage collector; repo/stat reports it either way. The read, compare
+        and write run under _ipfs_storage_lock so two Storage instances cannot
+        lower each other's value. Never raises."""
+        if "127.0.0.1" not in self.client_connect_url:
+            return
+        with _ipfs_storage_lock:
+            try:
+                stat = self._api_call('repo/stat', params={'size-only': 'true'}, timeout=10)
+                cap = int(stat['StorageMax'])
+                floor_text = os.environ.get('IPFS_STORAGE_MAX', '10GB')
+                floor = self._parse_byte_size(floor_text)
+                if cap >= floor:
+                    self.logger.debug(f"ipfs-heal[storage] Datastore.StorageMax {cap} kept (floor {floor})")
+                    return
+                self._api_call('config', params={'arg': ['Datastore.StorageMax', floor_text]}, timeout=10)
+                self.logger.info(f"ipfs-heal[storage] Datastore.StorageMax raised {cap} -> {floor_text}")
+            except Exception as e:
+                self.logger.warning(f"ipfs-heal[storage] Datastore.StorageMax check failed: {e}")
+
     def restart_ipfs_service(self):
         # One daemon is shared by every network thread, and each decides to
         # restart it on its own errors. Unsynchronized, that is a storm: the
@@ -1079,6 +1330,7 @@ class Storage:
                         # or the CIDs are unavailable. Reset the streak so we
                         # only escalate on a fresh unbroken run of failures.
                         self._pin_fail_streak = 0
+            self._ensure_provider_path(suspect=True)
             raise
 
     def pin_rm(self, hash):
