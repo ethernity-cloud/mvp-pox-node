@@ -131,11 +131,16 @@ class PayloadIntake:
 
             def _reply(self, code, body):
                 data = json.dumps(body).encode('utf-8')
-                self.send_response(code)
-                self.send_header('Content-Type', 'application/json')
-                self.send_header('Content-Length', str(len(data)))
-                self.end_headers()
-                self.wfile.write(data)
+                try:
+                    self.send_response(code)
+                    self.send_header('Content-Type', 'application/json')
+                    self.send_header('Content-Length', str(len(data)))
+                    self.end_headers()
+                    self.wfile.write(data)
+                except (ConnectionResetError, BrokenPipeError):
+                    # haproxy's health check closes as soon as it has the
+                    # status line; nothing to report.
+                    pass
 
             def do_GET(self):
                 self._reply(405, {'error': 'POST the artefact bytes to /payload/<network>/<doRequestId>/<cid>'})
@@ -206,9 +211,11 @@ class PayloadIntake:
             return 503, {'error': 'IPFS unavailable'}
         stored = backend.storage.add_bytes_raw(body, name=f"payload-{do_req}-{cid[:16]}")
         if not stored or stored.lower() != cid.lower():
-            self._discard(backend, stored)
             log.warning(f"[intake] {network} request {do_req}: bytes hash to {stored}, "
                         f"not {cid}; refused")
+            # The stray block is unpinned off the request thread; the
+            # garbage collector reclaims it.
+            backend.storage.executor.submit(self._discard, backend, stored)
             return 400, {'error': 'the bytes do not hash to the cid', 'stored': stored}
         self.ledger.add(network, do_req, cid)
         backend.storage.provide(cid)
@@ -249,14 +256,15 @@ class PayloadIntake:
 
     @staticmethod
     def _discard(backend, cid):
-        """Drop a block that was added but is not the one requested."""
+        """Unpin a block that was added but is not the one requested. The
+        block itself is left to the garbage collector: `block/rm` walks the
+        pin set on a Kubo this size and takes a minute."""
         if not cid:
             return
-        for command in ('pin/rm', 'block/rm'):
-            try:
-                backend.storage._api_call(command, params={'arg': cid}, timeout=30)
-            except Exception as e:
-                backend.logger.debug(f"[intake] {command} {cid}: {e}")
+        try:
+            backend.storage.pin_rm(cid)
+        except Exception as e:
+            backend.logger.debug(f"[intake] pin/rm {cid}: {e}")
 
     # ------------------------------------------------------------ retention
 
