@@ -145,9 +145,11 @@ class Storage:
         # Kept apart from IPFS_SWARM so a validator leaving the set is removed
         # from the peering list without touching the configured entries.
         self._chain_peers = {}
-        # (cid, time) of blocks this instance pinned recently, re-announced to
-        # the DHT by reprovide_recent.
-        self._recent_pins = deque(maxlen=200)
+        # Blocks this instance pinned recently, re-announced to the DHT by
+        # reprovide_recent: {cid: {'pinned', 'announces', 'last'}}, under
+        # _recent_lock.
+        self._recent_pins = {}
+        self._recent_lock = threading.Lock()
 
         self._setup_session_and_executor()
         logger.info("Initializing ipfs connection")
@@ -164,6 +166,10 @@ class Storage:
         adapter = HTTPAdapter(pool_connections=max_workers, pool_maxsize=max_workers)
         self.session.mount("https://", adapter)
         self.executor = ThreadPoolExecutor(max_workers=max_workers)
+        # DHT announces run one at a time on their own worker: each is a full
+        # DHT walk, and sharing the pin executor would let a slow DHT hold
+        # result pins in the queue.
+        self.announce_executor = ThreadPoolExecutor(max_workers=1)
 
     def _check_and_upgrade_ipfs_version(self):
         """Check IPFS version and upgrade if necessary."""
@@ -446,29 +452,31 @@ class Storage:
 
     def sync_chain_peers(self, multiaddrs):
         """Make Kubo's peering list carry exactly the validators' IPFS peers in
-        `multiaddrs`, beside the configured IPFS_SWARM entries: new peers are
-        added with swarm/peering/add, peers this method added before and that
+        `multiaddrs`, beside the configured IPFS_SWARM entries: a peer whose
+        addresses are not all listed is (re)added with one swarm/peering/add
+        carrying all of them, since the peering service replaces a peer's
+        address list on every add; peers this method added before and that
         are no longer listed are removed with swarm/peering/rm. Configured
         entries are never removed. Never raises."""
-        if not self.connected:
-            return
         wanted = self._group_by_peer(multiaddrs)
         configured = set(self._group_by_peer(self._swarm_addrs()))
         try:
             listed = self._api_call('swarm/peering/ls', timeout=10)
-            present = {addr for p in listed.get('Peers', []) for addr in p.get('Addrs', [])}
+            # peering/ls reports transport addresses without the /p2p/<id>
+            # suffix the add call takes; the comparison puts it back.
+            present = {f"{addr}/p2p/{p.get('ID')}"
+                       for p in listed.get('Peers', []) for addr in p.get('Addrs', [])}
         except Exception as e:
             self.logger.warning(f"ipfs-peers: swarm/peering/ls failed: {e}")
             return
         for pid, addrs in wanted.items():
-            for addr in addrs:
-                if addr in present:
-                    continue
-                try:
-                    self._api_call('swarm/peering/add', params={'arg': addr}, timeout=10)
-                    self.logger.info(f"ipfs-peers: peering with validator IPFS {addr}")
-                except Exception as e:
-                    self.logger.warning(f"ipfs-peers: swarm/peering/add {addr} failed: {e}")
+            if all(addr in present for addr in addrs):
+                continue
+            try:
+                self._api_call('swarm/peering/add', params={'arg': addrs}, timeout=10)
+                self.logger.info(f"ipfs-peers: peering with validator IPFS {pid} at {addrs}")
+            except Exception as e:
+                self.logger.warning(f"ipfs-peers: swarm/peering/add {addrs} failed: {e}")
         for pid in list(self._chain_peers):
             if pid in wanted or pid in configured:
                 continue
@@ -479,30 +487,54 @@ class Storage:
                 self.logger.warning(f"ipfs-peers: swarm/peering/rm {pid} failed: {e}")
         self._chain_peers = wanted
 
-    def provide(self, cid, remember=True):
-        """Announce `cid` to the DHT now (routing/provide), so a peer that is
-        not connected to this node can still find it. With remember=True the
-        CID joins the recent list that reprovide_recent re-announces. Never
-        raises: a failed announce leaves the block to bitswap and to Kubo's
-        own reprovider."""
-        if not self.connected:
-            return
+    # A pinned block is announced when pinned and again at the next
+    # REPROVIDE_EVERY-second sync passes until REPROVIDE_TIMES announces are
+    # done or it is older than REPROVIDE_WINDOW; Kubo's own reprovider carries
+    # it from there.
+    REPROVIDE_WINDOW = 1800
+    REPROVIDE_EVERY = 240
+    REPROVIDE_TIMES = 3
+
+    def provide(self, cid):
+        """Announce `cid` to the DHT (routing/provide) on the announce worker,
+        so a peer that is not connected to this node can still find it, and
+        remember it for reprovide_recent. Returns at once; never raises."""
+        with self._recent_lock:
+            self._recent_pins[cid] = {'pinned': time.time(), 'announces': 1, 'last': time.time()}
+        self.announce_executor.submit(self._announce, cid)
+
+    def _announce(self, cid):
+        """One routing/provide, read to the end of its event stream so the
+        call returns when the DHT walk is over. A refusal (HTTP error) or a
+        transport failure is logged at WARNING: a node whose announces all
+        fail must be visible in the log."""
         try:
-            self._api_call('routing/provide', params={'arg': cid}, timeout=60)
+            resp = self._api_call('routing/provide', params={'arg': cid}, stream=True, timeout=120)
+            try:
+                for _ in resp.iter_lines():
+                    pass
+            finally:
+                resp.close()
             self.logger.debug(f"ipfs-provide: announced {cid}")
         except Exception as e:
-            self.logger.debug(f"ipfs-provide: {cid}: {e}")
-        if remember:
-            self._recent_pins.append((cid, time.time()))
+            self.logger.warning(f"ipfs-provide: {cid}: {e}")
 
-    def reprovide_recent(self, max_age=3600):
-        """Re-announce every CID pinned within the last `max_age` seconds and
-        drop the older ones from the list."""
-        cutoff = time.time() - max_age
-        while self._recent_pins and self._recent_pins[0][1] < cutoff:
-            self._recent_pins.popleft()
-        for cid, _ in list(self._recent_pins):
-            self.provide(cid, remember=False)
+    def reprovide_recent(self):
+        """Schedule the next announce of every recently pinned CID that is due
+        (REPROVIDE_EVERY since its last one, fewer than REPROVIDE_TIMES
+        announces, younger than REPROVIDE_WINDOW) and forget the rest."""
+        now = time.time()
+        due = []
+        with self._recent_lock:
+            for cid, entry in list(self._recent_pins.items()):
+                if now - entry['pinned'] > self.REPROVIDE_WINDOW or entry['announces'] >= self.REPROVIDE_TIMES:
+                    del self._recent_pins[cid]
+                elif now - entry['last'] >= self.REPROVIDE_EVERY:
+                    entry['announces'] += 1
+                    entry['last'] = now
+                    due.append(cid)
+        for cid in due:
+            self.announce_executor.submit(self._announce, cid)
 
     def _api_call(self, command, params=None, files=None, data=None, stream=False, timeout=None):
         if params is None:
@@ -1269,9 +1301,14 @@ class Storage:
         except Exception as e:
             self.logger.warning(f"ipfs-heal[transport] swarm/peers failed: {e}")
             return
+        # The suspect redial of an unconnected peer applies to the configured
+        # providers only: a validator's IPFS peer from chain is dialed by the
+        # peering service, and one that is unreachable must not cost a redial
+        # attempt on every failed pin.
+        configured = set(self._group_by_peer(self._swarm_addrs()))
         for pid, addrs in peers.items():
             try:
-                self._check_provider(pid, addrs, conns.get(pid, []), suspect)
+                self._check_provider(pid, addrs, conns.get(pid, []), suspect and pid in configured)
             except Exception as e:
                 self.logger.warning(f"ipfs-heal[transport] {pid}: check failed: {e}")
 

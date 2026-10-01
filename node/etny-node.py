@@ -1276,6 +1276,9 @@ class EtnyPoXNode:
             if (time.time() - last) < interval:
                 return
             self.__last_ipfs_peer_sync_at = time.time()
+            # Re-announcing is scheduled on the announce worker and does not
+            # depend on the chain read below.
+            self.storage.reprovide_recent()
             net = (self.__network_config.name or "").upper()
             registry = (config.validator_registry_addresses.get(net) or "").strip()
             endpoints = (config.ipfs_endpoints_addresses.get(net) or "").strip()
@@ -1284,9 +1287,6 @@ class EtnyPoXNode:
                 addrs = cas_resolver.validator_ipfs_multiaddrs(
                     self.__w3, registry, endpoints, self.logger)
                 self.storage.sync_chain_peers(addrs)
-            # Each announce is a DHT walk; off the order thread so a slow DHT
-            # cannot hold up order processing.
-            self.storage.executor.submit(self.storage.reprovide_recent)
         except Exception as e:
             self.logger.warning(f"IPFS peer sync skipped: {e}")
 

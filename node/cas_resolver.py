@@ -34,6 +34,7 @@ resolves to an endpoint no node can dial.
 
 import json
 import random
+import re
 import urllib.request
 
 # DCAP quote layout (fixed offsets, version 3 ECDSA quote):
@@ -106,8 +107,9 @@ def validator_ipfs_multiaddrs(w3, registry_address, endpoints_address, logger):
             continue
         for ma in _chain(lambda: endpoints.caller().ipfsMultiaddrsOf(v)):
             ma = str(ma).strip()
-            if '/p2p/' not in ma:
-                logger.debug(f"IPFS peers: validator {v} publishes {ma!r} without a peer id; skipped")
+            if not re.search(r'/p2p/[^/]+$', ma):
+                logger.warning(f"IPFS peers: validator {v} publishes {ma!r}, which does not "
+                               f"end in /p2p/<peer id>; skipped")
                 continue
             if ma not in out:
                 out.append(ma)
