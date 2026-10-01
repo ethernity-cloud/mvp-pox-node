@@ -478,9 +478,10 @@ class EtnyPoXNode:
             return False
         if cid.startswith("Qm") and len(cid) == 46:
             return True
-        if cid.startswith("b") and len(cid) >= 46 and cid.islower():
-            return True
-        return False
+        # CIDv1 in its base32 text form: 'b' followed by at least 58 characters
+        # of the lowercase base32 alphabet (a-z and 2-7).
+        return (cid.startswith("b") and len(cid) >= 59
+                and set(cid[1:]) <= set("abcdefghijklmnopqrstuvwxyz234567"))
 
     def __esr_current_state_cids(self):
         """CIDs that are the CURRENT state for some enclave/key in the registry.
