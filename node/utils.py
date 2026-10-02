@@ -370,30 +370,33 @@ class Storage:
             try:
                 # Verify IPFS node is responsive
                 self._api_call('id')
-                # Get existing peering connections
+                # peering/ls reports transport addresses without the /p2p/<id>
+                # suffix the add call takes; the comparison puts it back.
                 peering_list = self._api_call('swarm/peering/ls')
-                existing_addrs = {addr for peer in peering_list.get('Peers', []) for addr in peer.get('Addrs', [])}
+                present = {f"{addr}/p2p/{peer.get('ID')}"
+                           for peer in peering_list.get('Peers', []) for addr in peer.get('Addrs', [])}
                 try:
                     swarm_list = self._swarm_addrs()
                 except ValueError as e:
                     self.logger.error(str(e))
                     return False
 
-                # Process each multiaddr individually
                 for url in swarm_list:
-                    if not url.startswith('/'):
-                        self.logger.error(f"Invalid multiaddr format: {url} (must start with '/')")
+                    if not url.startswith('/') or not re.search(r'/p2p/[^/]+$', url):
+                        self.logger.error(f"Invalid multiaddr format: {url} "
+                                          f"(must start with '/' and end in /p2p/<peer id>)")
+                # One add per peer carrying all of its addresses: the peering
+                # service replaces a peer's address list on every add, so an
+                # add per address would leave only the last one.
+                for pid, addrs in self._group_by_peer(u for u in swarm_list if u.startswith('/')).items():
+                    if all(a in present for a in addrs):
+                        self.logger.debug(f"Peer already configured: {addrs}")
                         continue
                     try:
-                        if url not in existing_addrs:
-                            self.logger.debug(f"Attempting to add IPFS peer: {url}")
-                            self._api_call('swarm/peering/add', params={'arg': url})
-                            self.logger.debug(f"Successfully added peer: {url}")
-                        else:
-                            self.logger.debug(f"Peer already connected: {url}")
+                        self._api_call('swarm/peering/add', params={'arg': addrs})
+                        self.logger.debug(f"Peering with {pid} at {addrs}")
                     except Exception as peer_error:
-                        self.logger.error(f"Failed to add peer {url}: {peer_error}")
-                        continue  # Continue with next peer instead of failing entirely
+                        self.logger.error(f"Failed to add peer {addrs}: {peer_error}")
                 return True
             except Exception as e:
                 self.logger.warning(f"IPFS communication error (attempt {attempt + 1}/{attempts}): {e}")
