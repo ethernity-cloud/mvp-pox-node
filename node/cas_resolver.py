@@ -23,9 +23,12 @@ enclave re-attests the CAS itself); what the node establishes is that the
 answering endpoint speaks for the on-chain validator identity it claims.
 
 Multiaddrs advertise the ENCLAVE port. The REST/identity port follows the
-PAIRING CONVENTION `rest = 9081 + (enclave - 19765)`: co-hosted CAS instances
-stack as 19765/9081, 19766/9082, 19767/9083, ... so one advert names both
-listeners. Enclave ports outside [19765, 19965) fall back to REST 9081.
+PAIRING CONVENTION `rest = 9081 + (enclave - 19765)`, the enclave port's offset
+from the in-container pair 18765/8081: co-hosted CAS instances stack as
+19765/9081, 19766/9082, 19767/9083, ... and a host running one CAS publishes
+18765/8081 as they are, so one advert names both listeners. An offset that
+leaves the port range pairs with no REST port. The CAS (validator_gov.rs
+`multiaddr_to_rest_url`) and the trustedzone apply the same mapping.
 
 Both ranges are chosen to be forwardable as a block (9081-9091 and
 19765-19775): a published port outside what the CAS host's router forwards
@@ -146,10 +149,10 @@ def order_endpoints(multiaddrs):
 
 
 def rest_port_for(enclave_port):
-    """The pairing convention (see module docstring)."""
-    if CAS_ENCLAVE_PORT <= enclave_port < CAS_ENCLAVE_PORT + 200:
-        return CAS_REST_PORT + (enclave_port - CAS_ENCLAVE_PORT)
-    return CAS_REST_PORT
+    """The REST port paired with a published enclave port (see module
+    docstring), or None when the offset leaves the port range."""
+    rest = CAS_REST_PORT + (enclave_port - CAS_ENCLAVE_PORT)
+    return rest if 1 <= rest <= 65535 else None
 
 
 def _fetch_identity(host, timeout, rest_port=CAS_REST_PORT):
@@ -263,6 +266,10 @@ def resolve_cas(w3, registry_address, logger, probe_timeout=10,
                     logger.debug(f"CAS resolver: skipping {host} (no Tor)")
                     continue
                 rp = rest_port_for(port)
+                if rp is None:
+                    logger.info(f"CAS resolver: {host}:{port} pairs with no "
+                                f"REST port; trying next")
+                    continue
                 try:
                     identity = _fetch_identity(host, probe_timeout, rp)
                 except Exception as e:
