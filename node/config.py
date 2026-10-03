@@ -164,7 +164,7 @@ cas_session_registry_scan_blocks = int(os.environ.get('CAS_SESSION_REGISTRY_SCAN
 # SCONE_CAS_ADDR in the order's compose. "" / absent = keep the compose's
 # baked-in CAS address (the pre-Sprint-4 behaviour).
 validator_registry_addresses = {
-    "BLOXBERG_TESTNET": os.environ.get('VALIDATOR_REGISTRY_ADDRESS', "0xC40102c0b3f87663C925083861F38e2498C2038F"),
+    "BLOXBERG_TESTNET": os.environ.get('VALIDATOR_REGISTRY_ADDRESS', "0xa821b36F378F76c793c436F5f9c9CC36c684eBE5"),
 }
 # ethernity-cas ValidatorIpfsEndpoints: where each validator's IPFS node is
 # reached (multiaddrs with peer id). When set for a network, the node keeps
@@ -172,7 +172,7 @@ validator_registry_addresses = {
 # IPFS_PEER_SYNC_SECONDS, so task artefacts and results travel directly between
 # the node and the validators. "" / absent = peer only with IPFS_SWARM.
 ipfs_endpoints_addresses = {
-    "BLOXBERG_TESTNET": os.environ.get('IPFS_ENDPOINTS_ADDRESS', "0x534123b11590b1A7c77b2A34409E10aF1b60Dbf2"),
+    "BLOXBERG_TESTNET": os.environ.get('IPFS_ENDPOINTS_ADDRESS', "0x4A85b38247409609B00e1b1ec75cc9fB515548A3"),
 }
 ipfs_peer_sync_seconds = int(os.environ.get('IPFS_PEER_SYNC_SECONDS', 300))
 
