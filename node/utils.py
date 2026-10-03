@@ -364,6 +364,10 @@ class Storage:
             self.logger.warning(f"Failed to get version: {e}")
             return None
 
+    def peer_id(self):
+        """The peer id of the Kubo node this agent uses."""
+        return self._api_call('id', timeout=10)['ID']
+
     def connect(self, attempts=3):
         attempt = 0
         while attempt < attempts:

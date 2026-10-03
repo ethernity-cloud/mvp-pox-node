@@ -23,7 +23,7 @@ version = os.environ.get('VERSION', "LEGACY")
 ipfs_swarm_default = os.environ.get('IPFS_SWARM', "/dns4/ipfs.ethernity.cloud/tcp/4001/p2p/QmRBc1eBt4hpJQUqHqn6eA8ixQPD3LFcUDsn6coKBQtia5")
 ipfs_connect_url_default = os.environ.get('IPFS_CONNECT_URL', "/ip4/127.0.0.1/tcp/5001/http")
 ipfs_timeout_default = int(os.environ.get('IPFS_TIMEOUT', 30))
-ipfs_gateway_url_default=os.environ.get('IPFS_REMOTE_URL', 'https://ipfs.io')
+ipfs_gateway_url_default=os.environ.get('IPFS_GATEWAY_URL', 'https://ipfs.io')
 # How long a locally pinned IPFS object is kept before the periodic cleanup
 # unpins and removes it. Objects the node still needs are exempt regardless of
 # age: the trustedzone images, and any CID that is still the CURRENT ESR state
@@ -53,7 +53,12 @@ class NetworkConfig:
     gas_price_measure: str
     minimum_gas_at_start: int
     task_execution_price: int
-    integration_test_image: str
+    # The trustedzones the node tests, one per platform requirement it should
+    # meet (comma-separated names from trustedzone_images).
+    integration_test_images: str
+    # The network's trustedzones, comma-separated "name:requirement" (see
+    # trustedzone_requirements); the node runs those whose requirement one of
+    # its passed integration tests covers.
     trustedzone_images: str
     eip1559: bool
     middleware: str
@@ -64,6 +69,36 @@ class NetworkConfig:
     reward_type: int
     network_fee: int
     enclave_fee: int
+
+# Platform requirements a trustedzone names in <NETWORK>_TRUSTEDZONE_IMAGES:
+#   dcap  provisioned by a CAS, which admits the enclave on a DCAP quote: the
+#         platform must produce one.
+#   sgx   runs without a CAS (the -unsafe testnet variants): any platform with
+#         hardware SGX.
+TRUSTEDZONE_REQUIREMENTS = ("dcap", "sgx")
+
+
+def trustedzone_requirements(spec: str) -> dict:
+    """{trustedzone name: platform requirement} from a TRUSTEDZONE_IMAGES
+    value: comma-separated "name:requirement", where a bare name is "dcap"."""
+    requirements = {}
+    for item in spec.split(','):
+        name, _, requirement = item.strip().partition(':')
+        if not name:
+            continue
+        requirement = requirement.strip() or "dcap"
+        if requirement not in TRUSTEDZONE_REQUIREMENTS:
+            raise EnvironmentError(
+                f"trustedzone {name}: unknown platform requirement {requirement!r} "
+                f"(one of {', '.join(TRUSTEDZONE_REQUIREMENTS)})")
+        requirements[name.strip()] = requirement
+    return requirements
+
+
+def integration_test_images(network_config) -> list:
+    """The trustedzones a network's integration tests run, in order."""
+    return [name.strip() for name in network_config.integration_test_images.split(',') if name.strip()]
+
 
 NETWORKS = {
     "POLYGON": ["MAINNET", "AMOY"],
@@ -354,6 +389,12 @@ def parse_networks(arguments: argparse.Namespace, parser: argparse.ArgumentParse
 
         # Create a NetworkConfig instance
         network_config = NetworkConfig(**config_kwargs)
+        trustedzones = trustedzone_requirements(network_config.trustedzone_images)
+        for image in integration_test_images(network_config):
+            if image not in trustedzones:
+                raise EnvironmentError(
+                    f"{prefix}_INTEGRATION_TEST_IMAGES names {image}, which "
+                    f"{prefix}_TRUSTEDZONE_IMAGES does not list")
         networks.append(network_config)
         logger.info(f"Loaded configuration for network: {network_suffix}")
 

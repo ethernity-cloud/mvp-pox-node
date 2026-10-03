@@ -1,3 +1,23 @@
+v3.6.0
+a node runs the trustedzones whose platform requirement its integration
+  tests show it meets: <NETWORK>_TRUSTEDZONE_IMAGES pairs each trustedzone
+  with "dcap" (provisioned by a CAS) or "sgx" (the -unsafe testnet variants),
+  and <NETWORK>_INTEGRATION_TEST_IMAGES (renamed from
+  _INTEGRATION_TEST_IMAGE) lists the images tested
+integration tests are tracked per image and a failed one is retried with a
+  backoff from 10 minutes doubling to 6 hours, instead of only at the
+  daily restart; a test whose image cannot be downloaded cleans up and
+  counts as failed
+a DO request is skipped, with the reason logged, when the trustedzone it
+  names is not one the node runs or its image metadata is not v3;
+  process_order refuses such an order after re-running the failed tests
+the CAS is resolved only for a compose that names SCONE_CAS_ADDR
+a DP request's metadata4 carries the trustedzones the node runs and the
+  peer id of its IPFS node
+pin retention skips a trustedzone the image registry does not hold
+  instead of the whole cleanup round
+IPFS_GATEWAY_URL is read from the key node/.env sets
+
 v3.5.0
 fixed result pinning: retries never reconnected, so a stale connection
   flag failed every attempt against a healthy IPFS daemon

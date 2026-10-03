@@ -32,25 +32,34 @@ task_lock = threading.Lock()
 # polling. Sharing the lock keeps get_task_running_on and the acquire/release
 # pair mutually exclusive.
 task_cond = threading.Condition(task_lock)
-# SGX integration-test coordination, per network_type (TESTNET / MAINNET).
+# SGX integration tests, per trustedzone image. A network runs the trustedzones
+# of its TRUSTEDZONE_IMAGES whose platform requirement (config.
+# TRUSTEDZONE_REQUIREMENTS) a passed test of one of its INTEGRATION_TEST_IMAGES
+# covers. An image's test passes at most once per process; a failed one runs
+# again once its backoff has elapsed. State outlives the EtnyPoXNode handles,
+# which process_network rebuilds.
 #
-# The test verifies the trustedzone enclave's result, which is identical across
-# all networks of a type -- so it must run to success exactly ONCE per type, and
-# every other same-type network must WAIT for that outcome and then skip (never
-# run its own, and never re-run on later processing-loop cycles).
-#
-#   integration_test_lock    Reentrant. Held across the whole check-and-run so
-#                            only one test runs at a time; reentrant because
-#                            __run_integration_test -> set_integration_test_complete
-#                            re-acquires it on the same thread.
-#   integration_test_done    Per-type Event, SET once that type's test passes.
-#                            Waiters block on it instead of skipping unresolved,
-#                            and once set no network ever runs or re-runs the
-#                            test for that type again (survives the per-network
-#                            resilient_process loop re-creating EtnyPoXNode).
+#   integration_test_lock     Reentrant. Held across a whole test, so one test
+#                             runs at a time: the tests share the docker and
+#                             swift-stream scaffolding and the SGX device.
+#   integration_test_passed   Image names whose test passed.
+#   integration_test_retry    {image name: (failures, time.monotonic() at which
+#                             it may run again)} for the images that failed.
+#   integration_tests_settled {network name: Event}, set once each of that
+#                             network's test images has run once; read through
+#                             tests_settled().
 integration_test_lock = threading.RLock()
-integration_test_complete = {'MAINNET': False, 'TESTNET': False}
-integration_test_done = {'MAINNET': threading.Event(), 'TESTNET': threading.Event()}
+integration_test_passed = set()
+integration_test_retry = {}
+integration_tests_settled = {}
+INTEGRATION_TEST_RETRY_MIN_SECONDS = 600
+INTEGRATION_TEST_RETRY_MAX_SECONDS = 6 * 3600
+
+
+def tests_settled(network_name):
+    """The Event set once each of `network_name`'s test images has run once.
+    dict.setdefault is atomic, so every thread gets the same Event."""
+    return integration_tests_settled.setdefault(network_name, threading.Event())
 
 # process_network re-creates EtnyPoXNode every processing-loop cycle, so the ESR
 # replication background thread must be launched exactly ONCE per network per
@@ -281,7 +290,10 @@ class EtnyPoXNode:
         self.__order_id = 0
         self.__total_nodes_count = 0
         self.__is_first_cycle = defaultdict(lambda: True)
-        self.can_run_under_sgx = False
+        # {trustedzone name: platform requirement} and the images whose
+        # integration tests prove those requirements on this platform.
+        self.__trustedzones = config.trustedzone_requirements(self.__network_config.trustedzone_images)
+        self.__integration_images = config.integration_test_images(self.__network_config)
 
         logger.info(f"NodeID: {self.__address}");
         logger.info(f"Network: {self.__network}");
@@ -297,11 +309,9 @@ class EtnyPoXNode:
         logger.info(f"Node free memory: %s", self.__free_memory);
         logger.info(f"Node free storage: %s", self.__free_storage);
         logger.info(f"Node geo: %s", self.__node_geo);
-
-
-        [enclave_image_hash, _, docker_compose_hash] = self.__image_registry.caller().getLatestTrustedZoneImageCertPublicKey(self.__network_config.integration_test_image, 'v3')
-        logger.info(f"Docker registry hash: {enclave_image_hash}")
-        logger.info(f"Docker composer hash: {docker_compose_hash}")
+        logger.info("Trustedzones: %s", ", ".join(
+            f"{name} ({requirement})" for name, requirement in self.__trustedzones.items()))
+        logger.info("Integration tests: %s", ", ".join(self.__integration_images))
 
         self.cache_config = CacheConfig(network.name)
         self.network_cache = Cache(self.cache_config.network_cache_limit, self.cache_config.network_cache_filepath)
@@ -359,57 +369,20 @@ class EtnyPoXNode:
 
         self.__uuid = get_or_generate_uuid(config.uuid_filepath)
 
-        # SGX integration test policy, per network_type (TESTNET / MAINNET):
-        #
-        #   * The test verifies the trustedzone enclave produces the expected
-        #     result, and that result is identical across all networks of the
-        #     same type -- so completion is tracked per type, not per network.
-        #   * The test must be SERIALIZED: only one integration test runs at a
-        #     time (running two enclave tests concurrently fights over the same
-        #     docker/swift-stream integration scaffolding and SGX device).
-        #   * FIRST SUCCESS WINS: as soon as one network of a type passes, every
-        #     remaining same-type network skips the test and just records the
-        #     capability.
-        #   * ON FAILURE, TRY THE NEXT: a failing network leaves the type flag
-        #     False, so the next same-type thread acquires the lock and attempts
-        #     it, until one succeeds.
-        #
-        # integration_test_lock (held across the whole check-and-run below)
-        # provides the serialization; re-checking completion INSIDE the lock is
-        # what makes it first-success-wins rather than every-thread-runs.
+        # The platform is classified by what its integration tests show it
+        # runs, not by its driver: each of this network's test images runs
+        # here, under the task slot taken above, unless it passed already or
+        # its retry is not yet due. A replication-only handle executes no task
+        # and runs no test.
         if self.__replication_only:
-           # A replication-only handle never executes tasks, so it neither runs
-           # nor waits on the SGX integration test.
-           self.can_run_under_sgx = False
-        elif config.skip_integration_test == True:
-           logger.warning('Agent skipped SGX integration test, SGX capabilitties overwritten by configuration')
-           self.can_run_under_sgx = True
+            pass
+        elif config.skip_integration_test:
+            logger.warning('Agent skipped SGX integration test, SGX capabilitties overwritten by configuration')
         else:
-           net_type = self.__network_config.network_type.upper()
-           done_event = integration_test_done[net_type]
-
-           # Fast path: this type's test already passed (this run, on any network,
-           # including an earlier cycle of THIS network). Never run or re-run it.
-           if done_event.is_set():
-               logger.info('SGX integration test completed already')
-               self.can_run_under_sgx = True
-           else:
-               # Serialize: only one integration test runs at a time. A network
-               # that arrives while another is mid-test blocks here on the lock
-               # rather than skipping unresolved.
-               with integration_test_lock:
-                   if done_event.is_set():
-                       # The network that held the lock before us passed -- the
-                       # capability is proven for the whole type, so skip.
-                       logger.info('SGX integration test completed already')
-                       self.can_run_under_sgx = True
-                   else:
-                       # We hold the lock and the type is still unproven: run it.
-                       # On success __run_integration_test marks it done (which
-                       # sets done_event, permanently unblocking + skipping every
-                       # other same-type network). On failure it leaves it unset
-                       # and the next thread to take the lock attempts it.
-                       self.__run_integration_test()
+            for image in self.__integration_images:
+                self.__run_integration_test_if_due(image)
+            tests_settled(self.__network).set()
+            self.__log_runnable_trustedzones()
 
 
         # Tracks when the pin cleanup last ran, so __maybe_clear_ipfs_cache can
@@ -1319,11 +1292,9 @@ class EtnyPoXNode:
 
         current_time = time.time()
 
-        trustedzone_images = self.__network_config.trustedzone_images.split(',')
-
         keep_hashes = []
 
-        for image in trustedzone_images:
+        for image in self.__trustedzones:
             # Bounded retry: this used to loop forever on RPC failure, which was
             # survivable at startup but would wedge the order-processing loop now
             # that cleanup also runs periodically. On failure we skip this round
@@ -1335,6 +1306,11 @@ class EtnyPoXNode:
                      docker_compose_hash] = self.__image_registry.caller().getLatestTrustedZoneImageCertPublicKey(image, 'v3')
                     keep_hashes.append(enclave_image_hash)
                     keep_hashes.append(docker_compose_hash)
+                    break
+                except exceptions.ContractLogicError as e:
+                    # The registry answered and holds no such image: nothing
+                    # of it is pinned to keep.
+                    logger.info(f"{image} is not in the image registry ({e}); nothing of it to keep")
                     break
                 except Exception as e:
                     continue
@@ -1587,7 +1563,7 @@ class EtnyPoXNode:
             self.__uuid,
             "v3",
             self.__node_geo,
-            ""
+            self.__dp_metadata4()
         ]
 
         max_retries = 20
@@ -1702,6 +1678,20 @@ class EtnyPoXNode:
                     logger.warning("Retrying")
                     timeout_in_seconds = int(self.__network_config.block_time) - 1.3
                     time.sleep(timeout_in_seconds)
+
+        # Backstop to the DO-request filter, for an order this node holds but
+        # cannot run, such as one resumed after a restart whose integration
+        # tests no longer pass: closed with a refusal rather than left
+        # PROCESSING. The requirement's failed tests run once more first, so a
+        # test that failed in transit does not cost an order the platform runs.
+        refusal = self.__trustedzone_refusal(metadata[1])
+        if refusal and self.__requested_trustedzone(metadata[1]) in self.__trustedzones:
+            self.__retest_requirement(self.__requested_trustedzone(metadata[1]))
+            refusal = self.__trustedzone_refusal(metadata[1])
+        if refusal:
+            logger.error(f"Refusing order {order_id}: {refusal}")
+            self.add_result_to_order(order_id, f"[Warn] Order refused by the node: {refusal}")
+            return
 
         if self.process_order_data['process_order_retry_counter'] > 10:
             if metadata[1].startswith('v1:') == 1:
@@ -2418,7 +2408,9 @@ class EtnyPoXNode:
         # RESOLVED from chain and attested before the task launches; the
         # compose's baked-in SCONE_CAS_ADDR is rewritten to the winner. No
         # resolution -> the compose default stands (logged by the resolver).
-        resolved = self.__resolve_cas_for_task()
+        # A compose without SCONE_CAS_ADDR (an -unsafe trustedzone's) contacts
+        # no CAS, and none is resolved for it.
+        resolved = self.__resolve_cas_for_task() if 'SCONE_CAS_ADDR=' in contents else None
         if resolved is not None:
             import re
             contents = re.sub(r'SCONE_CAS_ADDR=[^\s]+',
@@ -2591,10 +2583,11 @@ class EtnyPoXNode:
         doreq = {}
         metadata = {}
 
-        if not self.can_run_under_sgx:
-            logger.error('SGX is not enabled or correctly configured. Agent will not perform requests on this network')
+        runnable = self.__runnable_trustedzones()
+        if not runnable:
+            logger.error('No trustedzone of this network passed its integration test. Agent will not perform requests on this network until one does')
         else:
-            logger.info(f"System ready for the next DO request")
+            logger.info(f"System ready for the next DO request ({', '.join(sorted(runnable))})")
 
         next_dp_request = False
 
@@ -2622,6 +2615,8 @@ class EtnyPoXNode:
 
                 if stop_event.is_set():
                      break
+
+                self.__maybe_retry_integration_tests()
 
                 time.sleep(self.__network_config.rpc_delay/1000)
                 count = self.__etny.caller()._getDORequestsCount()
@@ -2734,8 +2729,12 @@ class EtnyPoXNode:
                     self.doreq_cache.add(i)
                     continue
 
-                if not self.can_run_under_sgx:
-                    logger.info(f"Ignoring DO Request {i} on {self.__network}")
+                # Field 2 of the image metadata names the trustedzone the
+                # request's challenge is sealed to; a node takes only requests
+                # whose trustedzone its platform runs.
+                refusal = self.__trustedzone_refusal(metadata[i][1])
+                if refusal:
+                    logger.info(f"Skipping DO Request {i}: {refusal}")
                     self.doreq_cache.add(i)
                     continue
 
@@ -3372,35 +3371,39 @@ class EtnyPoXNode:
 
     def __clean_up_integration_test(self):
         logger = self.logger
-        try: 
-            logger.debug('Cleaning up containers after integration test.')
-            run_subprocess([
-                'docker-compose', '-f', self.order_docker_compose_file, 'down'
-            ], logger)
+        try:
+            # Unset when the test stopped before its compose was prepared.
+            if getattr(self, 'order_docker_compose_file', None):
+                logger.debug('Cleaning up containers after integration test.')
+                run_subprocess([
+                    'docker-compose', '-f', self.order_docker_compose_file, 'down'
+                ], logger)
             logger.debug('Cleaning up swift-stream integration bucket.')
             self.swift_stream_service.delete_bucket(self.integration_bucket_name)
         except Exception as e:
             logger.warning(f"Unable to clean container: {e}")
 
-    def __run_integration_test(self):
+    def __run_integration_test(self, image):
+        """Run trustedzone `image`'s integration test; True when its enclave
+        produced the test result. The caller holds integration_test_lock and
+        the task slot."""
         logger = self.logger
 
-        logger.info('Running integration test.')
+        logger.info(f'Running integration test of {image} ({self.__trustedzones[image]}).')
 
         [enclave_image_hash, _,
-         docker_compose_hash] = self.__image_registry.caller().getLatestTrustedZoneImageCertPublicKey(self.__network_config.integration_test_image,
-                                                                                                      'v3')
+         docker_compose_hash] = self.__image_registry.caller().getLatestTrustedZoneImageCertPublicKey(image, 'v3')
         self.integration_bucket_name = 'etny-bucket-integration'
         order_id = 'integration_test'
         integration_test_file = 'context_test.etny'
 
-        logger.debug(f"Downloading IPFS Image: {enclave_image_hash}")
-        logger.debug(f"Downloading IPFS docker yml file: {docker_compose_hash}")
+        logger.info(f"Integration test of {image}: image {enclave_image_hash}, compose {docker_compose_hash}")
 
         list_of_ipfs_hashes = [enclave_image_hash, docker_compose_hash]
         if not self.storage.download_many(list_of_ipfs_hashes, attempts=10, delay=3):
-            logger.info("Cannot download data from IPFS, stopping test")
-            return
+            logger.warning(f'Integration test of {image}: its image could not be downloaded from IPFS.')
+            self.__clean_up_integration_test()
+            return False
 
         os.chdir(self.cache_config.base_path)
 
@@ -3468,16 +3471,127 @@ class EtnyPoXNode:
             status = None
 
         if not status:
-            logger.warning('The node is not properly configured to run SGX tasks in production mode. Please check the configuration.')
-            self.can_run_under_sgx = False
+            logger.warning(f'Integration test of {image} produced no result: this platform does not run it.')
             self.__clean_up_integration_test()
             return False
 
-        self.can_run_under_sgx = True
-        set_integration_test_complete(self.__network_config.network_type.upper(), True)
-        logger.info(f"Agent SGX capabilities tested and enabled successfully for {self.__network} ({self.__network_config.network_type.upper()})")
+        logger.info(f"Integration test of {image} passed on {self.__network}")
         self.__clean_up_integration_test()
         return True
+
+    def __run_integration_test_if_due(self, image):
+        """Run `image`'s integration test unless it passed already or its retry
+        is not yet due, and record the outcome. Each failure postpones the next
+        attempt by a backoff that doubles from INTEGRATION_TEST_RETRY_MIN_SECONDS
+        up to INTEGRATION_TEST_RETRY_MAX_SECONDS. The caller holds the task
+        slot."""
+        logger = self.logger
+        with integration_test_lock:
+            if image in integration_test_passed:
+                return
+            failures, due_at = integration_test_retry.get(image, (0, 0.0))
+            if time.monotonic() < due_at:
+                return
+            try:
+                passed = self.__run_integration_test(image)
+            except Exception as e:
+                logger.warning(f"Integration test of {image} failed: {e}")
+                passed = False
+            if passed:
+                integration_test_passed.add(image)
+                integration_test_retry.pop(image, None)
+                return
+            failures += 1
+            backoff = min(INTEGRATION_TEST_RETRY_MIN_SECONDS * 2 ** (failures - 1),
+                          INTEGRATION_TEST_RETRY_MAX_SECONDS)
+            integration_test_retry[image] = (failures, time.monotonic() + backoff)
+            logger.warning(f"Integration test of {image} failed {failures} time(s); "
+                           f"next attempt in {backoff // 60} min")
+
+    def __maybe_retry_integration_tests(self):
+        """Re-run this network's failed integration tests whose backoff has
+        elapsed. A test takes the task slot, as an order does."""
+        if self.__replication_only or config.skip_integration_test:
+            return
+        now = time.monotonic()
+        due = [image for image in self.__integration_images
+               if image not in integration_test_passed
+               and integration_test_retry.get(image, (0, 0.0))[1] <= now]
+        if not due:
+            return
+        acquire_task_slot(self.__network)
+        try:
+            for image in due:
+                self.__run_integration_test_if_due(image)
+        finally:
+            release_task_slot(self.__network)
+        self.__log_runnable_trustedzones()
+
+    def __retest_requirement(self, trustedzone):
+        """Run now, past any backoff, the failed integration tests of the
+        platform requirement `trustedzone` names. The caller holds the task
+        slot."""
+        requirement = self.__trustedzones.get(trustedzone)
+        for image in self.__integration_images:
+            if self.__trustedzones[image] != requirement or image in integration_test_passed:
+                continue
+            with integration_test_lock:
+                failures, _ = integration_test_retry.get(image, (0, 0.0))
+                integration_test_retry[image] = (failures, 0.0)
+            self.__run_integration_test_if_due(image)
+
+    def __runnable_trustedzones(self):
+        """The trustedzones of this network this node runs: those whose
+        platform requirement a passed integration test covers, every one under
+        SKIP_INTEGRATION_TEST, none on a replication-only handle."""
+        if self.__replication_only:
+            return set()
+        if config.skip_integration_test:
+            return set(self.__trustedzones)
+        met = {self.__trustedzones[image] for image in self.__integration_images
+               if image in integration_test_passed}
+        return {name for name, requirement in self.__trustedzones.items() if requirement in met}
+
+    def __log_runnable_trustedzones(self):
+        runnable = self.__runnable_trustedzones()
+        if not runnable:
+            self.logger.warning("No integration test passed: the agent takes no request on "
+                                "this network until one does")
+            return
+        met = sorted({self.__trustedzones[name] for name in runnable})
+        self.logger.info(f"Platform meets {' and '.join(met)}: runs {', '.join(sorted(runnable))}")
+
+    @staticmethod
+    def __requested_trustedzone(image_metadata):
+        """Field 2 of a v3 request's image metadata, the trustedzone its
+        challenge is sealed to; None for metadata that is not v3."""
+        fields = str(image_metadata or '').split(':')
+        return fields[2] if fields[0] == 'v3' and len(fields) > 2 else None
+
+    def __trustedzone_refusal(self, image_metadata):
+        """Why this node does not run the trustedzone a request names in its
+        image metadata, or None when it does."""
+        trustedzone = self.__requested_trustedzone(image_metadata)
+        if trustedzone is None:
+            return "its image metadata is not v3"
+        requirement = self.__trustedzones.get(trustedzone)
+        if requirement is None:
+            return f"{trustedzone!r} is not a trustedzone of this network"
+        if trustedzone not in self.__runnable_trustedzones():
+            return (f"{trustedzone} needs {requirement} and no {requirement} "
+                    f"integration test passed on this platform")
+        return None
+
+    def __dp_metadata4(self):
+        """A DP request's metadata4, "trustedzones=<names>;ipfs=<peer id>": the
+        trustedzones of this network this node runs, comma-separated, and the
+        peer id of its IPFS node, empty when Kubo does not answer."""
+        try:
+            peer_id = self.storage.peer_id()
+        except Exception as e:
+            self.logger.warning(f"IPFS peer id unavailable for the DP request: {e}")
+            peer_id = ""
+        return f"trustedzones={','.join(sorted(self.__runnable_trustedzones()))};ipfs={peer_id}"
 
     def __can_run_auto_update(self, file_path, interval):
         current_timestamp = int(time.time())
@@ -3532,7 +3646,7 @@ class EtnyPoXNode:
 
         if self.__can_run_auto_update(self.cache_config.heart_beat_log_file_path, heartbeat_frequency):
 
-            if not self.can_run_under_sgx:
+            if not self.__runnable_trustedzones():
                 self.__write_auto_update_cache(self.cache_config.heart_beat_log_file_path, heartbeat_frequency);
                 logger.info('Skipping hearbeat on inactive network...');
                 return
@@ -3769,57 +3883,29 @@ def start_esr_replication_for_network(network):
         if _payload_intake is not None:
             _payload_intake.register_network(net_name, *node.intake_backend())
 
-        # Do not replicate until the SGX integration test has completed for this
-        # network's type. Replication fetches/pins ESR blobs and touches IPFS;
-        # holding it until the node has proven it can actually run tasks keeps
-        # startup focused on the integration test (which gates order processing)
-        # and avoids competing for IPFS/CPU before the node is operational.
-        # The test is per-type, so any same-type network passing it unblocks us.
-        # A replication-only process runs no test, so it never waits for one.
+        # Do not replicate until this network's integration tests have each run
+        # once, passed or failed. Replication fetches/pins ESR blobs and touches
+        # IPFS; holding it until then keeps startup focused on the tests (which
+        # gate order processing) and avoids competing for IPFS/CPU with them. A
+        # replication-only process runs no test, so it never waits for one.
         if not getattr(config, 'skip_integration_test', False) \
                 and not getattr(config, 'replication_only', False):
-            net_type = network.network_type.upper()
-            done_event = integration_test_done.get(net_type)
-            if done_event is not None:
-                config.logger.info(
-                    f"[esr-replication:{net_name}] waiting for {net_type} integration "
-                    f"test before starting replication")
-                while not stop_event.is_set() and not done_event.wait(timeout=5):
-                    pass
-                if stop_event.is_set():
-                    return
-                config.logger.info(
-                    f"[esr-replication:{net_name}] {net_type} integration test complete; "
-                    f"starting replication")
+            settled = tests_settled(net_name)
+            config.logger.info(
+                f"[esr-replication:{net_name}] waiting for this network's integration "
+                f"tests before starting replication")
+            while not stop_event.is_set() and not settled.wait(timeout=5):
+                pass
+            if stop_event.is_set():
+                return
+            config.logger.info(
+                f"[esr-replication:{net_name}] integration tests have run; starting replication")
 
         config.logger.info(f"[esr-replication:{net_name}] paired replication thread started")
         node.run_esr_replication_loop()
 
     t = threading.Thread(target=_worker, name=f"esr-replication-{net_name}", daemon=True)
     t.start()
-
-def set_integration_test_complete(network, value):
-    """
-    Sets the shared value for integration test in a thread-safe way.
-
-    Setting it True also SETS the per-type Event, which permanently unblocks
-    every same-type network waiting on the test and makes them skip it (now and
-    on later processing-loop cycles). We only ever set the Event, never clear it:
-    a passed SGX capability does not become unproven within a process lifetime.
-    """
-    global integration_test_complete
-    with integration_test_lock:
-        integration_test_complete[network.upper()] = value
-        if value:
-            integration_test_done[network.upper()].set()
-
-def get_integration_test_complete(network):
-    """
-    Gets the shared value for integration test in a thread-safe way.
-    """
-    global integration_test_complete
-    with integration_test_lock:
-        return integration_test_complete.get(network.upper(), False)
 
 class TaskManager:
     def __init__(self):
