@@ -1,3 +1,9 @@
+v3.6.1
+an RPC call on a keep-alive connection the RPC closed while idle is retried
+  on a fresh one: web3's default retry missed requests' ConnectionError, so
+  the first call after a quiet spell failed with "Remote end closed
+  connection without response" (the integration tests' registry reads)
+
 v3.6.0
 a node runs the trustedzones whose platform requirement its integration
   tests show it meets: <NETWORK>_TRUSTEDZONE_IMAGES pairs each trustedzone

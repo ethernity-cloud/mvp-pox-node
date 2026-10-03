@@ -11,10 +11,12 @@ from pathlib import Path
 import logging
 import config
 
+import requests
 from eth_account import Account
 from web3 import Web3
 from web3 import exceptions
 from web3.middleware import ExtraDataToPOAMiddleware
+from web3.providers.rpc.utils import ExceptionRetryConfiguration
 from web3 import middleware
 from web3.gas_strategies.time_based import fast_gas_price_strategy
 from web3.gas_strategies.rpc import rpc_gas_price_strategy
@@ -178,9 +180,18 @@ class EtnyPoXNode:
             # Each network has one processing thread, so a stalled RPC stalls
             # that network. Reads stay longer than connects because get_logs
             # and receipt polls do real server-side work.
+            #
+            # The RPC closes a keep-alive connection that sits idle, and the
+            # next call on it fails with "Remote end closed connection without
+            # response". web3's default retry catches the builtin
+            # ConnectionError, which requests' ConnectionError does not
+            # subclass, so the class is named here and such a call is retried
+            # on a fresh connection.
             self.__w3 = Web3(Web3.HTTPProvider(
                 self.__network_config.rpc_url,
-                request_kwargs={'timeout': (3, 30)}))
+                request_kwargs={'timeout': (3, 30)},
+                exception_retry_configuration=ExceptionRetryConfiguration(
+                    errors=(ConnectionError, requests.ConnectionError, requests.HTTPError, requests.Timeout))))
 
             if network.middleware is not None:
                 self.__w3.middleware_onion.inject(ExtraDataToPOAMiddleware, layer=0)
