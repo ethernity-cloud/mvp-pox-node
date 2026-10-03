@@ -17,6 +17,8 @@ a DP request's metadata4 carries the trustedzones the node runs and the
 pin retention skips a trustedzone the image registry does not hold
   instead of the whole cleanup round
 IPFS_GATEWAY_URL is read from the key node/.env sets
+removed the legacy /dev/isgx etny-pynithy composes from node/docker, with
+  their Dockerfile, wrapper and result script; the agent used none of them
 
 v3.5.0
 fixed result pinning: retries never reconnected, so a stale connection
