@@ -2,7 +2,7 @@ import os, sys, signal
 import argparse
 import logging.handlers
 from os.path import expanduser
-from dataclasses import dataclass, fields
+from dataclasses import dataclass, fields, replace
 from typing import List
 from pathlib import Path
 import dependency_manager
@@ -102,11 +102,70 @@ def integration_test_images(network_config) -> list:
 
 NETWORKS = {
     "POLYGON": ["MAINNET", "AMOY"],
-    "BLOXBERG": ["MAINNET", "TESTNET"],
+    "BLOXBERG": ["MAINNET", "TESTNET", "TESTNET_UNSAFE"],
     "IOTEX": ["TESTNET"],
     "ETHEREUM": ["SEPOLIA"],
-    "LITVM": ["LITEFORGE"],
+    "LITVM": ["LITEFORGE", "LITEFORGE_UNSAFE"],
 }
+
+# An -unsafe network has the chain and contracts of the network it is named
+# after and runs only that network's -unsafe trustedzones: the ones that run
+# without a CAS, for hardware SGX platforms the CAS cannot attest. It is run
+# only when named; "all", "auto" and the legacy names never select one.
+UNSAFE_NETWORK_SUFFIX = "_unsafe"
+UNSAFE_TRUSTEDZONE_SUFFIX = "-unsafe"
+
+
+def available_networks() -> list:
+    """Every network NETWORKS defines, lowercase, as --network takes them."""
+    return [f"{network}_{suffix}".lower() for network, suffixes in NETWORKS.items()
+            for suffix in suffixes]
+
+
+def is_unsafe_network(name: str) -> bool:
+    return name.lower().endswith(UNSAFE_NETWORK_SUFFIX)
+
+
+def unsafe_twin(name: str):
+    """The -unsafe network named after `name`, if NETWORKS defines one."""
+    twin = f"{name.lower()}{UNSAFE_NETWORK_SUFFIX}"
+    return twin if twin in available_networks() else None
+
+
+def check_trustedzone_names(network_config) -> None:
+    """An -unsafe network's trustedzones all end in -unsafe and no other
+    network's does, so a CAS-less trustedzone runs only where it was chosen."""
+    unsafe = is_unsafe_network(network_config.name)
+    for name in trustedzone_requirements(network_config.trustedzone_images):
+        if name.endswith(UNSAFE_TRUSTEDZONE_SUFFIX) != unsafe:
+            raise EnvironmentError(
+                f"{network_config.name}: trustedzone {name} "
+                + (f"does not end in {UNSAFE_TRUSTEDZONE_SUFFIX}; an -unsafe network runs "
+                   f"only -unsafe trustedzones" if unsafe else
+                   f"runs without a CAS; it belongs to "
+                   f"{network_config.name}{UNSAFE_NETWORK_SUFFIX}"))
+
+
+def join_unsafe_twins(networks: list) -> list:
+    """One configuration per protocol contract. An -unsafe network selected
+    together with the network it is named after joins that network: one agent
+    handle on their shared contract, running both networks' trustedzones and
+    integration tests. Selected alone, it runs under its own name."""
+    by_name = {n.name: n for n in networks}
+    joined = []
+    for n in networks:
+        if is_unsafe_network(n.name) and n.name[:-len(UNSAFE_NETWORK_SUFFIX)] in by_name:
+            continue
+        twin = by_name.get(f"{n.name}{UNSAFE_NETWORK_SUFFIX}")
+        if twin is not None:
+            if (twin.chain_id, twin.contract_address.lower()) != (n.chain_id, n.contract_address.lower()):
+                raise EnvironmentError(
+                    f"{twin.name} must name the chain and protocol contract of {n.name}")
+            n = replace(n,
+                        trustedzone_images=f"{n.trustedzone_images},{twin.trustedzone_images}",
+                        integration_test_images=f"{n.integration_test_images},{twin.integration_test_images}")
+        joined.append(n)
+    return joined
 
 
 task_price_default = 3
@@ -141,7 +200,9 @@ esr_contract_addresses = {
     # pinned value must be exactly stored + 1 (no gaps, no reuse).
     "BLOXBERG_MAINNET": os.environ.get('ESR_CONTRACT_ADDRESS', "0x4Bf5cDE3BFD73dd10B707f8B123Ba631D2EBEAD2"),
     "BLOXBERG_TESTNET": os.environ.get('ESR_CONTRACT_ADDRESS', "0x0Ea1728EAE108FD3B9340ae91451348E2Cc6b4E4"),
+    "BLOXBERG_TESTNET_UNSAFE": os.environ.get('ESR_CONTRACT_ADDRESS', "0x0Ea1728EAE108FD3B9340ae91451348E2Cc6b4E4"),
     "LITVM_LITEFORGE": os.environ.get('ESR_CONTRACT_ADDRESS', "0x709052Fe77Af543d3d9FE2Ac06a15c635c8D4Be5"),
+    "LITVM_LITEFORGE_UNSAFE": os.environ.get('ESR_CONTRACT_ADDRESS', "0x709052Fe77Af543d3d9FE2Ac06a15c635c8D4Be5"),
 }
 # ethernity-cas SessionRegistry (CAS sessions -- distinct from the ESR
 # interactive-session rows replicated above): CAS sessions registered ON-CHAIN, bodies on
@@ -149,9 +210,10 @@ esr_contract_addresses = {
 # every registered session body so the material distributes across operator
 # nodes after a pipeline deployment. Same chain note as the ESR: bloxberg
 # mainnet and testnet share chainId 8995. "" / absent = not deployed there,
-# replication skipped.
+# replication skipped. An -unsafe network has no CAS, so no sessions.
 cas_session_registry_addresses = {
     "BLOXBERG_TESTNET": os.environ.get('CAS_SESSION_REGISTRY_ADDRESS', "0xcb1F389bF4524d1D61EDcbC24eC1F1F9C3FF4Fa6"),
+    "LITVM_LITEFORGE": os.environ.get('LITVM_LITEFORGE_CAS_SESSION_REGISTRY_ADDRESS', "0x8ad24b3F406A41a0F8D3440021792EB203957F43"),
 }
 # How far back the FIRST SessionRegistered scan reaches (later rounds continue
 # incrementally from where the previous one stopped).
@@ -162,17 +224,26 @@ cas_session_registry_scan_blocks = int(os.environ.get('CAS_SESSION_REGISTRY_SCAN
 # task: enumerate active validators, dial their published multiaddrs (onion
 # first), attest the answerer against its on-chain record, and rewrite
 # SCONE_CAS_ADDR in the order's compose. "" / absent = keep the compose's
-# baked-in CAS address (the pre-Sprint-4 behaviour).
+# baked-in CAS address (the pre-Sprint-4 behaviour). An -unsafe network's
+# entry only enumerates the validators for IPFS peering: its trustedzones'
+# composes name no CAS, so none is resolved.
 validator_registry_addresses = {
     "BLOXBERG_TESTNET": os.environ.get('VALIDATOR_REGISTRY_ADDRESS', "0xa821b36F378F76c793c436F5f9c9CC36c684eBE5"),
+    "BLOXBERG_TESTNET_UNSAFE": os.environ.get('VALIDATOR_REGISTRY_ADDRESS', "0xa821b36F378F76c793c436F5f9c9CC36c684eBE5"),
+    "LITVM_LITEFORGE": os.environ.get('LITVM_LITEFORGE_VALIDATOR_REGISTRY_ADDRESS', "0x2E27677fb67531eb09134fE331C27899f87ADe10"),
+    "LITVM_LITEFORGE_UNSAFE": os.environ.get('LITVM_LITEFORGE_VALIDATOR_REGISTRY_ADDRESS', "0x2E27677fb67531eb09134fE331C27899f87ADe10"),
 }
 # ethernity-cas ValidatorIpfsEndpoints: where each validator's IPFS node is
 # reached (multiaddrs with peer id). When set for a network, the node keeps
 # every active validator's IPFS node in its Kubo peering list, refreshed every
 # IPFS_PEER_SYNC_SECONDS, so task artefacts and results travel directly between
-# the node and the validators. "" / absent = peer only with IPFS_SWARM.
+# the node and the validators. "" / absent = peer only with IPFS_SWARM. The
+# validators judge an -unsafe network's orders too, so it peers with them.
 ipfs_endpoints_addresses = {
     "BLOXBERG_TESTNET": os.environ.get('IPFS_ENDPOINTS_ADDRESS', "0x4A85b38247409609B00e1b1ec75cc9fB515548A3"),
+    "BLOXBERG_TESTNET_UNSAFE": os.environ.get('IPFS_ENDPOINTS_ADDRESS', "0x4A85b38247409609B00e1b1ec75cc9fB515548A3"),
+    "LITVM_LITEFORGE": os.environ.get('LITVM_LITEFORGE_IPFS_ENDPOINTS_ADDRESS', "0x1Ab9A234974c53eEA3C344421434C9138D913367"),
+    "LITVM_LITEFORGE_UNSAFE": os.environ.get('LITVM_LITEFORGE_IPFS_ENDPOINTS_ADDRESS', "0x1Ab9A234974c53eEA3C344421434C9138D913367"),
 }
 ipfs_peer_sync_seconds = int(os.environ.get('IPFS_PEER_SYNC_SECONDS', 300))
 
@@ -291,15 +362,13 @@ def parse_networks(arguments: argparse.Namespace, parser: argparse.ArgumentParse
         network_names (list): List of available network names.
 
     Returns:
-        List[NetworkConfig]: A list of network configurations.
+        List[NetworkConfig]: A list of network configurations, an -unsafe
+        network joined to the network it is named after when both are
+        selected (join_unsafe_twins).
     """
-    AVAILABLE_NETWORKS = []
-    for network in network_names:
-        suffixes = NETWORKS.get(network, [])
-        for suffix in suffixes:
-            network_suffix = f"{network}_{suffix}" if suffix else network
-            AVAILABLE_NETWORKS.append(network_suffix.lower())
-    
+    AVAILABLE_NETWORKS = [n for n in available_networks()
+                          if n.split('_')[0].upper() in network_names]
+
     ALL_NETWORKS = ["all", "auto"]
     CURRENT_NETWORKS = ["openbeta"]
     LEGACY_NETWORKS = ["bloxberg", "testnet", "polygon"]
@@ -307,8 +376,8 @@ def parse_networks(arguments: argparse.Namespace, parser: argparse.ArgumentParse
     lower_networks = [n.lower() for n in arguments.network]
     # Determine which networks to load
     if any(n in ALL_NETWORKS for n in lower_networks):
-        # If any special keyword is specified, load all networks
-        selected_networks = AVAILABLE_NETWORKS
+        # Every network but the -unsafe ones, which run only when named.
+        selected_networks = [n for n in AVAILABLE_NETWORKS if not is_unsafe_network(n)]
     elif any(n in CURRENT_NETWORKS for n in lower_networks):
         # If any special keyword is specified, load all networks
         selected_networks = [ "polygon_mainnet", "bloxberg_mainnet" ]
@@ -395,10 +464,11 @@ def parse_networks(arguments: argparse.Namespace, parser: argparse.ArgumentParse
                 raise EnvironmentError(
                     f"{prefix}_INTEGRATION_TEST_IMAGES names {image}, which "
                     f"{prefix}_TRUSTEDZONE_IMAGES does not list")
+        check_trustedzone_names(network_config)
         networks.append(network_config)
         logger.info(f"Loaded configuration for network: {network_suffix}")
 
-    return networks
+    return join_unsafe_twins(networks)
 
 def parse_arguments(network_names: list) -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Ethernity PoX request")
@@ -483,7 +553,7 @@ def parse_arguments(network_names: list) -> argparse.ArgumentParser:
     parser.add_argument(
         "-n",
         "--network",
-        help="Networks the node runs on. Specify multiple networks separated by space (e.g., polygon_mainnet polygon_amoy bloxberg_mainnet bloxberg_testnet iotex_testnet). If not specified, all available networks are loaded.",
+        help="Networks the node runs on. Specify multiple networks separated by space (e.g., polygon_mainnet polygon_amoy bloxberg_mainnet bloxberg_testnet iotex_testnet). If not specified, all available networks are loaded except the -unsafe ones (bloxberg_testnet_unsafe, litvm_liteforge_unsafe), which run trustedzones without a CAS and are loaded only when named.",
         nargs='+',
         default=["all"],
         required=False

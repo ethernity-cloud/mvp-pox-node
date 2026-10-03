@@ -3917,7 +3917,10 @@ def start_esr_replication_for_network(network):
             return
 
         if _payload_intake is not None:
-            _payload_intake.register_network(net_name, *node.intake_backend())
+            # An -unsafe network's requests are on the contract of the network
+            # it is named after, so the intake takes them under both names.
+            for name in filter(None, (net_name, config.unsafe_twin(net_name))):
+                _payload_intake.register_network(name, *node.intake_backend())
 
         # Do not replicate until this network's integration tests have each run
         # once, passed or failed. Replication fetches/pins ESR blobs and touches

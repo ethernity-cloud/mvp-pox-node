@@ -29,3 +29,8 @@ networks:
     description: "Faucet URL: https://sepolia-faucet.pk910.de"
     rpc_url: "https://ethereum-sepolia-rpc.publicnode.com"
     minimum_gas_at_start: 2000000000000000000
+  - name: "LitVM LiteForge Testnet"
+    shortname: "LITVM_LITEFORGE"
+    description: "Gas token zkLTC"
+    rpc_url: "https://liteforge.rpc.caldera.xyz/infra-partner-http"
+    minimum_gas_at_start: 10000000000000000

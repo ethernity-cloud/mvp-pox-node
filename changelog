@@ -1,3 +1,20 @@
+v3.7.0
+the -unsafe trustedzones are networks of their own, bloxberg_testnet_unsafe
+  and litvm_liteforge_unsafe: the chain and contracts of the network each is
+  named after, and only that network's -unsafe trustedzones. A node runs one
+  only when it is named: "all", "auto", the installer's AUTO and the legacy
+  names select none. An -unsafe network lists only trustedzones ending in
+  -unsafe and no other network lists one, or the agent does not start
+a node that names a network and its -unsafe twin runs both as one handle on
+  their shared protocol contract, with both networks' trustedzones and
+  integration tests
+litvm_liteforge's trustedzones are provisioned by LitVM's CAS set: the agent
+  resolves the CAS from LitVM's validator registry, replicates its session
+  registry and peers with its validators' IPFS nodes
+the payload intake takes a network's requests under its -unsafe twin's name
+  as well
+the installer lists LitVM and the two -unsafe networks
+
 v3.6.2
 an order placement is simulated before it is sent, and a DO request the
   protocol contract refuses is skipped and cached instead of retried: on
