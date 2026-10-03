@@ -1,3 +1,11 @@
+v3.6.2
+an order placement is simulated before it is sent, and a DO request the
+  protocol contract refuses is skipped and cached instead of retried: on
+  bloxberg a request whose metadata4 is the zero address cannot be placed
+  by any node, and the node re-sent the reverting _placeOrder without end,
+  paying gas each time and taking no other request
+a placement that is mined but reverted is retried at most three times
+
 v3.6.1
 an RPC call on a keep-alive connection the RPC closed while idle is retried
   on a fresh one: web3's default retry missed requests' ConnectionError, so

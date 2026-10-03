@@ -2891,20 +2891,33 @@ class EtnyPoXNode:
         order_id = 0
         max_retries = 20
         retries = 0
+        max_reverts = 3
+        reverts = 0
 
         while True:
           try:
             time.sleep(self.__network_config.rpc_delay/1000)
+            placement = self.__etny.functions._placeOrder(int(doreq_id), int(self.__dprequest))
+            # Simulated before it is sent: a placement the contract refuses
+            # reverts again on every attempt, each one paying gas. On bloxberg
+            # a request whose metadata4 is the zero address is such a one:
+            # _placeOrder takes a non-empty metadata4 as the node it is pinned
+            # to, and no node is the zero address.
+            try:
+                placement.call({'from': self.__address})
+            except exceptions.ContractLogicError as refusal:
+                self.__raise_if_matched(doreq_id)
+                logger.info(f"DO request {doreq_id} cannot be placed with DP request "
+                            f"{self.__dprequest}: the protocol contract refuses it ({refusal}), skipping processing")
+                self.doreq_cache.add(doreq_id)
+                raise exceptions.ContractLogicError(f"DO request {doreq_id} refused by the contract")
             # Build the transaction INSIDE the retry loop so every attempt gets a
             # fresh nonce. A reverted transaction still consumes its nonce, so
             # re-sending the same pre-built txn after a revert (or after any
             # other transaction from this account) fails every retry with
             # "Transaction nonce is too low" until max_retries aborts the
             # placement -- observed live as a 20x nonce-too-low cascade.
-            unicorn_txn = self.__etny.functions._placeOrder(
-                    int(doreq_id),
-                    int(self.__dprequest),
-            ).build_transaction(self.get_transaction_build())
+            unicorn_txn = placement.build_transaction(self.get_transaction_build())
             _hash = self.send_transaction(unicorn_txn)
             logger.info(f"TXID {_hash} pending... fingers crossed")
             receipt = self.__w3.eth.wait_for_transaction_receipt(_hash)
@@ -2915,25 +2928,12 @@ class EtnyPoXNode:
             else:
               logger.info(f"TXID {_hash} is reverted")
 
-            _doreq = self.__etny.caller()._getDORequest(doreq_id)
-            _dpreq = self.__etny.caller()._getDPRequest(self.__dprequest)
-
-            doreq = DORequest(_doreq)
-            dpreq = DPRequest(_dpreq)
-
-            # Raise ContractLogicError so the handler below PROPAGATES the skip
-            # instead of swallowing it into the generic retry path (a bare
-            # `raise` here has no active exception -> RuntimeError -> 20 futile
-            # reverted placements against an already-matched request).
-            if doreq.status != RequestStatus.AVAILABLE:
-                  logger.info(f"DO request {doreq_id} is matched with another operator, skipping processing")
-                  self.doreq_cache.add(doreq_id)
-                  raise exceptions.ContractLogicError(f"DO request {doreq_id} already matched")
-
-            if dpreq.status != RequestStatus.AVAILABLE:
-                  logger.info(f"DP request {self.__dprequest} is matched with another order, skipping processing")
-                  self.doreq_cache.add(doreq_id)
-                  raise exceptions.ContractLogicError(f"DP request {self.__dprequest} already matched")
+            self.__raise_if_matched(doreq_id)
+            reverts += 1
+            if reverts == max_reverts:
+                logger.info(f"DO request {doreq_id}: {reverts} placements reverted, skipping processing")
+                self.doreq_cache.add(doreq_id)
+                raise exceptions.ContractLogicError(f"DO request {doreq_id}: {reverts} placements reverted")
 
           except (exceptions.ContractLogicError, IndexError) as e:
               logger.warning(f"ContractLogicError: {e}");
@@ -2961,6 +2961,31 @@ class EtnyPoXNode:
             continue
 
         logger.info(f"Order {self.__order_id} secured!")
+
+    def __raise_if_matched(self, doreq_id):
+        """Raises ContractLogicError when the DO request or this node's DP
+        request is no longer AVAILABLE, the placement having been refused
+        because one of them was matched."""
+        logger = self.logger
+        _doreq = self.__etny.caller()._getDORequest(doreq_id)
+        _dpreq = self.__etny.caller()._getDPRequest(self.__dprequest)
+
+        doreq = DORequest(_doreq)
+        dpreq = DPRequest(_dpreq)
+
+        # Raise ContractLogicError so place_order's handler PROPAGATES the skip
+        # instead of swallowing it into the generic retry path (a bare
+        # `raise` here has no active exception -> RuntimeError -> 20 futile
+        # reverted placements against an already-matched request).
+        if doreq.status != RequestStatus.AVAILABLE:
+              logger.info(f"DO request {doreq_id} is matched with another operator, skipping processing")
+              self.doreq_cache.add(doreq_id)
+              raise exceptions.ContractLogicError(f"DO request {doreq_id} already matched")
+
+        if dpreq.status != RequestStatus.AVAILABLE:
+              logger.info(f"DP request {self.__dprequest} is matched with another order, skipping processing")
+              self.doreq_cache.add(doreq_id)
+              raise exceptions.ContractLogicError(f"DP request {self.__dprequest} already matched")
 
     def get_transaction_build(self, existing_nonce=None):
         logger = self.logger
