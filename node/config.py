@@ -218,6 +218,12 @@ cas_session_registry_addresses = {
 # How far back the FIRST SessionRegistered scan reaches (later rounds continue
 # incrementally from where the previous one stopped).
 cas_session_registry_scan_blocks = int(os.environ.get('CAS_SESSION_REGISTRY_SCAN_BLOCKS', 200000))
+# Registered images (ECImageRegistryV2 ImageRegistered / TrustedZoneImageRegistered):
+# the replication loop pins each registered image tree and its compose from
+# the publisher's IPFS node. How far back the first scan reaches, and how long
+# one pin attempt of an image tree (about 1.2 GB) may take.
+image_registry_scan_blocks = int(os.environ.get('IMAGE_REGISTRY_SCAN_BLOCKS', 200000))
+registered_image_pin_timeout_seconds = int(os.environ.get('REGISTERED_IMAGE_PIN_TIMEOUT_SECONDS', 3600))
 
 # ethernity-cas ValidatorRegistry (validator identity + governance + endpoints).
 # When set for a network, the node RESOLVES its CAS from chain before each v3

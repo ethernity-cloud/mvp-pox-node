@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 
-import io, os, time, json, sys, argparse, threading
+import io, os, re, time, json, sys, argparse, threading
 import base64, hashlib
 from types import SimpleNamespace
 from collections import defaultdict
@@ -81,6 +81,35 @@ def _esr_replication_stagger_slot(step_seconds=8):
     return slot * step_seconds
 
 stop_event = threading.Event()
+
+# What the registered-image replication reads from an ECImageRegistryV2: the
+# two registration events and the two per-hash records (both tables share the
+# Image struct). The node's image_registry.abi is the V1 one the task path
+# reads with.
+IMAGE_REGISTRY_V2_ABI = json.dumps([
+    {"type": "event", "name": "ImageRegistered", "anonymous": False, "inputs": [
+        {"name": "ipfsHash", "type": "string", "indexed": False},
+        {"name": "imageName", "type": "string", "indexed": False},
+        {"name": "version", "type": "string", "indexed": False},
+        {"name": "owner", "type": "address", "indexed": True},
+        {"name": "ipfsPeer", "type": "string", "indexed": False}]},
+    {"type": "event", "name": "TrustedZoneImageRegistered", "anonymous": False, "inputs": [
+        {"name": "ipfsHash", "type": "string", "indexed": False},
+        {"name": "imageName", "type": "string", "indexed": False},
+        {"name": "version", "type": "string", "indexed": False},
+        {"name": "owner", "type": "address", "indexed": True},
+        {"name": "ipfsPeer", "type": "string", "indexed": False}]},
+] + [
+    {"type": "function", "name": name, "stateMutability": "view",
+     "inputs": [{"name": "", "type": "string"}],
+     "outputs": [{"name": "owner", "type": "address"}, {"name": "ipfsHash", "type": "string"},
+                 {"name": "version", "type": "string"}, {"name": "session", "type": "string"},
+                 {"name": "fee", "type": "uint8"}, {"name": "rewardAddress", "type": "address"},
+                 {"name": "validated", "type": "bool"}, {"name": "published", "type": "bool"},
+                 {"name": "certPublicKey", "type": "string"}, {"name": "dockerComposeHash", "type": "string"},
+                 {"name": "name", "type": "string"}]}
+    for name in ("imageDetails", "trustedZoneImageDetails")
+])
 
 class NetworkLoggerAdapter(logging.LoggerAdapter):
     def __init__(self, logger, network):
@@ -295,6 +324,15 @@ class EtnyPoXNode:
         except Exception as e:
             self.__cas_session_registry = None
             logger.warning(f"Could not initialise the CAS Session Registry: {e}")
+
+        # The image registry as an ECImageRegistryV2, for the registered-image
+        # replication: the registration events and the per-hash records. A V1
+        # registry emits neither event, so the replication finds nothing there.
+        self.__image_registry_v2 = self.__w3.eth.contract(
+            address=self.__w3.to_checksum_address(self.__network_config.image_registry_contract_address),
+            abi=IMAGE_REGISTRY_V2_ABI)
+        self.__image_registry_last_block = 0
+        self.__image_pin_thread = None
 
         self.__nonce = self.__w3.eth.get_transaction_count(self.__address)
         self.__dprequest = 0
@@ -1177,6 +1215,117 @@ class EtnyPoXNode:
             self.logger.debug(f"cas-session-registry replication failed ({e})")
         return kept
 
+    def __replicate_registered_images(self):
+        """Pin every image registered on this network's ECImageRegistryV2.
+
+        A publisher registers an image's hash before its certificate exists
+        (`registerImage` / `registerTrustedZoneImage`, with the multiaddr of
+        the IPFS node that holds the image), so the image tree and its compose
+        are pinned here from that node, and nodes and
+        publickey.ethernity.cloud fetch them from this mirror as well as from
+        the publisher. The registration events are scanned from where the last
+        round stopped (the first round reaches back image_registry_scan_blocks)
+        and every image found is kept, with its compose hash from the
+        registry's record and the publisher's peer, in esr_progress
+        'registered_images'; a V1 registry emits neither event. One image is
+        pinned at a time, on its own thread, with the publisher peered for the
+        duration (registered_image_pin_timeout_seconds per attempt); an image
+        whose pin does not complete is tried again on a later round, up to
+        esr_pin_max_attempts. Never raises.
+        """
+        try:
+            images = self.esr_progress.get('registered_images') or {}
+            head = self.__w3.eth.block_number
+            start = self.__image_registry_last_block
+            if start <= 0:
+                window = int(getattr(config, 'image_registry_scan_blocks', 200000))
+                start = max(0, head - window)
+            chunk = 9000
+            frm = start
+            while frm <= head:
+                to = min(frm + chunk - 1, head)
+                try:
+                    logs = (self.__image_registry_v2.events.ImageRegistered().get_logs(from_block=frm, to_block=to)
+                            + self.__image_registry_v2.events.TrustedZoneImageRegistered().get_logs(from_block=frm, to_block=to))
+                except Exception as e:
+                    self.logger.debug(f"image-registry logs {frm}-{to} failed ({e})")
+                    break
+                for lg in logs:
+                    args = lg['args']
+                    ipfs_hash = str(args['ipfsHash'])
+                    if ipfs_hash in images or not looks_like_cid(ipfs_hash):
+                        continue
+                    table = 'trustedZoneImageDetails' if lg['event'] == 'TrustedZoneImageRegistered' else 'imageDetails'
+                    try:
+                        record = getattr(self.__image_registry_v2.functions, table)(ipfs_hash).call()
+                    except Exception as e:
+                        self.logger.debug(f"image-registry {table}({ipfs_hash}) failed ({e})")
+                        continue
+                    compose = str(record[9])
+                    peer = str(args['ipfsPeer']).strip()
+                    images[ipfs_hash] = {
+                        'name': str(args['imageName']), 'version': str(args['version']),
+                        'compose': compose if looks_like_cid(compose) else '',
+                        'peer': peer if re.search(r'^/\S+/p2p/[^/\s]+$', peer) else '',
+                        'pinned': False, 'attempts': 0,
+                    }
+                    self.logger.info(
+                        f"[image-registry] {args['imageName']} {args['version']} registered as "
+                        f"{ipfs_hash} (compose {compose}, peer {peer or 'none'}); pinning")
+                frm = to + 1
+            self.__image_registry_last_block = frm
+            self.esr_progress.add('registered_images', images)
+
+            if self.__image_pin_thread is not None and self.__image_pin_thread.is_alive():
+                return
+            cap = int(getattr(config, 'esr_pin_max_attempts', 10))
+            for ipfs_hash, entry in images.items():
+                if entry['pinned'] or entry['attempts'] >= cap:
+                    continue
+                self.__image_pin_thread = threading.Thread(
+                    target=self.__pin_registered_image, args=(ipfs_hash,),
+                    name=f"image-pin-{self.__network_config.name}", daemon=True)
+                self.__image_pin_thread.start()
+                return
+        except Exception as e:
+            self.logger.debug(f"image-registry replication failed ({e})")
+
+    def __pin_registered_image(self, ipfs_hash):
+        """One attempt at pinning a registered image and its compose, with the
+        publisher's node connected and peered while it runs. The outcome is
+        recorded in esr_progress 'registered_images'."""
+        peer_id = None
+        try:
+            images = self.esr_progress.get('registered_images') or {}
+            entry = images.get(ipfs_hash)
+            if entry is None:
+                return
+            entry['attempts'] += 1
+            self.esr_progress.add('registered_images', images)
+            if entry['peer']:
+                try:
+                    self.storage.connect_peer(entry['peer'])
+                    peer_id = self.storage.peering_add(entry['peer'])
+                except Exception as e:
+                    self.logger.info(f"[image-registry] {ipfs_hash}: publisher {entry['peer']} not reachable ({e}); fetching from the swarm")
+            timeout = int(getattr(config, 'registered_image_pin_timeout_seconds', 3600))
+            if entry['compose']:
+                self.storage.pin_add(entry['compose'], timeout=120)
+            self.storage.pin_add(ipfs_hash, timeout=timeout)
+            images = self.esr_progress.get('registered_images') or {}
+            if ipfs_hash in images:
+                images[ipfs_hash]['pinned'] = True
+                self.esr_progress.add('registered_images', images)
+            self.storage.provide(ipfs_hash)
+            if entry['compose']:
+                self.storage.provide(entry['compose'])
+            self.logger.info(f"[image-registry] pinned {entry['name']} {entry['version']} ({ipfs_hash}) and its compose")
+        except Exception as e:
+            self.logger.warning(f"[image-registry] pin of {ipfs_hash} failed ({e}); retried next round")
+        finally:
+            if peer_id:
+                self.storage.peering_rm(peer_id)
+
     def intake_backend(self):
         """What the payload intake needs from this network's handle: the PoX
         contract, the Kubo client and the network logger."""
@@ -1209,6 +1358,7 @@ class EtnyPoXNode:
                 self.__replicate_do_request_inputs()
                 self.__replicate_session_rows()
                 self.__replicate_cas_session_registry()
+                self.__replicate_registered_images()
                 # A replication-only process has no order loop, so its peering
                 # upkeep and re-announcing run from here; the throttle inside
                 # keeps this to once per IPFS_PEER_SYNC_SECONDS.

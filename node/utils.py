@@ -494,6 +494,29 @@ class Storage:
                 self.logger.warning(f"ipfs-peers: swarm/peering/rm {pid} failed: {e}")
         self._chain_peers = wanted
 
+    def connect_peer(self, multiaddr, timeout=15):
+        """One swarm/connect to `multiaddr` (a full /…/p2p/<id> address), so
+        the next fetch has that node as a provider. Raises when the dial
+        fails."""
+        self._api_call('swarm/connect', params={'arg': multiaddr, 'timeout': f'{timeout}s'}, timeout=timeout + 5)
+
+    def peering_add(self, multiaddr):
+        """Keep Kubo reconnecting to `multiaddr`'s peer until peering_rm; its
+        peer id is returned. Peers added here are not touched by
+        sync_chain_peers, which manages only the validators' peers."""
+        m = re.search(r'/p2p/([^/]+)$', multiaddr)
+        if not m:
+            raise ValueError(f"{multiaddr!r} does not end in /p2p/<peer id>")
+        self._api_call('swarm/peering/add', params={'arg': [multiaddr]}, timeout=10)
+        return m.group(1)
+
+    def peering_rm(self, peer_id):
+        """Stop keeping the connection to `peer_id`. Never raises."""
+        try:
+            self._api_call('swarm/peering/rm', params={'arg': peer_id}, timeout=10)
+        except Exception as e:
+            self.logger.debug(f"swarm/peering/rm {peer_id}: {e}")
+
     # A pinned block is announced when pinned and again at the next
     # REPROVIDE_EVERY-second sync passes until REPROVIDE_TIMES announces are
     # done or it is older than REPROVIDE_WINDOW; Kubo's own reprovider carries
