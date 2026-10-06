@@ -1,3 +1,41 @@
+v3.7.4
+a registered image is pinned only when it is an enclave image the Ethernity
+  CLOUD SDK builds (scone_image.py): its lib/libbinary-fs.so, the SCONE
+  binary-fs, holds the SCONE runtime's variables and the enclave's role
+  (securelock or trustedzone), found newest layer first within
+  REGISTERED_IMAGE_SCAN_MAX_BYTES (1 GiB) of layer data, decompressing at
+  most REGISTERED_IMAGE_INFLATE_MAX_BYTES (2 GiB) and 100,000 archive
+  entries; its tree declares at most REGISTERED_IMAGE_MAX_BYTES (3 GiB) and
+  its compose REGISTERED_COMPOSE_MAX_BYTES (1 MiB); and the disk keeps
+  ESR_MIN_FREE_STORAGE_GB free before the pin, once the declared size is in,
+  and while the pin runs; a pin that grows the repository past twice the
+  declared size plus 2 GiB is ended and tried again later. Archives are walked
+  by the agent itself, header by header, with extended headers over 1 MiB
+  refused unread, so no layer makes it hold more than a few MiB
+a verdict (verified, refused, unreadable by this agent) stands until those
+  bounds or the verifier's version change; an image pinned without a verdict
+  is judged in place; a verified image whose pin Kubo no longer holds is
+  pinned again, and the retention sweep keeps verified images; a refusal
+  unpins only what this replication pinned (pins made by 3.7.2 and 3.7.3 stay),
+  sparing a CID another verified image of the network uses
+an attempt that fails is tried again after a delay doubling from 10 minutes
+  to 6 hours, the entry with the fewest attempts first; one registered-image
+  attempt runs at a time in the process
+a registered image's publisher is taken only with a canonical base58 peer id,
+  added to the peering list only when it is not in it already, and only a
+  peering the attempt added is removed after
+a registered image and its compose are taken only as the CID text Kubo prints
+  for them (varints as go-cid reads them, CIDv1 padding bits zero); an entry
+  3.7.2 or 3.7.3 recorded under another spelling is refused, under whatever
+  bounds are current
+a registration whose strings do not decode is skipped alone
+a replication-only agent collects the garbage of refused, unreadable and
+  failed attempts at most hourly, while no registered-image pin is in flight
+the handles of a network share one esr_progress, written as one snapshot that
+  replaces the file
+the replication loop runs for the life of the process: the daily restart of
+  the order-processing threads stopped it for good
+
 v3.7.0
 the -unsafe trustedzones are networks of their own, bloxberg_testnet_unsafe
   and litvm_liteforge_unsafe: the chain and contracts of the network each is

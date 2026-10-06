@@ -21,7 +21,8 @@ from web3 import middleware
 from web3.gas_strategies.time_based import fast_gas_price_strategy
 from web3.gas_strategies.rpc import rpc_gas_price_strategy
 
-from utils import get_or_generate_uuid, run_subprocess, retry, Storage, Cache, ListCache, ListCacheWithTimestamp, MergedOrdersCache, subprocess, get_node_geo, HardwareInfoProvider, parse_transaction_bytes_ut, looks_like_cid
+from utils import get_or_generate_uuid, run_subprocess, retry, Storage, Cache, ListCache, ListCacheWithTimestamp, MergedOrdersCache, subprocess, get_node_geo, HardwareInfoProvider, parse_transaction_bytes_ut, looks_like_cid, canonical_cid
+import scone_image
 from models import *
 from error_messages import errorMessages
 from swift_stream_service import SwiftStreamService
@@ -110,6 +111,28 @@ IMAGE_REGISTRY_V2_ABI = json.dumps([
                  {"name": "name", "type": "string"}]}
     for name in ("imageDetails", "trustedZoneImageDetails")
 ])
+# A registrant's IPFS peer: a multiaddr ending in a canonical base58 peer id,
+# an RSA one (Qm...) or an Ed25519 one (12D3KooW...).
+PEER_MULTIADDR = re.compile(r'/\S+/p2p/(Qm[1-9A-HJ-NP-Za-km-z]{44}|12D3KooW[1-9A-HJ-NP-Za-km-z]{44})')
+# One registered-image attempt at a time in the process, across networks: a
+# pin's growth bound reads the repository every attempt writes, and a mirror's
+# garbage collection waits for every pin in flight.
+_registered_image_lock = threading.Lock()
+_registered_image_gc = {'at': 0, 'due': False}
+
+
+def collect_garbage(storage, logger):
+    """repo/gc, unless a registered-image attempt of this process holds
+    _registered_image_lock: a collector queued behind that attempt's pin holds
+    every later add and pin of the node until the pin ends. Skipped then; the
+    next collection runs it."""
+    if not _registered_image_lock.acquire(blocking=False):
+        logger.info("IPFS garbage collection skipped: a registered-image attempt is in flight")
+        return
+    try:
+        storage.repo_gc()
+    finally:
+        _registered_image_lock.release()
 
 class NetworkLoggerAdapter(logging.LoggerAdapter):
     def __init__(self, logger, network):
@@ -333,6 +356,7 @@ class EtnyPoXNode:
             abi=IMAGE_REGISTRY_V2_ABI)
         self.__image_registry_last_block = 0
         self.__image_pin_thread = None
+        self.__peerings_checked = False
 
         self.__nonce = self.__w3.eth.get_transaction_count(self.__address)
         self.__dprequest = 0
@@ -405,7 +429,7 @@ class EtnyPoXNode:
         # Resumable replication progress (per network): last scanned block/order
         # and last pinned version per (enclave,key). Loaded from disk so a
         # restart resumes at the right height instead of re-scanning from zero.
-        self.esr_progress = Cache(10_000_000, self.cache_config.esr_progress_filepath)
+        self.esr_progress = Cache.shared(10_000_000, self.cache_config.esr_progress_filepath)
         self.__esr_last_block = int(self.esr_progress.get('esr_last_block') or 0)
 
         self.storage = Storage(self.__ipfs_swarm, self.__ipfs_timeout, self.__ipfs_connect_url, self.__ipfs_gateway_url,
@@ -1216,7 +1240,9 @@ class EtnyPoXNode:
         return kept
 
     def __replicate_registered_images(self):
-        """Pin every image registered on this network's ECImageRegistryV2.
+        """Pin the images registered on this network's ECImageRegistryV2 that
+        scone_image recognizes as enclave images the Ethernity CLOUD SDK
+        builds.
 
         A publisher registers an image's hash before its certificate exists
         (`registerImage` / `registerTrustedZoneImage`, with the multiaddr of
@@ -1225,13 +1251,21 @@ class EtnyPoXNode:
         publickey.ethernity.cloud fetch them from this mirror as well as from
         the publisher. The registration events are scanned from where the last
         round stopped (the first round reaches back image_registry_scan_blocks)
-        and every image found is kept, with its compose hash from the
-        registry's record and the publisher's peer, in esr_progress
-        'registered_images'; a V1 registry emits neither event. One image is
-        pinned at a time, on its own thread, with the publisher peered for the
-        duration (registered_image_pin_timeout_seconds per attempt); an image
-        whose pin does not complete is tried again on a later round, up to
-        esr_pin_max_attempts. Never raises.
+        and every image whose hash is a canonical CID is kept, with its compose
+        hash from the registry's record (when canonical), the publisher's peer
+        (when its peer id is a canonical base58 one) and the registry table it
+        is in, in esr_progress 'registered_images'; a V1 registry emits neither
+        event.
+
+        Each round, a verdict (verified, refused, unverifiable) recorded under
+        other bounds than __registered_image_limits() is dropped, an entry
+        whose image or compose Kubo no longer holds is no longer counted as
+        pinned, and the publisher peerings an earlier run of this agent left
+        are removed. Then one entry is handled, on its own thread
+        (__pin_registered_image): one without a verdict under the current
+        bounds, whose next attempt is due, the fewest attempts first and then
+        the earliest registered. A failed attempt is tried again after a delay
+        that doubles from 10 minutes to 6 hours. Never raises.
         """
         try:
             images = self.esr_progress.get('registered_images') or {}
@@ -1242,18 +1276,36 @@ class EtnyPoXNode:
                 start = max(0, head - window)
             chunk = 9000
             frm = start
+            # Each log is decoded on its own: a registration whose strings do not decode (V2 takes any bytes) is
+            # skipped, rather than failing every later scan of its block range.
+            events = {
+                bytes(Web3.keccak(text="ImageRegistered(string,string,string,address,string)")):
+                    self.__image_registry_v2.events.ImageRegistered(),
+                bytes(Web3.keccak(text="TrustedZoneImageRegistered(string,string,string,address,string)")):
+                    self.__image_registry_v2.events.TrustedZoneImageRegistered(),
+            }
             while frm <= head:
                 to = min(frm + chunk - 1, head)
                 try:
-                    logs = (self.__image_registry_v2.events.ImageRegistered().get_logs(from_block=frm, to_block=to)
-                            + self.__image_registry_v2.events.TrustedZoneImageRegistered().get_logs(from_block=frm, to_block=to))
+                    raw_logs = self.__w3.eth.get_logs({'address': self.__image_registry_v2.address, 'fromBlock': frm,
+                                                       'toBlock': to, 'topics': [list(events)]})
                 except Exception as e:
                     self.logger.debug(f"image-registry logs {frm}-{to} failed ({e})")
                     break
-                for lg in logs:
+                for raw in raw_logs:
+                    try:
+                        lg = events[bytes(raw['topics'][0])].process_log(raw)
+                    except Exception as e:
+                        self.logger.info(f"[image-registry] a registration in block {raw.get('blockNumber')} "
+                                         f"does not decode ({str(e)[:120]}); skipped")
+                        continue
                     args = lg['args']
                     ipfs_hash = str(args['ipfsHash'])
-                    if ipfs_hash in images or not looks_like_cid(ipfs_hash):
+                    if ipfs_hash in images:
+                        continue
+                    if not canonical_cid(ipfs_hash):
+                        self.logger.info(f"[image-registry] a registration names {ipfs_hash[:80]!r}, "
+                                         f"not a canonical CID; skipped")
                         continue
                     table = 'trustedZoneImageDetails' if lg['event'] == 'TrustedZoneImageRegistered' else 'imageDetails'
                     try:
@@ -1263,68 +1315,339 @@ class EtnyPoXNode:
                         continue
                     compose = str(record[9])
                     peer = str(args['ipfsPeer']).strip()
-                    images[ipfs_hash] = {
-                        'name': str(args['imageName']), 'version': str(args['version']),
-                        'compose': compose if looks_like_cid(compose) else '',
-                        'peer': peer if re.search(r'^/\S+/p2p/[^/\s]+$', peer) else '',
-                        'pinned': False, 'attempts': 0,
+                    # Names and peers are whatever the registrant wrote: kept short in the record and the log. A peer
+                    # id is taken only in its canonical base58 form, the form Kubo lists in swarm/peering/ls.
+                    entry = {
+                        'name': str(args['imageName'])[:128], 'version': str(args['version'])[:64],
+                        'kind': 'trustedzone' if lg['event'] == 'TrustedZoneImageRegistered' else 'securelock',
+                        'compose': compose if canonical_cid(compose) else '',
+                        'peer': peer if len(peer) <= 256 and PEER_MULTIADDR.fullmatch(peer) else '',
+                        'pinned': False, 'attempts': 0, 'next_at': 0,
                     }
+                    images[ipfs_hash] = entry
                     self.logger.info(
-                        f"[image-registry] {args['imageName']} {args['version']} registered as "
-                        f"{ipfs_hash} (compose {compose}, peer {peer or 'none'}); pinning")
+                        f"[image-registry] {entry['name']!r} {entry['version']!r} registered as {ipfs_hash} "
+                        f"(compose {entry['compose'] or 'none'}, peer {entry['peer'] or 'none'})")
                 frm = to + 1
             self.__image_registry_last_block = frm
-            self.esr_progress.add('registered_images', images)
 
             if self.__image_pin_thread is not None and self.__image_pin_thread.is_alive():
+                self.esr_progress.add('registered_images', images)
                 return
-            cap = int(getattr(config, 'esr_pin_max_attempts', 10))
+            self.__remove_leftover_peerings()
+            limits = self.__registered_image_limits()
+            try:
+                pins = self.storage.recursive_pins()
+            except Exception as e:
+                self.logger.debug(f"image-registry pin/ls failed ({e})")
+                pins = None
             for ipfs_hash, entry in images.items():
-                if entry['pinned'] or entry['attempts'] >= cap:
-                    continue
-                self.__image_pin_thread = threading.Thread(
-                    target=self.__pin_registered_image, args=(ipfs_hash,),
-                    name=f"image-pin-{self.__network_config.name}", daemon=True)
-                self.__image_pin_thread.start()
+                for verdict in ('verified', 'refused', 'unverifiable'):
+                    if entry.get(f'{verdict}_under') not in (None, limits):
+                        entry.pop(verdict, None)
+                        entry.pop(f'{verdict}_under', None)
+                        entry['attempts'] = 0
+                        entry['next_at'] = 0
+                # An entry recorded by 3.7.2 or 3.7.3 can hold a hash or compose that is not a canonical CID, and a
+                # peer of any form: the hash is refused here, under the current bounds, the compose and peer dropped.
+                if not canonical_cid(ipfs_hash) and not entry.get('refused_under'):
+                    entry.update(refused="its hash is not a canonical CID", refused_under=limits, pinned=False)
+                if entry.get('compose') and not canonical_cid(entry['compose']):
+                    entry['compose'] = ''
+                if not (len(entry.get('peer') or '') <= 256 and PEER_MULTIADDR.fullmatch(entry.get('peer') or '')):
+                    entry['peer'] = ''
+                held = {ipfs_hash, entry['compose']} - {''}
+                if pins is not None and entry['pinned'] and not held <= pins:
+                    entry['pinned'] = False
+            self.esr_progress.add('registered_images', images)
+            now = time.time()
+            due = [(entry.get('attempts', 0), order, ipfs_hash) for order, (ipfs_hash, entry) in enumerate(images.items())
+                   if not entry.get('refused_under') and not entry.get('unverifiable_under')
+                   and not (entry['pinned'] and entry.get('verified_under'))
+                   and entry.get('next_at', 0) <= now]
+            if not due:
                 return
+            self.__image_pin_thread = threading.Thread(
+                target=self.__pin_registered_image, args=(min(due)[2],),
+                name=f"image-pin-{self.__network_config.name}", daemon=True)
+            self.__image_pin_thread.start()
         except Exception as e:
             self.logger.debug(f"image-registry replication failed ({e})")
 
     def __pin_registered_image(self, ipfs_hash):
-        """One attempt at pinning a registered image and its compose, with the
-        publisher's node connected and peered while it runs. The outcome is
-        recorded in esr_progress 'registered_images'."""
-        peer_id = None
+        """One attempt at a registered image (__registered_image_attempt),
+        when no other network of this process runs one; otherwise nothing this
+        round. Never raises."""
+        if not _registered_image_lock.acquire(blocking=False):
+            return
         try:
-            images = self.esr_progress.get('registered_images') or {}
-            entry = images.get(ipfs_hash)
-            if entry is None:
+            self.__registered_image_attempt(ipfs_hash)
+            self.__collect_garbage_if_due()
+        except Exception as e:
+            self.logger.warning(f"[image-registry] {ipfs_hash}: {str(e)[:300]}")
+        finally:
+            _registered_image_lock.release()
+
+    def __registered_image_attempt(self, ipfs_hash):
+        """Reach a verdict on a registered image and keep it accordingly.
+
+        An entry Kubo holds pinned without a verdict under the current bounds
+        is judged in place. Any other is judged first by the sizes its tree
+        and compose declare, then -- when the disk keeps esr_min_free_storage_gb
+        free with the tree in, otherwise it waits 10 minutes without an
+        attempt counted -- fetched and judged by scone_image (a verdict reached
+        before under the same bounds is not reached again), and pinned with
+        its compose, image first, while the disk keeps that floor and the
+        repository grows less than twice what the tree declares, plus 2 GiB.
+        The publisher's node is connected while the attempt runs
+        (__peer_publisher). A refusal, and a layer scone_image cannot read
+        (CannotVerify), are recorded under the current bounds; any other
+        failure is tried again later (__retry_registered_image_later). The
+        CIDs this path pinned are recorded with the entry (pinned_cids). What
+        a refused, unreadable or unjudged fetch leaves unpinned is due for the
+        mirror's collector."""
+        images = self.esr_progress.get('registered_images') or {}
+        entry = images.get(ipfs_hash)
+        if entry is None:
+            return
+        limits = self.__registered_image_limits()
+        if entry['pinned']:
+            try:
+                refusal = self.__registered_image_refusal(ipfs_hash, entry)
+                if refusal is not None:
+                    if self.__refuse_registered_image(ipfs_hash, entry, refusal):
+                        _registered_image_gc['due'] = True
+                    return
+            except scone_image.CannotVerify as e:
+                self.__record_registered_image(ipfs_hash, unverifiable=str(e)[:200], unverifiable_under=limits)
                 return
-            entry['attempts'] += 1
-            self.esr_progress.add('registered_images', images)
-            if entry['peer']:
-                try:
-                    self.storage.connect_peer(entry['peer'])
-                    peer_id = self.storage.peering_add(entry['peer'])
-                except Exception as e:
-                    self.logger.info(f"[image-registry] {ipfs_hash}: publisher {entry['peer']} not reachable ({e}); fetching from the swarm")
-            timeout = int(getattr(config, 'registered_image_pin_timeout_seconds', 3600))
-            if entry['compose']:
-                self.storage.pin_add(entry['compose'], timeout=120)
-            self.storage.pin_add(ipfs_hash, timeout=timeout)
-            images = self.esr_progress.get('registered_images') or {}
-            if ipfs_hash in images:
-                images[ipfs_hash]['pinned'] = True
-                self.esr_progress.add('registered_images', images)
+            except Exception as e:
+                self.__retry_registered_image_later(ipfs_hash, entry, e)
+                return
+            self.__record_registered_image(ipfs_hash, verified_under=limits, attempts=0, next_at=0)
+            self.logger.info(f"[image-registry] kept {entry['name']!r} {entry['version']!r} ({ipfs_hash}): "
+                             f"an enclave image the SDK builds")
+            return
+        floor = config.esr_min_free_storage_gb
+        free_gb = HardwareInfoProvider.get_free_storage()
+        if free_gb < floor:
+            _registered_image_gc['due'] = True
+            self.logger.info(f"[image-registry] {ipfs_hash}: {free_gb}GB free, under {floor}GB; not fetched")
+            return
+        judged = entry.get('verified_under') == limits
+        peer_id = self.__peer_publisher(entry['peer']) if entry['peer'] else None
+        try:
+            declared = self.storage.ipfs_cumulative_size(ipfs_hash)
+            refusal = self.__registered_image_size_refusal(entry, declared)
+            if refusal is not None:
+                self.__refuse_registered_image(ipfs_hash, entry, refusal)
+                return
+            if free_gb - declared / 1024 ** 3 < floor:
+                self.__record_registered_image(ipfs_hash, next_at=time.time() + 600)
+                self.logger.info(f"[image-registry] {ipfs_hash}: {free_gb}GB free, under {floor}GB once its "
+                                 f"{declared} bytes are in; not fetched for 10 minutes")
+                return
+            if not judged:
+                refusal = self.__registered_image_content_refusal(ipfs_hash, entry)
+                if refusal is not None:
+                    _registered_image_gc['due'] = True
+                    self.__refuse_registered_image(ipfs_hash, entry, refusal)
+                    return
+                judged = True
+            self.__pin_registered_cids(ipfs_hash, entry, declared)
+            self.__record_registered_image(ipfs_hash, pinned=True, verified_under=limits, attempts=0, next_at=0)
             self.storage.provide(ipfs_hash)
             if entry['compose']:
                 self.storage.provide(entry['compose'])
-            self.logger.info(f"[image-registry] pinned {entry['name']} {entry['version']} ({ipfs_hash}) and its compose")
+            self.logger.info(f"[image-registry] pinned {entry['name']!r} {entry['version']!r} ({ipfs_hash})"
+                             f"{' and its compose' if entry['compose'] else ''}: an enclave image the SDK builds")
+        except scone_image.CannotVerify as e:
+            _registered_image_gc['due'] = True
+            self.__record_registered_image(ipfs_hash, unverifiable=str(e)[:200], unverifiable_under=limits)
+            self.logger.info(f"[image-registry] {ipfs_hash} cannot be read by this agent ({str(e)[:200]})")
         except Exception as e:
-            self.logger.warning(f"[image-registry] pin of {ipfs_hash} failed ({e}); retried next round")
+            if not judged:
+                _registered_image_gc['due'] = True
+            self.__retry_registered_image_later(ipfs_hash, entry, e)
         finally:
             if peer_id:
-                self.storage.peering_rm(peer_id)
+                self.__unpeer_publisher(peer_id)
+
+    def __pin_registered_cids(self, ipfs_hash, entry, declared):
+        """Pin the image, then its compose, under a watch that ends the pin
+        when the disk falls under esr_min_free_storage_gb or the repository
+        grows past twice what the tree declares, plus 2 GiB. Each CID this
+        pins that Kubo did not hold before is added to the entry's
+        pinned_cids as soon as it is pinned."""
+        floor = config.esr_min_free_storage_gb
+        before = self.storage.recursive_pins()
+        start = self.storage.repo_size()
+        limit = 2 * declared + 2 * 1024 ** 3
+
+        def watch():
+            if HardwareInfoProvider.get_free_storage() < floor:
+                return f"the disk fell under {floor}GB free"
+            grown = self.storage.repo_size() - start
+            if grown > limit:
+                return f"the pin grew the repository by {grown} bytes, for a tree that declares {declared}"
+            return None
+
+        timeout = int(getattr(config, 'registered_image_pin_timeout_seconds', 3600))
+        for cid, seconds in ((ipfs_hash, timeout), (entry['compose'], 120)):
+            if not cid:
+                continue
+            self.storage.pin_add_watched(cid, seconds, watch)
+            if cid not in before:
+                held = (self.esr_progress.get('registered_images') or {}).get(ipfs_hash, {}).get('pinned_cids') or []
+                self.__record_registered_image(ipfs_hash, pinned_cids=sorted(set(held) | {cid}))
+
+    def __retry_registered_image_later(self, ipfs_hash, entry, error):
+        """Count a failed attempt and set the next one after a delay that
+        doubles from 10 minutes to 6 hours."""
+        attempts = entry.get('attempts', 0) + 1
+        delay = min(600 * 2 ** (attempts - 1), 6 * 3600)
+        self.__record_registered_image(ipfs_hash, attempts=attempts, next_at=time.time() + delay)
+        self.logger.warning(f"[image-registry] {ipfs_hash} not judged or pinned ({str(error)[:300]}); "
+                            f"tried again in {delay}s")
+
+    def __registered_image_refusal(self, ipfs_hash, entry):
+        """Why this registered image is not kept on this node, or None: by the
+        sizes it declares (__registered_image_size_refusal), then by its
+        content (__registered_image_content_refusal). Raises when the image
+        cannot be read now, or not by this agent (scone_image.CannotVerify),
+        neither being a refusal."""
+        refusal = self.__registered_image_size_refusal(entry, self.storage.ipfs_cumulative_size(ipfs_hash))
+        return refusal if refusal is not None else self.__registered_image_content_refusal(ipfs_hash, entry)
+
+    def __registered_image_size_refusal(self, entry, declared):
+        """Why the sizes this registered image declares keep it off this node,
+        or None: its tree must declare at most registered_image_max_bytes and
+        its compose at most registered_compose_max_bytes."""
+        if declared > config.registered_image_max_bytes:
+            return f"its tree declares {declared} bytes, over the {config.registered_image_max_bytes}-byte limit"
+        if entry['compose']:
+            compose = self.storage.ipfs_cumulative_size(entry['compose'])
+            if compose > config.registered_compose_max_bytes:
+                return f"its compose declares {compose} bytes, over the {config.registered_compose_max_bytes}-byte limit"
+        return None
+
+    def __registered_image_content_refusal(self, ipfs_hash, entry):
+        """Why scone_image does not find, within
+        registered_image_verify_timeout_seconds, the enclave the Ethernity
+        CLOUD SDK builds for the registry table the image was registered in
+        (either table for an entry recorded without one), or None."""
+        roles = [entry['kind']] if entry.get('kind') in scone_image.ROLES else list(scone_image.ROLES)
+        reasons = []
+        for role in roles:
+            try:
+                scone_image.verify(self.storage.open_ipfs_path, ipfs_hash, role,
+                                   config.registered_image_scan_max_bytes,
+                                   config.registered_image_inflate_max_bytes,
+                                   config.registered_image_verify_timeout_seconds)
+                return None
+            except scone_image.NotAnEnclaveImage as e:
+                reasons.append(str(e))
+        return "; ".join(reasons)
+
+    def __registered_image_limits(self):
+        """The bounds a registered image is judged under. A verdict recorded
+        under others is reached again."""
+        return (f"v{scone_image.VERSION}/{config.registered_image_max_bytes}/{config.registered_compose_max_bytes}/"
+                f"{config.registered_image_scan_max_bytes}/{config.registered_image_inflate_max_bytes}")
+
+    def __record_registered_image(self, ipfs_hash, **fields):
+        images = self.esr_progress.get('registered_images') or {}
+        if ipfs_hash in images:
+            images[ipfs_hash].update(fields)
+            self.esr_progress.add('registered_images', images)
+
+    def __refuse_registered_image(self, ipfs_hash, entry, refusal):
+        """Unpin the CIDs this path pinned for the entry (pinned_cids), and
+        record the refusal under the current bounds, keeping only what a later
+        round reads. A CID another entry of this network that is not refused
+        uses as its image or compose stays pinned, and is added to that
+        entry's pinned_cids. An entry pinned by 3.7.2 or 3.7.3 records no
+        pinned_cids, and its pins stay: they cannot be told from another use
+        of the same CIDs on this node. Returns whether anything was unpinned;
+        raises when an unpin does not take, before the refusal is recorded."""
+        refusal = str(refusal)[:200]
+        images = self.esr_progress.get('registered_images') or {}
+        users = {}
+        for h, e in images.items():
+            if h != ipfs_hash and not e.get('refused_under'):
+                for cid in (h, e.get('compose')):
+                    if cid:
+                        users.setdefault(cid, h)
+        unpinned = False
+        for cid in entry.get('pinned_cids') or []:
+            if cid in users:
+                user = images[users[cid]]
+                user['pinned_cids'] = sorted(set(user.get('pinned_cids') or []) | {cid})
+            else:
+                self.storage.unpin(cid)
+                unpinned = True
+        if ipfs_hash in images:
+            images[ipfs_hash] = {
+                'name': entry['name'][:40], 'version': entry['version'][:16], 'kind': entry.get('kind'),
+                'compose': entry['compose'], 'peer': entry['peer'], 'pinned': False, 'attempts': 0, 'next_at': 0,
+                'refused': refusal, 'refused_under': self.__registered_image_limits(),
+            }
+        self.esr_progress.add('registered_images', images)
+        self.logger.warning(f"[image-registry] refused {entry['name']!r} {entry['version']!r} ({ipfs_hash}): "
+                            f"{refusal!r}")
+        return unpinned
+
+    def __peer_publisher(self, multiaddr):
+        """Connect to the publisher's IPFS node and keep it in the peering list
+        while the attempt runs. Returns the peer id when this attempt added
+        the peering, which is recorded in esr_progress
+        'registered_image_peerings' first and removed after
+        (__unpeer_publisher); None when the peer was in the list already
+        (Ethernity's IPFS node, a validator) or is unreachable."""
+        try:
+            self.storage.connect_peer(multiaddr)
+            peer_id = multiaddr.rsplit('/p2p/', 1)[1]
+            if peer_id in self.storage.peering_ids():
+                return None
+            added = set(self.esr_progress.get('registered_image_peerings') or []) | {peer_id}
+            self.esr_progress.add('registered_image_peerings', sorted(added))
+            return self.storage.peering_add(multiaddr)
+        except Exception as e:
+            self.logger.info(f"[image-registry] publisher {multiaddr} not reachable ({str(e)[:200]}); "
+                             f"fetching from the swarm")
+            return None
+
+    def __unpeer_publisher(self, peer_id):
+        """Remove a publisher peering __peer_publisher added, and its record."""
+        self.storage.peering_rm(peer_id)
+        added = set(self.esr_progress.get('registered_image_peerings') or []) - {peer_id}
+        self.esr_progress.add('registered_image_peerings', sorted(added))
+
+    def __remove_leftover_peerings(self):
+        """Remove the publisher peerings recorded in esr_progress
+        'registered_image_peerings' that no attempt of this run added: an
+        earlier run of this agent stopped while they were in place. Runs once
+        per replication handle."""
+        if self.__peerings_checked:
+            return
+        self.__peerings_checked = True
+        for peer_id in self.esr_progress.get('registered_image_peerings') or []:
+            self.__unpeer_publisher(peer_id)
+
+    def __collect_garbage_if_due(self):
+        """On a replication-only agent, which runs no hourly cleanup, collect
+        what refused, unreadable and failed attempts fetched, and what the
+        disk floor stopped: at most once an hour in the process, under
+        _registered_image_lock, so no registered-image pin holds Kubo's pin
+        lock while the collector waits for it."""
+        if (not config.replication_only or not _registered_image_gc['due']
+                or time.time() - _registered_image_gc['at'] < 3600):
+            return
+        _registered_image_gc.update(at=time.time(), due=False)
+        try:
+            self.storage.repo_gc_streamed()
+        except Exception as e:
+            self.logger.warning(f"[image-registry] garbage collection failed ({str(e)[:200]})")
 
     def intake_backend(self):
         """What the payload intake needs from this network's handle: the PoX
@@ -1341,15 +1664,13 @@ class EtnyPoXNode:
         order result CIDs, refreshing their cache timestamps so the retention
         sweep never ages out live content.
 
-        Previously replication only ran as a side-effect of the hourly IPFS
-        cache cleanup (ESR-only, and dead until the fromBlock fix), so freshly
-        committed state could sit un-replicated for up to an hour.
-
         Best-effort: any error is logged and the loop waits for the next tick.
-        Exits when stop_event is set.
+        It runs for the life of the process: the daily restart of the
+        order-processing threads (stop_event) does not stop it, and
+        start_esr_replication_for_network starts it once per network.
         """
         interval = float(getattr(config, 'esr_replication_interval_seconds', 300))
-        while not stop_event.is_set():
+        while True:
             try:
                 self.__reset_giveups_on_validator_change()
                 if self.__esr is not None:
@@ -1365,11 +1686,7 @@ class EtnyPoXNode:
                 self.__maybe_sync_ipfs_peers()
             except Exception as e:
                 self.logger.warning(f"[esr-replication] round failed: {e}")
-            # Sleep in short slices so stop_event is honored promptly.
-            waited = 0.0
-            while waited < interval and not stop_event.is_set():
-                time.sleep(2)
-                waited += 2
+            time.sleep(interval)
 
     def __maybe_clear_ipfs_cache(self):
         """Run the pin cleanup at most once per configured interval.
@@ -1492,6 +1809,12 @@ class EtnyPoXNode:
         except Exception as e:
             logger.warning(f"ESR replication skipped during cleanup: {e}")
 
+        # A registered image this node keeps as one the SDK builds stays pinned for the registered-image replication,
+        # which shares this esr_progress.
+        for ipfs_hash, entry in (self.esr_progress.get('registered_images') or {}).items():
+            if entry.get('verified_under'):
+                keep_hashes.extend(c for c in (ipfs_hash, entry.get('compose')) if c)
+
         retention_hours = retention_seconds / 3600
         removed = 0
         for hash in list(self.ipfs_cache.get_values):
@@ -1538,7 +1861,7 @@ class EtnyPoXNode:
         if str(os.environ.get('IPFS_PERIODIC_GC', '1')).strip() not in ('0', 'false', 'False'):
             try:
                 logger.info("Running periodic IPFS garbage collection to reclaim unpinned data")
-                self.storage.repo_gc()
+                collect_garbage(self.storage, logger)
             except Exception as gc_err:
                 logger.warning(f"Periodic IPFS garbage collection skipped: {gc_err}")
 
@@ -2961,7 +3284,7 @@ class EtnyPoXNode:
             if next_dp_request == True:
                 break
 
-        self.storage.repo_gc() # Running garbage colleciton on ipfs before exiting
+        collect_garbage(self.storage, logger)  # Running garbage collection on ipfs before exiting
 
 
     def wait_for_order_approval(self):
@@ -4058,13 +4381,17 @@ def start_esr_replication_for_network(network):
         # Build a dedicated node handle for this network's replication. The SGX
         # integration test and the gas-wait loop are both skipped for a
         # replication-only handle, so construction never blocks on them.
-        try:
-            node = EtnyPoXNode(network, replication_only=True)
-        except Exception as e:
-            config.logger.warning(f"[esr-replication:{net_name}] could not start: {e}")
-            with _esr_replication_lock:
-                _esr_replication_started.discard(net_name)
-            return
+        # A handle that cannot be built (the RPC unreachable at boot) is built again, after a delay doubling from
+        # 30 seconds to 30 minutes.
+        node = None
+        retry_in = 30
+        while node is None:
+            try:
+                node = EtnyPoXNode(network, replication_only=True)
+            except Exception as e:
+                config.logger.warning(f"[esr-replication:{net_name}] could not start ({e}); trying again in {retry_in}s")
+                time.sleep(retry_in)
+                retry_in = min(retry_in * 2, 1800)
 
         if _payload_intake is not None:
             # An -unsafe network's requests are on the contract of the network
@@ -4083,10 +4410,7 @@ def start_esr_replication_for_network(network):
             config.logger.info(
                 f"[esr-replication:{net_name}] waiting for this network's integration "
                 f"tests before starting replication")
-            while not stop_event.is_set() and not settled.wait(timeout=5):
-                pass
-            if stop_event.is_set():
-                return
+            settled.wait()
             config.logger.info(
                 f"[esr-replication:{net_name}] integration tests have run; starting replication")
 

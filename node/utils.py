@@ -81,6 +81,61 @@ def looks_like_cid(value):
             and set(cid[1:]) <= set("abcdefghijklmnopqrstuvwxyz234567"))
 
 
+_BASE58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
+
+
+def _varint(raw, i):
+    """The unsigned varint at raw[i] and the index after it, read as go-varint
+    reads one: at most 9 bytes, and minimally encoded."""
+    value = shift = 0
+    for n in range(9):
+        if i >= len(raw):
+            break
+        byte = raw[i]
+        i += 1
+        if byte < 0x80:
+            if byte == 0 and shift > 0:
+                raise ValueError("not a minimal varint")
+            return value | byte << shift, i
+        if n == 8:
+            break
+        value |= (byte & 0x7F) << shift
+        shift += 7
+    raise ValueError("not a varint")
+
+
+def canonical_cid(value):
+    """True when `value` is a CID in the one text form Kubo prints for it: a
+    CIDv0 whose base58btc text decodes to a 34-byte sha2-256 multihash, or a
+    CIDv1 ('b' base32) that is well formed and re-encodes to the same text, so
+    its padding bits are zero. pin/ls and files/stat name CIDs in that form.
+    A 46-character base58 text starting "Qm" decodes to less than 2**269 and
+    has no leading zero digit, so it is the only text of its 34 bytes."""
+    if not isinstance(value, str):
+        return False
+    if value.startswith("Qm") and len(value) == 46:
+        number = 0
+        for c in value:
+            digit = _BASE58.find(c)
+            if digit < 0:
+                return False
+            number = number * 58 + digit
+        return number.to_bytes(34, "big")[:2] == b"\x12\x20"
+    if not looks_like_cid(value) or value != value.strip():
+        return False
+    body = value[1:]
+    try:
+        raw = base64.b32decode(body.upper() + "=" * (-len(body) % 8))
+        version, i = _varint(raw, 0)
+        _, i = _varint(raw, i)
+        _, i = _varint(raw, i)
+        length, i = _varint(raw, i)
+    except ValueError:
+        return False
+    return (version == 1 and i + length == len(raw)
+            and base64.b32encode(raw).decode().rstrip("=").lower() == body)
+
+
 def get_or_generate_uuid(filename):
     if os.path.exists(filename):
         with open(filename) as f:
@@ -127,6 +182,23 @@ def get_node_geo():
     except Exception as e:
         print('error = ', e)
         return ''
+
+class PinAborted(Exception):
+    """A pin/add its watcher ended, with the watcher's reason."""
+
+
+class _ResponseStream:
+    """A streamed Kubo API response read as a file: read(n) and close()."""
+
+    def __init__(self, resp):
+        self._resp = resp
+
+    def read(self, size):
+        return self._resp.raw.read(size)
+
+    def close(self):
+        self._resp.close()
+
 
 class Storage:
     def __init__(self, ipfs_swarm, ipfs_timeout, client_connect_url, gateway_url, cache, ipfs_version_cache, logger, target, kubo_url, kubo_version, network_name):
@@ -1507,6 +1579,113 @@ class Storage:
             self.logger.error(e)
             raise
 
+    def open_ipfs_path(self, path, seconds):
+        """The bytes at `path` (/ipfs/<cid>/...) as a stream to read(n) and
+        close(), which Kubo ends after `seconds`. Raises FileNotFoundError when
+        the tree has no such path."""
+        try:
+            resp = self._api_call('cat', params={'arg': path, 'timeout': f'{seconds}s'}, stream=True,
+                                  timeout=seconds + 30)
+        except Exception as e:
+            if 'no link named' in str(e):
+                raise FileNotFoundError(path) from e
+            raise
+        return _ResponseStream(resp)
+
+    def ipfs_cumulative_size(self, cid, timeout=60):
+        """The size in bytes the root block of `cid` declares for the whole
+        tree (files/stat CumulativeSize); only that block is fetched. The
+        publisher writes that number, so it bounds nothing by itself."""
+        stat = self._api_call('files/stat', params={'arg': f'/ipfs/{cid}', 'timeout': f'{timeout}s'},
+                              timeout=timeout + 30)
+        return int(stat['CumulativeSize'])
+
+    def recursive_pins(self):
+        """The CIDs Kubo holds pinned recursively."""
+        return set((self._api_call('pin/ls', params={'type': 'recursive'}, timeout=120).get('Keys') or {}).keys())
+
+    def peering_ids(self):
+        """The peer ids in Kubo's peering list."""
+        peers = self._api_call('swarm/peering/ls', timeout=10).get('Peers') or []
+        return {p.get('ID') for p in peers}
+
+    def repo_size(self):
+        """The bytes Kubo's repository holds (repo/stat RepoSize)."""
+        return int(self._api_call('repo/stat', params={'size-only': 'true'}, timeout=60)['RepoSize'])
+
+    def unpin(self, cid):
+        """pin/rm `cid`, whatever the connection state recorded; done when Kubo
+        no longer holds it pinned recursively, which is checked. Raises
+        otherwise."""
+        try:
+            self._api_call('pin/rm', params={'arg': cid}, timeout=120)
+        except Exception as e:
+            if 'not pinned' not in str(e).lower():
+                raise
+        if cid in self.recursive_pins():
+            raise Exception(f"pin/rm {cid} left it pinned")
+
+    def repo_gc_streamed(self):
+        """repo/gc, read to its end: the collector waits for every pin in
+        flight and then runs for as long as the repository needs, so no read
+        timeout applies."""
+        resp = self._api_call('repo/gc', stream=True, timeout=(30, None))
+        try:
+            for _ in resp.iter_lines():
+                pass
+        finally:
+            resp.close()
+
+    def pin_add_watched(self, cid, timeout, watch, interval=10):
+        """pin/add `cid` while `watch()` is asked every `interval` seconds
+        whether to go on. When it returns a reason, or raises three times in a
+        row, the request is closed, which ends the pin in Kubo, and
+        PinAborted(reason) is raised; the blocks fetched so far stay unpinned
+        for the collector."""
+        resp = self._api_call('pin/add', params={'arg': cid, 'progress': 'true', 'timeout': f'{timeout}s'},
+                              stream=True, timeout=interval + 120)
+        reason = []
+        done = threading.Event()
+
+        def watcher():
+            failures = 0
+            while not done.wait(interval):
+                try:
+                    why = watch()
+                    failures = 0
+                except Exception as e:
+                    failures += 1
+                    self.logger.warning(f"pin/add {cid}: its watch failed ({e})")
+                    why = f"its watch failed {failures} times in a row ({e})" if failures >= 3 else None
+                if why:
+                    reason.append(why)
+                    resp.close()
+                    return
+
+        threading.Thread(target=watcher, name=f"pin-watch-{cid[:12]}", daemon=True).start()
+        pinned = False
+        try:
+            for line in resp.iter_lines():
+                if not line:
+                    continue
+                message = json.loads(line)
+                if message.get('Type') == 'error':
+                    raise Exception(f"pin/add {cid}: {message.get('Message')}")
+                if message.get('Pins'):
+                    pinned = True
+        except Exception:
+            if reason:
+                raise PinAborted(reason[0])
+            raise
+        finally:
+            done.set()
+            resp.close()
+        if reason:
+            raise PinAborted(reason[0])
+        # Kubo reports a failure after the body has started in a trailer, and the body then simply ends.
+        if not pinned:
+            raise Exception(f"pin/add {cid} ended without pinning it")
+
     def is_pinned(self, cid: str) -> bool:
         if not self.connected:
             return False
@@ -1600,11 +1779,16 @@ class Storage:
             self.logger.error(e)
             raise
 
+_shared_caches = {}
+_shared_caches_lock = threading.Lock()
+
+
 class Cache:
     def __init__(self, items_limit, filepath, store_type=OrderedDict):
         self.items_limit = items_limit
         self.filepath = filepath
         self.store_type = store_type
+        self._lock = threading.RLock()
         try:
             if not os.path.exists(filepath):
                 os.makedirs(os.path.dirname(filepath), exist_ok=True)
@@ -1614,12 +1798,32 @@ class Cache:
         except Exception as e:
             self.mem = store_type({})
             self._update_file()
+
+    @classmethod
+    def shared(cls, items_limit, filepath):
+        """The one Cache of `filepath` in this process, for every handle that
+        keeps state in that file. A Cache writes its whole content on each
+        change."""
+        key = os.path.abspath(filepath)
+        with _shared_caches_lock:
+            cache = _shared_caches.get(key)
+            if cache is None:
+                cache = _shared_caches[key] = cls(items_limit, filepath)
+            return cache
+
     def _update_file(self):
-        with open(self.filepath, 'w') as f:
+        """Write the content as one json.dumps snapshot -- the C encoder, which
+        no other thread interleaves with -- to a temporary file that then
+        replaces the file, so the file is always a whole snapshot."""
+        with self._lock:
             try:
-                json.dump(self.mem, f)
+                text = json.dumps(self.mem)
             except TypeError:
-                json.dump(list(self.mem), f)
+                text = json.dumps(list(self.mem))
+            temporary = f"{self.filepath}.tmp"
+            with open(temporary, 'w') as f:
+                f.write(text)
+            os.replace(temporary, self.filepath)
 
     def _reload_cache(self):
         if os.path.exists(self.filepath):
@@ -1629,15 +1833,17 @@ class Cache:
             self.mem = self.store_type({})
 
     def add(self, key, value):
-        self.mem[key] = value
-        if len(self.mem) == self.items_limit + 1:
-            self.mem.popitem(last=False)
-        self._update_file()
-    def rem(self, key):
-        if key in self.mem:
-            removed_value = self.mem.pop(key)
+        with self._lock:
+            self.mem[key] = value
+            if len(self.mem) == self.items_limit + 1:
+                self.mem.popitem(last=False)
             self._update_file()
-            return removed_value
+    def rem(self, key):
+        with self._lock:
+            if key in self.mem:
+                removed_value = self.mem.pop(key)
+                self._update_file()
+                return removed_value
         return None
     def get(self, key):
         return self.mem.get(key)

@@ -219,11 +219,26 @@ cas_session_registry_addresses = {
 # incrementally from where the previous one stopped).
 cas_session_registry_scan_blocks = int(os.environ.get('CAS_SESSION_REGISTRY_SCAN_BLOCKS', 200000))
 # Registered images (ECImageRegistryV2 ImageRegistered / TrustedZoneImageRegistered):
-# the replication loop pins each registered image tree and its compose from
-# the publisher's IPFS node. How far back the first scan reaches, and how long
-# one pin attempt of an image tree (about 1.2 GB) may take.
+# the replication loop pins each registered image that scone_image.py verifies,
+# with its compose, from the publisher's IPFS node. How far back the first scan
+# reaches, and how long one pin attempt of an image tree (about 1.3 GB) may take.
 image_registry_scan_blocks = int(os.environ.get('IMAGE_REGISTRY_SCAN_BLOCKS', 200000))
 registered_image_pin_timeout_seconds = int(os.environ.get('REGISTERED_IMAGE_PIN_TIMEOUT_SECONDS', 3600))
+# A registered image is pinned only when its tree declares at most
+# REGISTERED_IMAGE_MAX_BYTES and its compose at most REGISTERED_COMPOSE_MAX_BYTES,
+# and scone_image.py finds the enclave's SCONE binary-fs within the first
+# REGISTERED_IMAGE_SCAN_MAX_BYTES of its layers, newest first, decompressing at
+# most REGISTERED_IMAGE_INFLATE_MAX_BYTES of them. A securelock image tree is
+# about 1.3 GB, its binary-fs layer about 175 MB and the library in it about
+# 441 MB. A pin that grows the repository by more than twice what the tree
+# declares, plus 2 GiB, is ended and tried again later.
+registered_image_max_bytes = int(os.environ.get('REGISTERED_IMAGE_MAX_BYTES', 3 * 1024 ** 3))
+registered_compose_max_bytes = int(os.environ.get('REGISTERED_COMPOSE_MAX_BYTES', 1024 ** 2))
+registered_image_scan_max_bytes = int(os.environ.get('REGISTERED_IMAGE_SCAN_MAX_BYTES', 1024 ** 3))
+registered_image_inflate_max_bytes = int(os.environ.get('REGISTERED_IMAGE_INFLATE_MAX_BYTES', 2 * 1024 ** 3))
+# How long one verification may read a registered image before it is ended and
+# tried again on a later round; an SDK image's verification reads about 200 MB.
+registered_image_verify_timeout_seconds = int(os.environ.get('REGISTERED_IMAGE_VERIFY_TIMEOUT_SECONDS', 900))
 
 # ethernity-cas ValidatorRegistry (validator identity + governance + endpoints).
 # When set for a network, the node RESOLVES its CAS from chain before each v3
