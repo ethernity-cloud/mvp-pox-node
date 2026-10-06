@@ -1,3 +1,9 @@
+v3.7.5
+the bloxberg testnet and its -unsafe twin read the image registry 0xa372a6e1
+  (ECImageRegistryV3, whose securelock names belong to their publishers), and
+  the bloxberg testnet's CAS sessions are replicated from the SessionRegistry
+  0x44442968, whose records are keyed by name and hash
+
 v3.7.4
 a registered image is pinned only when it is an enclave image the Ethernity
   CLOUD SDK builds (scone_image.py): its lib/libbinary-fs.so, the SCONE
