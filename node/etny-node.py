@@ -35,12 +35,13 @@ task_lock = threading.Lock()
 # polling. Sharing the lock keeps get_task_running_on and the acquire/release
 # pair mutually exclusive.
 task_cond = threading.Condition(task_lock)
-# SGX integration tests, per trustedzone image. A network runs the trustedzones
-# of its TRUSTEDZONE_IMAGES whose platform requirement (config.
-# TRUSTEDZONE_REQUIREMENTS) a passed test of one of its INTEGRATION_TEST_IMAGES
-# covers. An image's test passes at most once per process; a failed one runs
-# again once its backoff has elapsed. State outlives the EtnyPoXNode handles,
-# which process_network rebuilds.
+# SGX integration tests, per trustedzone image. A network runs a trustedzone of
+# its TRUSTEDZONE_IMAGES that is one of its INTEGRATION_TEST_IMAGES once that
+# image's test passed, and any other once a passed test of one of its
+# INTEGRATION_TEST_IMAGES covers its platform requirement (config.
+# TRUSTEDZONE_REQUIREMENTS). An image's test passes at most once per process; a
+# failed one runs again once its backoff has elapsed. State outlives the
+# EtnyPoXNode handles, which process_network rebuilds.
 #
 #   integration_test_lock     Reentrant. Held across a whole test, so one test
 #                             runs at a time: the tests share the docker and
@@ -2166,8 +2167,9 @@ class EtnyPoXNode:
         # Backstop to the DO-request filter, for an order this node holds but
         # cannot run, such as one resumed after a restart whose integration
         # tests no longer pass: closed with a refusal rather than left
-        # PROCESSING. The requirement's failed tests run once more first, so a
-        # test that failed in transit does not cost an order the platform runs.
+        # PROCESSING. The failed tests that decide its trustedzone run once
+        # more first, so a test that failed in transit does not cost an order
+        # the platform runs.
         refusal = self.__trustedzone_refusal(metadata[1])
         if refusal and self.__requested_trustedzone(metadata[1]) in self.__trustedzones:
             self.__retest_requirement(self.__requested_trustedzone(metadata[1]))
@@ -2808,6 +2810,10 @@ class EtnyPoXNode:
 
         logger.debug('Cleaning up swift-stream bucket.')
         self.swift_stream_service.delete_bucket(bucket_name)
+        # The trustedzones read the integration bucket's .env before the
+        # order's, so one left by an interrupted integration test would run
+        # that test in place of this order.
+        self.swift_stream_service.delete_bucket('etny-bucket-integration')
         logger.debug('Creating new bucket.')
         self.order_folder = f'./orders/{order_id}/etny-order-{order_id}'
         self.create_folder_v1(self.order_folder)
@@ -4037,12 +4043,18 @@ class EtnyPoXNode:
         self.__log_runnable_trustedzones()
 
     def __retest_requirement(self, trustedzone):
-        """Run now, past any backoff, the failed integration tests of the
-        platform requirement `trustedzone` names. The caller holds the task
+        """Run now, past any backoff, the failed integration tests that decide
+        whether this node runs `trustedzone`: its own when it has one, else
+        those of the platform requirement it names. The caller holds the task
         slot."""
-        requirement = self.__trustedzones.get(trustedzone)
-        for image in self.__integration_images:
-            if self.__trustedzones[image] != requirement or image in integration_test_passed:
+        if trustedzone in self.__integration_images:
+            images = [trustedzone]
+        else:
+            requirement = self.__trustedzones.get(trustedzone)
+            images = [image for image in self.__integration_images
+                      if self.__trustedzones[image] == requirement]
+        for image in images:
+            if image in integration_test_passed:
                 continue
             with integration_test_lock:
                 failures, _ = integration_test_retry.get(image, (0, 0.0))
@@ -4050,16 +4062,19 @@ class EtnyPoXNode:
             self.__run_integration_test_if_due(image)
 
     def __runnable_trustedzones(self):
-        """The trustedzones of this network this node runs: those whose
-        platform requirement a passed integration test covers, every one under
-        SKIP_INTEGRATION_TEST, none on a replication-only handle."""
+        """The trustedzones of this network this node runs: one with an
+        integration test of its own once that test passed, any other once a
+        passed integration test covers its platform requirement; every one
+        under SKIP_INTEGRATION_TEST, none on a replication-only handle."""
         if self.__replication_only:
             return set()
         if config.skip_integration_test:
             return set(self.__trustedzones)
-        met = {self.__trustedzones[image] for image in self.__integration_images
-               if image in integration_test_passed}
-        return {name for name, requirement in self.__trustedzones.items() if requirement in met}
+        tested = set(self.__integration_images)
+        passed = tested & integration_test_passed
+        met = {self.__trustedzones[image] for image in passed}
+        return {name for name, requirement in self.__trustedzones.items()
+                if (name in passed if name in tested else requirement in met)}
 
     def __log_runnable_trustedzones(self):
         runnable = self.__runnable_trustedzones()
@@ -4087,6 +4102,8 @@ class EtnyPoXNode:
         if requirement is None:
             return f"{trustedzone!r} is not a trustedzone of this network"
         if trustedzone not in self.__runnable_trustedzones():
+            if trustedzone in self.__integration_images:
+                return f"the integration test of {trustedzone} has not passed on this platform"
             return (f"{trustedzone} needs {requirement} and no {requirement} "
                     f"integration test passed on this platform")
         return None

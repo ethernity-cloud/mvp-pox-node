@@ -53,12 +53,12 @@ class NetworkConfig:
     gas_price_measure: str
     minimum_gas_at_start: int
     task_execution_price: int
-    # The trustedzones the node tests, one per platform requirement it should
-    # meet (comma-separated names from trustedzone_images).
+    # The trustedzones the node tests (comma-separated names from
+    # trustedzone_images); a tested trustedzone runs once its own test passed.
     integration_test_images: str
     # The network's trustedzones, comma-separated "name:requirement" (see
-    # trustedzone_requirements); the node runs those whose requirement one of
-    # its passed integration tests covers.
+    # trustedzone_requirements); the node runs an untested one once a passed
+    # integration test covers its requirement.
     trustedzone_images: str
     eip1559: bool
     middleware: str

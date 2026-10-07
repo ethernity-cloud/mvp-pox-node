@@ -1,3 +1,13 @@
+v3.7.6
+the bloxberg testnet and its -unsafe twin run the integration tests of their
+  nodenithy trustedzones (etny-nodenithy-testnet,
+  etny-nodenithy-testnet-unsafe) after the pynithy ones
+a trustedzone with an integration test of its own runs once that test
+  passed; one without runs once a passed test covers its platform
+  requirement, as before
+an order's prerequisites remove the integration bucket, whose .env the
+  trustedzones read before the order's own
+
 v3.7.5
 the bloxberg testnet and its -unsafe twin read the image registry 0xa372a6e1
   (ECImageRegistryV3, whose securelock names belong to their publishers), and
