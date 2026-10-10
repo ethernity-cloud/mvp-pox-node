@@ -1394,7 +1394,11 @@ class EtnyPoXNode:
         its compose, image first, while the disk keeps that floor and the
         repository grows less than twice what the tree declares, plus 2 GiB.
         The publisher's node is connected while the attempt runs
-        (__peer_publisher). A refusal, and a layer scone_image cannot read
+        (__peer_publisher); a named publisher that cannot be reached leaves
+        the fetch to a provider that takes a connection
+        (Storage.reachable_provider), and without one the attempt is counted
+        and the image tried later, nothing fetched: a fetch of a tree nobody
+        serves would otherwise run to its bounds. A refusal, and a layer scone_image cannot read
         (CannotVerify), are recorded under the current bounds; any other
         failure is tried again later (__retry_registered_image_later). The
         CIDs this path pinned are recorded with the entry (pinned_cids). What
@@ -1429,8 +1433,14 @@ class EtnyPoXNode:
             self.logger.info(f"[image-registry] {ipfs_hash}: {free_gb}GB free, under {floor}GB; not fetched")
             return
         judged = entry.get('verified_under') == limits
-        peer_id = self.__peer_publisher(entry['peer']) if entry['peer'] else None
+        peer_id, connected = self.__peer_publisher(entry['peer']) if entry['peer'] else (None, True)
         try:
+            if not connected and not self.storage.reachable_provider(ipfs_hash):
+                self.__retry_registered_image_later(
+                    ipfs_hash, entry,
+                    Exception(f"no source: its publisher {entry['peer']} is not reachable and no provider "
+                              f"of the tree takes a connection"))
+                return
             declared = self.storage.ipfs_cumulative_size(ipfs_hash)
             refusal = self.__registered_image_size_refusal(entry, declared)
             if refusal is not None:
@@ -1593,23 +1603,23 @@ class EtnyPoXNode:
 
     def __peer_publisher(self, multiaddr):
         """Connect to the publisher's IPFS node and keep it in the peering list
-        while the attempt runs. Returns the peer id when this attempt added
+        while the attempt runs. Returns (peer id, True) when this attempt added
         the peering, which is recorded in esr_progress
         'registered_image_peerings' first and removed after
-        (__unpeer_publisher); None when the peer was in the list already
-        (Ethernity's IPFS node, a validator) or is unreachable."""
+        (__unpeer_publisher); (None, True) when the peer was in the list
+        already (Ethernity's IPFS node, a validator); (None, False) when it is
+        unreachable."""
         try:
             self.storage.connect_peer(multiaddr)
             peer_id = multiaddr.rsplit('/p2p/', 1)[1]
             if peer_id in self.storage.peering_ids():
-                return None
+                return None, True
             added = set(self.esr_progress.get('registered_image_peerings') or []) | {peer_id}
             self.esr_progress.add('registered_image_peerings', sorted(added))
-            return self.storage.peering_add(multiaddr)
+            return self.storage.peering_add(multiaddr), True
         except Exception as e:
-            self.logger.info(f"[image-registry] publisher {multiaddr} not reachable ({str(e)[:200]}); "
-                             f"fetching from the swarm")
-            return None
+            self.logger.info(f"[image-registry] publisher {multiaddr} not reachable ({str(e)[:200]})")
+            return None, False
 
     def __unpeer_publisher(self, peer_id):
         """Remove a publisher peering __peer_publisher added, and its record."""

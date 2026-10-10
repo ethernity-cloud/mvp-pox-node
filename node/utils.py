@@ -126,6 +126,28 @@ def next_registered_image(images, now):
     return min(due)[2] if due else None
 
 
+# Type of a `routing/findprovs` response line that carries providers
+# (go-libp2p-kad-dht routing.QueryEventType Provider).
+FINDPROVS_PROVIDER = 4
+
+
+def providers_in(lines):
+    """The peer ids a `routing/findprovs` response names as providers: the
+    `Responses[].ID` of its lines of Type FINDPROVS_PROVIDER. Lines that are
+    not JSON objects are skipped."""
+    found = set()
+    for line in lines:
+        if not line:
+            continue
+        try:
+            message = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(message, dict) and message.get('Type') == FINDPROVS_PROVIDER:
+            found.update(r['ID'] for r in message.get('Responses') or [] if isinstance(r, dict) and r.get('ID'))
+    return found
+
+
 def canonical_cid(value):
     """True when `value` is a CID in the one text form Kubo prints for it: a
     CIDv0 whose base58btc text decodes to a 34-byte sha2-256 multihash, or a
@@ -610,6 +632,28 @@ class Storage:
             self._api_call('swarm/peering/rm', params={'arg': peer_id}, timeout=10)
         except Exception as e:
             self.logger.debug(f"swarm/peering/rm {peer_id}: {e}")
+
+    def reachable_provider(self, cid, lookup_seconds=30, dial_seconds=15):
+        """Whether a node other than this one announces `cid` in the routing
+        system (routing/findprovs, up to three providers in `lookup_seconds`)
+        and takes a connection now (swarm/connect by peer id, which resolves
+        its addresses, `dial_seconds` each). A provider record outlives the
+        node that wrote it, so a record alone is not a source."""
+        own = self._api_call('id', timeout=10).get('ID')
+        resp = self._api_call('routing/findprovs',
+                              params={'arg': cid, 'num-providers': 3, 'timeout': f'{lookup_seconds}s'},
+                              stream=True, timeout=lookup_seconds + 30)
+        try:
+            providers = providers_in(resp.iter_lines()) - {own}
+        finally:
+            resp.close()
+        for peer_id in sorted(providers):
+            try:
+                self.connect_peer(f'/p2p/{peer_id}', timeout=dial_seconds)
+                return True
+            except Exception as e:
+                self.logger.debug(f"findprovs {cid}: provider {peer_id} not reachable ({e})")
+        return False
 
     # A pinned block is announced when pinned and again at the next
     # REPROVIDE_EVERY-second sync passes until REPROVIDE_TIMES announces are
