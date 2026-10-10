@@ -221,9 +221,12 @@ cas_session_registry_scan_blocks = int(os.environ.get('CAS_SESSION_REGISTRY_SCAN
 # Registered images (ECImageRegistryV2 ImageRegistered / TrustedZoneImageRegistered):
 # the replication loop pins each registered image that scone_image.py verifies,
 # with its compose, from the publisher's IPFS node. How far back the first scan
-# reaches, and how long one pin attempt of an image tree (about 1.3 GB) may take.
+# reaches, how long one pin attempt of an image tree (about 1.3 GB) may take,
+# and how long it may go on without a block arriving (a source that holds the
+# root block alone, or left, is what stalls it).
 image_registry_scan_blocks = int(os.environ.get('IMAGE_REGISTRY_SCAN_BLOCKS', 200000))
 registered_image_pin_timeout_seconds = int(os.environ.get('REGISTERED_IMAGE_PIN_TIMEOUT_SECONDS', 3600))
+registered_image_pin_stall_seconds = int(os.environ.get('REGISTERED_IMAGE_PIN_STALL_SECONDS', 300))
 # A registered image is pinned only when its tree declares at most
 # REGISTERED_IMAGE_MAX_BYTES and its compose at most REGISTERED_COMPOSE_MAX_BYTES,
 # and scone_image.py finds the enclave's SCONE binary-fs within the first

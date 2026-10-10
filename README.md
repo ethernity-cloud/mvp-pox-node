@@ -186,7 +186,9 @@ of those with the fewest attempts first; `ESR_MIN_FREE_STORAGE_GB`
 `REGISTERED_IMAGE_MAX_BYTES` (3 GiB), `REGISTERED_COMPOSE_MAX_BYTES` (1 MiB),
 `REGISTERED_IMAGE_SCAN_MAX_BYTES` (1 GiB),
 `REGISTERED_IMAGE_INFLATE_MAX_BYTES` (2 GiB),
-`REGISTERED_IMAGE_PIN_TIMEOUT_SECONDS` (3600) and
+`REGISTERED_IMAGE_PIN_TIMEOUT_SECONDS` (3600),
+`REGISTERED_IMAGE_PIN_STALL_SECONDS` (300: a pin that fetches no block for
+that long is ended and the image tried later) and
 `REGISTERED_IMAGE_VERIFY_TIMEOUT_SECONDS` (900) bound one image's pin.
 
 The bootnode (ipfs.ethernity.cloud) runs it as the docker container

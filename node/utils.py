@@ -1702,16 +1702,19 @@ class Storage:
         finally:
             resp.close()
 
-    def pin_add_watched(self, cid, timeout, watch, interval=10):
+    def pin_add_watched(self, cid, timeout, watch, interval=10, stall=None):
         """pin/add `cid` while `watch()` is asked every `interval` seconds
         whether to go on. When it returns a reason, or raises three times in a
-        row, the request is closed, which ends the pin in Kubo, and
-        PinAborted(reason) is raised; the blocks fetched so far stay unpinned
-        for the collector."""
+        row, or the pin's progress count (the blocks fetched, which Kubo
+        reports every half second) has not grown for `stall` seconds, the
+        request is closed, which ends the pin in Kubo, and PinAborted(reason)
+        is raised; the blocks fetched so far stay unpinned for the collector."""
         resp = self._api_call('pin/add', params={'arg': cid, 'progress': 'true', 'timeout': f'{timeout}s'},
                               stream=True, timeout=interval + 120)
         reason = []
         done = threading.Event()
+        # The last progress count seen and when it last grew.
+        fetched = [None, time.time()]
 
         def watcher():
             failures = 0
@@ -1723,6 +1726,8 @@ class Storage:
                     failures += 1
                     self.logger.warning(f"pin/add {cid}: its watch failed ({e})")
                     why = f"its watch failed {failures} times in a row ({e})" if failures >= 3 else None
+                if not why and stall and time.time() - fetched[1] > stall:
+                    why = f"no block fetched for {stall} s"
                 if why:
                     reason.append(why)
                     resp.close()
@@ -1739,6 +1744,9 @@ class Storage:
                     raise Exception(f"pin/add {cid}: {message.get('Message')}")
                 if message.get('Pins'):
                     pinned = True
+                progress = message.get('Progress')
+                if progress is not None and progress != fetched[0]:
+                    fetched[0], fetched[1] = progress, time.time()
         except Exception:
             if reason:
                 raise PinAborted(reason[0])

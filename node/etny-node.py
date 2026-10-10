@@ -1479,10 +1479,12 @@ class EtnyPoXNode:
 
     def __pin_registered_cids(self, ipfs_hash, entry, declared):
         """Pin the image, then its compose, under a watch that ends the pin
-        when the disk falls under esr_min_free_storage_gb or the repository
-        grows past twice what the tree declares, plus 2 GiB. Each CID this
-        pins that Kubo did not hold before is added to the entry's
-        pinned_cids as soon as it is pinned."""
+        when the disk falls under esr_min_free_storage_gb, the repository
+        grows past twice what the tree declares, plus 2 GiB, or no block has
+        arrived for registered_image_pin_stall_seconds (a source that holds
+        the root block alone, or left). Each CID this pins that Kubo did not
+        hold before is added to the entry's pinned_cids as soon as it is
+        pinned."""
         floor = config.esr_min_free_storage_gb
         before = self.storage.recursive_pins()
         start = self.storage.repo_size()
@@ -1497,10 +1499,11 @@ class EtnyPoXNode:
             return None
 
         timeout = int(getattr(config, 'registered_image_pin_timeout_seconds', 3600))
+        stall = int(getattr(config, 'registered_image_pin_stall_seconds', 300))
         for cid, seconds in ((ipfs_hash, timeout), (entry['compose'], 120)):
             if not cid:
                 continue
-            self.storage.pin_add_watched(cid, seconds, watch)
+            self.storage.pin_add_watched(cid, seconds, watch, stall=stall)
             if cid not in before:
                 held = (self.esr_progress.get('registered_images') or {}).get(ipfs_hash, {}).get('pinned_cids') or []
                 self.__record_registered_image(ipfs_hash, pinned_cids=sorted(set(held) | {cid}))
