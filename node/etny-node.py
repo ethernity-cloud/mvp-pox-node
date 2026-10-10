@@ -21,7 +21,7 @@ from web3 import middleware
 from web3.gas_strategies.time_based import fast_gas_price_strategy
 from web3.gas_strategies.rpc import rpc_gas_price_strategy
 
-from utils import get_or_generate_uuid, run_subprocess, retry, Storage, Cache, ListCache, ListCacheWithTimestamp, MergedOrdersCache, subprocess, get_node_geo, HardwareInfoProvider, parse_transaction_bytes_ut, looks_like_cid, canonical_cid
+from utils import get_or_generate_uuid, run_subprocess, retry, Storage, Cache, ListCache, ListCacheWithTimestamp, MergedOrdersCache, subprocess, get_node_geo, HardwareInfoProvider, parse_transaction_bytes_ut, looks_like_cid, canonical_cid, PEER_MULTIADDR
 import scone_image
 from models import *
 from error_messages import errorMessages
@@ -112,9 +112,6 @@ IMAGE_REGISTRY_V2_ABI = json.dumps([
                  {"name": "name", "type": "string"}]}
     for name in ("imageDetails", "trustedZoneImageDetails")
 ])
-# A registrant's IPFS peer: a multiaddr ending in a canonical base58 peer id,
-# an RSA one (Qm...) or an Ed25519 one (12D3KooW...).
-PEER_MULTIADDR = re.compile(r'/\S+/p2p/(Qm[1-9A-HJ-NP-Za-km-z]{44}|12D3KooW[1-9A-HJ-NP-Za-km-z]{44})')
 # One registered-image attempt at a time in the process, across networks: a
 # pin's growth bound reads the repository every attempt writes, and a mirror's
 # garbage collection waits for every pin in flight.

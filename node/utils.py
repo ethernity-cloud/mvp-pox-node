@@ -104,6 +104,14 @@ def _varint(raw, i):
     raise ValueError("not a varint")
 
 
+# A registrant's IPFS peer, as the SDKs write it into an image registry entry
+# (`ipfsPeer`): a multiaddr ending in a canonical base58 peer id, an RSA one
+# (Qm...) or an Ed25519 one (12D3KooW...), with or without a transport before
+# `/p2p/`. A publisher behind NAT registers the bare `/p2p/<id>`, which Kubo's
+# swarm/connect and swarm/peering/add dial through peer routing.
+PEER_MULTIADDR = re.compile(r'(?:/\S+)?/p2p/(Qm[1-9A-HJ-NP-Za-km-z]{44}|12D3KooW[1-9A-HJ-NP-Za-km-z]{44})')
+
+
 def canonical_cid(value):
     """True when `value` is a CID in the one text form Kubo prints for it: a
     CIDv0 whose base58btc text decodes to a 34-byte sha2-256 multihash, or a
