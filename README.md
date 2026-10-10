@@ -169,8 +169,11 @@ registry records as registered (`ImageRegistered` and
 runs it connects to and peers with the registrant's `ipfsPeer`, a multiaddr
 or the bare `/p2p/<id>` a publisher behind NAT registers, checks that the
 tree is an enclave image the SDK builds (`scone_image`), then pins the tree
-and its compose and announces both. A registrant that cannot be reached is
-replaced by a provider the routing system names and that takes a connection;
+and its compose and announces both. The registrant is dialled up to six
+times, ten seconds apart (a publisher behind NAT is reached only over the
+connection its node keeps to this one, which comes and goes in the minutes
+after a registration); one that cannot be reached is replaced by a provider
+the routing system names and that takes a connection;
 without one the attempt is counted and the image tried later, nothing
 fetched, so a registration whose node is gone costs a lookup, not a fetch
 run to its bounds. `IPFS_INTAKE_BIND=host:port` adds the

@@ -117,6 +117,10 @@ IMAGE_REGISTRY_V2_ABI = json.dumps([
 # garbage collection waits for every pin in flight.
 _registered_image_lock = threading.Lock()
 _registered_image_gc = {'at': 0, 'due': False}
+# How many times, how far apart, an attempt dials a registered image's
+# publisher before calling it unreachable (__peer_publisher).
+PUBLISHER_DIALS = 6
+PUBLISHER_DIAL_WAIT = 10
 
 
 def collect_garbage(storage, logger):
@@ -1611,9 +1615,26 @@ class EtnyPoXNode:
         'registered_image_peerings' first and removed after
         (__unpeer_publisher); (None, True) when the peer was in the list
         already (Ethernity's IPFS node, a validator); (None, False) when it is
-        unreachable."""
+        unreachable. The dial is tried PUBLISHER_DIALS times, PUBLISHER_DIAL_WAIT
+        seconds apart: a publisher behind NAT, registered as a bare
+        `/p2p/<id>`, is reached only over a connection its own node keeps to
+        this one, and that connection comes and goes in the minutes after a
+        registration."""
+        error = None
+        for attempt in range(PUBLISHER_DIALS):
+            if attempt:
+                time.sleep(PUBLISHER_DIAL_WAIT)
+            try:
+                self.storage.connect_peer(multiaddr)
+                error = None
+                break
+            except Exception as e:
+                error = e
+        if error is not None:
+            self.logger.info(f"[image-registry] publisher {multiaddr} not reachable in {PUBLISHER_DIALS} dials "
+                             f"({str(error)[:200]})")
+            return None, False
         try:
-            self.storage.connect_peer(multiaddr)
             peer_id = multiaddr.rsplit('/p2p/', 1)[1]
             if peer_id in self.storage.peering_ids():
                 return None, True
@@ -1621,8 +1642,8 @@ class EtnyPoXNode:
             self.esr_progress.add('registered_image_peerings', sorted(added))
             return self.storage.peering_add(multiaddr), True
         except Exception as e:
-            self.logger.info(f"[image-registry] publisher {multiaddr} not reachable ({str(e)[:200]})")
-            return None, False
+            self.logger.info(f"[image-registry] publisher {multiaddr} connected but not peered ({str(e)[:200]})")
+            return None, True
 
     def __unpeer_publisher(self, peer_id):
         """Remove a publisher peering __peer_publisher added, and its record."""
