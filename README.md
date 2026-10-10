@@ -157,6 +157,45 @@ $ git pull
 $ ./etny-node-installer.sh
 ```
 
+## Mirror mode (REPLICATION_ONLY)
+
+`REPLICATION_ONLY=True` runs the agent as a mirror: no SGX, no DP requests, no
+task execution. For every configured network it pins recent results, ESR
+state and CAS session bodies from chain into the Kubo at `IPFS_CONNECT_URL`,
+keeps that Kubo peered with the validators' IPFS nodes published on chain and
+with the peers in `IPFS_SWARM`, and pins every image the network's image
+registry records as registered (`ImageRegistered` and
+`TrustedZoneImageRegistered`; ECImageRegistryV2 and later): while the fetch
+runs it connects to and peers with the registrant's `ipfsPeer`, a multiaddr
+or the bare `/p2p/<id>` a publisher behind NAT registers, checks that the
+tree is an enclave image the SDK builds (`scone_image`), then pins the tree
+and its compose and announces both. `IPFS_INTAKE_BIND=host:port` adds the
+payload intake (`ipfs_intake.py`). A private key is still required for the
+chain reads' account context; the mirror sends no transaction.
+
+Settings, in the environment: `ESR_REPLICATION_INTERVAL_SECONDS` (300) is
+the cadence of the replication round, which scans the registry for new
+registrations and handles one image per round; `ESR_MIN_FREE_STORAGE_GB`
+(10) stops pinning below that free disk; `IMAGE_REGISTRY_SCAN_BLOCKS`
+(200000) is how far back the first scan looks;
+`REGISTERED_IMAGE_MAX_BYTES` (3 GiB), `REGISTERED_COMPOSE_MAX_BYTES` (1 MiB),
+`REGISTERED_IMAGE_SCAN_MAX_BYTES` (1 GiB),
+`REGISTERED_IMAGE_INFLATE_MAX_BYTES` (2 GiB),
+`REGISTERED_IMAGE_PIN_TIMEOUT_SECONDS` (3600) and
+`REGISTERED_IMAGE_VERIFY_TIMEOUT_SECONDS` (900) bound one image's pin.
+
+The bootnode (ipfs.ethernity.cloud) runs it as the docker container
+`etny-mirror`: image `etny-mirror:latest` (python:3.10-slim with psutil,
+python-dotenv, minio, web3 7.6.1, bs4 and requests), this repository
+bind-mounted at `/app`, working directory `/app/node`, command
+`python etny-node.py -k <key> -n bloxberg_testnet`, environment
+`REPLICATION_ONLY=True`, `IPFS_CONNECT_URL=/ip4/<kubo>/tcp/5001/http`,
+`IPFS_SWARM=<the validators' multiaddrs>`, `IPFS_INTAKE_BIND=0.0.0.0:8765`,
+`ESR_REPLICATION_INTERVAL_SECONDS=60` and `LOG_LEVEL=info`, on the docker
+network haproxy routes `/payload` to. It logs to `/var/log/etny-node.log` in
+the container. An upgrade is `git pull --ff-only origin master` in the
+checkout and a recreation of the container with the same arguments.
+
 ## Troubleshooting
 
 ### Failed installation
