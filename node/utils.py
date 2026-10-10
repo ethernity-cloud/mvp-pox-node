@@ -112,6 +112,20 @@ def _varint(raw, i):
 PEER_MULTIADDR = re.compile(r'(?:/\S+)?/p2p/(Qm[1-9A-HJ-NP-Za-km-z]{44}|12D3KooW[1-9A-HJ-NP-Za-km-z]{44})')
 
 
+def next_registered_image(images, now):
+    """The registered image a mirror attempts this round, from `images`
+    (hash -> entry, in registration order): one not refused or unverifiable
+    under the current bounds, not pinned and verified, and due; the fewest
+    attempts first and, among those, the most recently registered, so a new
+    registration is pinned ahead of an older one that keeps failing. None
+    when none is due."""
+    due = [(entry.get('attempts', 0), -order, ipfs_hash) for order, (ipfs_hash, entry) in enumerate(images.items())
+           if not entry.get('refused_under') and not entry.get('unverifiable_under')
+           and not (entry.get('pinned') and entry.get('verified_under'))
+           and entry.get('next_at', 0) <= now]
+    return min(due)[2] if due else None
+
+
 def canonical_cid(value):
     """True when `value` is a CID in the one text form Kubo prints for it: a
     CIDv0 whose base58btc text decodes to a 34-byte sha2-256 multihash, or a

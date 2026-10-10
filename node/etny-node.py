@@ -21,7 +21,7 @@ from web3 import middleware
 from web3.gas_strategies.time_based import fast_gas_price_strategy
 from web3.gas_strategies.rpc import rpc_gas_price_strategy
 
-from utils import get_or_generate_uuid, run_subprocess, retry, Storage, Cache, ListCache, ListCacheWithTimestamp, MergedOrdersCache, subprocess, get_node_geo, HardwareInfoProvider, parse_transaction_bytes_ut, looks_like_cid, canonical_cid, PEER_MULTIADDR
+from utils import get_or_generate_uuid, run_subprocess, retry, Storage, Cache, ListCache, ListCacheWithTimestamp, MergedOrdersCache, subprocess, get_node_geo, HardwareInfoProvider, parse_transaction_bytes_ut, looks_like_cid, canonical_cid, PEER_MULTIADDR, next_registered_image
 import scone_image
 from models import *
 from error_messages import errorMessages
@@ -1358,15 +1358,11 @@ class EtnyPoXNode:
                 if pins is not None and entry['pinned'] and not held <= pins:
                     entry['pinned'] = False
             self.esr_progress.add('registered_images', images)
-            now = time.time()
-            due = [(entry.get('attempts', 0), order, ipfs_hash) for order, (ipfs_hash, entry) in enumerate(images.items())
-                   if not entry.get('refused_under') and not entry.get('unverifiable_under')
-                   and not (entry['pinned'] and entry.get('verified_under'))
-                   and entry.get('next_at', 0) <= now]
-            if not due:
+            chosen = next_registered_image(images, time.time())
+            if chosen is None:
                 return
             self.__image_pin_thread = threading.Thread(
-                target=self.__pin_registered_image, args=(min(due)[2],),
+                target=self.__pin_registered_image, args=(chosen,),
                 name=f"image-pin-{self.__network_config.name}", daemon=True)
             self.__image_pin_thread.start()
         except Exception as e:

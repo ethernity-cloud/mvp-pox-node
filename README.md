@@ -175,7 +175,8 @@ chain reads' account context; the mirror sends no transaction.
 
 Settings, in the environment: `ESR_REPLICATION_INTERVAL_SECONDS` (300) is
 the cadence of the replication round, which scans the registry for new
-registrations and handles one image per round; `ESR_MIN_FREE_STORAGE_GB`
+registrations and handles one image per round, the most recently registered
+of those with the fewest attempts first; `ESR_MIN_FREE_STORAGE_GB`
 (10) stops pinning below that free disk; `IMAGE_REGISTRY_SCAN_BLOCKS`
 (200000) is how far back the first scan looks;
 `REGISTERED_IMAGE_MAX_BYTES` (3 GiB), `REGISTERED_COMPOSE_MAX_BYTES` (1 MiB),
