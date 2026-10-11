@@ -918,11 +918,19 @@ class Storage:
         raise RuntimeError("Exceeded max retries in _http_request_with_retry")
 
 
+    # Bounds of one swarm pin a download makes (pin_add_watched): the Kubo-side
+    # limit of the whole pin, and the longest pause between fetched blocks.
+    DOWNLOAD_PIN_SECONDS = 3600
+    DOWNLOAD_PIN_STALL_SECONDS = 120
+
     def download(self, data):
-        """
-        Main download function: Checks cache, attempts gateway if not local, then local IPFS/swarm.
-        Handles files (with gzip check) and directories (via tar).
-        """
+        """Fetch the CID `data` into target/<cid> unless the cache holds it.
+        The connected Kubo is asked first: a CID it pins is read from it, one
+        it does not pin is pinned from the swarm (pin_add_watched, bounded by
+        DOWNLOAD_PIN_SECONDS and DOWNLOAD_PIN_STALL_SECONDS, after the provider
+        connection check) and then read. The gateway is the fallback when that
+        fails or no Kubo is connected, and what it fetches is added and pinned
+        to a connected Kubo. Files come as they are, directories as tar."""
         out_path = os.path.join(self.target, data)
 
         # The cache flag records a fetch; the bytes may be gone since (a
@@ -938,45 +946,45 @@ class Storage:
 
         os.makedirs(os.path.dirname(out_path), exist_ok=True)
 
-        if self._try_download_from_gateway(data, out_path):
-            self._post_download_processing(data, out_path)
-            return
+        if not self.connected:
+            self.connected = self.connect()
+        if self.connected:
+            try:
+                self._download_through_kubo(data, out_path)
+                self.cache.add(data)
+                return
+            except Exception as e:
+                if self.gateway is None:
+                    raise
+                self.logger.warning(f"{data}: the fetch through the local IPFS failed ({e}); trying the gateway")
+        elif self.gateway is None:
+            raise Exception(f"{data}: no IPFS connection and no gateway configured")
 
-        self._ensure_ipfs_connection()
+        self.logger.info(f"{data}: downloading from the IPFS gateway {self.gateway}")
+        self.fetch_ipfs_content(data, output=out_path)
+        self._post_download_processing(data, out_path)
 
-        self._prepare_local_download(data)
-
+    def _download_through_kubo(self, data, out_path):
+        """Read `data` from the connected Kubo: pinned already, or pinned now
+        from the swarm, whose failure redials the configured providers
+        (_ensure_provider_path with suspect=True) before it is raised. A read
+        that fails goes through _handle_download_error, which restarts a local
+        daemon and raises."""
+        if self.is_pinned(data):
+            self.logger.info(f"{data} is pinned locally, downloading from local IPFS")
+        else:
+            self.logger.info(f"{data} is not pinned locally, pinning it from the IPFS swarm")
+            self._ensure_provider_path()
+            try:
+                self.pin_add_watched(data, self.DOWNLOAD_PIN_SECONDS, lambda: None,
+                                     stall=self.DOWNLOAD_PIN_STALL_SECONDS)
+            except Exception:
+                self._ensure_provider_path(suspect=True)
+                raise
         try:
             self._download_from_local_ipfs(data, out_path)
         except Exception as e:
             self._handle_download_error(e, data, out_path)
-
-        self.cache.add(data)
-
-    def _try_download_from_gateway(self, data, out_path):
-        """
-        Attempt to download from the IPFS gateway if conditions are met.
-        Returns True if successful, False otherwise.
-        """
-        if self.gateway is None or (self.connected and self.is_pinned(data)):
-            return False
-
-
-        if self.is_pinned(data):
-            self.logger.info(f"{data} is pinned locally, downloading from local IPFS")
-            try:
-                self._download_from_local_ipfs(data, out_path)
-            except Exception as e:
-                self._handle_download_error(e, data, out_path)
-        else:
-            try:
-                self.logger.info(f"{data} is not pinned locally, downloading from IPFS gateway")
-                self.fetch_ipfs_content(data, output=out_path)
-                return True
-            except Exception as e_remote:
-                self.logger.warning(f"Fetch from IPFS gateway failed for {data}: {e_remote}")
-                return False
-
 
     def _post_download_processing(self, data, out_path):
         """
@@ -989,27 +997,6 @@ class Storage:
                 self.pin_add(data)
             except Exception as e:
                 self.logger.warning(f"Failed to add/pin after gateway download for {data}: {e}")
-
-    def _ensure_ipfs_connection(self):
-        """
-        Ensure connection to IPFS; reconnect if necessary.
-        """
-        if not self.connected:
-            if not self.connect():
-                raise Exception("No IPFS connection and gateway failed")
-            self.connected = True
-
-    def _prepare_local_download(self, data):
-        """
-        Prepare for local download by pinning if not already pinned; the swarm
-        fetch is preceded by the provider connection check.
-        """
-        if not self.is_pinned(data):
-            self.logger.info(f"{data} is not pinned locally, downloading from IPFS swarm")
-            self._ensure_provider_path()
-            self.pin_add(data)
-        else:
-            self.logger.info(f"{data} is pinned locally, downloading from local IPFS")
 
     def _download_from_local_ipfs(self, data, out_path):
         """
@@ -1914,31 +1901,26 @@ class Storage:
         if not pinned:
             raise Exception(f"pin/add {cid} ended without pinning it")
 
+    # How long one pin/ls of a single CID may take.
+    PIN_STATUS_SECONDS = 60
+
     def is_pinned(self, cid: str) -> bool:
+        """Whether the connected Kubo pins `cid` recursively, as pin_add and
+        pin_add_watched pin. The question is put with type=recursive: without
+        a type Kubo also rules out an indirect pin, which walks the DAG of
+        every recursive pin it holds (minutes on a node holding image trees),
+        and a CID pinned indirectly is read like one not pinned, pinned
+        recursively first. A failed pin/ls for one CID says nothing about the
+        connection, so the client is not marked disconnected."""
         if not self.connected:
             return False
         try:
-            self._api_call('pin/ls', params={'arg': cid})
+            self._api_call('pin/ls', params={'arg': cid, 'type': 'recursive'}, timeout=self.PIN_STATUS_SECONDS)
             return True
         except Exception as e:
-            err = str(e).lower()
-            if 'not pinned' in err:
+            if 'not pinned' in str(e).lower():
                 return False
-            if 'pinned indirectly' in err:
-                return True
-            # A failed pin/ls for one CID says nothing about the connection,
-            # so do not latch the client off here. Clearing self.connected
-            # makes every later add/pin raise "Not connected" without calling
-            # the API, and nothing sets it back: observed at 21:20:09, one
-            # error disabled result pinning node-wide for 6h.
-            self.logger.warning(
-                f'Pin status check failed for {cid!r}: {e}')
-            return False
-            self.logger.info(f'Unexpected error while checking pin status for {cid}')
-            if "127.0.0.1" in self.client_connect_url:
-                self.logger.warning("Restarting IPFS service")
-                self.restart_ipfs_service()
-            self.logger.error(e)
+            self.logger.warning(f'Pin status check failed for {cid!r}: {e}')
             return False
 
     def mig(self, hash, base_path):
