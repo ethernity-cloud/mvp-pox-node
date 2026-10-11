@@ -23,7 +23,10 @@ version = os.environ.get('VERSION', "LEGACY")
 ipfs_swarm_default = os.environ.get('IPFS_SWARM', "/dns4/ipfs.ethernity.cloud/tcp/4001/p2p/QmRBc1eBt4hpJQUqHqn6eA8ixQPD3LFcUDsn6coKBQtia5")
 ipfs_connect_url_default = os.environ.get('IPFS_CONNECT_URL', "/ip4/127.0.0.1/tcp/5001/http")
 ipfs_timeout_default = int(os.environ.get('IPFS_TIMEOUT', 30))
-ipfs_gateway_url_default=os.environ.get('IPFS_GATEWAY_URL', 'https://ipfs.io')
+# The HTTP gateway a download falls back to when the local Kubo cannot fetch
+# a CID (utils.Storage.download): the bootnode's, which serves /ipfs/<cid>
+# from its Kubo's gateway port and holds every artefact the network pins.
+ipfs_gateway_url_default=os.environ.get('IPFS_GATEWAY_URL', 'https://ipfs.ethernity.cloud')
 # How long a locally pinned IPFS object is kept before the periodic cleanup
 # unpins and removes it. Objects the node still needs are exempt regardless of
 # age: the trustedzone images, and any CID that is still the CURRENT ESR state
