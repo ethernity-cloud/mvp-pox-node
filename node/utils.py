@@ -148,6 +148,162 @@ def providers_in(lines):
     return found
 
 
+# Written by the SCONE runtime on an enclave's stderr when the CAS refuses its
+# attestation; the process exits right after.
+CAS_REFUSAL_MARKER = 'CAS sent an error: '
+ENCLAVE_FAILURE_TEXT_MAX = 160
+
+
+def enclave_failure(name, state, log_text, awaited=True):
+    """Why the enclave container `name` will not finish its task, or None while
+    it still can. `state` is its docker inspect .State (Status, ExitCode,
+    RestartCount) or None when it could not be read, which counts as still
+    running; `log_text` the tail of its log. A CAS refusal in the log (the
+    last such line) is the reason whatever the state. When `awaited`, the
+    task's result comes from this container, so its exit with any code (the
+    composes run it under restart: on-failure, which restarts no clean exit
+    and leaves it exited after the restart cap) and a container never started
+    are reasons too; a container that is not awaited (the securelock: the
+    trustedzone consumes its result, and it exits with any code once it has
+    written it) fails on a CAS refusal alone. The text carries no ':', the
+    order result it goes into being colon-separated."""
+    refusal = None
+    for line in (log_text or '').splitlines():
+        if CAS_REFUSAL_MARKER in line:
+            refusal = line.split(CAS_REFUSAL_MARKER, 1)[1].strip()
+    if refusal is not None:
+        reason = f"{name} was refused by the CAS - {refusal[:ENCLAVE_FAILURE_TEXT_MAX]}"
+    elif awaited and state and state.get('Status') in ('exited', 'dead'):
+        reason = f"{name} exited with code {state.get('ExitCode') or 0} after {state.get('RestartCount') or 0} restarts"
+    elif awaited and state and state.get('Status') == 'created':
+        reason = f"{name} was not started"
+    else:
+        return None
+    return reason.replace(':', ' ')
+
+
+def enclave_may_have_failed(state):
+    """True when the docker inspect .State `state` shows the container other
+    than running untroubled: not 'running', restarted, or exited with a code.
+    Its log is read for a CAS refusal only then; None (no state read) is
+    False."""
+    if not state:
+        return False
+    return (state.get('Status') != 'running' or int(state.get('RestartCount') or 0) > 0
+            or int(state.get('ExitCode') or 0) != 0)
+
+
+# One line per container docker inspect finds: its name with the leading '/',
+# its restart count (a field of the container, not of its .State) and its
+# .State as JSON.
+CONTAINER_STATE_FORMAT = '{{.Name}} {{.RestartCount}} {{json .State}}'
+
+
+def container_states_in(text):
+    """{container name: .State with RestartCount} from the output of `docker
+    inspect --format CONTAINER_STATE_FORMAT`. Lines of another shape are
+    skipped."""
+    states = {}
+    for line in text.splitlines():
+        fields = line.split(' ', 2)
+        if len(fields) != 3 or not fields[0].startswith('/') or not fields[1].isdigit():
+            continue
+        try:
+            state = json.loads(fields[2])
+        except ValueError:
+            continue
+        if isinstance(state, dict):
+            state['RestartCount'] = int(fields[1])
+            states[fields[0][1:]] = state
+    return states
+
+
+def docker_container_states(names, timeout=5):
+    """The docker inspect .State (Status, ExitCode, ...) with the RestartCount
+    of each of the containers `names` docker knows, {name: state}, from one
+    inspect call; {} when docker does not answer within `timeout` seconds."""
+    try:
+        out = subprocess.run(['docker', 'inspect', '--format', CONTAINER_STATE_FORMAT, *names],
+                             capture_output=True, text=True, timeout=timeout)
+    except (subprocess.SubprocessError, OSError):
+        return {}
+    return container_states_in(out.stdout or '')
+
+
+def docker_container_log_tail(name, lines=500, timeout=5):
+    """The last `lines` lines of container `name`'s output, stdout and stderr
+    merged, or '' when docker does not answer within `timeout` seconds or
+    knows no such container."""
+    try:
+        out = subprocess.run(['docker', 'logs', '--tail', str(lines), name],
+                             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=timeout)
+    except (subprocess.SubprocessError, OSError):
+        return ''
+    return out.stdout.decode(errors='replace') if out.returncode == 0 else ''
+
+
+def stale_integration_tests(passed, latest):
+    """The trustedzone names whose passed integration test ran on an image the
+    registry no longer certifies as that name's latest: `passed` is {name:
+    tested IPFS hash}, `latest` {name: latest IPFS hash, None when the
+    registry holds no image of that name} for the names that were read; a name
+    absent from `latest` keeps its test."""
+    return {name for name, tested in passed.items() if name in latest and latest[name] != tested}
+
+
+# The Docker registry layout of an enclave image tree, which the node mounts at
+# /var/lib/registry and scone_image reads.
+IMAGE_TREE_REGISTRY = os.path.join('docker', 'registry', 'v2', 'repositories')
+
+
+def image_trees(base_path):
+    """The enclave image trees under `base_path`, {cid: mtime}: each directory
+    named by a CID that holds IMAGE_TREE_REGISTRY. Storage.download sets the
+    directory's mtime when it extracts the tree and when it reuses it."""
+    trees = {}
+    for name in os.listdir(base_path):
+        path = os.path.join(base_path, name)
+        if looks_like_cid(name) and os.path.isdir(os.path.join(path, IMAGE_TREE_REGISTRY)):
+            trees[name] = os.path.getmtime(path)
+    return trees
+
+
+def stale_image_trees(trees, keep, now, retention_seconds, since=0.0):
+    """The cids of `trees` ({cid: mtime}) not in `keep` last used more than
+    `retention_seconds` before `now`, oldest first. A tree's last use is its
+    mtime, and no earlier than `since`: the node passes its start time, since
+    a tree extracted by an earlier version carries its extraction time, not
+    its last reuse."""
+    last_used = {cid: max(mtime, since) for cid, mtime in trees.items()}
+    return sorted((cid for cid, used in last_used.items() if cid not in keep and now - used > retention_seconds),
+                  key=last_used.get)
+
+
+def directory_size(path):
+    """The bytes of the regular files under `path`; symlinks are not followed."""
+    return sum(os.lstat(os.path.join(root, f)).st_size for root, _, files in os.walk(path) for f in files)
+
+
+# A directory remove_tree is removing, renamed from its own name first.
+REMOVING_SUFFIX = '.removing'
+
+
+def remove_tree(path):
+    """Remove the directory `path`, renamed to path + REMOVING_SUFFIX first, so
+    a removal that fails part-way leaves nothing under the original name
+    (image_trees lists no such directory; removal_leftovers does). Raises what
+    the rename or the removal raises."""
+    removing = path + REMOVING_SUFFIX
+    os.rename(path, removing)
+    shutil.rmtree(removing)
+
+
+def removal_leftovers(base_path):
+    """The directories under `base_path` a remove_tree left part-removed."""
+    return [os.path.join(base_path, name) for name in os.listdir(base_path)
+            if name.endswith(REMOVING_SUFFIX) and os.path.isdir(os.path.join(base_path, name))]
+
+
 def canonical_cid(value):
     """True when `value` is a CID in the one text form Kubo prints for it: a
     CIDv0 whose base58btc text decodes to a 34-byte sha2-256 multihash, or a
@@ -769,15 +925,13 @@ class Storage:
         """
         out_path = os.path.join(self.target, data)
 
-        # The cache flag only says "we fetched this once" -- it does NOT
-        # guarantee the bytes are still on disk. Periodic GC / eviction or a
-        # cleared cache dir can remove the file while the flag lingers, so
-        # trusting the flag alone made download() a no-op that returned with no
-        # content (the integration-test image / compose then 'missing', failing
-        # the SGX check). Only skip the fetch when the flag is set AND the file
-        # actually exists on disk; otherwise fall through and REFETCH.
+        # The cache flag records a fetch; the bytes may be gone since (a
+        # cleared cache directory, a removed image tree), so the fetch is
+        # skipped only while the path exists. The path's mtime is set on each
+        # reuse, so an image tree's age counts from its last use (image_trees).
         if self.cache.contains(data) and os.path.exists(out_path):
             self.logger.info(f"{data} found in local cache, skipping download")
+            os.utime(out_path, None)
             return
         if self.cache.contains(data):
             self.logger.info(f"{data} cache flag set but file missing on disk; refetching")

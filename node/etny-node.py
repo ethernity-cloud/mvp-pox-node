@@ -21,7 +21,7 @@ from web3 import middleware
 from web3.gas_strategies.time_based import fast_gas_price_strategy
 from web3.gas_strategies.rpc import rpc_gas_price_strategy
 
-from utils import get_or_generate_uuid, run_subprocess, retry, Storage, Cache, ListCache, ListCacheWithTimestamp, MergedOrdersCache, subprocess, get_node_geo, HardwareInfoProvider, parse_transaction_bytes_ut, looks_like_cid, canonical_cid, PEER_MULTIADDR, next_registered_image
+from utils import get_or_generate_uuid, run_subprocess, retry, Storage, Cache, ListCache, ListCacheWithTimestamp, MergedOrdersCache, subprocess, get_node_geo, HardwareInfoProvider, parse_transaction_bytes_ut, looks_like_cid, canonical_cid, PEER_MULTIADDR, next_registered_image, enclave_failure, enclave_may_have_failed, docker_container_states, docker_container_log_tail, stale_integration_tests, image_trees, stale_image_trees, directory_size, remove_tree, removal_leftovers
 import scone_image
 from models import *
 from error_messages import errorMessages
@@ -37,27 +37,49 @@ task_lock = threading.Lock()
 task_cond = threading.Condition(task_lock)
 # SGX integration tests, per trustedzone image. A network runs a trustedzone of
 # its TRUSTEDZONE_IMAGES that is one of its INTEGRATION_TEST_IMAGES once that
-# image's test passed, and any other once a passed test of one of its
-# INTEGRATION_TEST_IMAGES covers its platform requirement (config.
-# TRUSTEDZONE_REQUIREMENTS). An image's test passes at most once per process; a
-# failed one runs again once its backoff has elapsed. State outlives the
-# EtnyPoXNode handles, which process_network rebuilds.
+# image's test passed on the registry's latest image of that name, and any
+# other once a passed test of one of its INTEGRATION_TEST_IMAGES covers its
+# platform requirement (config.TRUSTEDZONE_REQUIREMENTS). A passed test stands
+# until the registry certifies another image as that name's latest, which the
+# processing loop reads every INTEGRATION_TEST_REGISTRY_CHECK_SECONDS before it
+# takes requests; a failed one runs again once its backoff has elapsed. Image
+# names are per network (the SDKs name each network's images apart), so the
+# state is keyed by name alone. It outlives the EtnyPoXNode handles, which
+# process_network rebuilds.
 #
 #   integration_test_lock     Reentrant. Held across a whole test, so one test
 #                             runs at a time: the tests share the docker and
 #                             swift-stream scaffolding and the SGX device.
-#   integration_test_passed   Image names whose test passed.
+#   integration_test_passed   {image name: IPFS hash of the registry's latest
+#                             trustedzone image of that name whose test
+#                             passed}.
 #   integration_test_retry    {image name: (failures, time.monotonic() at which
 #                             it may run again)} for the images that failed.
 #   integration_tests_settled {network name: Event}, set once each of that
 #                             network's test images has run once; read through
 #                             tests_settled().
 integration_test_lock = threading.RLock()
-integration_test_passed = set()
+integration_test_passed = {}
 integration_test_retry = {}
 integration_tests_settled = {}
 INTEGRATION_TEST_RETRY_MIN_SECONDS = 600
 INTEGRATION_TEST_RETRY_MAX_SECONDS = 6 * 3600
+INTEGRATION_TEST_REGISTRY_CHECK_SECONDS = 300
+# The container names every published dApp compose gives its enclaves, polled
+# while an order's result is awaited (wait_for_enclave_v2): the trustedzone
+# writes the awaited result, the securelock writes its own for the trustedzone.
+ENCLAVE_TRUSTEDZONE = 'etny-trustedzone'
+ENCLAVE_SECURELOCK = 'etny-securelock'
+ENCLAVE_CONTAINERS = (ENCLAVE_TRUSTEDZONE, ENCLAVE_SECURELOCK)
+ENCLAVE_CONTAINER_POLL_SECONDS = 10
+# When this process started: an image tree extracted before it counts as last
+# used then (__remove_stale_image_trees).
+PROCESS_START = time.time()
+
+
+class EnclaveFailed(Exception):
+    """An enclave container of the running task will not finish it; str() is
+    the reason (utils.enclave_failure)."""
 
 
 def tests_settled(network_name):
@@ -449,6 +471,7 @@ class EtnyPoXNode:
         # here, under the task slot taken above, unless it passed already or
         # its retry is not yet due. A replication-only handle executes no task
         # and runs no test.
+        self.__last_registry_check_at = time.monotonic()
         if self.__replication_only:
             pass
         elif config.skip_integration_test:
@@ -1799,26 +1822,23 @@ class EtnyPoXNode:
         current_time = time.time()
 
         keep_hashes = []
+        # The image trees of the latest trustedzones, kept whatever their age
+        # (__remove_stale_image_trees).
+        keep_trees = set()
 
         for image in self.__trustedzones:
-            # Bounded retry: this used to loop forever on RPC failure, which was
-            # survivable at startup but would wedge the order-processing loop now
-            # that cleanup also runs periodically. On failure we skip this round
-            # -- better to keep pins one extra cycle than to stall the node.
+            # Five attempts at the registry; a round that cannot read it is
+            # skipped, so a transient RPC failure unpins nothing in use.
             for _attempt in range(5):
                 try:
-                    time.sleep(self.__network_config.rpc_delay/1000)
-                    [enclave_image_hash, _,
-                     docker_compose_hash] = self.__image_registry.caller().getLatestTrustedZoneImageCertPublicKey(image, 'v3')
-                    keep_hashes.append(enclave_image_hash)
-                    keep_hashes.append(docker_compose_hash)
+                    found = self.__latest_trustedzone_image(image)
+                    if found is None:
+                        logger.info(f"{image} is not in the image registry; nothing of it to keep")
+                    else:
+                        keep_hashes.extend(found)
+                        keep_trees.add(found[0])
                     break
-                except exceptions.ContractLogicError as e:
-                    # The registry answered and holds no such image: nothing
-                    # of it is pinned to keep.
-                    logger.info(f"{image} is not in the image registry ({e}); nothing of it to keep")
-                    break
-                except Exception as e:
+                except Exception:
                     continue
             else:
                 logger.warning(
@@ -1842,6 +1862,8 @@ class EtnyPoXNode:
         for ipfs_hash, entry in (self.esr_progress.get('registered_images') or {}).items():
             if entry.get('verified_under'):
                 keep_hashes.extend(c for c in (ipfs_hash, entry.get('compose')) if c)
+
+        self.__remove_stale_image_trees(keep_trees)
 
         retention_hours = retention_seconds / 3600
         removed = 0
@@ -1894,6 +1916,51 @@ class EtnyPoXNode:
                 logger.warning(f"Periodic IPFS garbage collection skipped: {gc_err}")
 
         self.__last_ipfs_cleanup_at = time.time()
+
+    def __remove_stale_image_trees(self, keep):
+        """Remove the enclave image trees under this network's directory
+        (utils.image_trees) that are not the latest trustedzone of a
+        configured name (`keep`) and that no download or order on this node
+        reused for IMAGE_TREE_RETENTION_DAYS (the directory's mtime, which
+        Storage.download sets; a tree that predates this process counts as
+        used at its start, PROCESS_START). Runs from __clear_ipfs_cache on the
+        thread that processes this network's orders and tests, so no tree of
+        this network is mounted while it runs; a replication-only handle never
+        calls it, and the registered images it pins live in Kubo alone.
+        Removes directories, never pins or pin-cache entries: a removed tree
+        whose hash stays pinned is extracted again from the local Kubo by the
+        next download. A tree is renamed before it is removed (utils.
+        remove_tree), so a removal that fails part-way leaves no tree under
+        its CID for a download to reuse; the leftovers are removed on the next
+        pass. Never raises."""
+        retention_seconds = float(getattr(config, 'image_tree_retention_days_default', 2)) * 24 * 60 * 60
+        if retention_seconds <= 0:
+            return
+        base_path = str(self.cache_config.base_path)
+        try:
+            for leftover in removal_leftovers(base_path):
+                shutil.rmtree(leftover, ignore_errors=True)
+            trees = image_trees(base_path)
+            stale = stale_image_trees(trees, keep, time.time(), retention_seconds, since=PROCESS_START)
+        except Exception as e:
+            self.logger.warning(f"Image tree cleanup skipped: {e}")
+            return
+        removed = freed = 0
+        for cid in stale:
+            path = os.path.join(base_path, cid)
+            age_days = (time.time() - max(trees[cid], PROCESS_START)) / 86400
+            try:
+                size = directory_size(path)
+                remove_tree(path)
+            except Exception as e:
+                self.logger.warning(f"Could not remove the image tree {cid}: {e}")
+                continue
+            removed += 1
+            freed += size
+            self.logger.info(f"Removed the image tree {cid}: {size / 1024 ** 3:.1f} GB, last used {age_days:.1f} days ago")
+        if removed:
+            self.logger.info(f"Image tree cleanup removed {removed} tree(s), {freed / 1024 ** 3:.1f} GB; "
+                             f"{len(trees) - removed} kept, {len(keep & set(trees))} of them the latest trustedzones")
 
     def generate_process_order_data(self, write=False):
 
@@ -2334,22 +2401,32 @@ class EtnyPoXNode:
             # Track total wait time
             start_total_wait = time.time()
 
-            # First wait
-            start_wait = time.time()
-            status_enclave = self.wait_for_enclave_v2(bucket_name, 'result.txt', do_req.duration * 3600 + 120, order_id=order_id)
-            elapsed_wait1 = time.time() - start_wait
+            # The waits end early when an enclave container will not finish
+            # the task (EnclaveFailed: a CAS refusal, an exit, a container
+            # never started); the order is then closed below with the reason.
+            failure = None
+            elapsed_wait1 = elapsed_wait2 = 0
+            try:
+                # First wait
+                start_wait = time.time()
+                status_enclave = self.wait_for_enclave_v2(bucket_name, 'result.txt', do_req.duration * 3600 + 120, order_id=order_id)
+                elapsed_wait1 = time.time() - start_wait
 
-            # Second wait
-            start_wait = time.time()
-            # The trustedzone's landed-check waits up to 5 blocks per started
-            # 64 commits (max 20 blocks for a full 256-commit run), so allow
-            # generous headroom on top of the relay work itself.
-            status_enclave = self.wait_for_enclave_v2(bucket_name, 'transaction.txt', 300, order_id=order_id)
-            elapsed_wait2 = time.time() - start_wait
+                # Second wait
+                start_wait = time.time()
+                # The trustedzone's landed-check waits up to 5 blocks per started
+                # 64 commits (max 20 blocks for a full 256-commit run), so allow
+                # generous headroom on top of the relay work itself.
+                status_enclave = self.wait_for_enclave_v2(bucket_name, 'transaction.txt', 300, order_id=order_id)
+                elapsed_wait2 = time.time() - start_wait
+            except EnclaveFailed as e:
+                failure = str(e)
+                status_enclave = False
 
             total_elapsed_wait = elapsed_wait1 + elapsed_wait2
 
-            logger.info('Enclave finished the execution')
+            if failure is None:
+                logger.info('Enclave finished the execution')
 
             # Pin any ESR state blobs the enclave wrote at the END of execution.
             # serve_esr_state_pins runs on a 5s cadence DURING the wait loops,
@@ -2500,8 +2577,11 @@ class EtnyPoXNode:
                         logger.info(f'No remaining sleep required. Already waited {total_elapsed_wait} seconds.')
 
             else:
-                result = self.build_result_format_v3("[WARN]","Task execution timed out");
-                self.add_result_to_order(order_id, result);
+                # The message carries no ':': the result is colon-separated and
+                # its readers take the second field.
+                message = f"Task execution failed, {failure}" if failure else "Task execution timed out"
+                result = self.build_result_format_v3("[WARN]", message)
+                self.add_result_to_order(order_id, result)
 
             self.dpreq_cache.add(self.__dprequest)
             logger.debug('Cleaning up environment')
@@ -2531,11 +2611,28 @@ class EtnyPoXNode:
                 logger.debug(f'[esr-read] staging skipped: {e}')
         last_state_poll = 0
         last_session_poll = 0
+        # The first container poll comes one interval after compose up, once
+        # the containers have left 'created'.
+        last_container_poll = time.time()
         while time.time() < deadline:
             exists, msg = self.swift_stream_service.is_object_in_bucket(bucket_name, object_name)
             if exists:
                 logger.info('Enclave execution finished!')
                 return True
+            # An enclave container that will not finish the task ends the wait
+            # (EnclaveFailed) instead of letting it run to the deadline. The
+            # trustedzone exits once it has written the result, so the object
+            # is looked for once more before its exit counts.
+            if time.time() - last_container_poll >= ENCLAVE_CONTAINER_POLL_SECONDS:
+                last_container_poll = time.time()
+                reason = self.__enclave_failure()
+                if reason:
+                    exists, msg = self.swift_stream_service.is_object_in_bucket(bucket_name, object_name)
+                    if exists:
+                        logger.info('Enclave execution finished!')
+                        return True
+                    logger.error(f'Enclave failed while waiting for {object_name} in {bucket_name}: {reason}')
+                    raise EnclaveFailed(reason)
             # While waiting on the enclave, serve any ESR state it has dropped
             # for pinning. The enclave blocks on the CID coming back, so this
             # has to run DURING the wait, not after it. Polled every few seconds
@@ -2564,6 +2661,22 @@ class EtnyPoXNode:
             time.sleep(1)
         logger.info('Enclave execution timed out')
         return False
+
+    def __enclave_failure(self):
+        """Why one of the task's enclave containers (ENCLAVE_CONTAINERS) will
+        not finish it, or None, judged by utils.enclave_failure from the
+        states one docker inspect reads and, for a container the state shows
+        troubled, the tail of its log; the trustedzone's reason first. Each
+        docker call is bounded to seconds, so a stalled daemon costs the wait
+        loop one poll, not its ESR and session cadence."""
+        states = docker_container_states(ENCLAVE_CONTAINERS)
+        for name in ENCLAVE_CONTAINERS:
+            state = states.get(name)
+            log_text = docker_container_log_tail(name) if enclave_may_have_failed(state) else ''
+            reason = enclave_failure(name, state, log_text, awaited=name == ENCLAVE_TRUSTEDZONE)
+            if reason:
+                return reason
+        return None
 
     @staticmethod
     def __cidv1_raw(content_bytes):
@@ -3926,15 +4039,20 @@ class EtnyPoXNode:
             logger.warning(f"Unable to clean container: {e}")
 
     def __run_integration_test(self, image):
-        """Run trustedzone `image`'s integration test; True when its enclave
-        produced the test result. The caller holds integration_test_lock and
-        the task slot."""
+        """Run trustedzone `image`'s integration test on the registry's latest
+        image of that name; the IPFS hash of that image when its enclave
+        produced the test result, None when none did or the registry holds no
+        image of that name. The caller holds integration_test_lock and the
+        task slot."""
         logger = self.logger
 
         logger.info(f'Running integration test of {image} ({self.__trustedzones[image]}).')
 
-        [enclave_image_hash, _,
-         docker_compose_hash] = self.__image_registry.caller().getLatestTrustedZoneImageCertPublicKey(image, 'v3')
+        found = self.__latest_trustedzone_image(image)
+        if found is None:
+            logger.warning(f'Integration test of {image}: the image registry holds no such image.')
+            return None
+        enclave_image_hash, docker_compose_hash = found
         self.integration_bucket_name = 'etny-bucket-integration'
         order_id = 'integration_test'
         integration_test_file = 'context_test.etny'
@@ -3945,7 +4063,7 @@ class EtnyPoXNode:
         if not self.storage.download_many(list_of_ipfs_hashes, attempts=10, delay=3):
             logger.warning(f'Integration test of {image}: its image could not be downloaded from IPFS.')
             self.__clean_up_integration_test()
-            return False
+            return None
 
         os.chdir(self.cache_config.base_path)
 
@@ -4004,7 +4122,11 @@ class EtnyPoXNode:
         ], logger)
 
         logger.debug('Waiting for execution of integration test enclave')
-        status_enclave = self.wait_for_enclave_v2(self.integration_bucket_name, integration_test_file, 300)
+        try:
+            status_enclave = self.wait_for_enclave_v2(self.integration_bucket_name, integration_test_file, 300)
+        except EnclaveFailed as e:
+            logger.warning(f'Integration test of {image}: {e}')
+            status_enclave = False
 
         if status_enclave == True:
             status, result_data = self.swift_stream_service.get_file_content(self.integration_bucket_name,
@@ -4015,18 +4137,18 @@ class EtnyPoXNode:
         if not status:
             logger.warning(f'Integration test of {image} produced no result: this platform does not run it.')
             self.__clean_up_integration_test()
-            return False
+            return None
 
-        logger.info(f"Integration test of {image} passed on {self.__network}")
+        logger.info(f"Integration test of {image} passed on {self.__network} (image {enclave_image_hash})")
         self.__clean_up_integration_test()
-        return True
+        return enclave_image_hash
 
     def __run_integration_test_if_due(self, image):
         """Run `image`'s integration test unless it passed already or its retry
-        is not yet due, and record the outcome. Each failure postpones the next
-        attempt by a backoff that doubles from INTEGRATION_TEST_RETRY_MIN_SECONDS
-        up to INTEGRATION_TEST_RETRY_MAX_SECONDS. The caller holds the task
-        slot."""
+        is not yet due, and record the outcome: the hash of the image a passed
+        test ran on, or the next attempt after a backoff that doubles from
+        INTEGRATION_TEST_RETRY_MIN_SECONDS up to
+        INTEGRATION_TEST_RETRY_MAX_SECONDS. The caller holds the task slot."""
         logger = self.logger
         with integration_test_lock:
             if image in integration_test_passed:
@@ -4035,12 +4157,12 @@ class EtnyPoXNode:
             if time.monotonic() < due_at:
                 return
             try:
-                passed = self.__run_integration_test(image)
+                tested = self.__run_integration_test(image)
             except Exception as e:
                 logger.warning(f"Integration test of {image} failed: {e}")
-                passed = False
-            if passed:
-                integration_test_passed.add(image)
+                tested = None
+            if tested:
+                integration_test_passed[image] = tested
                 integration_test_retry.pop(image, None)
                 return
             failures += 1
@@ -4051,15 +4173,23 @@ class EtnyPoXNode:
                            f"next attempt in {backoff // 60} min")
 
     def __maybe_retry_integration_tests(self):
-        """Re-run this network's failed integration tests whose backoff has
-        elapsed. A test takes the task slot, as an order does."""
+        """Run this network's integration tests that are out of date: one whose
+        tested image is no longer the registry's latest of its name (read at
+        most every INTEGRATION_TEST_REGISTRY_CHECK_SECONDS), one that failed
+        and whose backoff has elapsed. A test takes the task slot, as an order
+        does."""
         if self.__replication_only or config.skip_integration_test:
             return
         now = time.monotonic()
+        if now - self.__last_registry_check_at >= INTEGRATION_TEST_REGISTRY_CHECK_SECONDS:
+            self.__last_registry_check_at = now
+            self.__mark_stale_integration_tests(self.__integration_images)
         due = [image for image in self.__integration_images
                if image not in integration_test_passed
                and integration_test_retry.get(image, (0, 0.0))[1] <= now]
-        if not due:
+        # Another network may have taken the slot during the registry reads;
+        # the loop does not wait on its order here, the next pass tests.
+        if not due or get_task_running_on():
             return
         acquire_task_slot(self.__network)
         try:
@@ -4072,8 +4202,11 @@ class EtnyPoXNode:
     def __retest_requirement(self, trustedzone):
         """Run now, past any backoff, the failed integration tests that decide
         whether this node runs `trustedzone`: its own when it has one, else
-        those of the platform requirement it names. The caller holds the task
-        slot."""
+        those of the platform requirement it names. Nothing under
+        SKIP_INTEGRATION_TEST or on a replication-only handle, which run no
+        test. The caller holds the task slot."""
+        if self.__replication_only or config.skip_integration_test:
+            return
         if trustedzone in self.__integration_images:
             images = [trustedzone]
         else:
@@ -4088,6 +4221,45 @@ class EtnyPoXNode:
                 integration_test_retry[image] = (failures, 0.0)
             self.__run_integration_test_if_due(image)
 
+    def __latest_trustedzone_image(self, image):
+        """The registry's latest certified trustedzone of name `image`:
+        (image hash, compose hash), or None when the registry holds no image
+        of that name. Raises on any other failure of the read."""
+        time.sleep(self.__network_config.rpc_delay / 1000)
+        try:
+            [enclave_image_hash, _,
+             docker_compose_hash] = self.__image_registry.caller().getLatestTrustedZoneImageCertPublicKey(image, 'v3')
+        except exceptions.ContractLogicError:
+            return None
+        return enclave_image_hash, docker_compose_hash
+
+    def __mark_stale_integration_tests(self, images):
+        """Drop the passed integration tests among `images` whose tested image
+        is no longer the registry's latest of its name (utils.
+        stale_integration_tests), so the test runs again on the latest; a name
+        the registry no longer holds counts as stale. A read the registry does
+        not answer leaves that name's test standing. Returns the names
+        dropped."""
+        with integration_test_lock:
+            passed = {image: integration_test_passed[image] for image in images if image in integration_test_passed}
+        latest = {}
+        for image in passed:
+            try:
+                found = self.__latest_trustedzone_image(image)
+            except Exception as e:
+                self.logger.warning(f"Could not read the image registry's latest {image} ({e}); its test stands")
+                continue
+            latest[image] = found[0] if found else None
+        stale = stale_integration_tests(passed, latest)
+        for image in stale:
+            self.logger.info(f"Integration test of {image} ran on {passed[image]}; the image registry now "
+                             f"certifies {latest[image] or 'no image'}: it runs again")
+            with integration_test_lock:
+                if integration_test_passed.get(image) == passed[image]:
+                    del integration_test_passed[image]
+                    integration_test_retry[image] = (0, 0.0)
+        return stale
+
     def __runnable_trustedzones(self):
         """The trustedzones of this network this node runs: one with an
         integration test of its own once that test passed, any other once a
@@ -4098,7 +4270,7 @@ class EtnyPoXNode:
         if config.skip_integration_test:
             return set(self.__trustedzones)
         tested = set(self.__integration_images)
-        passed = tested & integration_test_passed
+        passed = tested & integration_test_passed.keys()
         met = {self.__trustedzones[image] for image in passed}
         return {name for name, requirement in self.__trustedzones.items()
                 if (name in passed if name in tested else requirement in met)}

@@ -34,6 +34,13 @@ ipfs_pin_retention_days_default = float(os.environ.get('IPFS_PIN_RETENTION_DAYS'
 # order-processing loop (the same place that calls the heartbeat), so this
 # throttles it to at most once per interval instead of once per order.
 ipfs_cleanup_interval_minutes_default = float(os.environ.get('IPFS_CLEANUP_INTERVAL_MINUTES', 60))
+# How long an enclave image tree extracted under node/<network>/<cid>/ (a
+# securelock or trustedzone Docker registry, about 1.3 GB) is kept after an
+# order or integration test on this node last downloaded or reused it. The
+# latest trustedzone of each configured name is kept regardless. 0 disables the
+# removal, as IPFS_PIN_RETENTION_DAYS=0 does: the sweep runs with the pin
+# cleanup.
+image_tree_retention_days_default = float(os.environ.get('IMAGE_TREE_RETENTION_DAYS', 2))
 skip_integration_test = strtobool(os.environ.get('SKIP_INTEGRATION_TEST', "False"))
 kubo_url_default = os.environ.get('KUBO_URL')
 kubo_version_default =  os.environ.get('KUBO_VERSION')
