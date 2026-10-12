@@ -198,7 +198,9 @@ The bootnode (ipfs.ethernity.cloud) runs it as the docker container
 `etny-mirror`: image `etny-mirror:latest` (python:3.10-slim with psutil,
 python-dotenv, minio, web3 7.6.1, bs4 and requests), this repository
 bind-mounted at `/app`, working directory `/app/node`, command
-`python etny-node.py -k <key> -n bloxberg_testnet`, environment
+`python etny-node.py -k <key> -n bloxberg_testnet litvm_liteforge` (one handle
+per network it mirrors and serves the intake for; each `-unsafe` twin follows
+its network), environment
 `REPLICATION_ONLY=True`, `IPFS_CONNECT_URL=/ip4/<kubo>/tcp/5001/http`,
 `IPFS_SWARM=<the validators' multiaddrs>`, `IPFS_INTAKE_BIND=0.0.0.0:8765`,
 `ESR_REPLICATION_INTERVAL_SECONDS=60` and `LOG_LEVEL=info`, on the docker

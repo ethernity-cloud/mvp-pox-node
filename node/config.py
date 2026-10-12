@@ -223,7 +223,7 @@ esr_contract_addresses = {
 # replication skipped. An -unsafe network has no CAS, so no sessions.
 cas_session_registry_addresses = {
     "BLOXBERG_TESTNET": os.environ.get('CAS_SESSION_REGISTRY_ADDRESS', "0x444429681fCb26470Cb12B5436E48402cF7478A3"),
-    "LITVM_LITEFORGE": os.environ.get('LITVM_LITEFORGE_CAS_SESSION_REGISTRY_ADDRESS', "0x8ad24b3F406A41a0F8D3440021792EB203957F43"),
+    "LITVM_LITEFORGE": os.environ.get('LITVM_LITEFORGE_CAS_SESSION_REGISTRY_ADDRESS', "0xfA70B5Df7C773A21164cAc5413704117e4dEaB76"),
 }
 # How far back the FIRST SessionRegistered scan reaches (later rounds continue
 # incrementally from where the previous one stopped).
