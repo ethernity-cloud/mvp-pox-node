@@ -720,7 +720,7 @@ class EtnyPoXNode:
                 self.esr_progress.add('repl_pin_attempts', attempts)
                 self.logger.warning(
                     f"{label}: {cid} not fetchable after {cap} attempts across "
-                    f"rounds; giving up until the validator set changes")
+                    f"rounds; marking failed and giving up")
                 return False
             attempts[cid] = attempts.get(cid, 0) + 1
             self.esr_progress.add('repl_pin_attempts', attempts)
@@ -733,8 +733,8 @@ class EtnyPoXNode:
                 self.esr_progress.add('repl_pin_attempts', attempts)
                 return True
             except Exception as e:
-                self.logger.debug(
-                    f"{label}: pin attempt {attempts.get(cid)} for {cid} failed ({e})")
+                self.logger.info(
+                    f"{label}: pin attempt {attempts.get(cid)}/{cap} for {cid} failed ({e})")
                 return False
         except Exception as e:
             self.logger.debug(f"{label}: pin bookkeeping failed for {cid} ({e})")

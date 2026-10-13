@@ -3,7 +3,10 @@ version: '3.5'
 services:
   swift-stream:
     container_name: etny-swift-stream
-    image: quay.io/minio/minio:RELEASE.2023-03-13T19-46-17Z
+    # quay.io/minio/minio:RELEASE.2023-03-13T19-46-17Z, mirrored on 2026-10-13
+    # (image id c69ff79d5831): quay.io answers 401 to an anonymous pull of
+    # that tag, and the mirror is pulled without credentials.
+    image: registry.ethernity.cloud:443/debuggingdelight/ethernity-cloud-sdk-registry/minio/minio:RELEASE.2023-03-13T19-46-17Z
     command: server /data/
     expose:
       - "9000"
