@@ -3618,8 +3618,12 @@ class EtnyPoXNode:
             if max_fee_per_gas > self.__w3.to_wei(self.__network_config.max_fee_per_gas, self.__network_config.gas_price_measure):
                 raise Exception("Network base fee is too high!")
                 
+            # The type is a hex string: build_transaction passes the field to
+            # eth_estimateGas as given, and Tenderly's Sepolia gateway answers
+            # a numeric 2 with -32602 "invalid params"; eth_account signs
+            # either form as a type-2 transaction.
             transaction_options = {
-                "type": 2,
+                "type": "0x2",
                 "nonce": self.__nonce,
                 "chainId": self.__network_config.chain_id,
                 "from": self.__acct.address,
