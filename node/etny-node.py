@@ -411,6 +411,7 @@ class EtnyPoXNode:
         logger.info("Integration tests: %s", ", ".join(self.__integration_images))
 
         self.cache_config = CacheConfig(network.name)
+        self.__reset_caches_of_another_contract(network)
         self.network_cache = Cache(self.cache_config.network_cache_limit, self.cache_config.network_cache_filepath)
         self.ipfs_version_cache = Cache(self.cache_config.ipfs_version_cache_limit, self.cache_config.ipfs_version_filepath)
 
@@ -3605,6 +3606,27 @@ class EtnyPoXNode:
               logger.info(f"DP request {self.__dprequest} is matched with another order, skipping processing")
               self.doreq_cache.add(doreq_id)
               raise exceptions.ContractLogicError(f"DP request {self.__dprequest} already matched")
+
+    def __reset_caches_of_another_contract(self, network):
+        """The request and order caches hold ids of the protocol contract they
+        were built against. When a network's contract changes (Sepolia's
+        family of 2026-10-14 replaced one whose DO requests 0 to 9 the cache
+        held as done, so the new contract's request 0 was never taken), they
+        start again; `contract.txt` beside them names the contract they
+        belong to. A directory without the marker keeps its caches and takes
+        one."""
+        marker = self.cache_config.base_path / 'contract.txt'
+        current = str(network.contract_address).strip().lower()
+        previous = marker.read_text().strip().lower() if marker.exists() else ''
+        if previous and previous != current:
+            for path in (self.cache_config.orders_cache_filepath, self.cache_config.dpreq_filepath,
+                         self.cache_config.doreq_filepath, self.cache_config.merged_orders_cache,
+                         self.cache_config.process_orders_cache_filepath):
+                if os.path.exists(path):
+                    os.remove(path)
+            logger.info(f"Protocol contract changed from {previous} to {current}: the request and order caches start again")
+        if previous != current:
+            marker.write_text(current)
 
     def get_transaction_build(self, existing_nonce=None):
         logger = self.logger
