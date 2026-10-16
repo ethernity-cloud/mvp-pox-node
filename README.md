@@ -230,3 +230,22 @@ $ ./etny-node-installer.sh
 
 Follow through the prompts and use the same keys and addresses from your backup
 
+### Every name lookup in the node VM fails ("DNSSEC validation failed: missing-key")
+The VM's resolver validates DNSSEC and, on Ubuntu 22.04, trusts only the root
+zone's old key (KSK-2017). The root zone has been signed by KSK-2024 alone
+since its key rollover of 2026-10-11, so a VM provisioned before this fix
+stops resolving every name: the agent restarts with `NameResolutionError`
+and its start script waits forever to resolve the IPFS host. `resolvectl
+query google.com` inside the VM shows the cause. Install both root keys as
+trust anchors, from the host:
+
+```
+$ cd && cd mvp-pox-node
+$ git pull
+$ vagrant upload ubuntu/etny-node-provision-dns.sh /tmp/etny-node-provision-dns.sh
+$ vagrant ssh -c 'sudo bash /tmp/etny-node-provision-dns.sh && resolvectl query google.com'
+$ sudo systemctl restart etny-vagrant
+```
+
+VMs provisioned from this version on get the anchors at provisioning.
+

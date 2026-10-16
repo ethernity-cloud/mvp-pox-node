@@ -41,6 +41,7 @@ Vagrant.configure("2") do |config|
       :dev => interface.strip!,
       :mode => 'vepa',
       :type => 'direct'
+    etnyvm1.vm.provision "file", source: "./ubuntu/etny-node-provision-dns.sh", destination: "~/etny/node/etny-node-provision-dns.sh"
     etnyvm1.vm.provision "file", source: "./ubuntu/etny-node-provision-docker.sh", destination: "~/etny/node/etny-node-provision-docker.sh"
     etnyvm1.vm.provision "file", source: "./ubuntu/etny-node-isgx-removal-tool.sh", destination: "~/etny/node/etny-node-isgx-removal-tool.sh"
     etnyvm1.vm.provision "file", source: "./ubuntu/etny-node-provision-sgx.sh", destination: "~/etny/node/etny-node-provision-sgx.sh"
@@ -52,6 +53,8 @@ Vagrant.configure("2") do |config|
     etnyvm1.vm.provision "file", source: "./ubuntu/etc/systemd/system/etny-node.service", destination: "~/etny/node/etny-node.service"
     etnyvm1.vm.provision "file", source: "./ubuntu/etc/systemd/system/ipfs.service", destination: "~/etny/node/ipfs.service"
     etnyvm1.vm.provision "file", source: "./config", destination: "~/etny/node/config"
+    etnyvm1.vm.provision "shell",
+      inline: "/bin/bash /home/vagrant/etny/node/etny-node-provision-dns.sh"
     etnyvm1.vm.provision "shell",
       inline: "/bin/bash /home/vagrant/etny/node/etny-node-provision-sgx.sh"
     etnyvm1.vm.provision "shell",
