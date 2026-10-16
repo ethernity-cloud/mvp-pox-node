@@ -21,7 +21,7 @@ from web3 import middleware
 from web3.gas_strategies.time_based import fast_gas_price_strategy
 from web3.gas_strategies.rpc import rpc_gas_price_strategy
 
-from utils import get_or_generate_uuid, run_subprocess, retry, Storage, Cache, ListCache, ListCacheWithTimestamp, MergedOrdersCache, subprocess, get_node_geo, HardwareInfoProvider, parse_transaction_bytes_ut, looks_like_cid, canonical_cid, PEER_MULTIADDR, next_registered_image, enclave_failure, enclave_may_have_failed, docker_container_states, docker_container_log_tail, stale_integration_tests, image_trees, stale_image_trees, directory_size, remove_tree, removal_leftovers
+from utils import get_or_generate_uuid, run_subprocess, retry, holds_within, Storage, Cache, ListCache, ListCacheWithTimestamp, MergedOrdersCache, subprocess, get_node_geo, HardwareInfoProvider, parse_transaction_bytes_ut, looks_like_cid, canonical_cid, PEER_MULTIADDR, next_registered_image, enclave_failure, enclave_may_have_failed, docker_container_states, docker_container_log_tail, stale_integration_tests, image_trees, stale_image_trees, directory_size, remove_tree, removal_leftovers
 import scone_image
 from models import *
 from error_messages import errorMessages
@@ -72,6 +72,10 @@ ENCLAVE_TRUSTEDZONE = 'etny-trustedzone'
 ENCLAVE_SECURELOCK = 'etny-securelock'
 ENCLAVE_CONTAINERS = (ENCLAVE_TRUSTEDZONE, ENCLAVE_SECURELOCK)
 ENCLAVE_CONTAINER_POLL_SECONDS = 10
+# How long a placed order waits for the data owner's approval (the runner's
+# _approveOrder) before the node moves to a new DP request; the order is read
+# every block time and once more when the window ends.
+ORDER_APPROVAL_WINDOW_SECONDS = 60
 # When this process started: an image tree extracted before it counts as last
 # used then (__remove_stale_image_trees).
 PROCESS_START = time.time()
@@ -3397,9 +3401,9 @@ class EtnyPoXNode:
 
                 if metadata[i][4] == '':
                     logger.info(f"Awaiting approval for order")
-                    attempts = int(60 / self.__network_config.block_time)
-                    if retry(self.wait_for_order_approval, attempts=attempts, delay=self.__network_config.block_time)[0] is False:
-                        logger.info(f"Order was not approved in the last ~{attempts} blocks, skipping to next DP request")
+                    if not holds_within(self.order_is_approved, ORDER_APPROVAL_WINDOW_SECONDS,
+                                        interval=self.__network_config.block_time):
+                        logger.info(f"Order was not approved within {ORDER_APPROVAL_WINDOW_SECONDS} s, skipping to next DP request")
                         next_dp_request = True
                         release_task_slot(self.__network)
                         break
@@ -3434,15 +3438,8 @@ class EtnyPoXNode:
         collect_garbage(self.storage, logger)  # Running garbage collection on ipfs before exiting
 
 
-    def wait_for_order_approval(self):
-        logger = self.logger
-        
-        
-        _order = self.__etny.caller()._getOrder(self.__order_id)
-        order = Order(_order)
-        #logger.info('Waiting...')
-        if order.status != OrderStatus.PROCESSING:
-            raise Exception("Order has not been yet approved")
+    def order_is_approved(self):
+        return Order(self.__etny.caller()._getOrder(self.__order_id)).status == OrderStatus.PROCESSING
 
     def find_order_by_dp_req(self):
         logger = self.logger

@@ -355,6 +355,23 @@ def run_subprocess(args, logger):
         if item:
             logger.debug(item.decode())
 
+def holds_within(check, window_seconds, interval, sleep=time.sleep, now=time.monotonic):
+    """Whether `check()` returns True within `window_seconds`, asked every
+    `interval` seconds and once more when the window ends. An exception from
+    `check` counts as False."""
+    deadline = now() + window_seconds
+    while True:
+        try:
+            if check():
+                return True
+        except Exception:
+            pass
+        remaining = deadline - now()
+        if remaining <= 0:
+            return False
+        sleep(min(interval, remaining))
+
+
 def retry(func, *func_args, attempts, delay=1, callback=None):
     for _ in range(attempts):
         try:
