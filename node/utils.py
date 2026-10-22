@@ -355,21 +355,42 @@ def run_subprocess(args, logger):
         if item:
             logger.debug(item.decode())
 
-def holds_within(check, window_seconds, interval, sleep=time.sleep, now=time.monotonic):
-    """Whether `check()` returns True within `window_seconds`, asked every
-    `interval` seconds and once more when the window ends. An exception from
-    `check` counts as False."""
-    deadline = now() + window_seconds
+def holds_within(check, window_seconds, interval, sleep=time.sleep, now=time.monotonic,
+                 min_blocks=0, block=None, max_seconds=None):
+    """Whether `check()` returns True within the window, asked every `interval`
+    seconds and once more when the window ends. The window ends once
+    `window_seconds` have passed and `block()` has advanced by `min_blocks`
+    (when given), and at `max_seconds` at the latest. An exception from `check`
+    or `block` counts as False / no progress."""
+    start = now()
+    deadline = start + window_seconds
+    cap = start + max_seconds if max_seconds is not None else None
+
+    def height():
+        try:
+            return block()
+        except Exception:
+            return None
+
+    start_block = height() if block is not None else None
     while True:
         try:
             if check():
                 return True
         except Exception:
             pass
-        remaining = deadline - now()
-        if remaining <= 0:
+        t = now()
+        if cap is not None and t >= cap:
             return False
-        sleep(min(interval, remaining))
+        if t >= deadline:
+            if start_block is None or min_blocks <= 0:
+                return False
+            h = height()
+            if h is not None and h - start_block >= min_blocks:
+                return False
+            sleep(interval if cap is None else max(0, min(interval, cap - t)))
+            continue
+        sleep(min(interval, deadline - t))
 
 
 def retry(func, *func_args, attempts, delay=1, callback=None):

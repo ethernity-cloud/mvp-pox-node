@@ -73,9 +73,14 @@ ENCLAVE_SECURELOCK = 'etny-securelock'
 ENCLAVE_CONTAINERS = (ENCLAVE_TRUSTEDZONE, ENCLAVE_SECURELOCK)
 ENCLAVE_CONTAINER_POLL_SECONDS = 10
 # How long a placed order waits for the data owner's approval (the runner's
-# _approveOrder) before the node moves to a new DP request; the order is read
-# every block time and once more when the window ends.
+# _approveOrder) before the node moves to a new DP request: at least
+# ORDER_APPROVAL_WINDOW_SECONDS and at least ORDER_APPROVAL_WINDOW_BLOCKS new
+# blocks (the runner needs one block to see the order and one to mine the
+# approval), at most ORDER_APPROVAL_MAX_SECONDS. The order is read every block
+# time and once more when the window ends.
 ORDER_APPROVAL_WINDOW_SECONDS = 60
+ORDER_APPROVAL_WINDOW_BLOCKS = 6
+ORDER_APPROVAL_MAX_SECONDS = 900
 # When this process started: an image tree extracted before it counts as last
 # used then (__remove_stale_image_trees).
 PROCESS_START = time.time()
@@ -3405,8 +3410,12 @@ class EtnyPoXNode:
                 if metadata[i][4] == '':
                     logger.info(f"Awaiting approval for order")
                     if not holds_within(self.order_is_approved, ORDER_APPROVAL_WINDOW_SECONDS,
-                                        interval=self.__network_config.block_time):
-                        logger.info(f"Order was not approved within {ORDER_APPROVAL_WINDOW_SECONDS} s, skipping to next DP request")
+                                        interval=self.__network_config.block_time,
+                                        min_blocks=ORDER_APPROVAL_WINDOW_BLOCKS,
+                                        block=lambda: self.__w3.eth.block_number,
+                                        max_seconds=ORDER_APPROVAL_MAX_SECONDS):
+                        logger.info(f"Order was not approved within {ORDER_APPROVAL_WINDOW_SECONDS} s and "
+                                    f"{ORDER_APPROVAL_WINDOW_BLOCKS} blocks, skipping to next DP request")
                         next_dp_request = True
                         release_task_slot(self.__network)
                         break
