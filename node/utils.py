@@ -638,10 +638,13 @@ class Storage:
             self._ensure_storage_max()
 
     def _parse_multiaddr(self, ma):
-        match = re.match(r'/ip4/([\d.]+)/tcp/(\d+)/http', ma)
+        # An /ip4/ address or a /dns4/ or /dns/ name (a container on a docker
+        # network reaches another by its name, which outlives the address
+        # docker assigns at start), then /tcp/<port>/http.
+        match = re.fullmatch(r'/(?:ip4/([\d.]+)|dns4?/([A-Za-z0-9.-]+))/tcp/(\d+)/http', ma)
         if match:
-            host, port = match.groups()
-            return f'http://{host}:{port}'
+            ip, name, port = match.groups()
+            return f'http://{ip or name}:{port}'
         raise ValueError(f"Invalid multiaddr: {ma}")
 
     def get_version(self):
