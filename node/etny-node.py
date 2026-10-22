@@ -3102,8 +3102,11 @@ class EtnyPoXNode:
         current_block_number = self.__w3.eth.block_number
 
         # Decide how many nodes can place orders per block
-        # Use max(1, ...) to avoid zero if total_nodes_count < 25
-        if self.__network == 'TESTNET':
+        # Use max(1, ...) to avoid zero if total_nodes_count < 25. A testnet
+        # (NETWORK_TYPE=TESTNET) is not dispersed: its heartbeat counts every
+        # node ever registered (3,657 on the bloxberg testnet in 2026-10), which
+        # would hold each request back for up to ~146 blocks.
+        if self.__network_config.network_type == 'TESTNET':
             dispersion_factor = 1
         else:
             dispersion_factor = max(1, self.__total_nodes_count // 25)
