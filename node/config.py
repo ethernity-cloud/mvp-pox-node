@@ -224,7 +224,7 @@ esr_contract_addresses = {
 # mainnet and testnet share chainId 8995. "" / absent = not deployed there,
 # replication skipped. An -unsafe network has no CAS, so no sessions.
 cas_session_registry_addresses = {
-    "BLOXBERG_TESTNET": os.environ.get('CAS_SESSION_REGISTRY_ADDRESS', "0x444429681fCb26470Cb12B5436E48402cF7478A3"),
+    "BLOXBERG_TESTNET": os.environ.get('CAS_SESSION_REGISTRY_ADDRESS', "0x78f0c5E92E7A9Ec2f2A36A4509ED4a75D0f9463B"),
     "LITVM_LITEFORGE": os.environ.get('LITVM_LITEFORGE_CAS_SESSION_REGISTRY_ADDRESS', "0xfA70B5Df7C773A21164cAc5413704117e4dEaB76"),
     "ETHEREUM_SEPOLIA": os.environ.get('ETHEREUM_SEPOLIA_CAS_SESSION_REGISTRY_ADDRESS', "0xDbB249E108d19fC1691483Bf897bA8BA0dA99c06"),
 }
