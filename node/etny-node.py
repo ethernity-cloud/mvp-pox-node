@@ -2691,7 +2691,7 @@ class EtnyPoXNode:
     @staticmethod
     def __cidv1_raw(content_bytes):
         """CIDv1/raw/sha2-256 for `content_bytes` -- the CID Storage.add_bytes_raw
-        stores content of up to one block (Storage.RAW_BLOCK_MAX) under.
+        stores content of up to one block (utils.BLOCK_SIZE) under.
 
         Layout: multibase 'b' + base32( 0x01 0x55 0x12 0x20 || sha256(content) )
                                         CIDv1 raw  sha256  32 bytes
@@ -2765,7 +2765,7 @@ class EtnyPoXNode:
                 # Verify the delivered bytes actually hash to the committed CID
                 # before handing them to the enclave -- never stage substituted
                 # content, even though the enclave re-checks too.
-                if self.__cidv1_raw(blob) != cid:
+                if Storage.cid_of(blob) != cid:
                     self.logger.warning(f"[esr-read] {cid}: fetched content hashes differently; not staging")
                     continue
                 self.swift_stream_service.put_file_content(
@@ -2845,7 +2845,7 @@ class EtnyPoXNode:
                 # Confirm the enclave's CID actually describes this blob. A
                 # mismatch means the blob and the committed pointer disagree --
                 # pinning it would serve content that does not match the chain.
-                computed = self.__cidv1_raw(blob)
+                computed = Storage.cid_of(blob)
                 if computed != declared_cid:
                     self.logger.warning(
                         f'ESR state {name}: CID mismatch (enclave published {declared_cid}, '

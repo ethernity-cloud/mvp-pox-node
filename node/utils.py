@@ -81,6 +81,74 @@ def looks_like_cid(value):
             and set(cid[1:]) <= set("abcdefghijklmnopqrstuvwxyz234567"))
 
 
+# Content is stored as Kubo's `add --cid-version=1 --raw-leaves` stores it with
+# its default chunker: in raw sha256 blocks of BLOCK_SIZE bytes (the last one
+# shorter), a single block as it is, several under a balanced UnixFS tree of
+# at most LINKS_PER_NODE blocks per node. unixfs_cid() computes the resulting
+# CID from the bytes alone, as the runners and the enclaves do, and an IPFS
+# node adding the same bytes with its default settings names them the same;
+# Storage.add_bytes_raw passes the chunker all the same, for a Kubo whose
+# default was changed.
+BLOCK_SIZE = 262144
+LINKS_PER_NODE = 174
+
+
+def _cid_b32(cid):
+    return 'b' + base64.b32encode(cid).decode('ascii').lower().rstrip('=')
+
+
+def _pb_varint(n):
+    out = bytearray()
+    while True:
+        byte = n & 0x7F
+        n >>= 7
+        if n:
+            out.append(byte | 0x80)
+        else:
+            out.append(byte)
+            return bytes(out)
+
+
+def _pb_field(number, wire, payload):
+    """A protobuf field: varint (wire 0) or length-delimited (wire 2)."""
+    tag = _pb_varint((number << 3) | wire)
+    return tag + (_pb_varint(len(payload)) + payload if wire == 2 else payload)
+
+
+def _pb_raw_cid(content):
+    """CIDv1, codec raw (0x55), sha2-256 (0x12, 32 bytes)."""
+    return bytes([0x01, 0x55, 0x12, 0x20]) + hashlib.sha256(content).digest()
+
+
+def _pb_file_node(children):
+    """A dag-pb UnixFS File node over `children`, each (cid, tsize, filesize);
+    returns (cid, tsize, filesize). Links come before Data in dag-pb; a link
+    carries the child's CID, an empty Name and its Tsize, the size of the
+    child's subtree; Data is UnixFS Type=File(2), filesize, blocksizes."""
+    links = b"".join(
+        _pb_field(2, 2, _pb_field(1, 2, cid) + _pb_field(2, 2, b"") + _pb_field(3, 0, _pb_varint(tsize)))
+        for cid, tsize, _ in children)
+    filesize = sum(size for _, _, size in children)
+    data = _pb_field(1, 0, _pb_varint(2)) + _pb_field(3, 0, _pb_varint(filesize))
+    data += b"".join(_pb_field(4, 0, _pb_varint(size)) for _, _, size in children)
+    block = links + _pb_field(1, 2, data)
+    cid = bytes([0x01, 0x70, 0x12, 0x20]) + hashlib.sha256(block).digest()
+    return cid, len(block) + sum(tsize for _, tsize, _ in children), filesize
+
+
+def unixfs_cid(content, block_size=BLOCK_SIZE):
+    """The CID Kubo gives `content` for `add` with Storage.RAW_ADD_PARAMS: the
+    raw block's CID up to one block, else the root of the balanced UnixFS tree
+    over the blocks, LINKS_PER_NODE to a node, every node full but the last."""
+    if len(content) <= block_size:
+        return _cid_b32(_pb_raw_cid(content))
+    nodes = [(_pb_raw_cid(content[i:i + block_size]), len(content[i:i + block_size]), len(content[i:i + block_size]))
+             for i in range(0, len(content), block_size)]
+    while len(nodes) > 1:
+        nodes = [_pb_file_node(nodes[i:i + LINKS_PER_NODE]) for i in range(0, len(nodes), LINKS_PER_NODE)]
+    return _cid_b32(nodes[0][0])
+
+
 _BASE58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
 
 
@@ -1211,12 +1279,9 @@ class Storage:
             time.sleep(1)
         raise Exception(f"Unable to determine if {path} is file or folder after 10 attempts")
 
-    # Kubo's largest chunk. add_bytes_raw adds with it, so content of up to
-    # RAW_BLOCK_MAX bytes is one raw block, whose CID is cidv1_raw(content):
-    # the CID the enclaves and the runners compute. Larger content is a DAG of
-    # such blocks, whose root CID only Kubo computes (cid_of).
-    RAW_BLOCK_MAX = 1048576
-    RAW_ADD_PARAMS = {'cid-version': '1', 'raw-leaves': 'true', 'chunker': f'size-{RAW_BLOCK_MAX}'}
+    # What add_bytes_raw passes to Kubo's add: the parameters unixfs_cid()
+    # computes the CID for.
+    RAW_ADD_PARAMS = {'cid-version': '1', 'raw-leaves': 'true', 'chunker': f'size-{BLOCK_SIZE}'}
 
     @staticmethod
     def cidv1_raw(content_bytes):
@@ -1225,29 +1290,15 @@ class Storage:
         Layout: 'b' + base32( 0x01 0x55 0x12 0x20 || sha256(content) )
                         CIDv1  raw  sha256  32 bytes
 
-        The CID add_bytes_raw stores content of up to RAW_BLOCK_MAX bytes under.
+        The CID add_bytes_raw stores content of up to BLOCK_SIZE bytes under.
         """
-        digest = hashlib.sha256(content_bytes).digest()
-        raw = bytes([0x01, 0x55, 0x12, 0x20]) + digest
-        return 'b' + base64.b32encode(raw).decode('ascii').lower().rstrip('=')
+        return _cid_b32(_pb_raw_cid(content_bytes))
 
-    def cid_of(self, content_bytes):
-        """The CID add_bytes_raw stores `content_bytes` under: cidv1_raw() up
-        to RAW_BLOCK_MAX bytes, computed locally; above it, the root Kubo
-        computes for the chunked content without storing it (raises when the
-        daemon cannot be reached)."""
-        if len(content_bytes) <= self.RAW_BLOCK_MAX:
-            return self.cidv1_raw(content_bytes)
-        if not self.connected:
-            if not self.connect():
-                raise Exception("IPFS unreachable: cannot compute the CID of content above one block")
-            self.connected = True
-        resp = self._api_call('add', params={**self.RAW_ADD_PARAMS, 'only-hash': 'true', 'pin': 'false'},
-                              files={'file': ('blob', content_bytes)})
-        cid = self._added_hash(resp, 'blob')
-        if not cid:
-            raise Exception("IPFS returned no CID for the content")
-        return cid
+    @staticmethod
+    def cid_of(content_bytes):
+        """The CID add_bytes_raw stores `content_bytes` under, computed locally
+        (unixfs_cid)."""
+        return unixfs_cid(content_bytes)
 
     def pin_bytes_deferred(self, content_bytes, name='blob', attempts=10, delay=30):
         """Compute the CID now, return it, and pin in the BACKGROUND.
@@ -1258,13 +1309,11 @@ class Storage:
         result submission for work the enclave had already completed correctly,
         and the stall grows with the size of the result.
 
-        The CID of content of up to one block is a hash computed locally; that
-        of larger content is Kubo's (cid_of). The caller gets it immediately
+        The CID is computed locally (cid_of). The caller gets it immediately
         and proceeds; the actual add/pin is queued on the existing executor and
         retries on its own without holding anything up.
 
-        Returns the CID (never None). Raises only for content above one block
-        when IPFS cannot compute its CID.
+        Returns the CID (never None, never raises).
         """
         cid = self.cid_of(content_bytes)
         # Spool the content before returning. In-memory retries die with the
@@ -1419,14 +1468,14 @@ class Storage:
         return done
 
     def add_bytes_raw(self, content_bytes, name='blob'):
-        """Add bytes as CIDv1 with raw leaves in chunks of RAW_BLOCK_MAX,
+        """Add bytes as CIDv1 with raw leaves in chunks of BLOCK_SIZE,
         returning the CID.
 
         The default `add` produces a CIDv0 dag-pb node (content wrapped in UnixFS
-        framing), whose CID an enclave cannot derive without reimplementing that
-        framing. With cid-version=1 + raw-leaves, content of up to one chunk is
+        framing). With cid-version=1 + raw-leaves, content of up to one chunk is
         a single raw block whose CID is base32(0x01 0x55 0x12 0x20 ||
-        sha256(content)) -- so the enclave can compute it from the bytes it
+        sha256(content)), and larger content a UnixFS tree unixfs_cid()
+        reproduces -- so the enclave can compute the CID from the bytes it
         authored and commit THAT to the chain, meaning a hostile node cannot
         substitute different content for what was committed.
 
