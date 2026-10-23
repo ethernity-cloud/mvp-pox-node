@@ -230,36 +230,18 @@ $ ./etny-node-installer.sh
 
 Follow through the prompts and use the same keys and addresses from your backup
 
-### Every name lookup in the node VM fails ("DNSSEC validation failed: missing-key")
-The VM's resolver validates DNSSEC and, on Ubuntu 22.04, trusts only the root
-zone's old key (KSK-2017). The root zone has been signed by KSK-2024 alone
-since its key rollover of 2026-10-11, so a VM provisioned before this fix
-stops resolving every name: the agent restarts with `NameResolutionError`
-and its start script waits forever to resolve the IPFS host. `resolvectl
-query google.com` inside the VM shows the cause. Install both root keys as
-trust anchors, from the host:
+### Node VM DNS
+`ubuntu/etny-node-provision-dns.sh` installs the root zone's KSK-2017 and
+KSK-2024 as DNSSEC trust anchors and sets the VM's resolvers to 1.1.1.1,
+8.8.8.8, 1.0.0.1 and 8.8.4.4. VMs get it at provisioning. On a VM that logs
+`DNSSEC validation failed: missing-key`, `NameResolutionError` or
+`SSLV3_ALERT_HANDSHAKE_FAILURE`, run it from the host:
 
 ```
 $ cd && cd mvp-pox-node
 $ git pull
 $ vagrant upload ubuntu/etny-node-provision-dns.sh /tmp/etny-node-provision-dns.sh
-$ vagrant ssh -c 'sudo bash /tmp/etny-node-provision-dns.sh && resolvectl query google.com'
+$ vagrant ssh -c 'sudo bash /tmp/etny-node-provision-dns.sh && resolvectl status | grep "DNS Servers"'
 $ sudo systemctl restart etny-vagrant
-```
-
-VMs provisioned from this version on get the anchors at provisioning.
-
-### TLS to one RPC fails in the node VM ("SSLV3_ALERT_HANDSHAKE_FAILURE")
-The Ubuntu box resolves through 4.2.2.1, 4.2.2.2 and OpenDNS
-208.67.220.220. OpenDNS answers the names it filters with the address of its
-block page (146.112.61.x), so a connection to such a host, the Ethereum
-Sepolia RPC `sepolia.gateway.tenderly.co` among them, fails its TLS
-handshake: the agent logs `SSLV3_ALERT_HANDSHAKE_FAILURE` for every call on
-that network. `getent hosts sepolia.gateway.tenderly.co` inside the VM shows
-the cause. The same script replaces the box's resolvers with Cloudflare's and
-Google's; run it as above, then check:
-
-```
-$ vagrant ssh -c 'resolvectl status | grep "DNS Servers"; getent hosts sepolia.gateway.tenderly.co'
 ```
 
