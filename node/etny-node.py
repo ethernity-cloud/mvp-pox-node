@@ -21,7 +21,7 @@ from web3 import middleware
 from web3.gas_strategies.time_based import fast_gas_price_strategy
 from web3.gas_strategies.rpc import rpc_gas_price_strategy
 
-from utils import get_or_generate_uuid, run_subprocess, retry, holds_within, pinned_within, remaining_order_seconds, record_order_placement, order_placed_at, ORDER_GRACE_SECONDS, Storage, Cache, ListCache, ListCacheWithTimestamp, MergedOrdersCache, subprocess, get_node_geo, HardwareInfoProvider, parse_transaction_bytes_ut, looks_like_cid, canonical_cid, PEER_MULTIADDR, next_registered_image, enclave_failure, enclave_may_have_failed, docker_container_states, docker_container_log_tail, stale_integration_tests, image_trees, stale_image_trees, directory_size, remove_tree, removal_leftovers
+from utils import get_or_generate_uuid, run_subprocess, retry, holds_within, pinned_within, remaining_order_seconds, record_order_placement, order_placed_at, ORDER_GRACE_SECONDS, session_wallet_attestation, Storage, Cache, ListCache, ListCacheWithTimestamp, MergedOrdersCache, subprocess, get_node_geo, HardwareInfoProvider, parse_transaction_bytes_ut, looks_like_cid, canonical_cid, PEER_MULTIADDR, next_registered_image, enclave_failure, enclave_may_have_failed, docker_container_states, docker_container_log_tail, stale_integration_tests, image_trees, stale_image_trees, directory_size, remove_tree, removal_leftovers
 import scone_image
 from models import *
 from error_messages import errorMessages
@@ -3757,6 +3757,7 @@ class EtnyPoXNode:
                 'delivered': set(),
                 'proof_next': 0,
                 'spent': 0,
+                'wallet_sent': False,
             }
             if is_session:
                 logger.info(f"[session] order {order_id}: interactive session detected "
@@ -3831,12 +3832,69 @@ class EtnyPoXNode:
             st['delivered'].add(seq)
             logger.info(f"[session] order {order_id}: delivered input {seq}")
 
+    def __session_broadcast_row(self, order_id, st, key, value, budget, label):
+        """Broadcast one DP-request metadata row (`key`, `value`) of the
+        session from this node's wallet, within the per-order gas budget;
+        True when it is on chain, False to try again next tick."""
+        fn = self.__etny.functions._addMetadataToDPRequest(st['dp_req'], key, value)
+        gas_price, fee_fields = self.__esr_fee()
+        try:
+            gas_units = fn.estimate_gas({'from': self.__address})
+        except Exception as e:
+            logger.error(f"[session] order {order_id}: {label}: estimate_gas failed ({e}); retrying next tick")
+            return False
+        cost = gas_units * gas_price
+        if st['spent'] + cost > budget:
+            logger.error(f"[session] order {order_id}: {label} would exceed the per-order gas budget "
+                         f"({st['spent'] + cost} > {budget} wei); stopping relay")
+            return False
+        try:
+            opts = {
+                'from': self.__address,
+                'nonce': self.__w3.eth.get_transaction_count(self.__address),
+                'chainId': self.__network_config.chain_id,
+                'gas': gas_units + 30000,
+            }
+            opts.update(fee_fields)
+            txn = fn.build_transaction(opts)
+            self.__w3.eth.wait_for_transaction_receipt(
+                self.__w3.eth.send_raw_transaction(
+                    self.__w3.eth.account.sign_transaction(
+                        txn, private_key=self.__acct.key).raw_transaction),
+                timeout=180)
+            st['spent'] += cost
+            logger.info(f"[session] order {order_id}: broadcast {label} (gas {gas_units})")
+            return True
+        except Exception as e:
+            logger.error(f"[session] order {order_id}: broadcasting {label} failed ({e})")
+            return False
+
+    def __session_relay_wallet(self, bucket_name, order_id, st, budget):
+        """Broadcast the enclave's task wallet attestation (session.wallet.proof,
+        the 'etny-sw' row) once, before any output row. True when it is on
+        chain, was malformed, or the enclave staged none (a trustedzone from
+        before the attestation); False to try again next tick."""
+        ok, value = self.swift_stream_service.get_file_content(bucket_name, 'session.wallet.proof')
+        if not ok or not value:
+            return True
+        if session_wallet_attestation(value, order_id) is None:
+            logger.error(f"[session] order {order_id}: malformed task wallet attestation; not broadcast")
+            st['wallet_sent'] = True
+            return True
+        if not self.__session_broadcast_row(order_id, st, 'etny-sw', str(value).strip(), budget,
+                                            'the task wallet attestation'):
+            return False
+        st['wallet_sent'] = True
+        return True
+
     def __session_relay_outputs(self, bucket_name, order_id, st):
         """Pin each staged output ciphertext (verified against the CID the
         enclave attested inside its signed proof) and broadcast the proof as
         a DP-request metadata row from this node's wallet. Strictly in proof
         order; shares the ESR relay's per-order gas budget discipline."""
         budget = int(config.esr_relay_gas_budget_wei)
+        if not st['wallet_sent'] and not self.__session_relay_wallet(bucket_name, order_id, st, budget):
+            return
         while True:
             proof_name = f"session.output.{st['proof_next']}.proof"
             ok, proof = self.swift_stream_service.get_file_content(bucket_name, proof_name)
@@ -3861,42 +3919,10 @@ class EtnyPoXNode:
                 else:
                     self.storage.pin_bytes_deferred(
                         blob, name=f"session-output-{order_id}-{st['proof_next']}")
-            fn = self.__etny.functions._addMetadataToDPRequest(st['dp_req'], 'etny-so', proof)
-            gas_price, fee_fields = self.__esr_fee()
-            try:
-                gas_units = fn.estimate_gas({'from': self.__address})
-            except Exception as e:
-                logger.error(f"[session] order {order_id}: proof {st['proof_next']} "
-                             f"estimate_gas failed ({e}); retrying next tick")
+            if not self.__session_broadcast_row(order_id, st, 'etny-so', proof, budget,
+                                                f"output row {st['proof_next']} ({status_field})"):
                 return
-            cost = gas_units * gas_price
-            if st['spent'] + cost > budget:
-                logger.error(f"[session] order {order_id}: output relay would exceed the "
-                             f"per-order gas budget ({st['spent'] + cost} > {budget} wei); "
-                             f"stopping relay")
-                return
-            try:
-                opts = {
-                    'from': self.__address,
-                    'nonce': self.__w3.eth.get_transaction_count(self.__address),
-                    'chainId': self.__network_config.chain_id,
-                    'gas': gas_units + 30000,
-                }
-                opts.update(fee_fields)
-                txn = fn.build_transaction(opts)
-                self.__w3.eth.wait_for_transaction_receipt(
-                    self.__w3.eth.send_raw_transaction(
-                        self.__w3.eth.account.sign_transaction(
-                            txn, private_key=self.__acct.key).raw_transaction),
-                    timeout=180)
-                st['spent'] += cost
-                logger.info(f"[session] order {order_id}: broadcast output row "
-                            f"{st['proof_next']} ({status_field}, gas {gas_units})")
-                st['proof_next'] += 1
-            except Exception as e:
-                logger.error(f"[session] order {order_id}: broadcasting output "
-                             f"{st['proof_next']} failed ({e})")
-                return
+            st['proof_next'] += 1
 
     def __relay_esr_commits(self, bucket_name, order_id):
         """Relay the ESR state commits the enclave signed for this order.

@@ -439,6 +439,33 @@ def pinned_within(storage, cid, deadline, now=time.monotonic):
     return None
 
 
+# A session's task wallet attestation, staged by the trustedzone as
+# session.wallet.proof and broadcast by the node as the 'etny-sw' row:
+# 'v1:<orderId>:<taskWallet>:<sigDerHex>', the signature being the enclave's
+# certificate key's over 'etny-sw|<orderId>|<taskWallet>'.
+SESSION_WALLET_ROW_VERSION = 'v1'
+
+
+def session_wallet_attestation(value, order_id):
+    """(wallet, signature hex) from a session.wallet.proof value staged for
+    `order_id`; None for a value of any other shape or order."""
+    parts = str(value or '').strip().split(':')
+    if len(parts) != 4 or parts[0] != SESSION_WALLET_ROW_VERSION:
+        return None
+    wallet, sig = parts[2], parts[3]
+    try:
+        if int(parts[1]) != int(order_id):
+            return None
+        if len(wallet) != 42 or not wallet.startswith('0x'):
+            return None
+        int(wallet[2:], 16)
+        if len(sig) < 16 or len(bytes.fromhex(sig)) * 2 != len(sig):
+            return None
+    except ValueError:
+        return None
+    return wallet, sig
+
+
 # An order's window ends ORDER_GRACE_SECONDS after the duration its DO request
 # paid for, counted from the block that placed the order, whatever restarts
 # the agent in between.
