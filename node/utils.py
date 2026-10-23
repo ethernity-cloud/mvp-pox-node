@@ -355,6 +355,22 @@ def run_subprocess(args, logger):
         if item:
             logger.debug(item.decode())
 
+def pinned_within(storage, cid, deadline, now=time.monotonic):
+    """Whether `cid` is pinned in `storage`'s Kubo, pinning it from the network
+    when it is not, until `deadline` (a `now()` value) at the latest. Returns
+    None when it is pinned, otherwise why it is not."""
+    if storage.is_pinned(cid):
+        return None
+    remaining = int(deadline - now())
+    if remaining < 1:
+        return "not pinned here, and no time is left to fetch it"
+    try:
+        storage.pin_add_watched(cid, remaining, lambda: None, interval=5)
+    except Exception as e:
+        return f"not pinned here, and not fetched within {remaining} s ({e})"
+    return None
+
+
 def holds_within(check, window_seconds, interval, sleep=time.sleep, now=time.monotonic,
                  min_blocks=0, block=None, max_seconds=None):
     """Whether `check()` returns True within the window, asked every `interval`

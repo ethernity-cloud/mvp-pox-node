@@ -320,6 +320,10 @@ esr_scan_lookback_blocks = int(os.environ.get('ESR_SCAN_LOOKBACK_BLOCKS', 50_000
 # Keep pinning replicated state only while at least this much free disk (in GB)
 # remains, so replication can never fill the disk the node needs to run tasks.
 esr_min_free_storage_gb = float(os.environ.get('ESR_MIN_FREE_STORAGE_GB', 10))
+# Before an order runs, the current state objects not yet pinned here (one
+# committed on another node moments ago) are fetched from the network for at
+# most this many seconds in all, so a CID no node provides cannot stall the order.
+esr_stage_fetch_seconds = float(os.environ.get('ESR_STAGE_FETCH_SECONDS', 120))
 # How often the dedicated replication thread pins current ESR state + recent
 # protocol-contract result CIDs into the node's IPFS (seconds). Runs on its own
 # cadence rather than piggybacking on the hourly cache cleanup, so freshly

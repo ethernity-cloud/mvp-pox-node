@@ -21,7 +21,7 @@ from web3 import middleware
 from web3.gas_strategies.time_based import fast_gas_price_strategy
 from web3.gas_strategies.rpc import rpc_gas_price_strategy
 
-from utils import get_or_generate_uuid, run_subprocess, retry, holds_within, Storage, Cache, ListCache, ListCacheWithTimestamp, MergedOrdersCache, subprocess, get_node_geo, HardwareInfoProvider, parse_transaction_bytes_ut, looks_like_cid, canonical_cid, PEER_MULTIADDR, next_registered_image, enclave_failure, enclave_may_have_failed, docker_container_states, docker_container_log_tail, stale_integration_tests, image_trees, stale_image_trees, directory_size, remove_tree, removal_leftovers
+from utils import get_or_generate_uuid, run_subprocess, retry, holds_within, pinned_within, Storage, Cache, ListCache, ListCacheWithTimestamp, MergedOrdersCache, subprocess, get_node_geo, HardwareInfoProvider, parse_transaction_bytes_ut, looks_like_cid, canonical_cid, PEER_MULTIADDR, next_registered_image, enclave_failure, enclave_may_have_failed, docker_container_states, docker_container_log_tail, stale_integration_tests, image_trees, stale_image_trees, directory_size, remove_tree, removal_leftovers
 import scone_image
 from models import *
 from error_messages import errorMessages
@@ -2719,11 +2719,16 @@ class EtnyPoXNode:
         still verifies the blob against the on-chain CID, so a wrong or corrupted
         stage is rejected rather than trusted.
 
-        Best-effort and bounded by free disk; never raises.
+        A current object not pinned here (committed on another node moments
+        ago, before replication reached this one) is fetched from the network,
+        within config.esr_stage_fetch_seconds for the whole staging.
+
+        Best-effort and bounded by free disk and that budget; never raises.
         """
         if self.__esr is None or not bucket_name:
             return 0
         staged = 0
+        fetch_deadline = time.monotonic() + config.esr_stage_fetch_seconds
         try:
             records = self.__esr_current_state_cids()
             cids = {r['cid'] for r in records}
@@ -2740,17 +2745,15 @@ class EtnyPoXNode:
                 if HardwareInfoProvider.get_free_storage() < config.esr_min_free_storage_gb:
                     self.logger.warning("[esr-read] low disk; stopping state staging this round")
                     break
-                # Only stage a blob that is already pinned LOCALLY (this node, or
-                # replicated to it). is_pinned is a fast local check. If it is not
-                # here, DO NOT call the blocking download()/gateway fetch: a CID
-                # that no node ever pinned (e.g. a historical commit whose pin
-                # failed) is unfetchable, and download() would retry for a long
-                # time -- stalling the order's execution wait and, when staging
-                # runs during the integration test, the whole SGX check. Skipping
-                # is safe: staging is best-effort; a missing prior state just
-                # means the enclave's get() returns default, not a hang.
-                if not self.storage.is_pinned(cid):
-                    self.logger.debug(f"[esr-read] {cid} not pinned locally; skipping stage (non-blocking)")
+                # A blob not pinned here is pinned from the network within what
+                # is left of the fetch budget, never through the unbounded
+                # download()/gateway path: a CID no node provides (a historical
+                # commit whose pin failed) would otherwise stall the order's
+                # execution wait and, when staging runs during the integration
+                # test, the whole SGX check.
+                why = pinned_within(self.storage, cid, fetch_deadline)
+                if why:
+                    self.logger.info(f"[esr-read] {cid} {why}; not staged")
                     continue
                 self.storage.download(cid)
                 blob_path = os.path.join(self.storage.target, cid)
