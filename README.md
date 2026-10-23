@@ -249,3 +249,17 @@ $ sudo systemctl restart etny-vagrant
 
 VMs provisioned from this version on get the anchors at provisioning.
 
+### TLS to one RPC fails in the node VM ("SSLV3_ALERT_HANDSHAKE_FAILURE")
+The Ubuntu box resolves through 4.2.2.1, 4.2.2.2 and OpenDNS
+208.67.220.220. OpenDNS answers the names it filters with the address of its
+block page (146.112.61.x), so a connection to such a host, the Ethereum
+Sepolia RPC `sepolia.gateway.tenderly.co` among them, fails its TLS
+handshake: the agent logs `SSLV3_ALERT_HANDSHAKE_FAILURE` for every call on
+that network. `getent hosts sepolia.gateway.tenderly.co` inside the VM shows
+the cause. The same script replaces the box's resolvers with Cloudflare's and
+Google's; run it as above, then check:
+
+```
+$ vagrant ssh -c 'resolvectl status | grep "DNS Servers"; getent hosts sepolia.gateway.tenderly.co'
+```
+
