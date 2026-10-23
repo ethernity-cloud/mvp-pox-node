@@ -324,6 +324,9 @@ esr_min_free_storage_gb = float(os.environ.get('ESR_MIN_FREE_STORAGE_GB', 10))
 # committed on another node moments ago) are fetched from the network for at
 # most this many seconds in all, so a CID no node provides cannot stall the order.
 esr_stage_fetch_seconds = float(os.environ.get('ESR_STAGE_FETCH_SECONDS', 120))
+# A session input whose bytes are not on IPFS yet is fetched for at most this
+# many seconds per tick of the enclave wait, and tried again on the next tick.
+session_input_fetch_seconds = float(os.environ.get('SESSION_INPUT_FETCH_SECONDS', 30))
 # How often the dedicated replication thread pins current ESR state + recent
 # protocol-contract result CIDs into the node's IPFS (seconds). Runs on its own
 # cadence rather than piggybacking on the hourly cache cleanup, so freshly

@@ -439,6 +439,41 @@ def pinned_within(storage, cid, deadline, now=time.monotonic):
     return None
 
 
+# An order's window ends ORDER_GRACE_SECONDS after the duration its DO request
+# paid for, counted from the block that placed the order, whatever restarts
+# the agent in between.
+ORDER_GRACE_SECONDS = 120
+
+
+def remaining_order_seconds(placed_at, duration_hours, now=None):
+    """Seconds left of an order placed at `placed_at` (a block timestamp) for
+    `duration_hours`, the grace included; negative once the window is over."""
+    now = time.time() if now is None else now
+    return placed_at + duration_hours * 3600 + ORDER_GRACE_SECONDS - now
+
+
+def order_placement_path(orders_dir, order_id):
+    return os.path.join(orders_dir, str(order_id), 'placed_at')
+
+
+def record_order_placement(orders_dir, order_id, placed_at):
+    """Keep the timestamp of the block that placed `order_id`, for a run of
+    the order resumed after a restart to size its waits from."""
+    os.makedirs(os.path.join(orders_dir, str(order_id)), exist_ok=True)
+    with open(order_placement_path(orders_dir, order_id), 'w') as f:
+        f.write(str(int(placed_at)))
+
+
+def order_placed_at(orders_dir, order_id):
+    """The recorded placement timestamp of `order_id`, or None for an order
+    placed by an agent that did not record it."""
+    try:
+        with open(order_placement_path(orders_dir, order_id)) as f:
+            return int(f.read().strip())
+    except (OSError, ValueError):
+        return None
+
+
 def holds_within(check, window_seconds, interval, sleep=time.sleep, now=time.monotonic,
                  min_blocks=0, block=None, max_seconds=None):
     """Whether `check()` returns True within the window, asked every `interval`

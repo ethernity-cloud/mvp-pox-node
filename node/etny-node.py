@@ -21,7 +21,7 @@ from web3 import middleware
 from web3.gas_strategies.time_based import fast_gas_price_strategy
 from web3.gas_strategies.rpc import rpc_gas_price_strategy
 
-from utils import get_or_generate_uuid, run_subprocess, retry, holds_within, pinned_within, Storage, Cache, ListCache, ListCacheWithTimestamp, MergedOrdersCache, subprocess, get_node_geo, HardwareInfoProvider, parse_transaction_bytes_ut, looks_like_cid, canonical_cid, PEER_MULTIADDR, next_registered_image, enclave_failure, enclave_may_have_failed, docker_container_states, docker_container_log_tail, stale_integration_tests, image_trees, stale_image_trees, directory_size, remove_tree, removal_leftovers
+from utils import get_or_generate_uuid, run_subprocess, retry, holds_within, pinned_within, remaining_order_seconds, record_order_placement, order_placed_at, ORDER_GRACE_SECONDS, Storage, Cache, ListCache, ListCacheWithTimestamp, MergedOrdersCache, subprocess, get_node_geo, HardwareInfoProvider, parse_transaction_bytes_ut, looks_like_cid, canonical_cid, PEER_MULTIADDR, next_registered_image, enclave_failure, enclave_may_have_failed, docker_container_states, docker_container_log_tail, stale_integration_tests, image_trees, stale_image_trees, directory_size, remove_tree, removal_leftovers
 import scone_image
 from models import *
 from error_messages import errorMessages
@@ -64,6 +64,9 @@ integration_test_retry = {}
 integration_tests_settled = {}
 INTEGRATION_TEST_RETRY_MIN_SECONDS = 600
 INTEGRATION_TEST_RETRY_MAX_SECONDS = 6 * 3600
+# Where an order's files live, under the network's working directory: its
+# placement record (utils.record_order_placement) and its order folder.
+ORDERS_DIR = './orders'
 INTEGRATION_TEST_REGISTRY_CHECK_SECONDS = 300
 # The container names every published dApp compose gives its enclaves, polled
 # while an order's result is awaited (wait_for_enclave_v2): the trustedzone
@@ -2411,6 +2414,14 @@ class EtnyPoXNode:
             # Track total wait time
             start_total_wait = time.time()
 
+            # The waits are sized from the block that placed the order, so a
+            # run resumed after a restart gets what is left of the window, not
+            # the duration over again. An order placed by an agent that did not
+            # record its placement gets the duration from now.
+            placed_at = order_placed_at(ORDERS_DIR, order_id)
+            window = (remaining_order_seconds(placed_at, do_req.duration) if placed_at is not None
+                      else do_req.duration * 3600 + ORDER_GRACE_SECONDS)
+
             # The waits end early when an enclave container will not finish
             # the task (EnclaveFailed: a CAS refusal, an exit, a container
             # never started); the order is then closed below with the reason.
@@ -2419,7 +2430,7 @@ class EtnyPoXNode:
             try:
                 # First wait
                 start_wait = time.time()
-                status_enclave = self.wait_for_enclave_v2(bucket_name, 'result.txt', do_req.duration * 3600 + 120, order_id=order_id)
+                status_enclave = self.wait_for_enclave_v2(bucket_name, 'result.txt', window, order_id=order_id)
                 elapsed_wait1 = time.time() - start_wait
 
                 # Second wait
@@ -2577,7 +2588,8 @@ class EtnyPoXNode:
                     logger.info(f"Process EXECVE is still running")
 
                     total_duration = do_req.duration * 3600
-                    remaining_sleep = total_duration - total_elapsed_wait
+                    remaining_sleep = (remaining_order_seconds(placed_at, do_req.duration) - ORDER_GRACE_SECONDS
+                                       if placed_at is not None else total_duration - total_elapsed_wait)
 
                     logger.info(f"Waiting till the end of execution - {remaining_sleep}")
 
@@ -3184,6 +3196,16 @@ class EtnyPoXNode:
         if order_details is not None:
             [order_id, order] = order_details
             if order.status == OrderStatus.PROCESSING:
+                # An order whose window has passed is not resumed: its client
+                # has given up on it, and the validators settle it.
+                placed_at = order_placed_at(ORDERS_DIR, order_id)
+                if placed_at is not None:
+                    do_req = DORequest(self.__etny.caller()._getDORequest(order.do_req))
+                    left = remaining_order_seconds(placed_at, do_req.duration)
+                    if left <= 0:
+                        logger.info(f"Order {order_id}: its window ended {int(-left)} s ago; not resumed")
+                        self.dpreq_cache.add(self.__dprequest)
+                        return
                 logger.debug(f"DP request never finished, processing order {order_id}")
 
                 while not stop_event.is_set():
@@ -3593,6 +3615,12 @@ class EtnyPoXNode:
             continue
 
         logger.info(f"Order {self.__order_id} secured!")
+        try:
+            record_order_placement(ORDERS_DIR, self.__order_id,
+                                   self.__w3.eth.get_block(receipt.blockNumber).timestamp)
+        except Exception as e:
+            logger.warning(f"Order {self.__order_id}: its placement time was not recorded ({e}); "
+                           f"a run resumed after a restart would take the full duration")
 
     def __raise_if_matched(self, doreq_id):
         """Raises ContractLogicError when the DO request or this node's DP
@@ -3774,6 +3802,15 @@ class EtnyPoXNode:
             if present:
                 st['delivered'].add(seq)
                 continue
+            # The client uploads the input after committing its row, so a row
+            # can be ahead of its bytes; the fetch is bounded per tick so a
+            # missing input holds the tick for config.session_input_fetch_seconds,
+            # not for the full download attempt, and is tried again next tick.
+            why = pinned_within(self.storage, cid, time.monotonic() + config.session_input_fetch_seconds)
+            if why:
+                logger.warning(f"[session] order {order_id}: input {seq} ({cid}) not fetchable yet: {why}")
+                st['rows_seen'] = i  # retry this row next tick
+                return
             try:
                 self.storage.download(cid)
                 path = os.path.join(self.storage.target, cid)
@@ -3781,7 +3818,7 @@ class EtnyPoXNode:
                     blob = fh.read()
             except Exception as e:
                 logger.warning(f"[session] order {order_id}: input {seq} ({cid}) "
-                               f"not fetchable yet: {e}")
+                               f"not readable yet: {e}")
                 st['rows_seen'] = i  # retry this row next tick
                 return
             if hashlib.sha256(blob).hexdigest() != sha_hex:
