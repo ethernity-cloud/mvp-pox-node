@@ -2690,8 +2690,8 @@ class EtnyPoXNode:
 
     @staticmethod
     def __cidv1_raw(content_bytes):
-        """CIDv1/raw/sha2-256 for `content_bytes` -- the same CID `ipfs add
-        --cid-version=1 --raw-leaves` produces.
+        """CIDv1/raw/sha2-256 for `content_bytes` -- the CID Storage.add_bytes_raw
+        stores content of up to one block (Storage.RAW_BLOCK_MAX) under.
 
         Layout: multibase 'b' + base32( 0x01 0x55 0x12 0x20 || sha256(content) )
                                         CIDv1 raw  sha256  32 bytes

@@ -1195,6 +1195,13 @@ class Storage:
             time.sleep(1)
         raise Exception(f"Unable to determine if {path} is file or folder after 10 attempts")
 
+    # Kubo's largest chunk. add_bytes_raw adds with it, so content of up to
+    # RAW_BLOCK_MAX bytes is one raw block, whose CID is cidv1_raw(content):
+    # the CID the enclaves and the runners compute. Larger content is a DAG of
+    # such blocks, whose root CID only Kubo computes (cid_of).
+    RAW_BLOCK_MAX = 1048576
+    RAW_ADD_PARAMS = {'cid-version': '1', 'raw-leaves': 'true', 'chunker': f'size-{RAW_BLOCK_MAX}'}
+
     @staticmethod
     def cidv1_raw(content_bytes):
         """CIDv1/raw/sha2-256 for `content_bytes`, computed locally.
@@ -1202,13 +1209,29 @@ class Storage:
         Layout: 'b' + base32( 0x01 0x55 0x12 0x20 || sha256(content) )
                         CIDv1  raw  sha256  32 bytes
 
-        Matches what `ipfs add --cid-version=1 --raw-leaves` returns, so the CID
-        can be known WITHOUT talking to IPFS at all. That is what lets the node
-        record a result and move on while pinning happens in the background.
+        The CID add_bytes_raw stores content of up to RAW_BLOCK_MAX bytes under.
         """
         digest = hashlib.sha256(content_bytes).digest()
         raw = bytes([0x01, 0x55, 0x12, 0x20]) + digest
         return 'b' + base64.b32encode(raw).decode('ascii').lower().rstrip('=')
+
+    def cid_of(self, content_bytes):
+        """The CID add_bytes_raw stores `content_bytes` under: cidv1_raw() up
+        to RAW_BLOCK_MAX bytes, computed locally; above it, the root Kubo
+        computes for the chunked content without storing it (raises when the
+        daemon cannot be reached)."""
+        if len(content_bytes) <= self.RAW_BLOCK_MAX:
+            return self.cidv1_raw(content_bytes)
+        if not self.connected:
+            if not self.connect():
+                raise Exception("IPFS unreachable: cannot compute the CID of content above one block")
+            self.connected = True
+        resp = self._api_call('add', params={**self.RAW_ADD_PARAMS, 'only-hash': 'true', 'pin': 'false'},
+                              files={'file': ('blob', content_bytes)})
+        cid = self._added_hash(resp, 'blob')
+        if not cid:
+            raise Exception("IPFS returned no CID for the content")
+        return cid
 
     def pin_bytes_deferred(self, content_bytes, name='blob', attempts=10, delay=30):
         """Compute the CID now, return it, and pin in the BACKGROUND.
@@ -1219,14 +1242,15 @@ class Storage:
         result submission for work the enclave had already completed correctly,
         and the stall grows with the size of the result.
 
-        Since the CID is just a hash of the content, it can be computed locally.
-        The caller gets it immediately and proceeds; the actual add/pin is queued
-        on the existing executor and retries on its own without holding anything
-        up.
+        The CID of content of up to one block is a hash computed locally; that
+        of larger content is Kubo's (cid_of). The caller gets it immediately
+        and proceeds; the actual add/pin is queued on the existing executor and
+        retries on its own without holding anything up.
 
-        Returns the CID (never None, never raises).
+        Returns the CID (never None). Raises only for content above one block
+        when IPFS cannot compute its CID.
         """
-        cid = self.cidv1_raw(content_bytes)
+        cid = self.cid_of(content_bytes)
         # Spool the content before returning. In-memory retries die with the
         # process, and the result is then unrecoverable: the CID is on chain
         # but no node holds the bytes. Written first so a crash between here
@@ -1351,7 +1375,7 @@ class Storage:
             except Exception as e:
                 self.logger.warning(f"Could not read spooled pin {cid}: {e}")
                 continue
-            if self.cidv1_raw(content) != cid:
+            if self.cid_of(content) != cid:
                 self.logger.error(
                     f"Spooled content for {cid} does not hash to its CID; discarding")
                 self._unspool_pending_pin(cid)
@@ -1379,23 +1403,27 @@ class Storage:
         return done
 
     def add_bytes_raw(self, content_bytes, name='blob'):
-        """Add bytes as CIDv1 with raw leaves, returning the CID.
+        """Add bytes as CIDv1 with raw leaves in chunks of RAW_BLOCK_MAX,
+        returning the CID.
 
         The default `add` produces a CIDv0 dag-pb node (content wrapped in UnixFS
         framing), whose CID an enclave cannot derive without reimplementing that
-        framing. With cid-version=1 + raw-leaves the CID is simply
-        base32(0x01 0x55 0x12 0x20 || sha256(content)) -- so the enclave can
-        compute it from the bytes it authored and commit THAT to the chain,
-        meaning a hostile node cannot substitute different content for what was
-        committed.
+        framing. With cid-version=1 + raw-leaves, content of up to one chunk is
+        a single raw block whose CID is base32(0x01 0x55 0x12 0x20 ||
+        sha256(content)) -- so the enclave can compute it from the bytes it
+        authored and commit THAT to the chain, meaning a hostile node cannot
+        substitute different content for what was committed.
 
         Returns the CID, or None on failure.
         """
         if not self.connected:
             raise Exception("Not connected")
         files = {'file': (name, content_bytes)}
-        params = {'cid-version': '1', 'raw-leaves': 'true', 'pin': 'true'}
-        resp = self._api_call('add', params=params, files=files)
+        resp = self._api_call('add', params={**self.RAW_ADD_PARAMS, 'pin': 'true'}, files=files)
+        return self._added_hash(resp, name)
+
+    def _added_hash(self, resp, name):
+        """The Hash of the last line of an `add` response, or None."""
         try:
             if isinstance(resp, str):
                 resp = json.loads(resp.strip().split('\n')[-1])
