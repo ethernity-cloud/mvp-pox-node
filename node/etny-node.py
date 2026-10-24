@@ -21,7 +21,7 @@ from web3 import middleware
 from web3.gas_strategies.time_based import fast_gas_price_strategy
 from web3.gas_strategies.rpc import rpc_gas_price_strategy
 
-from utils import get_or_generate_uuid, run_subprocess, retry, holds_within, pinned_within, remaining_order_seconds, record_order_placement, order_placed_at, ORDER_GRACE_SECONDS, session_wallet_attestation, Storage, Cache, ListCache, ListCacheWithTimestamp, MergedOrdersCache, subprocess, get_node_geo, HardwareInfoProvider, parse_transaction_bytes_ut, looks_like_cid, canonical_cid, PEER_MULTIADDR, next_registered_image, enclave_failure, enclave_may_have_failed, docker_container_states, docker_container_log_tail, stale_integration_tests, image_trees, stale_image_trees, directory_size, remove_tree, removal_leftovers
+from utils import get_or_generate_uuid, run_subprocess, retry, holds_within, pinned_within, FetchDeferrals, staging_plan, remaining_order_seconds, record_order_placement, order_placed_at, ORDER_GRACE_SECONDS, session_wallet_attestation, Storage, Cache, ListCache, ListCacheWithTimestamp, MergedOrdersCache, subprocess, get_node_geo, HardwareInfoProvider, parse_transaction_bytes_ut, looks_like_cid, canonical_cid, PEER_MULTIADDR, next_registered_image, enclave_failure, enclave_may_have_failed, docker_container_states, docker_container_log_tail, stale_integration_tests, image_trees, stale_image_trees, directory_size, remove_tree, removal_leftovers
 import scone_image
 from models import *
 from error_messages import errorMessages
@@ -334,6 +334,9 @@ class EtnyPoXNode:
         # network without an ESR behaves exactly as before.
         self.__esr = None
         self.__esr_last_block = 0
+        # When each state object no node served is fetched again for an
+        # order's staging (stage_esr_state_for_read).
+        self.__esr_fetch_deferrals = FetchDeferrals()
         try:
             # Network names are lowercase at runtime (e.g. "bloxberg_testnet")
             # but the config keys are uppercase -- look up case-insensitively so
@@ -2713,80 +2716,91 @@ class EtnyPoXNode:
         return 'b' + base64.b32encode(raw).decode('ascii').lower().rstrip('=')
 
     def stage_esr_state_for_read(self, bucket_name):
-        """Deliver current ESR state into the bucket so the enclave can read it.
+        """Deliver the current ESR state objects into the bucket so the enclave
+        can read them.
 
         The enclave's StateRegistry.get() reads the CID from the chain
         (getState = the last committed value + version) and then fetches the
         blob from the SwiftStream bucket as state.<cid>.enc -- it cannot reach
         IPFS itself. Each task runs in a FRESH bucket, so state committed by a
-        previous order is not present, and get() raises "Could not read state
-        object". This bridges that gap: for every (enclave, key) whose current
-        on-chain version points at a real CID, fetch that blob from IPFS (where
-        replication keeps it pinned) and write it into this order's bucket as
-        state.<cid>.enc. The enclave's _fetch already looks for exactly that
-        name, so no enclave-side change is needed.
+        previous order is not present without this. The enclave verifies the
+        blob against the on-chain CID, so a wrong or corrupted stage is
+        rejected rather than trusted.
 
-        Staging by the CID getState returns means we always deliver the LAST
-        committed value for the current version, never a stale one. The enclave
-        still verifies the blob against the on-chain CID, so a wrong or corrupted
-        stage is rejected rather than trusted.
-
-        A current object not pinned here (committed on another node moments
-        ago, before replication reached this one) is fetched from the network,
-        within config.esr_stage_fetch_seconds for the whole staging.
-
-        Best-effort and bounded by free disk and that budget; never raises.
+        The objects pinned here are written now, before the enclave wait
+        starts. The ones that are not (committed on another node before
+        replication reached this one) are fetched from the network and written
+        as they arrive by a thread of their own, within
+        config.esr_stage_fetch_seconds for all of them, so no fetch holds the
+        wait -- and with it the pin service, the commit relay and the session
+        transport -- back; the enclave's read waits for a staged object. An
+        object no node served is left out of the next orders' staging for the
+        wait self.__esr_fetch_deferrals sets. Returns the number written now;
+        never raises.
         """
         if self.__esr is None or not bucket_name:
             return 0
-        staged = 0
-        fetch_deadline = time.monotonic() + config.esr_stage_fetch_seconds
         try:
             records = self.__esr_current_state_cids()
             cids = {r['cid'] for r in records}
+            local, remote = staging_plan(cids, self.storage.is_pinned, self.__esr_fetch_deferrals)
         except Exception as e:
             self.logger.debug(f"[esr-read] could not resolve current state CIDs: {e}")
             return 0
-        for cid in cids:
-            object_name = f"state.{cid}.enc"
-            try:
-                # Already delivered for this order? skip.
-                present, _ = self.swift_stream_service.is_object_in_bucket(bucket_name, object_name)
-                if present:
-                    continue
-                if HardwareInfoProvider.get_free_storage() < config.esr_min_free_storage_gb:
-                    self.logger.warning("[esr-read] low disk; stopping state staging this round")
-                    break
-                # A blob not pinned here is pinned from the network within what
-                # is left of the fetch budget, never through the unbounded
-                # download()/gateway path: a CID no node provides (a historical
-                # commit whose pin failed) would otherwise stall the order's
-                # execution wait and, when staging runs during the integration
-                # test, the whole SGX check.
-                why = pinned_within(self.storage, cid, fetch_deadline)
-                if why:
-                    self.logger.info(f"[esr-read] {cid} {why}; not staged")
-                    continue
-                self.storage.download(cid)
-                blob_path = os.path.join(self.storage.target, cid)
-                if not os.path.isfile(blob_path):
-                    self.logger.debug(f"[esr-read] {cid} not retrievable; skipping")
-                    continue
-                with open(blob_path, "rb") as fh:
-                    blob = fh.read()
-                # Verify the delivered bytes actually hash to the committed CID
-                # before handing them to the enclave -- never stage substituted
-                # content, even though the enclave re-checks too.
-                if Storage.cid_of(blob) != cid:
-                    self.logger.warning(f"[esr-read] {cid}: fetched content hashes differently; not staging")
-                    continue
-                self.swift_stream_service.put_file_content(
-                    bucket_name, object_name, "", io.BytesIO(blob))
-                staged += 1
-                self.logger.info(f"[esr-read] staged {object_name} into {bucket_name}")
-            except Exception as e:
-                self.logger.debug(f"[esr-read] could not stage {object_name}: {e}")
+        if not (local or remote):
+            return 0
+        if HardwareInfoProvider.get_free_storage() < config.esr_min_free_storage_gb:
+            self.logger.warning("[esr-read] low disk; not staging state objects for this order")
+            return 0
+        staged = 0
+        for cid in local:
+            staged += self.__stage_esr_object(bucket_name, cid)
+        if remote:
+            threading.Thread(
+                target=self.__stage_esr_objects_from_network, args=(bucket_name, remote),
+                name=f"esr-stage-{bucket_name}", daemon=True).start()
         return staged
+
+    def __stage_esr_object(self, bucket_name, cid):
+        """Write the state object `cid`, pinned here, into the bucket as
+        state.<cid>.enc unless it is there already; 1 when written, else 0.
+        The bytes are checked against the CID before the enclave gets them."""
+        object_name = f"state.{cid}.enc"
+        try:
+            present, _ = self.swift_stream_service.is_object_in_bucket(bucket_name, object_name)
+            if present:
+                return 0
+            self.storage.download(cid)
+            blob_path = os.path.join(self.storage.target, cid)
+            if not os.path.isfile(blob_path):
+                self.logger.debug(f"[esr-read] {cid} not retrievable; skipping")
+                return 0
+            with open(blob_path, "rb") as fh:
+                blob = fh.read()
+            if Storage.cid_of(blob) != cid:
+                self.logger.warning(f"[esr-read] {cid}: fetched content hashes differently; not staging")
+                return 0
+            self.swift_stream_service.put_file_content(
+                bucket_name, object_name, "", io.BytesIO(blob))
+            self.logger.info(f"[esr-read] staged {object_name} into {bucket_name}")
+            return 1
+        except Exception as e:
+            self.logger.debug(f"[esr-read] could not stage {object_name}: {e}")
+            return 0
+
+    def __stage_esr_objects_from_network(self, bucket_name, cids):
+        """Pin the state objects `cids` from the network, within
+        config.esr_stage_fetch_seconds for all of them, and write each into
+        the bucket as it arrives; one not served in time is deferred."""
+        deadline = time.monotonic() + config.esr_stage_fetch_seconds
+        for cid in cids:
+            why = pinned_within(self.storage, cid, deadline)
+            if why:
+                wait = self.__esr_fetch_deferrals.failed(cid)
+                self.logger.info(f"[esr-read] {cid} {why}; not staged, fetched again in {wait} s at the earliest")
+                continue
+            self.__esr_fetch_deferrals.served(cid)
+            self.__stage_esr_object(bucket_name, cid)
 
     def serve_esr_state_pins(self, bucket_name, deadline_ts):
         """Pin ESR state blobs the enclave drops in the bucket.

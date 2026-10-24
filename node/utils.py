@@ -439,6 +439,54 @@ def pinned_within(storage, cid, deadline, now=time.monotonic):
     return None
 
 
+# A state object no node served when an order's staging asked for it is asked
+# for again this many seconds later, doubling per failed attempt up to the
+# maximum.
+ESR_FETCH_DEFER_SECONDS = 600
+ESR_FETCH_DEFER_MAX_SECONDS = 6 * 3600
+
+
+class FetchDeferrals:
+    """For each CID whose network fetch failed, when it is fetched again."""
+
+    def __init__(self, now=time.monotonic):
+        self._now = now
+        # cid -> (time of the next attempt, the wait that set it)
+        self._next = {}
+
+    def deferred(self, cid):
+        """True while `cid`'s next attempt lies ahead."""
+        entry = self._next.get(cid)
+        return entry is not None and self._now() < entry[0]
+
+    def failed(self, cid):
+        """Record that `cid` was not served and return the wait, in seconds,
+        before its next attempt: ESR_FETCH_DEFER_SECONDS after the first
+        failure, twice the previous wait after each further one, at most
+        ESR_FETCH_DEFER_MAX_SECONDS."""
+        entry = self._next.get(cid)
+        wait = ESR_FETCH_DEFER_SECONDS if entry is None else min(entry[1] * 2, ESR_FETCH_DEFER_MAX_SECONDS)
+        self._next[cid] = (self._now() + wait, wait)
+        return wait
+
+    def served(self, cid):
+        """Forget `cid`'s failures: it was fetched."""
+        self._next.pop(cid, None)
+
+
+def staging_plan(cids, is_pinned, deferrals):
+    """(local, remote): the CIDs of `cids` pinned here, which an order's
+    staging writes at once, and the ones to fetch from the network, without
+    those whose fetch `deferrals` holds back. Each list is sorted."""
+    local, remote = [], []
+    for cid in cids:
+        if is_pinned(cid):
+            local.append(cid)
+        elif not deferrals.deferred(cid):
+            remote.append(cid)
+    return sorted(local), sorted(remote)
+
+
 # A session's task wallet attestation, staged by the trustedzone as
 # session.wallet.proof and broadcast by the node as the 'etny-sw' row:
 # 'v1:<orderId>:<taskWallet>:<sigDerHex>', the signature being the enclave's
