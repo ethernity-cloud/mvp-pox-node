@@ -21,7 +21,7 @@ from web3 import middleware
 from web3.gas_strategies.time_based import fast_gas_price_strategy
 from web3.gas_strategies.rpc import rpc_gas_price_strategy
 
-from utils import get_or_generate_uuid, run_subprocess, run_subprocess_status, environment_failure, loaded_enclave_images, record_enclave_images, revert_reason, retry, holds_within, pinned_within, FetchDeferrals, staging_plan, remaining_order_seconds, record_order_placement, order_placed_at, pending_approvals, record_pending_approval, forget_pending_approval, ORDER_STARTED_KEY, DP_STARTED_ROW_CAPABILITY, order_started_row, ORDER_GRACE_SECONDS, session_wallet_attestation, Storage, Cache, ListCache, ListCacheWithTimestamp, MergedOrdersCache, subprocess, get_node_geo, HardwareInfoProvider, parse_transaction_bytes_ut, looks_like_cid, canonical_cid, PEER_MULTIADDR, next_registered_image, enclave_failure, enclave_may_have_failed, docker_container_states, docker_container_log_tail, stale_integration_tests, image_trees, stale_image_trees, directory_size, remove_tree, removal_leftovers
+from utils import get_or_generate_uuid, run_subprocess, run_subprocess_status, environment_failure, loaded_enclave_images, record_enclave_images, revert_reason, wallet_covers, WALLET_GAS_TRANSACTIONS, retry, holds_within, pinned_within, FetchDeferrals, staging_plan, remaining_order_seconds, record_order_placement, order_placed_at, pending_approvals, record_pending_approval, forget_pending_approval, ORDER_STARTED_KEY, DP_STARTED_ROW_CAPABILITY, order_started_row, ORDER_GRACE_SECONDS, session_wallet_attestation, Storage, Cache, ListCache, ListCacheWithTimestamp, MergedOrdersCache, subprocess, get_node_geo, HardwareInfoProvider, parse_transaction_bytes_ut, looks_like_cid, canonical_cid, PEER_MULTIADDR, next_registered_image, enclave_failure, enclave_may_have_failed, docker_container_states, docker_container_log_tail, stale_integration_tests, image_trees, stale_image_trees, directory_size, remove_tree, removal_leftovers
 import scone_image
 from models import *
 from error_messages import errorMessages
@@ -86,6 +86,9 @@ REGISTRY_IMAGE = 'registry:2'
 # a DP request or an order created moments ago (utils.revert_reason).
 PLACEMENT_SIMULATION_ATTEMPTS = 3
 STARTED_ROW_ATTEMPTS = 3
+# How often, at most, a wallet that cannot pay its transactions is logged
+# (__wallet_covers_transactions).
+WALLET_GAS_LOG_SECONDS = 600
 # How long a placed order waits for the data owner's approval (the runner's
 # _approveOrder) before the node moves to a new DP request: at least
 # ORDER_APPROVAL_WINDOW_SECONDS and at least ORDER_APPROVAL_WINDOW_BLOCKS new
@@ -3354,6 +3357,9 @@ class EtnyPoXNode:
                 if self.__take_up_approved_order():
                     continue
 
+                if not self.__wallet_covers_transactions():
+                    continue
+
                 time.sleep(self.__network_config.rpc_delay/1000)
                 count = self.__etny.caller()._getDORequestsCount()
                 checked = 0
@@ -3592,6 +3598,33 @@ class EtnyPoXNode:
                     time.sleep(self.__network_config.block_time)
                 else:
                     logger.warning(f"Order {order_id}: the started row was not added ({e})")
+
+    def __wallet_covers_transactions(self):
+        """Whether this node's wallet pays WALLET_GAS_TRANSACTIONS transactions
+        at the network's gas limit and price (utils.wallet_covers): the gas
+        price configured, or the configured maximum fee on an EIP-1559
+        network. A wallet that does not is logged at ERROR at most every
+        WALLET_GAS_LOG_SECONDS, and the node takes no request meanwhile; a
+        balance that cannot be read counts as covering, so an RPC failure
+        does not stop the node."""
+        try:
+            balance = self.__w3.eth.get_balance(self.__address)
+            measure = self.__network_config.gas_price_measure
+            price = self.__w3.to_wei(self.__network_config.max_fee_per_gas if self.__network_config.eip1559 == True
+                                     else self.__network_config.gas_price, measure)
+            gas_limit = int(self.__network_config.gas_limit)
+        except Exception as e:
+            self.logger.debug(f"wallet balance not read ({e}); taking requests")
+            return True
+        if wallet_covers(balance, gas_limit, price):
+            return True
+        now = time.time()
+        if now - (getattr(self, '_EtnyPoXNode__wallet_gas_logged_at', 0) or 0) >= WALLET_GAS_LOG_SECONDS:
+            self.__wallet_gas_logged_at = now
+            self.logger.error(f"Wallet {self.__address} holds {balance} wei, below the {WALLET_GAS_TRANSACTIONS * gas_limit * price} wei "
+                              f"that {WALLET_GAS_TRANSACTIONS} transactions need at gas limit {gas_limit} and price {price} wei; "
+                              f"taking no request until it is funded")
+        return False
 
     def __take_up_approved_order(self):
         """Run the oldest order this node placed whose approval landed after

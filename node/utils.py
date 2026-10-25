@@ -462,6 +462,19 @@ def record_enclave_images(base_path, image_hash):
         marker.write(image_hash)
 
 
+# How many transactions, at the configured gas limit and price, a node's wallet
+# must cover before the node takes a request: the RPC refuses a transaction
+# whose sender cannot pay gas limit times price up front, and an order's first
+# two are the DP request and the placement.
+WALLET_GAS_TRANSACTIONS = 2
+
+
+def wallet_covers(balance_wei, gas_limit, gas_price_wei, transactions=WALLET_GAS_TRANSACTIONS):
+    """Whether `balance_wei` pays `transactions` transactions of `gas_limit`
+    gas at `gas_price_wei`."""
+    return int(balance_wei) >= int(transactions) * int(gas_limit) * int(gas_price_wei)
+
+
 def revert_reason(error):
     """The reason a contract revert carried, from a web3 ContractLogicError
     whose args are the message web3 builds, 'execution reverted: <reason>',
