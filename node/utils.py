@@ -415,13 +415,32 @@ def get_or_generate_uuid(filename):
     return _uuid
 
 def run_subprocess(args, logger):
-    out = subprocess.Popen(args,
-                           stdout=subprocess.PIPE,
-                           stderr=subprocess.STDOUT)
-    stdout, stderr = out.communicate()
-    for item in [stdout, stderr]:
-        if item:
-            logger.debug(item.decode())
+    """Runs the command `args` to completion, logging its output at DEBUG;
+    its exit code is not looked at."""
+    run_subprocess_status(args, logger)
+
+
+def run_subprocess_status(args, logger):
+    """Runs the command `args` to completion and returns (exit code, output),
+    the output being its stdout and stderr merged and decoded, logged at
+    DEBUG."""
+    out = subprocess.run(args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    output = out.stdout.decode(errors='replace') if out.stdout else ''
+    if output:
+        logger.debug(output)
+    return out.returncode, output
+
+
+def environment_failure(step, output):
+    """The reason an order's enclave environment did not come up: `step` says
+    what did not start, `output` is the failing docker command's output, of
+    which the last line that reports an error (or the last line at all) is
+    kept, its final ENCLAVE_FAILURE_TEXT_MAX characters. The text carries no
+    ':' (enclave_failure)."""
+    lines = [line.strip() for line in (output or '').splitlines() if line.strip()]
+    errors = [line for line in lines if 'error' in line.lower()]
+    detail = (errors or lines or ['no output'])[-1][-ENCLAVE_FAILURE_TEXT_MAX:]
+    return f"{step} - {detail}".replace(':', ' ')
 
 def pinned_within(storage, cid, deadline, now=time.monotonic):
     """Whether `cid` is pinned in `storage`'s Kubo, pinning it from the network

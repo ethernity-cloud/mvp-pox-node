@@ -21,7 +21,7 @@ from web3 import middleware
 from web3.gas_strategies.time_based import fast_gas_price_strategy
 from web3.gas_strategies.rpc import rpc_gas_price_strategy
 
-from utils import get_or_generate_uuid, run_subprocess, retry, holds_within, pinned_within, FetchDeferrals, staging_plan, remaining_order_seconds, record_order_placement, order_placed_at, pending_approvals, record_pending_approval, forget_pending_approval, ORDER_STARTED_KEY, DP_STARTED_ROW_CAPABILITY, order_started_row, ORDER_GRACE_SECONDS, session_wallet_attestation, Storage, Cache, ListCache, ListCacheWithTimestamp, MergedOrdersCache, subprocess, get_node_geo, HardwareInfoProvider, parse_transaction_bytes_ut, looks_like_cid, canonical_cid, PEER_MULTIADDR, next_registered_image, enclave_failure, enclave_may_have_failed, docker_container_states, docker_container_log_tail, stale_integration_tests, image_trees, stale_image_trees, directory_size, remove_tree, removal_leftovers
+from utils import get_or_generate_uuid, run_subprocess, run_subprocess_status, environment_failure, retry, holds_within, pinned_within, FetchDeferrals, staging_plan, remaining_order_seconds, record_order_placement, order_placed_at, pending_approvals, record_pending_approval, forget_pending_approval, ORDER_STARTED_KEY, DP_STARTED_ROW_CAPABILITY, order_started_row, ORDER_GRACE_SECONDS, session_wallet_attestation, Storage, Cache, ListCache, ListCacheWithTimestamp, MergedOrdersCache, subprocess, get_node_geo, HardwareInfoProvider, parse_transaction_bytes_ut, looks_like_cid, canonical_cid, PEER_MULTIADDR, next_registered_image, enclave_failure, enclave_may_have_failed, docker_container_states, docker_container_log_tail, stale_integration_tests, image_trees, stale_image_trees, directory_size, remove_tree, removal_leftovers
 import scone_image
 from models import *
 from error_messages import errorMessages
@@ -75,6 +75,11 @@ ENCLAVE_TRUSTEDZONE = 'etny-trustedzone'
 ENCLAVE_SECURELOCK = 'etny-securelock'
 ENCLAVE_CONTAINERS = (ENCLAVE_TRUSTEDZONE, ENCLAVE_SECURELOCK)
 ENCLAVE_CONTAINER_POLL_SECONDS = 10
+# The composes' local attestation service, and the registry an order's compose
+# pulls its enclave images from (__start_enclave_environment).
+ENCLAVE_LAS = 'las'
+REGISTRY_CONTAINER = 'registry'
+REGISTRY_IMAGE = 'registry:2'
 # How long a placed order waits for the data owner's approval (the runner's
 # _approveOrder) before the node moves to a new DP request: at least
 # ORDER_APPROVAL_WINDOW_SECONDS and at least ORDER_APPROVAL_WINDOW_BLOCKS new
@@ -2374,41 +2379,6 @@ class EtnyPoXNode:
             self.build_prerequisites_v3(bucket_name, order_id, payload_file, input_file,
                                         docker_compose_file, challenge_content)
 
-            logger.debug("Stopping previous docker registry")
-            run_subprocess(['docker', 'stop', 'registry'], logger)
-            logger.debug("Cleaning up docker registry")
-            run_subprocess(['docker', 'stop', 'etny-securelock'], logger)
-            run_subprocess(['docker', 'stop', 'etny-trustedzone'], logger)
-            run_subprocess(['docker', 'system', 'prune', '-a', '-f', '--volumes'], logger)
-            logger.debug("Running new docker registry")
-            logger.debug(str(self.cache_config.base_path) + '/' + enclave_image_hash + ':/var/lib/registry')
-
-            logger.debug("Stopping previous docker las")
-            run_subprocess(['docker', 'stop', 'las'], logger)
-            logger.debug("Removing previous docker las")
-            run_subprocess(['docker', 'rm', 'las'], logger)
-            run_subprocess([
-                'docker', 'run', '-d', '--restart=always', '-p', '5000:5000', '--name', 'registry', '-v',
-                str(self.cache_config.base_path) + '/' + enclave_image_hash + ':/var/lib/registry',
-                'registry:2'
-            ], logger)
-
-            os.chdir(self.cache_config.base_path)
-            logger.debug("Cleaning up docker container")
-            run_subprocess([
-                'docker-compose', '-f', self.order_docker_compose_file, 'down'
-            ], logger)
-
-            logger.debug("Started enclave execution")
-
-            os.chdir(self.cache_config.base_path)
-
-            run_subprocess([
-                'docker-compose', '-f', self.order_docker_compose_file, 'up', '-d'
-            ], logger)
-
-            logger.info('Docker environment ready. Execution started in SGX enclave')
-
             while True:
                try:
                    order = Order(self.__etny.caller()._getOrder(order_id))
@@ -2417,9 +2387,6 @@ class EtnyPoXNode:
                except Exception as e:
                    logger.warning(f"Unable to fetch order details: {e}")
                    time.sleep(1)
-
-            # Track total wait time
-            start_total_wait = time.time()
 
             # The waits are sized from the block that placed the order, so a
             # run resumed after a restart gets what is left of the window, not
@@ -2431,10 +2398,15 @@ class EtnyPoXNode:
 
             # The waits end early when an enclave container will not finish
             # the task (EnclaveFailed: a CAS refusal, an exit, a container
-            # never started); the order is then closed below with the reason.
+            # never started), as does the start of the environment when its
+            # registry or compose does not come up; the order is then closed
+            # below with the reason.
             failure = None
             elapsed_wait1 = elapsed_wait2 = 0
             try:
+                self.__start_enclave_environment(enclave_image_hash)
+                logger.info('Docker environment ready. Execution started in SGX enclave')
+
                 # First wait
                 start_wait = time.time()
                 status_enclave = self.wait_for_enclave_v2(bucket_name, 'result.txt', window, order_id=order_id)
@@ -2618,6 +2590,40 @@ class EtnyPoXNode:
             run_subprocess([
                 'docker-compose', '-f', self.order_docker_compose_file, 'down'
             ], logger)
+
+    def __start_enclave_environment(self, enclave_image_hash):
+        """Starts the enclave environment of the order whose compose is
+        self.order_docker_compose_file: the previous order's enclave
+        containers are stopped, a docker registry serving the image tree
+        `enclave_image_hash` on localhost:5000 is run, the previous order's
+        containers and images are pruned, and the compose is brought up,
+        pulling its enclave images from that registry. The registry runs
+        before the prune, which keeps the images of running containers, so
+        REGISTRY_IMAGE is pulled from Docker Hub once per node, not once per
+        order: Docker Hub rate-limits anonymous pulls per IPv4 address, and
+        nodes behind one address share the allowance. Raises EnclaveFailed
+        when the registry or the compose does not come up, with the failing
+        command's error."""
+        logger = self.logger
+        for name in (ENCLAVE_SECURELOCK, ENCLAVE_TRUSTEDZONE, ENCLAVE_LAS):
+            run_subprocess(['docker', 'stop', name], logger)
+        run_subprocess(['docker', 'rm', '-f', REGISTRY_CONTAINER], logger)
+        registry_tree = f'{self.cache_config.base_path}/{enclave_image_hash}'
+        logger.debug(f'Running the docker registry on {registry_tree}')
+        code, output = run_subprocess_status([
+            'docker', 'run', '-d', '--restart=always', '-p', '5000:5000', '--name', REGISTRY_CONTAINER,
+            '-v', f'{registry_tree}:/var/lib/registry', REGISTRY_IMAGE
+        ], logger)
+        if code != 0:
+            raise EnclaveFailed(environment_failure('the docker registry did not start', output))
+        logger.debug("Removing the previous order's containers and images")
+        run_subprocess(['docker', 'system', 'prune', '-a', '-f', '--volumes'], logger)
+        os.chdir(self.cache_config.base_path)
+        run_subprocess(['docker-compose', '-f', self.order_docker_compose_file, 'down'], logger)
+        code, output = run_subprocess_status(['docker-compose', '-f', self.order_docker_compose_file, 'up', '-d'],
+                                             logger)
+        if code != 0:
+            raise EnclaveFailed(environment_failure('the enclave containers did not start', output))
 
     def wait_for_enclave_v2(self, bucket_name, object_name, timeout=120, order_id=None):
         logger = self.logger
@@ -4294,44 +4300,9 @@ class EtnyPoXNode:
             self.ipfs_cache.rem(docker_compose_hash)
             raise Exception(f"Integration test initialization failed: {e}")
 
-        logger.debug("Stopping previous docker registry and containers")
-        run_subprocess(['docker', 'stop', 'registry'], logger)
-        run_subprocess(['docker', 'stop', 'etny-securelock'], logger)
-        run_subprocess(['docker', 'stop', 'etny-trustedzone'], logger)
-        run_subprocess(['docker', 'stop', 'las'], logger)
-        logger.debug("Cleaning up docker registry")
-        run_subprocess(['docker', 'system', 'prune', '-a', '-f', '--volumes'], logger)
-        logger.debug("Running new docker registry")
-        logger.debug( "{self.cache_config.base_path} / {enclave_image_hash} :/var/lib/registry")
-
-        logger.debug("Stopping previous docker las")
-        run_subprocess(['docker', 'stop', 'las'], logger)
-        logger.debug("Removing previous docker las")
-        run_subprocess(['docker', 'rm', 'las'], logger)
-        run_subprocess([
-            'docker', 'run', '-d', '--restart=always', '-p', '5000:5000', '--name', 'registry', '-v',
-            f'{self.cache_config.base_path}/{enclave_image_hash}' + ':/var/lib/registry',
-            'registry:2'
-        ], logger)
-
-        logger.debug("Started enclaves by running ETNY docker-compose")
-
-        os.chdir(self.cache_config.base_path)
-
-        logger.debug("Cleaning up docker container")
-        run_subprocess([
-            'docker-compose', '-f', self.order_docker_compose_file, 'down'
-        ], logger)
-
-
-        os.chdir(self.cache_config.base_path)
-
-        run_subprocess([
-            'docker-compose', '-f', self.order_docker_compose_file, 'up', '-d'
-        ], logger)
-
-        logger.debug('Waiting for execution of integration test enclave')
         try:
+            self.__start_enclave_environment(enclave_image_hash)
+            logger.debug('Waiting for execution of integration test enclave')
             status_enclave = self.wait_for_enclave_v2(self.integration_bucket_name, integration_test_file, 300)
         except EnclaveFailed as e:
             logger.warning(f'Integration test of {image}: {e}')

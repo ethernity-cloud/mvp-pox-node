@@ -36,6 +36,9 @@ apt-get -yq  install docker-ce docker-compose-plugin
 # The node calls `docker-compose`. The Compose v2 plugin runs standalone under
 # that name; Compose v1 speaks an API version the current Docker Engine refuses.
 ln -sf /usr/libexec/docker/cli-plugins/docker-compose /usr/local/bin/docker-compose
+# The node runs each order's image registry from this image and keeps it across
+# orders; pulled here so that its first integration test needs no Docker Hub pull.
+docker pull registry:2 || echo "registry:2 was not pulled; the node pulls it when it first runs an integration test"
 
 ufw --force enable
 
