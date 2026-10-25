@@ -21,7 +21,7 @@ from web3 import middleware
 from web3.gas_strategies.time_based import fast_gas_price_strategy
 from web3.gas_strategies.rpc import rpc_gas_price_strategy
 
-from utils import get_or_generate_uuid, run_subprocess, run_subprocess_status, environment_failure, loaded_enclave_images, record_enclave_images, retry, holds_within, pinned_within, FetchDeferrals, staging_plan, remaining_order_seconds, record_order_placement, order_placed_at, pending_approvals, record_pending_approval, forget_pending_approval, ORDER_STARTED_KEY, DP_STARTED_ROW_CAPABILITY, order_started_row, ORDER_GRACE_SECONDS, session_wallet_attestation, Storage, Cache, ListCache, ListCacheWithTimestamp, MergedOrdersCache, subprocess, get_node_geo, HardwareInfoProvider, parse_transaction_bytes_ut, looks_like_cid, canonical_cid, PEER_MULTIADDR, next_registered_image, enclave_failure, enclave_may_have_failed, docker_container_states, docker_container_log_tail, stale_integration_tests, image_trees, stale_image_trees, directory_size, remove_tree, removal_leftovers
+from utils import get_or_generate_uuid, run_subprocess, run_subprocess_status, environment_failure, loaded_enclave_images, record_enclave_images, revert_reason, retry, holds_within, pinned_within, FetchDeferrals, staging_plan, remaining_order_seconds, record_order_placement, order_placed_at, pending_approvals, record_pending_approval, forget_pending_approval, ORDER_STARTED_KEY, DP_STARTED_ROW_CAPABILITY, order_started_row, ORDER_GRACE_SECONDS, session_wallet_attestation, Storage, Cache, ListCache, ListCacheWithTimestamp, MergedOrdersCache, subprocess, get_node_geo, HardwareInfoProvider, parse_transaction_bytes_ut, looks_like_cid, canonical_cid, PEER_MULTIADDR, next_registered_image, enclave_failure, enclave_may_have_failed, docker_container_states, docker_container_log_tail, stale_integration_tests, image_trees, stale_image_trees, directory_size, remove_tree, removal_leftovers
 import scone_image
 from models import *
 from error_messages import errorMessages
@@ -80,6 +80,12 @@ ENCLAVE_CONTAINER_POLL_SECONDS = 10
 ENCLAVE_LAS = 'las'
 REGISTRY_CONTAINER = 'registry'
 REGISTRY_IMAGE = 'registry:2'
+# How many times a placement whose simulation reverts without a reason is
+# simulated again, a block apart, and how many times the started row is sent
+# when its transaction fails: an RPC replica behind the chain answers both for
+# a DP request or an order created moments ago (utils.revert_reason).
+PLACEMENT_SIMULATION_ATTEMPTS = 3
+STARTED_ROW_ATTEMPTS = 3
 # How long a placed order waits for the data owner's approval (the runner's
 # _approveOrder) before the node moves to a new DP request: at least
 # ORDER_APPROVAL_WINDOW_SECONDS and at least ORDER_APPROVAL_WINDOW_BLOCKS new
@@ -3547,36 +3553,45 @@ class EtnyPoXNode:
     def __broadcast_order_started(self, order_id):
         """Add the started row (utils.order_started_row) to the order's DP
         request from this node's wallet, once per order: orders/<id>/started_row
-        is written when the row is on chain. A row that does not land is
-        logged and the run goes on without it."""
+        is written when the row is on chain. The row is sent up to
+        STARTED_ROW_ATTEMPTS times a block apart, since the gas estimate of a
+        row for an order placed moments ago reverts on an RPC replica behind
+        the chain; a row that does not land is logged and the run goes on
+        without it."""
         logger = self.logger
         marker = os.path.join(ORDERS_DIR, str(order_id), 'started_row')
         if os.path.exists(marker):
             return
-        try:
-            order = Order(self.__etny.caller()._getOrder(order_id))
-            value = order_started_row(order_id, self.__w3.eth.block_number)
-            fn = self.__etny.functions._addMetadataToDPRequest(order.dp_req, ORDER_STARTED_KEY, value)
-            _price, fee_fields = self.__esr_fee()
-            opts = {
-                'from': self.__address,
-                'nonce': self.__w3.eth.get_transaction_count(self.__address),
-                'chainId': self.__network_config.chain_id,
-                'gas': fn.estimate_gas({'from': self.__address}) + 30000,
-            }
-            opts.update(fee_fields)
-            txn = fn.build_transaction(opts)
-            self.__w3.eth.wait_for_transaction_receipt(
-                self.__w3.eth.send_raw_transaction(
-                    self.__w3.eth.account.sign_transaction(
-                        txn, private_key=self.__acct.key).raw_transaction),
-                timeout=120)
-            os.makedirs(os.path.dirname(marker), exist_ok=True)
-            with open(marker, 'w') as f:
-                f.write(value)
-            logger.info(f"Order {order_id}: started row {value} is on chain")
-        except Exception as e:
-            logger.warning(f"Order {order_id}: the started row was not added ({e})")
+        for attempt in range(1, STARTED_ROW_ATTEMPTS + 1):
+            try:
+                order = Order(self.__etny.caller()._getOrder(order_id))
+                value = order_started_row(order_id, self.__w3.eth.block_number)
+                fn = self.__etny.functions._addMetadataToDPRequest(order.dp_req, ORDER_STARTED_KEY, value)
+                _price, fee_fields = self.__esr_fee()
+                opts = {
+                    'from': self.__address,
+                    'nonce': self.__w3.eth.get_transaction_count(self.__address),
+                    'chainId': self.__network_config.chain_id,
+                    'gas': fn.estimate_gas({'from': self.__address}) + 30000,
+                }
+                opts.update(fee_fields)
+                txn = fn.build_transaction(opts)
+                self.__w3.eth.wait_for_transaction_receipt(
+                    self.__w3.eth.send_raw_transaction(
+                        self.__w3.eth.account.sign_transaction(
+                            txn, private_key=self.__acct.key).raw_transaction),
+                    timeout=120)
+                os.makedirs(os.path.dirname(marker), exist_ok=True)
+                with open(marker, 'w') as f:
+                    f.write(value)
+                logger.info(f"Order {order_id}: started row {value} is on chain")
+                return
+            except Exception as e:
+                if attempt < STARTED_ROW_ATTEMPTS:
+                    logger.info(f"Order {order_id}: the started row was not added ({e}); sending it again next block")
+                    time.sleep(self.__network_config.block_time)
+                else:
+                    logger.warning(f"Order {order_id}: the started row was not added ({e})")
 
     def __take_up_approved_order(self):
         """Run the oldest order this node placed whose approval landed after
@@ -3695,6 +3710,7 @@ class EtnyPoXNode:
         retries = 0
         max_reverts = 3
         reverts = 0
+        simulation_reverts = 0
 
         while True:
           try:
@@ -3704,13 +3720,29 @@ class EtnyPoXNode:
             # reverts again on every attempt, each one paying gas. On bloxberg
             # a request whose metadata4 is the zero address is such a one:
             # _placeOrder takes a non-empty metadata4 as the node it is pinned
-            # to, and no node is the zero address.
+            # to, and no node is the zero address. A revert without a reason
+            # is not a refusal: the RPC replica that answered may not hold
+            # this node's DP request, created moments ago, or the DO request;
+            # the simulation is repeated PLACEMENT_SIMULATION_ATTEMPTS times a
+            # block apart, and a request still reverting so is left, uncached,
+            # for a later pass.
             try:
                 placement.call({'from': self.__address})
             except exceptions.ContractLogicError as refusal:
                 self.__raise_if_matched(doreq_id)
+                reason = revert_reason(refusal)
+                if reason is None:
+                    simulation_reverts += 1
+                    if simulation_reverts < PLACEMENT_SIMULATION_ATTEMPTS:
+                        logger.info(f"DO request {doreq_id}: the placement simulation reverted without a reason "
+                                    f"({simulation_reverts}/{PLACEMENT_SIMULATION_ATTEMPTS}); simulating again next block")
+                        time.sleep(self.__network_config.block_time)
+                        continue
+                    logger.info(f"DO request {doreq_id}: the placement simulation reverted without a reason "
+                                f"{simulation_reverts} times; left for a later pass")
+                    raise exceptions.ContractLogicError(f"DO request {doreq_id} placement simulation reverted without a reason")
                 logger.info(f"DO request {doreq_id} cannot be placed with DP request "
-                            f"{self.__dprequest}: the protocol contract refuses it ({refusal}), skipping processing")
+                            f"{self.__dprequest}: the protocol contract refuses it ({reason}), skipping processing")
                 self.doreq_cache.add(doreq_id)
                 raise exceptions.ContractLogicError(f"DO request {doreq_id} refused by the contract")
             # Build the transaction INSIDE the retry loop so every attempt gets a

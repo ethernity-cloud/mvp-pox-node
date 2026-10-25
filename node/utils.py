@@ -462,6 +462,27 @@ def record_enclave_images(base_path, image_hash):
         marker.write(image_hash)
 
 
+def revert_reason(error):
+    """The reason a contract revert carried, from a web3 ContractLogicError
+    whose args are the message web3 builds, 'execution reverted: <reason>',
+    and the revert data; None when the revert carried no data (web3 gives
+    the data as '0x' or 'Reverted 0x'), which an RPC replica that lags
+    behind the chain answers for a call about a request it has not seen yet.
+    Revert data without a reason string (a custom error) is returned as its
+    hex."""
+    message = str(error.args[0]) if error.args else str(error)
+    if message.startswith('execution reverted'):
+        reason = message[len('execution reverted'):].lstrip(':').strip()
+    else:
+        reason = message.strip()
+    if reason:
+        return reason
+    data = str(error.args[1]).strip() if len(error.args) > 1 and error.args[1] is not None else ''
+    if data.startswith('Reverted '):
+        data = data[len('Reverted '):]
+    return data if data not in ('', '0x') else None
+
+
 def environment_failure(step, output):
     """The reason an order's enclave environment did not come up: `step` says
     what did not start, `output` is the failing docker command's output, of
