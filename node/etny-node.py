@@ -2344,13 +2344,19 @@ class EtnyPoXNode:
 
             payload_hash = metadata[2].split(':')[1]
             input_hash = metadata[3].split(':')[1]
-            list_of_ipfs_hashes = [enclave_image_hash, docker_compose_hash, challenge_hash, payload_hash]
+            # The image tree and the compose come from the image's publisher
+            # and the registry's mirrors; the challenge, the code and the
+            # input were just delivered to the public intake, which the
+            # gateway serves (Storage.download_artefact).
+            image_hashes = [enclave_image_hash, docker_compose_hash]
+            artefact_hashes = [challenge_hash, payload_hash]
             if input_hash is not None and len(input_hash) > 0:
-                list_of_ipfs_hashes.append(input_hash)
+                artefact_hashes.append(input_hash)
 
             if self.process_order_data['process_order_retry_counter'] <= 10:
                 logger.info(f"Fetching task data for DO Request {order.do_req} from IPFS.")
-                if not self.storage.download_many(list_of_ipfs_hashes, attempts=5, delay=3):
+                if not (self.storage.download_many(image_hashes, attempts=5, delay=3)
+                        and self.storage.download_many(artefact_hashes, attempts=5, delay=3, artefacts=True)):
                     logger.info("Cannot download data from IPFS, cancelling processing")
                     self.ipfs_timeout_cancel(order_id)
                     self.dpreq_cache.add(order.dp_req)

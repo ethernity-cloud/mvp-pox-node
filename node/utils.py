@@ -1338,6 +1338,40 @@ class Storage:
         self.fetch_ipfs_content(data, output=out_path)
         self._post_download_processing(data, out_path)
 
+    # How often, and how far apart, the gateway is asked for an order's
+    # artefact before the swarm path is taken (download_artefact).
+    ARTEFACT_GATEWAY_ATTEMPTS = 3
+    ARTEFACT_GATEWAY_DELAY_SECONDS = 5
+
+    def download_artefact(self, data):
+        """Fetch the CID `data` of an order's artefact (its challenge, code or
+        input) into target/<cid> unless the cache holds it: the gateway first,
+        ARTEFACT_GATEWAY_ATTEMPTS times, since the client delivered the
+        artefact to the public intake, which pinned it on the bootnode the
+        gateway serves, and what the gateway serves is added and pinned to the
+        connected Kubo; then download(), whose swarm pin waits
+        DOWNLOAD_PIN_STALL_SECONDS for a block before its own gateway
+        fallback. Without a gateway it is download() alone."""
+        out_path = os.path.join(self.target, data)
+        if self.cache.contains(data) and os.path.exists(out_path):
+            self.logger.info(f"{data} found in local cache, skipping download")
+            os.utime(out_path, None)
+            return
+        if self.gateway is not None:
+            for attempt in range(1, self.ARTEFACT_GATEWAY_ATTEMPTS + 1):
+                try:
+                    os.makedirs(os.path.dirname(out_path), exist_ok=True)
+                    self.logger.info(f"{data}: downloading the artefact from the IPFS gateway {self.gateway}")
+                    self.fetch_ipfs_content(data, output=out_path)
+                    self._post_download_processing(data, out_path)
+                    return
+                except Exception as e:
+                    self.logger.info(f"{data}: the gateway did not serve the artefact "
+                                     f"(attempt {attempt}/{self.ARTEFACT_GATEWAY_ATTEMPTS}: {e})")
+                    if attempt < self.ARTEFACT_GATEWAY_ATTEMPTS:
+                        time.sleep(self.ARTEFACT_GATEWAY_DELAY_SECONDS)
+        self.download(data)
+
     def _download_through_kubo(self, data, out_path):
         """Read `data` from the connected Kubo: pinned already, or pinned now
         from the swarm, whose failure redials the configured providers
@@ -2074,10 +2108,14 @@ class Storage:
         except subprocess.CalledProcessError as e:
             self.logger.warning(f"Failed to restart local IPFS service. Error: {e.stderr.decode().strip()}")
 
-    def download_many(self, lst, attempts=1, delay=0):
+    def download_many(self, lst, attempts=1, delay=0, artefacts=False):
+        """Fetch every CID of `lst`, each with download(), or with
+        download_artefact() when `artefacts`; False when one of them stays
+        unfetched after `attempts` tries `delay` seconds apart."""
+        fetch = self.download_artefact if artefacts else self.download
         for data in lst:
             self.logger.debug(f'Downloading {data}')
-            if retry(self.download, data, attempts=attempts, delay=delay)[0] is False:
+            if retry(fetch, data, attempts=attempts, delay=delay)[0] is False:
                 return False
         return True
 
