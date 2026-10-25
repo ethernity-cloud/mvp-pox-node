@@ -4975,7 +4975,10 @@ if __name__ == '__main__':
     args, unknown_args = parser.parse_known_args()
 
     if unknown_args:
-       config.logger.warning(f"Ignored unrecognized arguments: {' '.join(unknown_args)}")
+       # Option names only: the values of the start script's arguments
+       # include the result wallet's private key.
+       config.logger.warning("Ignored unrecognized arguments: "
+                             f"{' '.join(a for a in unknown_args if a.startswith('--'))}")
 
     try:
         if config.replication_only:

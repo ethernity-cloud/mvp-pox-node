@@ -1221,22 +1221,35 @@ class Storage:
             except Exception as e:
                 self.logger.debug(f"ipfs-provide: swarm/connect {addr}: {e}")
 
+    # How many times an announce is attempted when the Kubo API fails it, and
+    # how far apart: a daemon that restarts answers again within seconds.
+    ANNOUNCE_ATTEMPTS = 3
+    ANNOUNCE_RETRY_SECONDS = 10
+
     def _announce(self, cid):
         """The swarm peers connected, then one routing/provide, read to the
-        end of its event stream so the call returns when the DHT walk is over.
-        A refusal (HTTP error) or a transport failure is logged at WARNING: a
-        node whose announces all fail must be visible in the log."""
-        self._connect_swarm_peers()
-        try:
-            resp = self._api_call('routing/provide', params={'arg': cid}, stream=True, timeout=120)
+        end of its event stream so the call returns when the DHT walk is over,
+        attempted ANNOUNCE_ATTEMPTS times ANNOUNCE_RETRY_SECONDS apart while
+        the API fails it. A refusal (HTTP error) or a transport failure on the
+        last attempt is logged at WARNING: a node whose announces all fail must
+        be visible in the log."""
+        for attempt in range(1, self.ANNOUNCE_ATTEMPTS + 1):
+            self._connect_swarm_peers()
             try:
-                for _ in resp.iter_lines():
-                    pass
-            finally:
-                resp.close()
-            self.logger.debug(f"ipfs-provide: announced {cid}")
-        except Exception as e:
-            self.logger.warning(f"ipfs-provide: {cid}: {e}")
+                resp = self._api_call('routing/provide', params={'arg': cid}, stream=True, timeout=120)
+                try:
+                    for _ in resp.iter_lines():
+                        pass
+                finally:
+                    resp.close()
+                self.logger.debug(f"ipfs-provide: announced {cid}")
+                return
+            except Exception as e:
+                if attempt < self.ANNOUNCE_ATTEMPTS:
+                    self.logger.info(f"ipfs-provide: {cid}: {e}; announcing again in {self.ANNOUNCE_RETRY_SECONDS} s")
+                    time.sleep(self.ANNOUNCE_RETRY_SECONDS)
+                else:
+                    self.logger.warning(f"ipfs-provide: {cid}: {e}")
 
     def reprovide_recent(self):
         """Schedule the next announce of every recently pinned CID that is due
