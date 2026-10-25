@@ -591,6 +591,33 @@ def forget_pending_approval(orders_dir, order_id):
         pass
 
 
+# The row a node adds to its DP request (_addMetadataToDPRequest) when it
+# starts running an order: key ORDER_STARTED_KEY, value 'v1:<order>:<block>'.
+# A client reads it to know within blocks that its order is being worked on.
+# A DP request whose metadata4 carries DP_STARTED_ROW_CAPABILITY is from an
+# agent that adds the row.
+ORDER_STARTED_KEY = 'etny-st'
+ORDER_STARTED_ROW_VERSION = 'v1'
+DP_STARTED_ROW_CAPABILITY = 'startrow=v1'
+
+
+def order_started_row(order_id, block_number):
+    return f"{ORDER_STARTED_ROW_VERSION}:{int(order_id)}:{int(block_number)}"
+
+
+def order_started_row_order(value):
+    """The order id a started row names, or None for a value of another
+    shape."""
+    parts = str(value or '').strip().split(':')
+    if len(parts) != 3 or parts[0] != ORDER_STARTED_ROW_VERSION:
+        return None
+    try:
+        int(parts[2])
+        return int(parts[1])
+    except ValueError:
+        return None
+
+
 def holds_within(check, window_seconds, interval, sleep=time.sleep, now=time.monotonic,
                  min_blocks=0, block=None, max_seconds=None):
     """Whether `check()` returns True within the window, asked every `interval`

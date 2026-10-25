@@ -21,7 +21,7 @@ from web3 import middleware
 from web3.gas_strategies.time_based import fast_gas_price_strategy
 from web3.gas_strategies.rpc import rpc_gas_price_strategy
 
-from utils import get_or_generate_uuid, run_subprocess, retry, holds_within, pinned_within, FetchDeferrals, staging_plan, remaining_order_seconds, record_order_placement, order_placed_at, pending_approvals, record_pending_approval, forget_pending_approval, ORDER_GRACE_SECONDS, session_wallet_attestation, Storage, Cache, ListCache, ListCacheWithTimestamp, MergedOrdersCache, subprocess, get_node_geo, HardwareInfoProvider, parse_transaction_bytes_ut, looks_like_cid, canonical_cid, PEER_MULTIADDR, next_registered_image, enclave_failure, enclave_may_have_failed, docker_container_states, docker_container_log_tail, stale_integration_tests, image_trees, stale_image_trees, directory_size, remove_tree, removal_leftovers
+from utils import get_or_generate_uuid, run_subprocess, retry, holds_within, pinned_within, FetchDeferrals, staging_plan, remaining_order_seconds, record_order_placement, order_placed_at, pending_approvals, record_pending_approval, forget_pending_approval, ORDER_STARTED_KEY, DP_STARTED_ROW_CAPABILITY, order_started_row, ORDER_GRACE_SECONDS, session_wallet_attestation, Storage, Cache, ListCache, ListCacheWithTimestamp, MergedOrdersCache, subprocess, get_node_geo, HardwareInfoProvider, parse_transaction_bytes_ut, looks_like_cid, canonical_cid, PEER_MULTIADDR, next_registered_image, enclave_failure, enclave_may_have_failed, docker_container_states, docker_container_log_tail, stale_integration_tests, image_trees, stale_image_trees, directory_size, remove_tree, removal_leftovers
 import scone_image
 from models import *
 from error_messages import errorMessages
@@ -2276,6 +2276,8 @@ class EtnyPoXNode:
                     timeout_in_seconds = int(self.__network_config.block_time) - 1.3
                     time.sleep(timeout_in_seconds)
 
+        self.__broadcast_order_started(order_id)
+
         # Backstop to the DO-request filter, for an order this node holds but
         # cannot run, such as one resumed after a restart whose integration
         # tests no longer pass: closed with a refusal rather than left
@@ -3502,6 +3504,40 @@ class EtnyPoXNode:
     def order_is_approved(self):
         return Order(self.__etny.caller()._getOrder(self.__order_id)).status == OrderStatus.PROCESSING
 
+    def __broadcast_order_started(self, order_id):
+        """Add the started row (utils.order_started_row) to the order's DP
+        request from this node's wallet, once per order: orders/<id>/started_row
+        is written when the row is on chain. A row that does not land is
+        logged and the run goes on without it."""
+        logger = self.logger
+        marker = os.path.join(ORDERS_DIR, str(order_id), 'started_row')
+        if os.path.exists(marker):
+            return
+        try:
+            order = Order(self.__etny.caller()._getOrder(order_id))
+            value = order_started_row(order_id, self.__w3.eth.block_number)
+            fn = self.__etny.functions._addMetadataToDPRequest(order.dp_req, ORDER_STARTED_KEY, value)
+            _price, fee_fields = self.__esr_fee()
+            opts = {
+                'from': self.__address,
+                'nonce': self.__w3.eth.get_transaction_count(self.__address),
+                'chainId': self.__network_config.chain_id,
+                'gas': fn.estimate_gas({'from': self.__address}) + 30000,
+            }
+            opts.update(fee_fields)
+            txn = fn.build_transaction(opts)
+            self.__w3.eth.wait_for_transaction_receipt(
+                self.__w3.eth.send_raw_transaction(
+                    self.__w3.eth.account.sign_transaction(
+                        txn, private_key=self.__acct.key).raw_transaction),
+                timeout=120)
+            os.makedirs(os.path.dirname(marker), exist_ok=True)
+            with open(marker, 'w') as f:
+                f.write(value)
+            logger.info(f"Order {order_id}: started row {value} is on chain")
+        except Exception as e:
+            logger.warning(f"Order {order_id}: the started row was not added ({e})")
+
     def __take_up_approved_order(self):
         """Run the oldest order this node placed whose approval landed after
         the approval window (utils.pending_approvals) while its window is
@@ -4481,15 +4517,17 @@ class EtnyPoXNode:
         return None
 
     def __dp_metadata4(self):
-        """A DP request's metadata4, "trustedzones=<names>;ipfs=<peer id>": the
-        trustedzones of this network this node runs, comma-separated, and the
-        peer id of its IPFS node, empty when Kubo does not answer."""
+        """A DP request's metadata4, "trustedzones=<names>;ipfs=<peer id>;startrow=v1":
+        the trustedzones of this network this node runs, comma-separated, the
+        peer id of its IPFS node, empty when Kubo does not answer, and that
+        this agent adds the started row to the DP request when it starts an
+        order (utils.DP_STARTED_ROW_CAPABILITY)."""
         try:
             peer_id = self.storage.peer_id()
         except Exception as e:
             self.logger.warning(f"IPFS peer id unavailable for the DP request: {e}")
             peer_id = ""
-        return f"trustedzones={','.join(sorted(self.__runnable_trustedzones()))};ipfs={peer_id}"
+        return f"trustedzones={','.join(sorted(self.__runnable_trustedzones()))};ipfs={peer_id};{DP_STARTED_ROW_CAPABILITY}"
 
     def __can_run_auto_update(self, file_path, interval):
         current_timestamp = int(time.time())
