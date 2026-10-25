@@ -21,7 +21,7 @@ from web3 import middleware
 from web3.gas_strategies.time_based import fast_gas_price_strategy
 from web3.gas_strategies.rpc import rpc_gas_price_strategy
 
-from utils import get_or_generate_uuid, run_subprocess, run_subprocess_status, environment_failure, retry, holds_within, pinned_within, FetchDeferrals, staging_plan, remaining_order_seconds, record_order_placement, order_placed_at, pending_approvals, record_pending_approval, forget_pending_approval, ORDER_STARTED_KEY, DP_STARTED_ROW_CAPABILITY, order_started_row, ORDER_GRACE_SECONDS, session_wallet_attestation, Storage, Cache, ListCache, ListCacheWithTimestamp, MergedOrdersCache, subprocess, get_node_geo, HardwareInfoProvider, parse_transaction_bytes_ut, looks_like_cid, canonical_cid, PEER_MULTIADDR, next_registered_image, enclave_failure, enclave_may_have_failed, docker_container_states, docker_container_log_tail, stale_integration_tests, image_trees, stale_image_trees, directory_size, remove_tree, removal_leftovers
+from utils import get_or_generate_uuid, run_subprocess, run_subprocess_status, environment_failure, loaded_enclave_images, record_enclave_images, retry, holds_within, pinned_within, FetchDeferrals, staging_plan, remaining_order_seconds, record_order_placement, order_placed_at, pending_approvals, record_pending_approval, forget_pending_approval, ORDER_STARTED_KEY, DP_STARTED_ROW_CAPABILITY, order_started_row, ORDER_GRACE_SECONDS, session_wallet_attestation, Storage, Cache, ListCache, ListCacheWithTimestamp, MergedOrdersCache, subprocess, get_node_geo, HardwareInfoProvider, parse_transaction_bytes_ut, looks_like_cid, canonical_cid, PEER_MULTIADDR, next_registered_image, enclave_failure, enclave_may_have_failed, docker_container_states, docker_container_log_tail, stale_integration_tests, image_trees, stale_image_trees, directory_size, remove_tree, removal_leftovers
 import scone_image
 from models import *
 from error_messages import errorMessages
@@ -2593,37 +2593,65 @@ class EtnyPoXNode:
 
     def __start_enclave_environment(self, enclave_image_hash):
         """Starts the enclave environment of the order whose compose is
-        self.order_docker_compose_file: the previous order's enclave
-        containers are stopped, a docker registry serving the image tree
-        `enclave_image_hash` on localhost:5000 is run, the previous order's
-        containers and images are pruned, and the compose is brought up,
-        pulling its enclave images from that registry. The registry runs
-        before the prune, which keeps the images of running containers, so
-        REGISTRY_IMAGE is pulled from Docker Hub once per node, not once per
-        order: Docker Hub rate-limits anonymous pulls per IPv4 address, and
-        nodes behind one address share the allowance. Raises EnclaveFailed
-        when the registry or the compose does not come up, with the failing
-        command's error."""
+        self.order_docker_compose_file. The previous order's enclave containers
+        are removed. When docker still holds the enclave images of the image
+        tree `enclave_image_hash` behind a running registry serving that tree
+        (__enclave_images_kept), the compose is brought up on them at once;
+        otherwise a docker registry serving the tree on localhost:5000 is run,
+        the previous order's containers and images are pruned, the compose is
+        brought up pulling its enclave images from the registry, and the tree
+        is recorded as the one loaded (utils.record_enclave_images). The
+        registry runs before the prune, which keeps the images of running
+        containers, so REGISTRY_IMAGE is pulled from Docker Hub once per node,
+        not once per order: Docker Hub rate-limits anonymous pulls per IPv4
+        address, and nodes behind one address share the allowance. Raises
+        EnclaveFailed when the registry or the compose does not come up, with
+        the failing command's error."""
         logger = self.logger
+        base_path = str(self.cache_config.base_path)
         for name in (ENCLAVE_SECURELOCK, ENCLAVE_TRUSTEDZONE, ENCLAVE_LAS):
-            run_subprocess(['docker', 'stop', name], logger)
-        run_subprocess(['docker', 'rm', '-f', REGISTRY_CONTAINER], logger)
-        registry_tree = f'{self.cache_config.base_path}/{enclave_image_hash}'
-        logger.debug(f'Running the docker registry on {registry_tree}')
-        code, output = run_subprocess_status([
-            'docker', 'run', '-d', '--restart=always', '-p', '5000:5000', '--name', REGISTRY_CONTAINER,
-            '-v', f'{registry_tree}:/var/lib/registry', REGISTRY_IMAGE
-        ], logger)
-        if code != 0:
-            raise EnclaveFailed(environment_failure('the docker registry did not start', output))
-        logger.debug("Removing the previous order's containers and images")
-        run_subprocess(['docker', 'system', 'prune', '-a', '-f', '--volumes'], logger)
-        os.chdir(self.cache_config.base_path)
+            run_subprocess(['docker', 'rm', '-f', name], logger)
+        if loaded_enclave_images(base_path) == enclave_image_hash and self.__enclave_images_kept(enclave_image_hash):
+            logger.info(f'Enclave images of {enclave_image_hash} are loaded; the registry and the images are kept')
+        else:
+            record_enclave_images(base_path, None)
+            run_subprocess(['docker', 'rm', '-f', REGISTRY_CONTAINER], logger)
+            registry_tree = f'{base_path}/{enclave_image_hash}'
+            logger.debug(f'Running the docker registry on {registry_tree}')
+            code, output = run_subprocess_status([
+                'docker', 'run', '-d', '--restart=always', '-p', '5000:5000', '--name', REGISTRY_CONTAINER,
+                '-v', f'{registry_tree}:/var/lib/registry', REGISTRY_IMAGE
+            ], logger)
+            if code != 0:
+                raise EnclaveFailed(environment_failure('the docker registry did not start', output))
+            logger.debug("Removing the previous order's containers and images")
+            run_subprocess(['docker', 'system', 'prune', '-a', '-f', '--volumes'], logger)
+        os.chdir(base_path)
         run_subprocess(['docker-compose', '-f', self.order_docker_compose_file, 'down'], logger)
         code, output = run_subprocess_status(['docker-compose', '-f', self.order_docker_compose_file, 'up', '-d'],
                                              logger)
         if code != 0:
             raise EnclaveFailed(environment_failure('the enclave containers did not start', output))
+        record_enclave_images(base_path, enclave_image_hash)
+
+    def __enclave_images_kept(self, enclave_image_hash):
+        """Whether docker holds the enclave images of the image tree
+        `enclave_image_hash`: the registry container runs with that tree
+        mounted, and the trustedzone and securelock images it served exist.
+        False when docker does not answer within seconds."""
+        try:
+            registry = subprocess.run(
+                ['docker', 'inspect', '--format', '{{.State.Running}} {{range .Mounts}}{{.Source}} {{end}}',
+                 REGISTRY_CONTAINER], capture_output=True, text=True, timeout=15)
+            if registry.returncode != 0 or not registry.stdout.startswith('true') \
+                    or f'/{enclave_image_hash} ' not in registry.stdout:
+                return False
+            images = subprocess.run(
+                ['docker', 'image', 'inspect', f'localhost:5000/{ENCLAVE_TRUSTEDZONE}:latest',
+                 f'localhost:5000/{ENCLAVE_SECURELOCK}:latest'], capture_output=True, text=True, timeout=15)
+        except (subprocess.SubprocessError, OSError):
+            return False
+        return images.returncode == 0
 
     def wait_for_enclave_v2(self, bucket_name, object_name, timeout=120, order_id=None):
         logger = self.logger

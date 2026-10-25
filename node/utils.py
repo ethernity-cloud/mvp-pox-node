@@ -431,6 +431,37 @@ def run_subprocess_status(args, logger):
     return out.returncode, output
 
 
+# The file under the cache base path that records the image tree whose enclave
+# images docker holds (record_enclave_images / loaded_enclave_images).
+ENCLAVE_IMAGES_MARKER = '.enclave-images'
+
+
+def loaded_enclave_images(base_path):
+    """The hash of the image tree whose enclave images docker holds, as
+    recorded by record_enclave_images under `base_path`; None when none is
+    recorded."""
+    try:
+        with open(os.path.join(base_path, ENCLAVE_IMAGES_MARKER)) as marker:
+            value = marker.read().strip()
+    except OSError:
+        return None
+    return value or None
+
+
+def record_enclave_images(base_path, image_hash):
+    """Records `image_hash` under `base_path` as the tree whose enclave images
+    docker holds; None records that no tree's images are loaded."""
+    path = os.path.join(base_path, ENCLAVE_IMAGES_MARKER)
+    if image_hash is None:
+        try:
+            os.remove(path)
+        except FileNotFoundError:
+            pass
+        return
+    with open(path, 'w') as marker:
+        marker.write(image_hash)
+
+
 def environment_failure(step, output):
     """The reason an order's enclave environment did not come up: `step` says
     what did not start, `output` is the failing docker command's output, of
