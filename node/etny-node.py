@@ -21,7 +21,7 @@ from web3 import middleware
 from web3.gas_strategies.time_based import fast_gas_price_strategy
 from web3.gas_strategies.rpc import rpc_gas_price_strategy
 
-from utils import get_or_generate_uuid, run_subprocess, retry, holds_within, pinned_within, FetchDeferrals, staging_plan, remaining_order_seconds, record_order_placement, order_placed_at, ORDER_GRACE_SECONDS, session_wallet_attestation, Storage, Cache, ListCache, ListCacheWithTimestamp, MergedOrdersCache, subprocess, get_node_geo, HardwareInfoProvider, parse_transaction_bytes_ut, looks_like_cid, canonical_cid, PEER_MULTIADDR, next_registered_image, enclave_failure, enclave_may_have_failed, docker_container_states, docker_container_log_tail, stale_integration_tests, image_trees, stale_image_trees, directory_size, remove_tree, removal_leftovers
+from utils import get_or_generate_uuid, run_subprocess, retry, holds_within, pinned_within, FetchDeferrals, staging_plan, remaining_order_seconds, record_order_placement, order_placed_at, pending_approvals, record_pending_approval, forget_pending_approval, ORDER_GRACE_SECONDS, session_wallet_attestation, Storage, Cache, ListCache, ListCacheWithTimestamp, MergedOrdersCache, subprocess, get_node_geo, HardwareInfoProvider, parse_transaction_bytes_ut, looks_like_cid, canonical_cid, PEER_MULTIADDR, next_registered_image, enclave_failure, enclave_may_have_failed, docker_container_states, docker_container_log_tail, stale_integration_tests, image_trees, stale_image_trees, directory_size, remove_tree, removal_leftovers
 import scone_image
 from models import *
 from error_messages import errorMessages
@@ -80,9 +80,11 @@ ENCLAVE_CONTAINER_POLL_SECONDS = 10
 # ORDER_APPROVAL_WINDOW_SECONDS and at least ORDER_APPROVAL_WINDOW_BLOCKS new
 # blocks (the runner needs one block to see the order and one to mine the
 # approval), at most ORDER_APPROVAL_MAX_SECONDS. The order is read every block
-# time and once more when the window ends.
+# time and once more when the window ends. An order approved after the window
+# is still this node's: it is recorded (utils.record_pending_approval) and run
+# once the approval lands, while the order's window is open.
 ORDER_APPROVAL_WINDOW_SECONDS = 60
-ORDER_APPROVAL_WINDOW_BLOCKS = 6
+ORDER_APPROVAL_WINDOW_BLOCKS = 8
 ORDER_APPROVAL_MAX_SECONDS = 900
 # When this process started: an image tree extracted before it counts as last
 # used then (__remove_stale_image_trees).
@@ -3238,7 +3240,8 @@ class EtnyPoXNode:
                 logger.debug(f"DP request {self.__dprequest} completed successfully!")
                 self.dpreq_cache.add(self.__dprequest)
             if order.status == OrderStatus.OPEN:
-                logger.debug("Order was never approved, skipping")
+                record_pending_approval(ORDERS_DIR, order_id, self.__dprequest, order.do_req)
+                logger.info(f"Order {order_id} is not approved yet; kept for its approval")
             return
 
         logger.debug(f"Processing DP request {self.__dprequest}")
@@ -3299,6 +3302,9 @@ class EtnyPoXNode:
                      break
 
                 self.__maybe_retry_integration_tests()
+
+                if self.__take_up_approved_order():
+                    continue
 
                 time.sleep(self.__network_config.rpc_delay/1000)
                 count = self.__etny.caller()._getDORequestsCount()
@@ -3453,8 +3459,12 @@ class EtnyPoXNode:
                                         min_blocks=ORDER_APPROVAL_WINDOW_BLOCKS,
                                         block=lambda: self.__w3.eth.block_number,
                                         max_seconds=ORDER_APPROVAL_MAX_SECONDS):
-                        logger.info(f"Order was not approved within {ORDER_APPROVAL_WINDOW_SECONDS} s and "
-                                    f"{ORDER_APPROVAL_WINDOW_BLOCKS} blocks, skipping to next DP request")
+                        # The order stays this node's: it is run once the
+                        # approval lands (__take_up_approved_order), while
+                        # the next requests are served meanwhile.
+                        record_pending_approval(ORDERS_DIR, self.__order_id, self.__dprequest, i)
+                        logger.info(f"Order {self.__order_id} was not approved within {ORDER_APPROVAL_WINDOW_SECONDS} s "
+                                    f"and {ORDER_APPROVAL_WINDOW_BLOCKS} blocks; kept for its approval, next DP request")
                         next_dp_request = True
                         release_task_slot(self.__network)
                         break
@@ -3491,6 +3501,54 @@ class EtnyPoXNode:
 
     def order_is_approved(self):
         return Order(self.__etny.caller()._getOrder(self.__order_id)).status == OrderStatus.PROCESSING
+
+    def __take_up_approved_order(self):
+        """Run the oldest order this node placed whose approval landed after
+        the approval window (utils.pending_approvals) while its window is
+        still open, with the DP request it was placed with; the records of
+        orders that are closed, cancelled or past their window are dropped.
+        Returns whether an order was run."""
+        logger = self.logger
+        for order_id, record in pending_approvals(ORDERS_DIR).items():
+            try:
+                time.sleep(self.__network_config.rpc_delay / 1000)
+                order = Order(self.__etny.caller()._getOrder(order_id))
+            except Exception as e:
+                logger.debug(f"Order {order_id}, awaiting approval, is not readable ({e})")
+                continue
+            if order.status in (OrderStatus.CLOSED, OrderStatus.CANCELLED):
+                forget_pending_approval(ORDERS_DIR, order_id)
+                continue
+            placed_at = order_placed_at(ORDERS_DIR, order_id)
+            if placed_at is not None:
+                try:
+                    do_req = DORequest(self.__etny.caller()._getDORequest(order.do_req))
+                except Exception as e:
+                    logger.debug(f"Order {order_id}: its request is not readable ({e})")
+                    continue
+                if remaining_order_seconds(placed_at, do_req.duration) <= 0:
+                    logger.info(f"Order {order_id}: its window ended before it was approved; no longer kept")
+                    forget_pending_approval(ORDERS_DIR, order_id)
+                    continue
+            if order.status != OrderStatus.PROCESSING:
+                continue
+            logger.info(f"Order {order_id} (DO request {record['do_req']}, DP request {record['dp_req']}) "
+                        f"was approved after its window; running it now")
+            current_dp_request = self.__dprequest
+            self.__dprequest = record['dp_req']
+            self.__order_id = order_id
+            acquire_task_slot(self.__network)
+            try:
+                self.process_order(order_id)
+                logger.info(f"Order {order_id} (DO request {record['do_req']}, DP request {record['dp_req']}) completed.")
+            except Exception as e:
+                logger.error(f"Order {order_id}, approved after its window, failed: {e}")
+            finally:
+                release_task_slot(self.__network)
+                forget_pending_approval(ORDERS_DIR, order_id)
+                self.__dprequest = current_dp_request
+            return True
+        return False
 
     def find_order_by_dp_req(self):
         logger = self.logger

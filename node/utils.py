@@ -549,6 +549,48 @@ def order_placed_at(orders_dir, order_id):
         return None
 
 
+def pending_approval_path(orders_dir, order_id):
+    return os.path.join(orders_dir, str(order_id), 'awaiting_approval')
+
+
+def record_pending_approval(orders_dir, order_id, dp_req, do_req):
+    """Keep that `order_id`, this node's order with its DP request `dp_req` on
+    DO request `do_req`, was not approved within the approval window, so the
+    node takes it up once the approval lands."""
+    os.makedirs(os.path.join(orders_dir, str(order_id)), exist_ok=True)
+    with open(pending_approval_path(orders_dir, order_id), 'w') as f:
+        json.dump({'dp_req': int(dp_req), 'do_req': int(do_req)}, f)
+
+
+def pending_approvals(orders_dir):
+    """{order id: {'dp_req', 'do_req'}} of the orders recorded as awaiting
+    approval, the oldest order first; a record that cannot be read is left
+    out."""
+    pending = {}
+    try:
+        names = os.listdir(orders_dir)
+    except OSError:
+        return pending
+    for name in names:
+        if not name.isdigit():
+            continue
+        try:
+            with open(pending_approval_path(orders_dir, name)) as f:
+                record = json.load(f)
+            pending[int(name)] = {'dp_req': int(record['dp_req']), 'do_req': int(record['do_req'])}
+        except (OSError, ValueError, KeyError, TypeError):
+            continue
+    return dict(sorted(pending.items()))
+
+
+def forget_pending_approval(orders_dir, order_id):
+    """Drop `order_id`'s awaiting-approval record; nothing when there is none."""
+    try:
+        os.remove(pending_approval_path(orders_dir, order_id))
+    except OSError:
+        pass
+
+
 def holds_within(check, window_seconds, interval, sleep=time.sleep, now=time.monotonic,
                  min_blocks=0, block=None, max_seconds=None):
     """Whether `check()` returns True within the window, asked every `interval`
