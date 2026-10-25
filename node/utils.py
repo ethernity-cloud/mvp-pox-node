@@ -1055,18 +1055,38 @@ class Storage:
     REPROVIDE_TIMES = 3
 
     def provide(self, cid):
-        """Announce `cid` to the DHT (routing/provide) on the announce worker,
-        so a peer that is not connected to this node can still find it, and
-        remember it for reprovide_recent. Returns at once; never raises."""
+        """Announce `cid` on the announce worker: a swarm/connect to each
+        configured swarm peer (IPFS_SWARM, the bootnode), then routing/provide
+        to the DHT so a peer that is not connected to this node can still find
+        it; `cid` is remembered for reprovide_recent. Returns at once; never
+        raises."""
         with self._recent_lock:
             self._recent_pins[cid] = {'pinned': time.time(), 'announces': 1, 'last': time.time()}
         self.announce_executor.submit(self._announce, cid)
 
+    def _connect_swarm_peers(self):
+        """One swarm/connect per configured swarm peer, so the block announced
+        next is served to the bootnode over a live connection: Kubo's peering
+        reconnects a dropped peer with a back-off, and the bootnode cannot
+        dial a node behind NAT. A dial that fails is logged at DEBUG and the
+        announce goes ahead."""
+        try:
+            addrs = self._swarm_addrs()
+        except ValueError as e:
+            self.logger.debug(f"ipfs-provide: swarm peers not read ({e})")
+            return
+        for addr in addrs:
+            try:
+                self.connect_peer(addr, timeout=10)
+            except Exception as e:
+                self.logger.debug(f"ipfs-provide: swarm/connect {addr}: {e}")
+
     def _announce(self, cid):
-        """One routing/provide, read to the end of its event stream so the
-        call returns when the DHT walk is over. A refusal (HTTP error) or a
-        transport failure is logged at WARNING: a node whose announces all
-        fail must be visible in the log."""
+        """The swarm peers connected, then one routing/provide, read to the
+        end of its event stream so the call returns when the DHT walk is over.
+        A refusal (HTTP error) or a transport failure is logged at WARNING: a
+        node whose announces all fail must be visible in the log."""
+        self._connect_swarm_peers()
         try:
             resp = self._api_call('routing/provide', params={'arg': cid}, stream=True, timeout=120)
             try:
