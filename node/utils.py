@@ -506,6 +506,15 @@ def wallet_covers(balance_wei, gas_limit, gas_price_wei, transactions=WALLET_GAS
     return int(balance_wei) >= int(transactions) * int(gas_limit) * int(gas_price_wei)
 
 
+def placement_block_of(logs, order_id):
+    """The block number of the _placeOrderEV log in `logs` (web3 event logs,
+    args._orderNumber) that placed `order_id`; None when none did."""
+    for log in logs:
+        if int(log['args']['_orderNumber']) == int(order_id):
+            return int(log['blockNumber'])
+    return None
+
+
 def transaction_known(error):
     """Whether `error` is a transaction pool's answer that it holds the
     transaction already: OpenEthereum's "Transaction with the same hash was

@@ -21,7 +21,7 @@ from web3 import middleware
 from web3.gas_strategies.time_based import fast_gas_price_strategy
 from web3.gas_strategies.rpc import rpc_gas_price_strategy
 
-from utils import get_or_generate_uuid, run_subprocess, run_subprocess_status, environment_failure, record_enclave_image_tree, compose_images, tree_image_tag, revert_reason, wallet_covers, insufficient_funds, transaction_known, WALLET_GAS_TRANSACTIONS, retry, holds_within, pinned_within, FetchDeferrals, staging_plan, remaining_order_seconds, record_order_placement, order_placed_at, pending_approvals, record_pending_approval, forget_pending_approval, ORDER_STARTED_KEY, DP_STARTED_ROW_CAPABILITY, order_started_row, ORDER_GRACE_SECONDS, session_wallet_attestation, Storage, Cache, ListCache, ListCacheWithTimestamp, MergedOrdersCache, subprocess, get_node_geo, HardwareInfoProvider, parse_transaction_bytes_ut, looks_like_cid, canonical_cid, PEER_MULTIADDR, next_registered_image, enclave_failure, enclave_may_have_failed, docker_container_states, docker_container_log_tail, stale_integration_tests, image_trees, stale_image_trees, directory_size, remove_tree, removal_leftovers
+from utils import get_or_generate_uuid, run_subprocess, run_subprocess_status, environment_failure, record_enclave_image_tree, compose_images, tree_image_tag, revert_reason, wallet_covers, insufficient_funds, transaction_known, placement_block_of, WALLET_GAS_TRANSACTIONS, retry, holds_within, pinned_within, FetchDeferrals, staging_plan, remaining_order_seconds, record_order_placement, order_placed_at, pending_approvals, record_pending_approval, forget_pending_approval, ORDER_STARTED_KEY, DP_STARTED_ROW_CAPABILITY, order_started_row, ORDER_GRACE_SECONDS, session_wallet_attestation, Storage, Cache, ListCache, ListCacheWithTimestamp, MergedOrdersCache, subprocess, get_node_geo, HardwareInfoProvider, parse_transaction_bytes_ut, looks_like_cid, canonical_cid, PEER_MULTIADDR, next_registered_image, enclave_failure, enclave_may_have_failed, docker_container_states, docker_container_log_tail, stale_integration_tests, image_trees, stale_image_trees, directory_size, remove_tree, removal_leftovers
 import scone_image
 from models import *
 from error_messages import errorMessages
@@ -92,6 +92,10 @@ WALLET_GAS_LOG_SECONDS = 600
 # How often the wallet's balance is read while an order's result waits for
 # the wallet to be funded (__await_funding).
 RESULT_FUNDING_RETRY_SECONDS = 30
+# How many blocks beyond an order's window and grace this node's placement of
+# it is looked for on the chain (__placement_time_from_chain): the block time
+# the window is converted with is the configured average.
+PLACEMENT_LOOKBACK_MARGIN_BLOCKS = 20
 # How long a transaction's receipt is waited for; web3's default is 120 s,
 # which ten nodes placing orders in the same minute on the bloxberg testnet
 # exceeded, so the placement was sent again and its match taken for another
@@ -2616,6 +2620,23 @@ class EtnyPoXNode:
             self.dpreq_cache.add(self.__dprequest)
             self.__enclave_environment_down()
 
+    def __placement_time_from_chain(self, order_id, duration_hours):
+        """The timestamp of the block in which this node placed `order_id`:
+        the _placeOrderEV it emitted for the order (utils.placement_block_of),
+        looked for over the blocks of the order's window and grace plus
+        PLACEMENT_LOOKBACK_MARGIN_BLOCKS. None when no such event is there,
+        the placement being older than the window. Raises when the chain
+        cannot be read."""
+        latest = int(self.__w3.eth.block_number)
+        span = int((duration_hours * 3600 + ORDER_GRACE_SECONDS) / int(self.__network_config.block_time))
+        logs = self.__etny.events._placeOrderEV().get_logs(
+            from_block=max(0, latest - span - PLACEMENT_LOOKBACK_MARGIN_BLOCKS), to_block=latest,
+            argument_filters={'_from': self.__address})
+        block = placement_block_of(logs, order_id)
+        if block is None:
+            return None
+        return int(self.__w3.eth.get_block(block).timestamp)
+
     def __enclave_environment_down(self):
         """Removes the order's enclave containers with its compose,
         self.order_docker_compose_file; nothing before an order set one. Run
@@ -3359,9 +3380,28 @@ class EtnyPoXNode:
             if order.status == OrderStatus.PROCESSING:
                 # An order whose window has passed is not resumed: its client
                 # has given up on it, and the validators settle it.
+                do_req = DORequest(self.__etny.caller()._getDORequest(order.do_req))
                 placed_at = order_placed_at(ORDERS_DIR, order_id)
+                if placed_at is None:
+                    # An agent that did not record the placement (one that
+                    # took the placement for failed, or an earlier version):
+                    # the block of this node's _placeOrderEV for the order
+                    # gives it, looked for over the order's window; none
+                    # there means the window has passed. A chain read that
+                    # fails leaves the time unknown, and the order is resumed
+                    # with the full window, as before the record existed.
+                    try:
+                        placed_at = self.__placement_time_from_chain(order_id, do_req.duration)
+                    except Exception as e:
+                        logger.warning(f"Order {order_id}: its placement could not be read from the chain ({e}); "
+                                       f"resumed with the full window")
+                    else:
+                        if placed_at is None:
+                            logger.info(f"Order {order_id}: this node placed it before its window; not resumed")
+                            self.dpreq_cache.add(self.__dprequest)
+                            return
+                        record_order_placement(ORDERS_DIR, order_id, placed_at)
                 if placed_at is not None:
-                    do_req = DORequest(self.__etny.caller()._getDORequest(order.do_req))
                     left = remaining_order_seconds(placed_at, do_req.duration)
                     if left <= 0:
                         logger.info(f"Order {order_id}: its window ended {int(-left)} s ago; not resumed")
