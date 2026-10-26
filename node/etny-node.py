@@ -21,7 +21,7 @@ from web3 import middleware
 from web3.gas_strategies.time_based import fast_gas_price_strategy
 from web3.gas_strategies.rpc import rpc_gas_price_strategy
 
-from utils import get_or_generate_uuid, run_subprocess, run_subprocess_status, environment_failure, loaded_enclave_images, record_enclave_images, revert_reason, wallet_covers, WALLET_GAS_TRANSACTIONS, retry, holds_within, pinned_within, FetchDeferrals, staging_plan, remaining_order_seconds, record_order_placement, order_placed_at, pending_approvals, record_pending_approval, forget_pending_approval, ORDER_STARTED_KEY, DP_STARTED_ROW_CAPABILITY, order_started_row, ORDER_GRACE_SECONDS, session_wallet_attestation, Storage, Cache, ListCache, ListCacheWithTimestamp, MergedOrdersCache, subprocess, get_node_geo, HardwareInfoProvider, parse_transaction_bytes_ut, looks_like_cid, canonical_cid, PEER_MULTIADDR, next_registered_image, enclave_failure, enclave_may_have_failed, docker_container_states, docker_container_log_tail, stale_integration_tests, image_trees, stale_image_trees, directory_size, remove_tree, removal_leftovers
+from utils import get_or_generate_uuid, run_subprocess, run_subprocess_status, environment_failure, loaded_enclave_images, record_enclave_images, revert_reason, wallet_covers, insufficient_funds, WALLET_GAS_TRANSACTIONS, retry, holds_within, pinned_within, FetchDeferrals, staging_plan, remaining_order_seconds, record_order_placement, order_placed_at, pending_approvals, record_pending_approval, forget_pending_approval, ORDER_STARTED_KEY, DP_STARTED_ROW_CAPABILITY, order_started_row, ORDER_GRACE_SECONDS, session_wallet_attestation, Storage, Cache, ListCache, ListCacheWithTimestamp, MergedOrdersCache, subprocess, get_node_geo, HardwareInfoProvider, parse_transaction_bytes_ut, looks_like_cid, canonical_cid, PEER_MULTIADDR, next_registered_image, enclave_failure, enclave_may_have_failed, docker_container_states, docker_container_log_tail, stale_integration_tests, image_trees, stale_image_trees, directory_size, remove_tree, removal_leftovers
 import scone_image
 from models import *
 from error_messages import errorMessages
@@ -87,8 +87,11 @@ REGISTRY_IMAGE = 'registry:2'
 PLACEMENT_SIMULATION_ATTEMPTS = 3
 STARTED_ROW_ATTEMPTS = 3
 # How often, at most, a wallet that cannot pay its transactions is logged
-# (__wallet_covers_transactions).
+# (__wallet_covers_transactions, __await_funding, __session_broadcast_row).
 WALLET_GAS_LOG_SECONDS = 600
+# How often the wallet's balance is read while an order's result waits for
+# the wallet to be funded (__await_funding).
+RESULT_FUNDING_RETRY_SECONDS = 30
 # How long a placed order waits for the data owner's approval (the runner's
 # _approveOrder) before the node moves to a new DP request: at least
 # ORDER_APPROVAL_WINDOW_SECONDS and at least ORDER_APPROVAL_WINDOW_BLOCKS new
@@ -2374,7 +2377,7 @@ class EtnyPoXNode:
             payload_file = f'{self.cache_config.base_path}/{payload_hash}'
             if input_hash is not None and len(input_hash) > 0:
                 input_file = f'{self.cache_config.base_path}/{input_hash}'
-                logger.info('input hash is not none: ', input_file)
+                logger.info(f'input hash is not none: {input_file}')
             else:
                 input_file = None
 
@@ -2410,6 +2413,8 @@ class EtnyPoXNode:
             placed_at = order_placed_at(ORDERS_DIR, order_id)
             window = (remaining_order_seconds(placed_at, do_req.duration) if placed_at is not None
                       else do_req.duration * 3600 + ORDER_GRACE_SECONDS)
+            # The order's result is worth sending until then (add_result_to_order).
+            order_deadline = time.time() + window
 
             # The waits end early when an enclave container will not finish
             # the task (EnclaveFailed: a CAS refusal, an exit, a container
@@ -2418,6 +2423,8 @@ class EtnyPoXNode:
             # below with the reason.
             failure = None
             elapsed_wait1 = elapsed_wait2 = 0
+            # The ESR state objects pinned for this order (serve_esr_state_pins).
+            self._esr_state_served = {}
             try:
                 self.__start_enclave_environment(enclave_image_hash)
                 logger.info('Docker environment ready. Execution started in SGX enclave')
@@ -2565,7 +2572,7 @@ class EtnyPoXNode:
                 logger.debug('Building result for v3')
                 result = self.build_result_format_v3(result_hash, transaction_data)
                 logger.debug(f'Result is: {result}')
-                self.add_result_to_order(order_id, result)
+                self.add_result_to_order(order_id, result, until=order_deadline)
                 logger.info("ZK proof added. Task integrity submitted for validation.")
                 self.calculate_reward()
 
@@ -2597,14 +2604,21 @@ class EtnyPoXNode:
                 # its readers take the second field.
                 message = f"Task execution failed, {failure}" if failure else "Task execution timed out"
                 result = self.build_result_format_v3("[WARN]", message)
-                self.add_result_to_order(order_id, result)
+                self.add_result_to_order(order_id, result, until=order_deadline)
 
             self.dpreq_cache.add(self.__dprequest)
-            logger.debug('Cleaning up environment')
-            logger.debug('Cleaning up SecureLock and TrustedZone containers.')
-            run_subprocess([
-                'docker-compose', '-f', self.order_docker_compose_file, 'down'
-            ], logger)
+            self.__enclave_environment_down()
+
+    def __enclave_environment_down(self):
+        """Removes the order's enclave containers with its compose,
+        self.order_docker_compose_file; nothing before an order set one. Run
+        when an order ends, completed or failed: a container left running
+        holds EPC memory and CPU until the next order removes it."""
+        compose_file = getattr(self, 'order_docker_compose_file', None)
+        if compose_file is None:
+            return
+        self.logger.debug('Cleaning up SecureLock and TrustedZone containers.')
+        run_subprocess(['docker-compose', '-f', compose_file, 'down'], self.logger)
 
     def __start_enclave_environment(self, enclave_image_hash):
         """Starts the enclave environment of the order whose compose is
@@ -2886,8 +2900,17 @@ class EtnyPoXNode:
         whose CID does not match what the enclave published.
 
         Never raises: a state pin failing must not fail the task itself.
+
+        The objects pinned for the current order are kept in
+        self._esr_state_served (name -> the CID the enclave published; reset
+        by process_order), and an object whose published CID is unchanged is
+        neither read nor pinned again on the later calls of the order's wait
+        loop; a key the enclave commits again publishes a new CID and is
+        pinned again. Returns that record.
         """
-        served = {}
+        served = getattr(self, '_esr_state_served', None)
+        if served is None:
+            served = self._esr_state_served = {}
         if not bucket_name:
             return served
         try:
@@ -2900,8 +2923,6 @@ class EtnyPoXNode:
                     continue
                 key = name[len('state.'):-len('.enc')]
                 cid_object = f'state.{key}.cid'
-                if name in served:
-                    continue
                 if time.time() > deadline_ts:
                     self.logger.warning('Deadline reached while serving ESR state pins')
                     break
@@ -2914,6 +2935,8 @@ class EtnyPoXNode:
                 ok, declared_cid = self.swift_stream_service.get_file_content(bucket_name, cid_object)
                 declared_cid = (declared_cid or '').strip()
                 if not ok or not declared_cid:
+                    continue
+                if served.get(name) == declared_cid:
                     continue
 
                 ok, blob = self.swift_stream_service.get_file_content_bytes(bucket_name, name)
@@ -2954,7 +2977,15 @@ class EtnyPoXNode:
     def build_result_format_v3(self, result_hash, transaction_hex):
         return f'v3:{transaction_hex}:{result_hash}'
 
-    def add_result_to_order(self, order_id, result):
+    def add_result_to_order(self, order_id, result, until=None):
+        """Sends the order's result (_addResultToOrder) from this node's
+        wallet. While `until` (the order's deadline, seconds since the epoch)
+        has not passed, a send the RPC refuses for the wallet's balance
+        (utils.insufficient_funds) waits for the wallet to cover the
+        transaction (__await_funding) and is made again: the enclave's work
+        is done and the client waits for the result until then, so a wallet
+        funded meanwhile completes the order. Any other failure, and a
+        refusal past `until`, is retried 20 times 5 s apart, then raised."""
         logger = self.logger
 
         logger.info(f'Packaging results for blockchain submission.')
@@ -2963,6 +2994,7 @@ class EtnyPoXNode:
         retries = 0
 
         while True:
+            unicorn_txn = None
             try:
                 unicorn_txn = self.__etny.functions._addResultToOrder(
                     order_id, result
@@ -2976,12 +3008,44 @@ class EtnyPoXNode:
                     self.dpreq_cache.add(self.__dprequest)
                     break
             except Exception as ex:
+                if until is not None and unicorn_txn is not None and insufficient_funds(ex) \
+                        and self.__await_funding(order_id, unicorn_txn, until):
+                    continue
                 retries += 1
                 logger.warning(f"Warning while adding result to Order. Retry {retries}/{max_retries}. Warning Message: {ex}")
                 if retries == max_retries:
                     logger.error("Maximum retries reached. Aborting.")
                     raise
                 time.sleep(5)
+
+    def __await_funding(self, order_id, transaction, until):
+        """Waits, RESULT_FUNDING_RETRY_SECONDS at a time, until this node's
+        wallet covers `transaction` (its gas limit at its gas price, or its
+        maximum fee on an EIP-1559 network; utils.wallet_covers) or `until`
+        passes; True when it covers it. The shortfall is logged at ERROR at
+        most every WALLET_GAS_LOG_SECONDS. A balance that cannot be read
+        counts as covering after one wait, so an RPC failure costs a send,
+        not the order."""
+        gas_limit = int(transaction.get('gas') or 0)
+        price = int(transaction.get('gasPrice') or transaction.get('maxFeePerGas') or 0)
+        logged_at = 0
+        while time.time() < until:
+            try:
+                balance = self.__w3.eth.get_balance(self.__address)
+            except Exception as e:
+                self.logger.debug(f"wallet balance not read ({e}); sending the result of order {order_id} again")
+                time.sleep(RESULT_FUNDING_RETRY_SECONDS)
+                return True
+            if wallet_covers(balance, gas_limit, price, transactions=1):
+                return True
+            if time.time() - logged_at >= WALLET_GAS_LOG_SECONDS:
+                logged_at = time.time()
+                self.logger.error(f"The result of order {order_id} is not sent: wallet {self.__address} holds {balance} wei, "
+                                  f"below the {gas_limit * price} wei its transaction needs at gas limit {gas_limit} and "
+                                  f"price {price} wei; it is sent once the wallet is funded, within the "
+                                  f"{int(until - time.time())} s left of the order's window")
+            time.sleep(RESULT_FUNDING_RETRY_SECONDS)
+        return False
         
     def upload_result_to_ipfs(self, result_file):
         """Blocking upload; kept for callers outside the v3 result path.
@@ -3534,6 +3598,7 @@ class EtnyPoXNode:
                     break
                 except Exception as e:
                     logger.error(f"Unable to process order {self.__order_id}: {e}")
+                    self.__enclave_environment_down()
                     self.doreq_cache.rem(i)
 
                     self.merged_orders_cache.rem(order_id=self.__order_id)
@@ -4079,6 +4144,16 @@ class EtnyPoXNode:
             logger.info(f"[session] order {order_id}: broadcast {label} (gas {gas_units})")
             return True
         except Exception as e:
+            if insufficient_funds(e):
+                # The wallet's shortfall holds every row of the session; it is
+                # said at ERROR once per WALLET_GAS_LOG_SECONDS, not per tick.
+                if time.time() - st.get('shortfall_logged', 0) >= WALLET_GAS_LOG_SECONDS:
+                    st['shortfall_logged'] = time.time()
+                    logger.error(f"[session] order {order_id}: {label} is not broadcast: the wallet cannot pay for it "
+                                 f"({e}); tried again every tick until it is funded")
+                else:
+                    logger.debug(f"[session] order {order_id}: broadcasting {label} failed ({e})")
+                return False
             logger.error(f"[session] order {order_id}: broadcasting {label} failed ({e})")
             return False
 

@@ -475,6 +475,14 @@ def wallet_covers(balance_wei, gas_limit, gas_price_wei, transactions=WALLET_GAS
     return int(balance_wei) >= int(transactions) * int(gas_limit) * int(gas_price_wei)
 
 
+def insufficient_funds(error):
+    """Whether `error` is an RPC's refusal of a transaction for its sender's
+    balance: OpenEthereum's code -32010 "Insufficient funds. The account you
+    tried to send transaction from does not have enough funds", geth's
+    "insufficient funds for gas * price + value"."""
+    return 'insufficient funds' in str(error).lower()
+
+
 def revert_reason(error):
     """The reason a contract revert carried, from a web3 ContractLogicError
     whose args are the message web3 builds, 'execution reverted: <reason>',
