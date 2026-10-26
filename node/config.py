@@ -354,6 +354,11 @@ esr_pin_max_attempts = int(os.environ.get('ESR_PIN_MAX_ATTEMPTS', 10))
 # rest across cycles.
 esr_pin_attempt_timeout_seconds = int(os.environ.get('ESR_PIN_ATTEMPT_TIMEOUT_SECONDS', 30))
 
+# How many image trees' enclave images docker keeps: those of the trees run
+# most recently (EtnyPoXNode.__start_enclave_environment). A tree's images
+# take some 8 GB of disk.
+enclave_image_trees_kept = int(os.environ.get('ENCLAVE_IMAGE_TREES_KEPT', 3))
+
 # logger
 logger = logging.getLogger("ETNY NODE")
 handler = logging.handlers.RotatingFileHandler('/var/log/etny-node.log', maxBytes=2048000, backupCount=5)

@@ -431,35 +431,66 @@ def run_subprocess_status(args, logger):
     return out.returncode, output
 
 
-# The file under the cache base path that records the image tree whose enclave
-# images docker holds (record_enclave_images / loaded_enclave_images).
+# The file under the cache base path that records the image trees whose enclave
+# images docker holds (record_enclave_image_tree / enclave_image_trees): a JSON
+# list, the tree run most recently first.
 ENCLAVE_IMAGES_MARKER = '.enclave-images'
 
 
-def loaded_enclave_images(base_path):
-    """The hash of the image tree whose enclave images docker holds, as
-    recorded by record_enclave_images under `base_path`; None when none is
-    recorded."""
+def enclave_image_trees(base_path):
+    """The hashes of the image trees whose enclave images docker holds, the
+    tree run most recently first, as recorded under `base_path` by
+    record_enclave_image_tree; a marker holding one bare hash, as node
+    versions before 3.7.45 wrote it, names that one tree."""
     try:
         with open(os.path.join(base_path, ENCLAVE_IMAGES_MARKER)) as marker:
-            value = marker.read().strip()
+            text = marker.read().strip()
     except OSError:
-        return None
-    return value or None
+        return []
+    if not text:
+        return []
+    if not text.startswith('['):
+        return [text]
+    try:
+        trees = json.loads(text)
+    except ValueError:
+        return []
+    return [tree for tree in trees if isinstance(tree, str) and tree]
 
 
-def record_enclave_images(base_path, image_hash):
+def record_enclave_image_tree(base_path, image_hash, keep):
     """Records `image_hash` under `base_path` as the tree whose enclave images
-    docker holds; None records that no tree's images are loaded."""
-    path = os.path.join(base_path, ENCLAVE_IMAGES_MARKER)
-    if image_hash is None:
-        try:
-            os.remove(path)
-        except FileNotFoundError:
-            pass
-        return
-    with open(path, 'w') as marker:
-        marker.write(image_hash)
+    docker holds and ran last, ahead of the trees recorded before, keeping the
+    `keep` most recent; returns the trees dropped from the record, whose
+    images docker no longer needs."""
+    trees = [tree for tree in enclave_image_trees(base_path) if tree != image_hash]
+    trees.insert(0, image_hash)
+    kept, dropped = trees[:keep], trees[keep:]
+    with open(os.path.join(base_path, ENCLAVE_IMAGES_MARKER), 'w') as marker:
+        json.dump(kept, marker)
+    return dropped
+
+
+def compose_images(compose_file):
+    """The images the compose file `compose_file` names, its services'
+    `image:` values in order, each with its tag: `latest` when the compose
+    gives none, as docker reads it."""
+    images = []
+    with open(compose_file) as fh:
+        for line in fh:
+            found = re.match(r'''^\s+image:\s*["']?([^"'\s#]+)''', line)
+            if found is None:
+                continue
+            reference = found.group(1)
+            name = reference.rsplit('/', 1)[-1]
+            images.append(reference if ':' in name else f'{reference}:latest')
+    return images
+
+
+def tree_image_tag(image, tree):
+    """The tag docker keeps the image `image` (<repository>:<tag>) of the image
+    tree `tree` under: <repository>:<tree>."""
+    return f"{image.rsplit(':', 1)[0]}:{tree}"
 
 
 # How many transactions, at the configured gas limit and price, a node's wallet
