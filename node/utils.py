@@ -506,6 +506,15 @@ def wallet_covers(balance_wei, gas_limit, gas_price_wei, transactions=WALLET_GAS
     return int(balance_wei) >= int(transactions) * int(gas_limit) * int(gas_price_wei)
 
 
+def transaction_known(error):
+    """Whether `error` is a transaction pool's answer that it holds the
+    transaction already: OpenEthereum's "Transaction with the same hash was
+    already imported", geth's "already known". The send that put it there
+    succeeded, and its receipt is to be waited for."""
+    text = str(error).lower()
+    return 'already imported' in text or 'already known' in text
+
+
 def insufficient_funds(error):
     """Whether `error` is an RPC's refusal of a transaction for its sender's
     balance: OpenEthereum's code -32010 "Insufficient funds. The account you

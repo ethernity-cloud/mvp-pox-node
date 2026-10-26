@@ -21,7 +21,7 @@ from web3 import middleware
 from web3.gas_strategies.time_based import fast_gas_price_strategy
 from web3.gas_strategies.rpc import rpc_gas_price_strategy
 
-from utils import get_or_generate_uuid, run_subprocess, run_subprocess_status, environment_failure, record_enclave_image_tree, compose_images, tree_image_tag, revert_reason, wallet_covers, insufficient_funds, WALLET_GAS_TRANSACTIONS, retry, holds_within, pinned_within, FetchDeferrals, staging_plan, remaining_order_seconds, record_order_placement, order_placed_at, pending_approvals, record_pending_approval, forget_pending_approval, ORDER_STARTED_KEY, DP_STARTED_ROW_CAPABILITY, order_started_row, ORDER_GRACE_SECONDS, session_wallet_attestation, Storage, Cache, ListCache, ListCacheWithTimestamp, MergedOrdersCache, subprocess, get_node_geo, HardwareInfoProvider, parse_transaction_bytes_ut, looks_like_cid, canonical_cid, PEER_MULTIADDR, next_registered_image, enclave_failure, enclave_may_have_failed, docker_container_states, docker_container_log_tail, stale_integration_tests, image_trees, stale_image_trees, directory_size, remove_tree, removal_leftovers
+from utils import get_or_generate_uuid, run_subprocess, run_subprocess_status, environment_failure, record_enclave_image_tree, compose_images, tree_image_tag, revert_reason, wallet_covers, insufficient_funds, transaction_known, WALLET_GAS_TRANSACTIONS, retry, holds_within, pinned_within, FetchDeferrals, staging_plan, remaining_order_seconds, record_order_placement, order_placed_at, pending_approvals, record_pending_approval, forget_pending_approval, ORDER_STARTED_KEY, DP_STARTED_ROW_CAPABILITY, order_started_row, ORDER_GRACE_SECONDS, session_wallet_attestation, Storage, Cache, ListCache, ListCacheWithTimestamp, MergedOrdersCache, subprocess, get_node_geo, HardwareInfoProvider, parse_transaction_bytes_ut, looks_like_cid, canonical_cid, PEER_MULTIADDR, next_registered_image, enclave_failure, enclave_may_have_failed, docker_container_states, docker_container_log_tail, stale_integration_tests, image_trees, stale_image_trees, directory_size, remove_tree, removal_leftovers
 import scone_image
 from models import *
 from error_messages import errorMessages
@@ -92,6 +92,11 @@ WALLET_GAS_LOG_SECONDS = 600
 # How often the wallet's balance is read while an order's result waits for
 # the wallet to be funded (__await_funding).
 RESULT_FUNDING_RETRY_SECONDS = 30
+# How long a transaction's receipt is waited for; web3's default is 120 s,
+# which ten nodes placing orders in the same minute on the bloxberg testnet
+# exceeded, so the placement was sent again and its match taken for another
+# node's.
+RECEIPT_TIMEOUT_SECONDS = 600
 # How long a placed order waits for the data owner's approval (the runner's
 # _approveOrder) before the node moves to a new DP request: at least
 # ORDER_APPROVAL_WINDOW_SECONDS and at least ORDER_APPROVAL_WINDOW_BLOCKS new
@@ -2192,7 +2197,7 @@ class EtnyPoXNode:
             unicorn_txn = self.__etny.functions._addDPRequest(*params).build_transaction(self.get_transaction_build())
             _hash = self.send_transaction(unicorn_txn)
             logger.info(f"TXID {_hash} pending... ")
-            receipt = self.__w3.eth.wait_for_transaction_receipt(_hash)
+            receipt = self.__w3.eth.wait_for_transaction_receipt(_hash, timeout=RECEIPT_TIMEOUT_SECONDS)
             if receipt.status != 1:
                 raise Exception(f"TXID {_hash} reverted with parameters {params[:6]}")
             processed_logs = self.__etny.events._addDPRequestEV().process_receipt(receipt)
@@ -2222,7 +2227,7 @@ class EtnyPoXNode:
                 unicorn_txn = self.__etny.functions._cancelDPRequest(req).build_transaction(self.get_transaction_build())
                 _hash = self.send_transaction(unicorn_txn)
                 logger.info(f"TXID {_hash} pending... ")
-                receipt = self.__w3.eth.wait_for_transaction_receipt(_hash)
+                receipt = self.__w3.eth.wait_for_transaction_receipt(_hash, timeout=RECEIPT_TIMEOUT_SECONDS)
                 if receipt.status == 1:
                     logger.info(f"TXID {_hash} confirmed!")
                     break
@@ -3027,7 +3032,7 @@ class EtnyPoXNode:
 
                 _hash = self.send_transaction(unicorn_txn)
                 logger.info(f"TXID {_hash} pending... ")
-                receipt = self.__w3.eth.wait_for_transaction_receipt(_hash)
+                receipt = self.__w3.eth.wait_for_transaction_receipt(_hash, timeout=RECEIPT_TIMEOUT_SECONDS)
                 if receipt.status == 1:
                     logger.info(f"TXID {_hash} confirmed!")
                     self.dpreq_cache.add(self.__dprequest)
@@ -3852,7 +3857,10 @@ class EtnyPoXNode:
             try:
                 placement.call({'from': self.__address})
             except exceptions.ContractLogicError as refusal:
-                self.__raise_if_matched(doreq_id)
+                placed = self.__raise_if_matched(doreq_id)
+                if placed is not None:
+                    receipt, order_id = None, placed
+                    break
                 reason = revert_reason(refusal)
                 if reason is None:
                     simulation_reverts += 1
@@ -3877,7 +3885,7 @@ class EtnyPoXNode:
             unicorn_txn = placement.build_transaction(self.get_transaction_build())
             _hash = self.send_transaction(unicorn_txn)
             logger.info(f"TXID {_hash} pending... fingers crossed")
-            receipt = self.__w3.eth.wait_for_transaction_receipt(_hash)
+            receipt = self.__w3.eth.wait_for_transaction_receipt(_hash, timeout=RECEIPT_TIMEOUT_SECONDS)
 
             if receipt.status == 1:
               logger.info(f"TXID {_hash} confirmed!")
@@ -3885,7 +3893,10 @@ class EtnyPoXNode:
             else:
               logger.info(f"TXID {_hash} is reverted")
 
-            self.__raise_if_matched(doreq_id)
+            placed = self.__raise_if_matched(doreq_id)
+            if placed is not None:
+                receipt, order_id = None, placed
+                break
             reverts += 1
             if reverts == max_reverts:
                 logger.info(f"DO request {doreq_id}: {reverts} placements reverted, skipping processing")
@@ -3904,7 +3915,9 @@ class EtnyPoXNode:
               time.sleep(5)
           continue
 
-        while True:
+        # The receipt is None when the order was found placed by a transaction
+        # sent before (__raise_if_matched); order_id holds it then.
+        while receipt is not None:
           try:
             time.sleep(self.__network_config.rpc_delay/1000)
             processed_logs = self.__etny.events._placeOrderEV().process_receipt(receipt)
@@ -3917,38 +3930,46 @@ class EtnyPoXNode:
             logger.warn(f"{receipt}")
             continue
 
+        if receipt is None:
+            self.__order_id = order_id
         logger.info(f"Order {self.__order_id} secured!")
         try:
+            # Without the receipt, the block of the send that placed the order
+            # is not known: the window is counted from the latest block,
+            # minutes after it at most.
             record_order_placement(ORDERS_DIR, self.__order_id,
-                                   self.__w3.eth.get_block(receipt.blockNumber).timestamp)
+                                   self.__w3.eth.get_block(receipt.blockNumber if receipt is not None
+                                                           else 'latest').timestamp)
         except Exception as e:
             logger.warning(f"Order {self.__order_id}: its placement time was not recorded ({e}); "
                            f"a run resumed after a restart would take the full duration")
 
     def __raise_if_matched(self, doreq_id):
-        """Raises ContractLogicError when the DO request or this node's DP
-        request is no longer AVAILABLE, the placement having been refused
-        because one of them was matched."""
+        """When this node's DP request is no longer AVAILABLE and the order
+        placed with it (find_order_by_dp_req) is `doreq_id`'s, that order's
+        id: the placement sent before, whose receipt did not come in time,
+        made the match. Raises ContractLogicError when the DP request is
+        matched with another DO request's order, or the DO request was matched
+        by another node, the placement having been refused for it; None when
+        both are AVAILABLE. The error carries the skip out of place_order's
+        retry loop, which retries any other exception."""
         logger = self.logger
-        _doreq = self.__etny.caller()._getDORequest(doreq_id)
-        _dpreq = self.__etny.caller()._getDPRequest(self.__dprequest)
-
-        doreq = DORequest(_doreq)
-        dpreq = DPRequest(_dpreq)
-
-        # Raise ContractLogicError so place_order's handler PROPAGATES the skip
-        # instead of swallowing it into the generic retry path (a bare
-        # `raise` here has no active exception -> RuntimeError -> 20 futile
-        # reverted placements against an already-matched request).
-        if doreq.status != RequestStatus.AVAILABLE:
-              logger.info(f"DO request {doreq_id} is matched with another operator, skipping processing")
-              self.doreq_cache.add(doreq_id)
-              raise exceptions.ContractLogicError(f"DO request {doreq_id} already matched")
-
+        doreq = DORequest(self.__etny.caller()._getDORequest(doreq_id))
+        dpreq = DPRequest(self.__etny.caller()._getDPRequest(self.__dprequest))
         if dpreq.status != RequestStatus.AVAILABLE:
-              logger.info(f"DP request {self.__dprequest} is matched with another order, skipping processing")
-              self.doreq_cache.add(doreq_id)
-              raise exceptions.ContractLogicError(f"DP request {self.__dprequest} already matched")
+            order_id = self.find_order_by_dp_req()
+            if order_id is not None and int(Order(self.__etny.caller()._getOrder(order_id)).do_req) == int(doreq_id):
+                logger.info(f"DO request {doreq_id} is matched with this node's DP request {self.__dprequest}: "
+                            f"order {order_id}, placed by the transaction sent before")
+                return order_id
+            logger.info(f"DP request {self.__dprequest} is matched with another order, skipping processing")
+            self.doreq_cache.add(doreq_id)
+            raise exceptions.ContractLogicError(f"DP request {self.__dprequest} already matched")
+        if doreq.status != RequestStatus.AVAILABLE:
+            logger.info(f"DO request {doreq_id} is matched with another operator, skipping processing")
+            self.doreq_cache.add(doreq_id)
+            raise exceptions.ContractLogicError(f"DO request {doreq_id} already matched")
+        return None
 
     def __reset_caches_of_another_contract(self, network):
         """The request and order caches hold ids of the protocol contract they
@@ -4373,14 +4394,21 @@ class EtnyPoXNode:
                         f"paid for {spent} wei of gas total this order")
 
     def send_transaction(self, unicorn_txn):
+        """Signs and sends `unicorn_txn` from this node's wallet; its hash. A
+        pool that holds the transaction already (utils.transaction_known)
+        counts as having taken it: an earlier send of the same transaction
+        reached it, and the caller waits for the receipt as after any send."""
+        signed_txn = self.__w3.eth.account.sign_transaction(unicorn_txn, private_key=self.__acct.key)
+        _hash = self.__w3.to_hex(self.__w3.keccak(signed_txn.raw_transaction))
         try:
-            signed_txn = self.__w3.eth.account.sign_transaction(unicorn_txn, private_key=self.__acct.key)
             self.__w3.eth.send_raw_transaction(signed_txn.raw_transaction)
-            _hash = self.__w3.to_hex(self.__w3.keccak(signed_txn.raw_transaction))
-            return _hash
         except Exception as e:
+            if transaction_known(e):
+                logger.info(f"TXID {_hash} is in the pool from an earlier send")
+                return _hash
             logger.error(f"Error sending Transaction, Error Message: {e}")
             raise
+        return _hash
 
     def resume_processing(self):
         while True and not stop_event.is_set():
@@ -4772,7 +4800,7 @@ class EtnyPoXNode:
                 unicorn_txn = self.__heart_beat.functions.logCall(*params).build_transaction(self.get_transaction_build())
                 _hash = self.send_transaction(unicorn_txn)
                 logger.info(f"{_hash} pending... ")
-                receipt = self.__w3.eth.wait_for_transaction_receipt(_hash)
+                receipt = self.__w3.eth.wait_for_transaction_receipt(_hash, timeout=RECEIPT_TIMEOUT_SECONDS)
                 if receipt.status == 1:
                     logger.info(f"{_hash} confirmed!")
                     logger.info('Heart beat successfully called...')
