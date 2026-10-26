@@ -1157,15 +1157,24 @@ class Storage:
         return peers
 
     def sync_chain_peers(self, multiaddrs):
-        """Make Kubo's peering list carry exactly the validators' IPFS peers in
-        `multiaddrs`, beside the configured IPFS_SWARM entries: a peer whose
+        """Make Kubo's peering list carry the configured IPFS_SWARM peers and
+        exactly the validators' IPFS peers in `multiaddrs`: a peer whose
         addresses are not all listed is (re)added with one swarm/peering/add
         carrying all of them, since the peering service replaces a peer's
-        address list on every add; peers this method added before and that
-        are no longer listed are removed with swarm/peering/rm. Configured
-        entries are never removed. Never raises."""
+        address list on every add; validators' peers this method added before
+        and that are no longer listed are removed with swarm/peering/rm.
+        Configured entries are never removed. The peering service keeps a
+        peer connected and its connection out of the connection manager's
+        trimming, which an ordinary connection to the bootnode is subject to
+        on a daemon whose own config lists no peers, such as one shared by
+        several nodes. Never raises."""
         wanted = self._group_by_peer(multiaddrs)
-        configured = set(self._group_by_peer(self._swarm_addrs()))
+        configured = self._group_by_peer(self._swarm_addrs())
+        desired = {}
+        for peers in (configured, wanted):
+            for pid, addrs in peers.items():
+                known = desired.setdefault(pid, [])
+                known.extend(addr for addr in addrs if addr not in known)
         try:
             listed = self._api_call('swarm/peering/ls', timeout=10)
             # peering/ls reports transport addresses without the /p2p/<id>
@@ -1175,12 +1184,13 @@ class Storage:
         except Exception as e:
             self.logger.warning(f"ipfs-peers: swarm/peering/ls failed: {e}")
             return
-        for pid, addrs in wanted.items():
+        for pid, addrs in desired.items():
             if all(addr in present for addr in addrs):
                 continue
             try:
                 self._api_call('swarm/peering/add', params={'arg': addrs}, timeout=10)
-                self.logger.info(f"ipfs-peers: peering with validator IPFS {pid} at {addrs}")
+                self.logger.info(f"ipfs-peers: peering with {'validator' if pid in wanted else 'configured'} "
+                                 f"IPFS peer {pid} at {addrs}")
             except Exception as e:
                 self.logger.warning(f"ipfs-peers: swarm/peering/add {addrs} failed: {e}")
         for pid in list(self._chain_peers):

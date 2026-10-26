@@ -1799,12 +1799,13 @@ class EtnyPoXNode:
             self.__last_ipfs_cleanup_at = time.time()
 
     def __maybe_sync_ipfs_peers(self):
-        """Keep Kubo peered with every active validator's IPFS node and
-        re-announce the blocks pinned in the last hour, at most once per
+        """Keep Kubo peered with the configured IPFS_SWARM peers and every
+        active validator's IPFS node (Storage.sync_chain_peers) and re-announce
+        the blocks pinned in the last hour, at most once per
         IPFS_PEER_SYNC_SECONDS. The validators' multiaddrs come from the
         ValidatorIpfsEndpoints contract of this network; a network without one
-        keeps the configured IPFS_SWARM peers only. A chain read that fails
-        leaves the previous peer set in place.
+        peers with the configured IPFS_SWARM peers only. A chain read that
+        fails leaves the previous peer set in place.
 
         Never raises: peering upkeep must not be able to interrupt order
         processing.
@@ -1823,11 +1824,12 @@ class EtnyPoXNode:
             net = (self.__network_config.name or "").upper()
             registry = (config.validator_registry_addresses.get(net) or "").strip()
             endpoints = (config.ipfs_endpoints_addresses.get(net) or "").strip()
+            addrs = []
             if registry and endpoints:
                 import cas_resolver
                 addrs = cas_resolver.validator_ipfs_multiaddrs(
                     self.__w3, registry, endpoints, self.logger)
-                self.storage.sync_chain_peers(addrs)
+            self.storage.sync_chain_peers(addrs)
         except Exception as e:
             self.logger.warning(f"IPFS peer sync skipped: {e}")
 
