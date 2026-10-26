@@ -355,9 +355,11 @@ esr_pin_max_attempts = int(os.environ.get('ESR_PIN_MAX_ATTEMPTS', 10))
 esr_pin_attempt_timeout_seconds = int(os.environ.get('ESR_PIN_ATTEMPT_TIMEOUT_SECONDS', 30))
 
 # How many image trees' enclave images docker keeps: those of the trees run
-# most recently (EtnyPoXNode.__start_enclave_environment). A tree's images
-# take some 8 GB of disk.
-enclave_image_trees_kept = int(os.environ.get('ENCLAVE_IMAGE_TREES_KEPT', 3))
+# most recently (EtnyPoXNode.__start_enclave_environment). The integration
+# tests' trees count among them, one per trustedzone the node runs, so a node
+# serving two dApps alternately needs four; a tree's images take up to some
+# 8 GB of disk, less where trees share layers.
+enclave_image_trees_kept = int(os.environ.get('ENCLAVE_IMAGE_TREES_KEPT', 5))
 
 # logger
 logger = logging.getLogger("ETNY NODE")
