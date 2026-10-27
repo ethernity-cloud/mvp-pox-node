@@ -2489,6 +2489,15 @@ class EtnyPoXNode:
             try:
                 try:
                     self.__start_enclave_environment(enclave_image_hash)
+                    # The enclave reads its ESR state as soon as it is up, and
+                    # the started row's confirmation below can take a block:
+                    # the state objects are staged first (the waits stage
+                    # them again, which costs nothing for an object present).
+                    if self.__esr is not None:
+                        try:
+                            self.stage_esr_state_for_read(bucket_name)
+                        except Exception as e:
+                            logger.debug(f'[esr-read] staging before the started row skipped: {e}')
                 finally:
                     # The waits relay the enclave's transactions from this
                     # wallet; the started row is confirmed before them.
