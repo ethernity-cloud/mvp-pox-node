@@ -426,6 +426,13 @@ class EtnyPoXNode:
         self.__peerings_checked = False
 
         self.__nonce = self.__w3.eth.get_transaction_count(self.__address)
+        # The started row sent for the order in process and not confirmed yet
+        # (__send_order_started), the DP request sent with an order's result
+        # and not confirmed yet (__send_dp_request), and whether an order's
+        # enclave compose is up (__start_enclave_environment).
+        self.__started_row_pending = None
+        self.__dp_request_pending = None
+        self.__enclave_up = False
         self.__dprequest = 0
         self.__order_id = 0
         self.__total_nodes_count = 0
@@ -2166,19 +2173,16 @@ class EtnyPoXNode:
     def _limited_arg(self, item, allowed_max=255):
         return allowed_max if item > allowed_max else item
 
-    def add_dp_request(self, waiting_period_on_error=15, beginning_of_recursion=None):
-        logger = self.logger
-
+    def __dp_request_params(self):
+        """The arguments of this node's _addDPRequest: its hardware resources,
+        read now, bandwidth, duration, price, uuid, protocol version,
+        geography and capabilities (__dp_metadata4)."""
         if self.__price is None:
             self.__price = 1
-
-
-        # Getting available hardware resources
-        self.__number_of_cpus = int(HardwareInfoProvider.get_number_of_cpus());
-        self.__free_memory = int(HardwareInfoProvider.get_free_memory());
-        self.__free_storage = int(HardwareInfoProvider.get_free_storage());
-
-        params = [
+        self.__number_of_cpus = int(HardwareInfoProvider.get_number_of_cpus())
+        self.__free_memory = int(HardwareInfoProvider.get_free_memory())
+        self.__free_storage = int(HardwareInfoProvider.get_free_storage())
+        return [
             self._limited_arg(self.__number_of_cpus),
             self._limited_arg(self.__free_memory),
             self._limited_arg(self.__free_storage),
@@ -2191,32 +2195,69 @@ class EtnyPoXNode:
             self.__dp_metadata4()
         ]
 
+    def __dp_request_from_receipt(self, receipt):
+        """Makes the DP request a confirmed _addDPRequest receipt created this
+        node's current one."""
+        processed_logs = self.__etny.events._addDPRequestEV().process_receipt(receipt)
+        self.__dprequest = processed_logs[0].args._rowNumber
+        self.logger.info(f"DP Request {self.__dprequest} initialized. Unlocking the value of decentralization.")
+
+    def __send_dp_request(self, nonce):
+        """Sends this node's next DP request with `nonce` and returns without
+        awaiting its receipt, which add_dp_request awaits. Sent with the nonce
+        after an order's result, the two are mined together, and the node
+        takes its next request as soon as the order is closed."""
+        logger = self.logger
+        logger.info("Preparing transaction for new DP request")
+        unicorn_txn = self.__etny.functions._addDPRequest(*self.__dp_request_params()).build_transaction(
+            self.get_transaction_build(existing_nonce=nonce))
+        self.__dp_request_pending = self.send_transaction(unicorn_txn)
+        logger.info(f"TXID {self.__dp_request_pending} pending... ")
+
+    def add_dp_request(self, waiting_period_on_error=15, beginning_of_recursion=None):
+        """Makes this node's next DP request current: the one __send_dp_request
+        sent with the last order's result, once its receipt confirms it, else
+        a new one sent and awaited here."""
+        logger = self.logger
+
+        pending = self.__dp_request_pending
+        if pending is not None:
+            self.__dp_request_pending = None
+            try:
+                receipt = self.__w3.eth.wait_for_transaction_receipt(pending, timeout=RECEIPT_TIMEOUT_SECONDS)
+                if receipt.status == 1:
+                    logger.info(f"TXID {pending} confirmed!")
+                    self.__dp_request_from_receipt(receipt)
+                    return
+                logger.warning(f"The DP request sent with the result (TXID {pending}) reverted; sending a new one")
+            except Exception as ex:
+                logger.warning(f"The DP request sent with the result (TXID {pending}) was not confirmed ({ex}); "
+                               f"sending a new one")
+
         max_retries = 20
         retries = 0
 
-        while True: 
-          try:
-            logger.info("Preparing transaction for new DP request")
-            time.sleep(self.__network_config.rpc_delay/1000)
-            unicorn_txn = self.__etny.functions._addDPRequest(*params).build_transaction(self.get_transaction_build())
-            _hash = self.send_transaction(unicorn_txn)
-            logger.info(f"TXID {_hash} pending... ")
-            receipt = self.__w3.eth.wait_for_transaction_receipt(_hash, timeout=RECEIPT_TIMEOUT_SECONDS)
-            if receipt.status != 1:
-                raise Exception(f"TXID {_hash} reverted with parameters {params[:6]}")
-            processed_logs = self.__etny.events._addDPRequestEV().process_receipt(receipt)
-            self.__dprequest = processed_logs[0].args._rowNumber
-            logger.info(f"TXID {_hash} confirmed!")
-            break
-          except Exception as ex:
-            retries += 1
-            logger.warning(f"Warning while adding DP request. Retry {retries}/{max_retries}. Message: {ex}")
-            if retries == max_retries:
-              logger.error("Maximum retries reached. Aborting.")
-              raise
-            time.sleep(5)
-
-        logger.info(f"DP Request {self.__dprequest} initialized. Unlocking the value of decentralization.")
+        while True:
+            try:
+                logger.info("Preparing transaction for new DP request")
+                time.sleep(self.__network_config.rpc_delay/1000)
+                params = self.__dp_request_params()
+                unicorn_txn = self.__etny.functions._addDPRequest(*params).build_transaction(self.get_transaction_build())
+                _hash = self.send_transaction(unicorn_txn)
+                logger.info(f"TXID {_hash} pending... ")
+                receipt = self.__w3.eth.wait_for_transaction_receipt(_hash, timeout=RECEIPT_TIMEOUT_SECONDS)
+                if receipt.status != 1:
+                    raise Exception(f"TXID {_hash} reverted with parameters {params[:6]}")
+                logger.info(f"TXID {_hash} confirmed!")
+                self.__dp_request_from_receipt(receipt)
+                break
+            except Exception as ex:
+                retries += 1
+                logger.warning(f"Warning while adding DP request. Retry {retries}/{max_retries}. Message: {ex}")
+                if retries == max_retries:
+                    logger.error("Maximum retries reached. Aborting.")
+                    raise
+                time.sleep(5)
 
 
     def cancel_dp_request(self, req):
@@ -2304,7 +2345,7 @@ class EtnyPoXNode:
                     timeout_in_seconds = int(self.__network_config.block_time) - 1.3
                     time.sleep(timeout_in_seconds)
 
-        self.__broadcast_order_started(order_id)
+        self.__send_order_started(order_id)
 
         # Backstop to the DO-request filter, for an order this node holds but
         # cannot run, such as one resumed after a restart whose integration
@@ -2437,7 +2478,12 @@ class EtnyPoXNode:
             # The ESR state objects pinned for this order (serve_esr_state_pins).
             self._esr_state_served = {}
             try:
-                self.__start_enclave_environment(enclave_image_hash)
+                try:
+                    self.__start_enclave_environment(enclave_image_hash)
+                finally:
+                    # The waits relay the enclave's transactions from this
+                    # wallet; the started row is confirmed before them.
+                    self.__confirm_order_started()
                 logger.info('Docker environment ready. Execution started in SGX enclave')
 
                 # First wait
@@ -2583,7 +2629,7 @@ class EtnyPoXNode:
                 logger.debug('Building result for v3')
                 result = self.build_result_format_v3(result_hash, transaction_data)
                 logger.debug(f'Result is: {result}')
-                self.add_result_to_order(order_id, result, until=order_deadline)
+                self.add_result_to_order(order_id, result, until=order_deadline, after_send=self.__order_result_sent)
                 logger.info("ZK proof added. Task integrity submitted for validation.")
                 self.calculate_reward()
 
@@ -2615,7 +2661,7 @@ class EtnyPoXNode:
                 # its readers take the second field.
                 message = f"Task execution failed, {failure}" if failure else "Task execution timed out"
                 result = self.build_result_format_v3("[WARN]", message)
-                self.add_result_to_order(order_id, result, until=order_deadline)
+                self.add_result_to_order(order_id, result, until=order_deadline, after_send=self.__order_result_sent)
 
             self.dpreq_cache.add(self.__dprequest)
             self.__enclave_environment_down()
@@ -2638,15 +2684,28 @@ class EtnyPoXNode:
         return int(self.__w3.eth.get_block(block).timestamp)
 
     def __enclave_environment_down(self):
-        """Removes the order's enclave containers with its compose,
-        self.order_docker_compose_file; nothing before an order set one. Run
-        when an order ends, completed or failed: a container left running
-        holds EPC memory and CPU until the next order removes it."""
-        compose_file = getattr(self, 'order_docker_compose_file', None)
-        if compose_file is None:
+        """Removes the enclave containers __start_enclave_environment brought
+        up with their compose, self.order_docker_compose_file, unless they
+        are removed already. Run once an order's result is sent and when an
+        order fails: a container left running holds EPC memory and CPU until
+        the next order removes it."""
+        if not self.__enclave_up:
             return
+        self.__enclave_up = False
         self.logger.debug('Cleaning up SecureLock and TrustedZone containers.')
-        run_subprocess(['docker-compose', '-f', compose_file, 'down'], self.logger)
+        run_subprocess(['docker-compose', '-f', self.order_docker_compose_file, 'down'], self.logger)
+
+    def __order_result_sent(self, transaction):
+        """Runs once an order's result transaction is in the pool, while its
+        receipt is awaited: the next DP request is sent with the nonce after
+        the result's, so the two are mined together (__send_dp_request), and
+        the order's enclave containers are removed (__enclave_environment_down).
+        A DP request not sent here is sent by add_dp_request."""
+        try:
+            self.__send_dp_request(int(transaction['nonce']) + 1)
+        except Exception as e:
+            self.logger.info(f"The next DP request was not sent with the result ({e}); it is sent after it")
+        self.__enclave_environment_down()
 
     def __start_enclave_environment(self, enclave_image_hash):
         """Starts the enclave environment of the order whose compose is
@@ -2697,6 +2756,7 @@ class EtnyPoXNode:
             for image in images:
                 run_subprocess(['docker', 'tag', image, tree_image_tag(image, enclave_image_hash)], logger)
         run_subprocess(['docker-compose', '-f', self.order_docker_compose_file, 'down'], logger)
+        self.__enclave_up = True
         code, output = run_subprocess_status(['docker-compose', '-f', self.order_docker_compose_file, 'up', '-d'],
                                              logger)
         if code != 0:
@@ -3028,7 +3088,7 @@ class EtnyPoXNode:
     def build_result_format_v3(self, result_hash, transaction_hex):
         return f'v3:{transaction_hex}:{result_hash}'
 
-    def add_result_to_order(self, order_id, result, until=None):
+    def add_result_to_order(self, order_id, result, until=None, after_send=None):
         """Sends the order's result (_addResultToOrder) from this node's
         wallet. While `until` (the order's deadline, seconds since the epoch)
         has not passed, a send the RPC refuses for the wallet's balance
@@ -3036,7 +3096,9 @@ class EtnyPoXNode:
         transaction (__await_funding) and is made again: the enclave's work
         is done and the client waits for the result until then, so a wallet
         funded meanwhile completes the order. Any other failure, and a
-        refusal past `until`, is retried 20 times 5 s apart, then raised."""
+        refusal past `until`, is retried 20 times 5 s apart, then raised.
+        `after_send` is called with the transaction once it is in the pool,
+        before its receipt is awaited."""
         logger = self.logger
 
         logger.info(f'Packaging results for blockchain submission.')
@@ -3053,6 +3115,9 @@ class EtnyPoXNode:
 
                 _hash = self.send_transaction(unicorn_txn)
                 logger.info(f"TXID {_hash} pending... ")
+                if after_send is not None:
+                    after_send(unicorn_txn)
+                    after_send = None
                 receipt = self.__w3.eth.wait_for_transaction_receipt(_hash, timeout=RECEIPT_TIMEOUT_SECONDS)
                 if receipt.status == 1:
                     logger.info(f"TXID {_hash} confirmed!")
@@ -3691,41 +3756,93 @@ class EtnyPoXNode:
     def order_is_approved(self):
         return Order(self.__etny.caller()._getOrder(self.__order_id)).status == OrderStatus.PROCESSING
 
+    def __started_row_transaction(self, order_id):
+        """The signed transaction adding the started row of `order_id`
+        (utils.order_started_row) to the order's DP request from this node's
+        wallet, and the row."""
+        order = Order(self.__etny.caller()._getOrder(order_id))
+        value = order_started_row(order_id, self.__w3.eth.block_number)
+        fn = self.__etny.functions._addMetadataToDPRequest(order.dp_req, ORDER_STARTED_KEY, value)
+        _price, fee_fields = self.__esr_fee()
+        opts = {
+            'from': self.__address,
+            'nonce': self.__w3.eth.get_transaction_count(self.__address),
+            'chainId': self.__network_config.chain_id,
+            'gas': fn.estimate_gas({'from': self.__address}) + 30000,
+        }
+        opts.update(fee_fields)
+        txn = fn.build_transaction(opts)
+        return self.__w3.eth.account.sign_transaction(txn, private_key=self.__acct.key).raw_transaction, value
+
+    def __record_order_started(self, order_id, value):
+        """Writes orders/<id>/started_row: the row `value` is on chain."""
+        marker = os.path.join(ORDERS_DIR, str(order_id), 'started_row')
+        os.makedirs(os.path.dirname(marker), exist_ok=True)
+        with open(marker, 'w') as f:
+            f.write(value)
+        self.logger.info(f"Order {order_id}: started row {value} is on chain")
+
+    def __send_order_started(self, order_id):
+        """Sends the started row of `order_id` (__started_row_transaction) and
+        returns without awaiting its receipt, which __confirm_order_started
+        awaits before this wallet's next transaction: the order's data is
+        fetched and its enclave environment started meanwhile. Nothing is sent
+        for an order whose row is recorded (orders/<id>/started_row). A send
+        that fails, as the gas estimate of a row for an order placed moments
+        ago does on an RPC replica behind the chain, leaves the row to
+        __confirm_order_started."""
+        if os.path.exists(os.path.join(ORDERS_DIR, str(order_id), 'started_row')):
+            return
+        try:
+            raw, value = self.__started_row_transaction(order_id)
+            self.__started_row_pending = (order_id, self.__w3.eth.send_raw_transaction(raw), value)
+        except Exception as e:
+            self.logger.info(f"Order {order_id}: the started row was not sent ({e}); "
+                             f"it is sent once the enclave environment is up")
+            self.__started_row_pending = (order_id, None, None)
+
+    def __confirm_order_started(self):
+        """Awaits the receipt of the started row __send_order_started sent and
+        records the row; a row that was not sent, reverted or is not mined
+        within 120 s is sent again and awaited by __broadcast_order_started.
+        Runs before this wallet's next transaction, which would otherwise be
+        built with the row's nonce (get_transaction_build), and before the
+        enclave waits, whose relays build their own transactions."""
+        pending = self.__started_row_pending
+        if pending is None:
+            return
+        self.__started_row_pending = None
+        order_id, tx_hash, value = pending
+        if tx_hash is not None:
+            try:
+                receipt = self.__w3.eth.wait_for_transaction_receipt(tx_hash, timeout=120)
+                if receipt.status == 1:
+                    self.__record_order_started(order_id, value)
+                    return
+                self.logger.info(f"Order {order_id}: the started row reverted; sending it again")
+            except Exception as e:
+                self.logger.info(f"Order {order_id}: the started row was not confirmed ({e}); sending it again")
+        self.__broadcast_order_started(order_id)
+
     def __broadcast_order_started(self, order_id):
-        """Add the started row (utils.order_started_row) to the order's DP
-        request from this node's wallet, once per order: orders/<id>/started_row
-        is written when the row is on chain. The row is sent up to
+        """Adds the started row (__started_row_transaction) to the order's DP
+        request and awaits it, once per order: orders/<id>/started_row is
+        written when the row is on chain. The row is sent up to
         STARTED_ROW_ATTEMPTS times a block apart, since the gas estimate of a
         row for an order placed moments ago reverts on an RPC replica behind
         the chain; a row that does not land is logged and the run goes on
         without it."""
         logger = self.logger
-        marker = os.path.join(ORDERS_DIR, str(order_id), 'started_row')
-        if os.path.exists(marker):
+        if os.path.exists(os.path.join(ORDERS_DIR, str(order_id), 'started_row')):
             return
         for attempt in range(1, STARTED_ROW_ATTEMPTS + 1):
             try:
-                order = Order(self.__etny.caller()._getOrder(order_id))
-                value = order_started_row(order_id, self.__w3.eth.block_number)
-                fn = self.__etny.functions._addMetadataToDPRequest(order.dp_req, ORDER_STARTED_KEY, value)
-                _price, fee_fields = self.__esr_fee()
-                opts = {
-                    'from': self.__address,
-                    'nonce': self.__w3.eth.get_transaction_count(self.__address),
-                    'chainId': self.__network_config.chain_id,
-                    'gas': fn.estimate_gas({'from': self.__address}) + 30000,
-                }
-                opts.update(fee_fields)
-                txn = fn.build_transaction(opts)
-                self.__w3.eth.wait_for_transaction_receipt(
-                    self.__w3.eth.send_raw_transaction(
-                        self.__w3.eth.account.sign_transaction(
-                            txn, private_key=self.__acct.key).raw_transaction),
-                    timeout=120)
-                os.makedirs(os.path.dirname(marker), exist_ok=True)
-                with open(marker, 'w') as f:
-                    f.write(value)
-                logger.info(f"Order {order_id}: started row {value} is on chain")
+                raw, value = self.__started_row_transaction(order_id)
+                receipt = self.__w3.eth.wait_for_transaction_receipt(self.__w3.eth.send_raw_transaction(raw),
+                                                                     timeout=120)
+                if receipt.status != 1:
+                    raise Exception('the transaction reverted')
+                self.__record_order_started(order_id, value)
                 return
             except Exception as e:
                 if attempt < STARTED_ROW_ATTEMPTS:
@@ -4035,6 +4152,9 @@ class EtnyPoXNode:
     def get_transaction_build(self, existing_nonce=None):
         logger = self.logger
 
+        # A started row in flight holds this wallet's next nonce until it is
+        # mined; the transaction built here takes the one after it.
+        self.__confirm_order_started()
         self.__nonce = existing_nonce if existing_nonce else self.__w3.eth.get_transaction_count(self.__address)
 
         if self.__network_config.eip1559 == True:
@@ -4509,12 +4629,7 @@ class EtnyPoXNode:
     def __clean_up_integration_test(self):
         logger = self.logger
         try:
-            # Unset when the test stopped before its compose was prepared.
-            if getattr(self, 'order_docker_compose_file', None):
-                logger.debug('Cleaning up containers after integration test.')
-                run_subprocess([
-                    'docker-compose', '-f', self.order_docker_compose_file, 'down'
-                ], logger)
+            self.__enclave_environment_down()
             logger.debug('Cleaning up swift-stream integration bucket.')
             self.swift_stream_service.delete_bucket(self.integration_bucket_name)
         except Exception as e:
