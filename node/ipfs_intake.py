@@ -10,6 +10,13 @@ The intake accepts the bytes only when the DO request on chain names that CID
 to it under the raw-block recipe (CIDv1, raw leaves, sha256). It then adds and
 pins them into this host's Kubo, where validators and nodes fetch them over
 bitswap. Nothing a runner sends reaches a validator directly.
+A payload the request does not name yet is taken too when the upload carries
+the request owner's signature (OWNER_SIGNATURE_HEADER: an EIP-191 signature
+of owner_signature_message(network, doRequestId), the same for every payload
+of the request), up to OWNER_SIGNED_PAYLOADS_PER_REQUEST per request: a
+session's runner lodges each input's bytes before it commits the row that
+names them, so a runner that stops between the two leaves no row without
+bytes, and the node reads the bytes the moment it reads the row.
 
 Limits: bodies above `max_bytes` (100 MiB) are refused with 413; one accepted
 upload per (network, request, cid), a repeat answers 200 without reading the
@@ -29,10 +36,37 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+from eth_account import Account
+from eth_account.messages import encode_defunct
+
 from models import Order, OrderStatus
 from utils import looks_like_cid
 
 _PATH = re.compile(r'^/payload/([a-z0-9_]+)/(\d+)/([A-Za-z0-9]+)$')
+
+# The header of an upload lodged before the request names its CID: the request
+# owner's EIP-191 signature of owner_signature_message(network, doRequestId).
+OWNER_SIGNATURE_HEADER = 'X-Etny-Owner-Signature'
+# How many payloads of one request are taken on its owner's signature: a
+# session's inputs (256 at most) and a task's artefacts, with room.
+OWNER_SIGNED_PAYLOADS_PER_REQUEST = 300
+
+
+def owner_signature_message(network, do_req):
+    """The text the owner of DO request `do_req` on `network` signs to lodge
+    payloads with the intake before the request names them."""
+    return f"etny-intake|{network}|{int(do_req)}"
+
+
+def signed_by(message, signature, address):
+    """Whether `signature` (hex, with or without 0x) is `address`'s EIP-191
+    signature of the text `message`; False for a malformed signature."""
+    try:
+        raw = bytes.fromhex(signature[2:] if signature.startswith('0x') else signature)
+        signer = Account.recover_message(encode_defunct(text=message), signature=raw)
+    except Exception:
+        return False
+    return signer.lower() == str(address).lower()
 
 
 class IntakeLedger:
@@ -67,6 +101,12 @@ class IntakeLedger:
                 'network': network, 'do_req': int(do_req), 'cid': cid,
                 'accepted': time.time()}
             self._write()
+
+    def count(self, network, do_req):
+        """How many uploads of DO request `do_req` on `network` are recorded."""
+        prefix = f"{network}:{int(do_req)}:"
+        with self._lock:
+            return sum(1 for key in self._entries if key.startswith(prefix))
 
     def remove(self, key):
         with self._lock:
@@ -162,7 +202,7 @@ class PayloadIntake:
                 if intake.ledger.has(network, do_req, cid):
                     return self._reply(200, {'status': 'already', 'cid': cid})
                 body = self.rfile.read(length)
-                code, reply = intake.accept(network, do_req, cid, body)
+                code, reply = intake.accept(network, do_req, cid, body, self.headers.get(OWNER_SIGNATURE_HEADER))
                 self._reply(code, reply)
 
         self._server = ThreadingHTTPServer(self._bind, Handler)
@@ -176,8 +216,10 @@ class PayloadIntake:
 
     # ------------------------------------------------------------ accepting
 
-    def accept(self, network, do_req, cid, body):
-        """(http status, json body) for one upload. Never raises."""
+    def accept(self, network, do_req, cid, body, owner_signature=None):
+        """(http status, json body) for one upload, lodged on the request
+        owner's `owner_signature` when given (OWNER_SIGNATURE_HEADER). Never
+        raises."""
         backend = self.backends.get(network)
         if backend is None:
             return 404, {'error': f'unknown network {network}'}
@@ -189,7 +231,7 @@ class PayloadIntake:
                 return 409, {'error': 'this upload is already being processed'}
             self._in_flight.add(key)
         try:
-            return self._accept(backend, network, do_req, cid, body)
+            return self._accept(backend, network, do_req, cid, body, owner_signature)
         except Exception as e:
             backend.logger.warning(f"[intake] {network} request {do_req} {cid}: {e}")
             return 500, {'error': 'intake failure'}
@@ -197,16 +239,31 @@ class PayloadIntake:
             with self._lock:
                 self._in_flight.discard(key)
 
-    def _accept(self, backend, network, do_req, cid, body):
+    def _accept(self, backend, network, do_req, cid, body, owner_signature=None):
         log = backend.logger
-        named = self._request_cids_with_wait(backend, do_req)
-        if named is None:
-            log.info(f"[intake] {network} request {do_req}: not on chain after "
-                     f"{self.chain_wait_seconds}s; refusing {cid}")
-            return 404, {'error': f'DO request {do_req} not found on chain'}
-        if cid not in named:
-            log.info(f"[intake] {network} request {do_req} does not name {cid}; refusing")
-            return 403, {'error': 'the DO request does not name this cid'}
+        if owner_signature:
+            owner = self._read_with_wait(backend, do_req, self._request_owner)
+            if owner is None:
+                log.info(f"[intake] {network} request {do_req}: not on chain after "
+                         f"{self.chain_wait_seconds}s; refusing {cid}")
+                return 404, {'error': f'DO request {do_req} not found on chain'}
+            if not signed_by(owner_signature_message(network, do_req), owner_signature, owner):
+                log.info(f"[intake] {network} request {do_req}: the signature lodging {cid} "
+                         f"is not the owner's; refusing")
+                return 403, {'error': "the signature is not the request owner's"}
+            lodged = self.ledger.count(network, do_req)
+            if lodged >= OWNER_SIGNED_PAYLOADS_PER_REQUEST:
+                log.info(f"[intake] {network} request {do_req}: {lodged} payloads lodged already; refusing {cid}")
+                return 429, {'error': f'the request has {lodged} payloads lodged already'}
+        else:
+            named = self._read_with_wait(backend, do_req, self._request_cids)
+            if named is None:
+                log.info(f"[intake] {network} request {do_req}: not on chain after "
+                         f"{self.chain_wait_seconds}s; refusing {cid}")
+                return 404, {'error': f'DO request {do_req} not found on chain'}
+            if cid not in named:
+                log.info(f"[intake] {network} request {do_req} does not name {cid}; refusing")
+                return 403, {'error': 'the DO request does not name this cid'}
         if not backend.storage.connected:
             return 503, {'error': 'IPFS unavailable'}
         stored = backend.storage.add_bytes_raw(body, name=f"payload-{do_req}-{cid[:16]}")
@@ -222,18 +279,25 @@ class PayloadIntake:
         log.info(f"[intake] {network} request {do_req}: pinned {cid} ({len(body)} bytes)")
         return 200, {'status': 'pinned', 'cid': cid}
 
-    def _request_cids_with_wait(self, backend, do_req):
-        """The CIDs the DO request names, or None when the request is not on
-        chain within chain_wait_seconds."""
+    def _read_with_wait(self, backend, do_req, read):
+        """`read(backend, do_req)`, tried again every 5 s while it raises, or
+        None when it still does after chain_wait_seconds: the request is not
+        on chain, or the RPC fails."""
         deadline = time.time() + self.chain_wait_seconds
         while True:
             try:
-                return self._request_cids(backend, do_req)
+                return read(backend, do_req)
             except Exception as e:
                 if time.time() >= deadline:
                     backend.logger.debug(f"[intake] request {do_req}: {e}")
                     return None
                 time.sleep(5)
+
+    @staticmethod
+    def _request_owner(backend, do_req):
+        """The address that created DO request `do_req` (its downer). Raises
+        when the request cannot be read."""
+        return str(backend.contract.caller()._getDORequest(do_req)[0])
 
     @staticmethod
     def _request_cids(backend, do_req):
