@@ -104,6 +104,10 @@ RECEIPT_TIMEOUT_SECONDS = 600
 # How long the CAS selected for a task is kept for the next tasks, as long as
 # it answers and attests again before each (__resolve_cas_for_task).
 CAS_SELECTION_TTL_SECONDS = 900
+# The free disk, in GB, under which the ESR state objects an order reads are
+# not staged into its bucket (stage_esr_state_for_read); the objects are
+# kilobytes, so only a disk about to be full stops them.
+ESR_STAGING_MIN_FREE_GB = 1
 # How long a placed order waits for the data owner's approval (the runner's
 # _approveOrder) before the node moves to a new DP request: at least
 # ORDER_APPROVAL_WINDOW_SECONDS and at least ORDER_APPROVAL_WINDOW_BLOCKS new
@@ -2932,8 +2936,11 @@ class EtnyPoXNode:
             return 0
         if not (local or remote):
             return 0
-        if HardwareInfoProvider.get_free_storage() < config.esr_min_free_storage_gb:
-            self.logger.warning("[esr-read] low disk; not staging state objects for this order")
+        # Not the replication floor (ESR_MIN_FREE_STORAGE_GB), which keeps
+        # replication from filling the disk: the objects staged here are the
+        # kilobytes the order reads, and an order without them fails.
+        if HardwareInfoProvider.get_free_storage() < ESR_STAGING_MIN_FREE_GB:
+            self.logger.warning(f"[esr-read] under {ESR_STAGING_MIN_FREE_GB} GB free; not staging state objects for this order")
             return 0
         staged = 0
         for cid in local:
