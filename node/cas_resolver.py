@@ -203,6 +203,25 @@ def _attest(identity, expected_address, expected_mrenclave, expected_cert):
     return None
 
 
+def recheck_cas(selection, probe_timeout, logger):
+    """Whether the CAS `selection` (a resolve_cas result) still answers and
+    attests as the validator it was selected for: its identity is fetched
+    again and checked against the measurement and certificate hash recorded
+    at selection. False, with the reason logged, when it does not answer or
+    the check fails."""
+    rp = rest_port_for(selection['port'])
+    try:
+        identity = _fetch_identity(selection['host'], probe_timeout, rp)
+    except Exception as e:
+        logger.info(f"CAS resolver: {selection['host']}:{rp} did not answer ({e}); resolving again")
+        return False
+    reason = _attest(identity, selection['address'], selection['mrenclave'], selection['cert_hash'])
+    if reason is not None:
+        logger.warning(f"CAS resolver: {selection['host']} FAILED attestation: {reason}; resolving again")
+        return False
+    return True
+
+
 def resolve_cas(w3, registry_address, logger, probe_timeout=10,
                 tor_available=False, start_at=None):
     """Pick a CAS for task provisioning. Returns

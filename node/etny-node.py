@@ -101,6 +101,9 @@ PLACEMENT_LOOKBACK_MARGIN_BLOCKS = 20
 # exceeded, so the placement was sent again and its match taken for another
 # node's.
 RECEIPT_TIMEOUT_SECONDS = 600
+# How long the CAS selected for a task is kept for the next tasks, as long as
+# it answers and attests again before each (__resolve_cas_for_task).
+CAS_SELECTION_TTL_SECONDS = 900
 # How long a placed order waits for the data owner's approval (the runner's
 # _approveOrder) before the node moves to a new DP request: at least
 # ORDER_APPROVAL_WINDOW_SECONDS and at least ORDER_APPROVAL_WINDOW_BLOCKS new
@@ -433,6 +436,8 @@ class EtnyPoXNode:
         self.__started_row_pending = None
         self.__dp_request_pending = None
         self.__enclave_up = False
+        # The CAS selected for this network's tasks and when (__resolve_cas_for_task).
+        self.__cas_selection = None
         self.__dprequest = 0
         self.__order_id = 0
         self.__total_nodes_count = 0
@@ -3327,6 +3332,13 @@ class EtnyPoXNode:
 
     def __resolve_cas_for_task(self):
         """Chain-resolved CAS for this network, or None (use compose default).
+        The CAS selected within the last CAS_SELECTION_TTL_SECONDS is kept
+        while it still answers and attests (cas_resolver.recheck_cas): one
+        probe per task instead of the registry sweep, whose chain reads and
+        probes of every endpoint before the selected one, stale entries
+        included, took 3 s per task on the bloxberg testnet. The sweep runs
+        again for an older selection, so the rotation keeps spreading the
+        load over the validators, and for one that no longer attests.
 
         Never raises: CAS resolution must not be able to stop task
         processing that worked before Sprint 4.
@@ -3337,9 +3349,15 @@ class EtnyPoXNode:
             if not reg_address:
                 return None
             import cas_resolver
-            return cas_resolver.resolve_cas(
+            kept = self.__cas_selection
+            if kept is not None and time.time() - kept['at'] < CAS_SELECTION_TTL_SECONDS \
+                    and cas_resolver.recheck_cas(kept['selection'], config.cas_resolver_probe_timeout, self.logger):
+                return kept['selection']
+            selection = cas_resolver.resolve_cas(
                 self.__w3, reg_address, self.logger,
                 probe_timeout=config.cas_resolver_probe_timeout)
+            self.__cas_selection = {'selection': selection, 'at': time.time()} if selection else None
+            return selection
         except Exception as e:
             self.logger.warning(f"CAS resolver failed ({e}); using the "
                                 f"compose's baked-in CAS address")
