@@ -493,6 +493,57 @@ def tree_image_tag(image, tree):
     return f"{image.rsplit(':', 1)[0]}:{tree}"
 
 
+def compose_services(compose_file):
+    """The service names the compose file `compose_file` defines, in order:
+    the keys indented two spaces under its top-level `services:`."""
+    services = []
+    in_services = False
+    with open(compose_file) as fh:
+        for line in fh:
+            if re.match(r'^services:\s*(#.*)?$', line):
+                in_services = True
+                continue
+            if in_services and re.match(r'^\S', line):
+                break
+            found = re.match(r'^  ([A-Za-z0-9_.-]+):\s*(#.*)?$', line) if in_services else None
+            if found is not None:
+                services.append(found.group(1))
+    return services
+
+
+def enclave_runtime_up(log_text):
+    """Whether the enclave container output `log_text` holds a line from
+    inside the enclave: one that is not a SCONE runtime message (`[SCONE|`)
+    and not blank. The runtime prints only such messages until the enclave
+    is created and attested."""
+    return any(line.strip() and not line.lstrip().startswith('[SCONE|') for line in log_text.splitlines())
+
+
+# How often await_enclave_runtime reads the container, seconds.
+ENCLAVE_RUNTIME_POLL_SECONDS = 2
+
+
+def await_enclave_runtime(name, timeout, states=None, log_tail=None, sleep=time.sleep, now=time.monotonic):
+    """Waits up to `timeout` seconds for the enclave container `name` to print
+    a line from inside the enclave (enclave_runtime_up), reading its state and
+    output every ENCLAVE_RUNTIME_POLL_SECONDS. Returns (up, waited): `up` is
+    False when the container is not running any more or the timeout passes.
+    `states` and `log_tail` default to docker_container_states and
+    docker_container_log_tail."""
+    states = states or docker_container_states
+    log_tail = log_tail or docker_container_log_tail
+    started = now()
+    while True:
+        state = states([name]).get(name)
+        if state is not None and state.get('Status') != 'running':
+            return False, now() - started
+        if enclave_runtime_up(log_tail(name, lines=200)):
+            return True, now() - started
+        if now() - started >= timeout:
+            return False, now() - started
+        sleep(min(ENCLAVE_RUNTIME_POLL_SECONDS, timeout - (now() - started)))
+
+
 # How many transactions, at the configured gas limit and price, a node's wallet
 # must cover before the node takes a request: the RPC refuses a transaction
 # whose sender cannot pay gas limit times price up front, and an order's first

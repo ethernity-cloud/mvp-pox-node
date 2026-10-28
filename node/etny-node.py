@@ -21,7 +21,7 @@ from web3 import middleware
 from web3.gas_strategies.time_based import fast_gas_price_strategy
 from web3.gas_strategies.rpc import rpc_gas_price_strategy
 
-from utils import get_or_generate_uuid, run_subprocess, run_subprocess_status, environment_failure, record_enclave_image_tree, compose_images, tree_image_tag, revert_reason, wallet_covers, insufficient_funds, transaction_known, placement_block_of, WALLET_GAS_TRANSACTIONS, retry, holds_within, pinned_within, FetchDeferrals, staging_plan, remaining_order_seconds, record_order_placement, order_placed_at, pending_approvals, record_pending_approval, forget_pending_approval, ORDER_STARTED_KEY, DP_STARTED_ROW_CAPABILITY, order_started_row, ORDER_GRACE_SECONDS, session_wallet_attestation, Storage, Cache, ListCache, ListCacheWithTimestamp, MergedOrdersCache, subprocess, get_node_geo, HardwareInfoProvider, parse_transaction_bytes_ut, looks_like_cid, canonical_cid, PEER_MULTIADDR, next_registered_image, enclave_failure, enclave_may_have_failed, docker_container_states, docker_container_log_tail, stale_integration_tests, image_trees, stale_image_trees, directory_size, remove_tree, removal_leftovers
+from utils import get_or_generate_uuid, run_subprocess, run_subprocess_status, environment_failure, record_enclave_image_tree, compose_images, compose_services, await_enclave_runtime, tree_image_tag,revert_reason, wallet_covers, insufficient_funds, transaction_known, placement_block_of, WALLET_GAS_TRANSACTIONS, retry, holds_within, pinned_within, FetchDeferrals, staging_plan, remaining_order_seconds, record_order_placement, order_placed_at, pending_approvals, record_pending_approval, forget_pending_approval, ORDER_STARTED_KEY, DP_STARTED_ROW_CAPABILITY, order_started_row, ORDER_GRACE_SECONDS, session_wallet_attestation, Storage, Cache, ListCache, ListCacheWithTimestamp, MergedOrdersCache, subprocess, get_node_geo, HardwareInfoProvider, parse_transaction_bytes_ut, looks_like_cid, canonical_cid, PEER_MULTIADDR, next_registered_image, enclave_failure, enclave_may_have_failed, docker_container_states, docker_container_log_tail, stale_integration_tests, image_trees, stale_image_trees, directory_size, remove_tree, removal_leftovers
 import scone_image
 from models import *
 from error_messages import errorMessages
@@ -2742,9 +2742,13 @@ class EtnyPoXNode:
         pull from the local registry takes minutes, so a node that alternates
         between a few trees pulls each once. REGISTRY_IMAGE is pulled from
         Docker Hub once per node: Docker Hub rate-limits anonymous pulls per
-        IPv4 address, and nodes behind one address share the allowance. Raises
-        EnclaveFailed when the registry, the pull or the compose fails, with
-        the failing command's error."""
+        IPv4 address, and nodes behind one address share the allowance. The
+        compose's services other than the securelock are started first; the
+        securelock once the trustedzone's enclave runtime is up or after
+        config.enclave_start_stagger_seconds (utils.await_enclave_runtime), so
+        the two enclaves are not created through the EPC at the same time.
+        Raises EnclaveFailed when the registry, the pull or the compose fails,
+        with the failing command's error."""
         logger = self.logger
         base_path = str(self.cache_config.base_path)
         for name in (ENCLAVE_SECURELOCK, ENCLAVE_TRUSTEDZONE, ENCLAVE_LAS):
@@ -2775,10 +2779,22 @@ class EtnyPoXNode:
                 run_subprocess(['docker', 'tag', image, tree_image_tag(image, enclave_image_hash)], logger)
         run_subprocess(['docker-compose', '-f', self.order_docker_compose_file, 'down'], logger)
         self.__enclave_up = True
-        code, output = run_subprocess_status(['docker-compose', '-f', self.order_docker_compose_file, 'up', '-d'],
-                                             logger)
+        services = compose_services(self.order_docker_compose_file)
+        staggered = (config.enclave_start_stagger_seconds > 0
+                     and ENCLAVE_SECURELOCK in services and ENCLAVE_TRUSTEDZONE in services)
+        first = [service for service in services if service != ENCLAVE_SECURELOCK] if staggered else []
+        code, output = run_subprocess_status(
+            ['docker-compose', '-f', self.order_docker_compose_file, 'up', '-d', *first], logger)
         if code != 0:
             raise EnclaveFailed(environment_failure('the enclave containers did not start', output))
+        if staggered:
+            up, waited = await_enclave_runtime(ENCLAVE_TRUSTEDZONE, config.enclave_start_stagger_seconds)
+            logger.info(f"Trustedzone enclave runtime {'up' if up else 'not seen'} after {waited:.0f} s; "
+                        f"starting the securelock")
+            code, output = run_subprocess_status(
+                ['docker-compose', '-f', self.order_docker_compose_file, 'up', '-d', ENCLAVE_SECURELOCK], logger)
+            if code != 0:
+                raise EnclaveFailed(environment_failure('the securelock container did not start', output))
         self.__drop_enclave_images(
             record_enclave_image_tree(base_path, enclave_image_hash, config.enclave_image_trees_kept))
 
