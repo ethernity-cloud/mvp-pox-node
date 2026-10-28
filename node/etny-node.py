@@ -3098,14 +3098,6 @@ class EtnyPoXNode:
                                   f"{int(until - time.time())} s left of the order's window")
             time.sleep(RESULT_FUNDING_RETRY_SECONDS)
         return False
-        
-    def upload_result_to_ipfs(self, result_file):
-        """Uploads `result_file` to IPFS, blocking: Storage.upload makes up to
-        10 attempts with an IPFS restart between failures and raises when all
-        fail. The v3 result path uses Storage.pin_bytes_deferred.
-        """
-        response = self.storage.upload(result_file)
-        return response
 
     def create_folder_v1(self, order_directory):
         if not os.path.exists(order_directory):

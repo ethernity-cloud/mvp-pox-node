@@ -280,22 +280,6 @@ class SwiftStreamService:
         except Exception:
             return []
 
-    def _list_buckets(self) -> None:
-        try:
-            buckets = self.client.list_buckets()
-            for bucket in buckets:
-                print(bucket.name, bucket.creation_date)
-        except S3Error as err:
-            if self.restart_etny_swift_stream_and_reconnect():
-                return self._list_buckets()
-            else:
-                print(f"_list_buckets failed: {err}")
-
-    def _list_objects(self, bucket_name: str) -> None:
-        """Prints the objects in a bucket; list_object_names() returns them."""
-        for name in self.list_object_names(bucket_name):
-            print("-> ", name)
-
     def _is_bucket(self, bucket_name: str) -> bool:
         try:
             return self.client.bucket_exists(bucket_name)

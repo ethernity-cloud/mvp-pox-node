@@ -2248,29 +2248,6 @@ class Storage:
                 return False
         return True
 
-    def upload(self, data, timeout=600):
-        if not self.connected:
-            if self.connect():
-                self.connected = True
-            else:
-                raise Exception("Failed to connect to IPFS for upload")
-        attempt = 0
-        while attempt < 10:
-            try:
-                hash_val = self.add_path(data)
-                self.cache.add(hash_val)
-                return hash_val
-            except Exception as e:
-                self.logger.warning(f"Error while uploading: {e}")
-                if "127.0.0.1" in self.client_connect_url:
-                    self.logger.warning("Restarting IPFS service")
-                    self.restart_ipfs_service()
-            attempt += 1
-        raise Exception("Failed to upload after 10 attempts")
-
-    def add(self, hash):
-        pass
-
     def pin_add(self, hash, timeout=None):
         if not self.connected:
             return
