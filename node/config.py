@@ -362,8 +362,8 @@ esr_pin_attempt_timeout_seconds = int(os.environ.get('ESR_PIN_ATTEMPT_TIMEOUT_SE
 enclave_image_trees_kept = int(os.environ.get('ENCLAVE_IMAGE_TREES_KEPT', 5))
 
 # An order's securelock container is started once the trustedzone's enclave
-# runtime is up (its first line of output from inside the enclave), or after
-# this many seconds, whichever comes first; 0 starts every container of the
+# is created (utils.ENCLAVE_RUNTIME_UP_MARKERS in its output), or after this
+# many seconds, whichever comes first; 0 starts every container of the
 # compose at once. Two enclaves created at the same time share the EPC: on a
 # 1 GiB EPC with two 1.3 GB enclaves the trustedzone took 35 s to create and
 # 105 s to reach its application, against 5.9 s and 18 s alone (2026-10-27).

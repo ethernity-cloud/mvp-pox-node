@@ -511,12 +511,18 @@ def compose_services(compose_file):
     return services
 
 
+# What the SCONE runtime prints once the enclave exists: the starter's line on
+# the enclave's creation (SCONE_LOG=DEBUG, which the composes set), and the
+# message with which the runtime applies the session's configuration after the
+# attestation (WARN level). Everything before them, the layout lines and the
+# resolver's dump of the CAS address lookup, precedes the creation.
+ENCLAVE_RUNTIME_UP_MARKERS = ('enclave created in', 'Applying process working directory')
+
+
 def enclave_runtime_up(log_text):
-    """Whether the enclave container output `log_text` holds a line from
-    inside the enclave: one that is not a SCONE runtime message (`[SCONE|`)
-    and not blank. The runtime prints only such messages until the enclave
-    is created and attested."""
-    return any(line.strip() and not line.lstrip().startswith('[SCONE|') for line in log_text.splitlines())
+    """Whether the enclave container output `log_text` shows the enclave
+    created (ENCLAVE_RUNTIME_UP_MARKERS)."""
+    return any(marker in log_text for marker in ENCLAVE_RUNTIME_UP_MARKERS)
 
 
 # How often await_enclave_runtime reads the container, seconds.

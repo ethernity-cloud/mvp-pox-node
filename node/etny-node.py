@@ -2744,7 +2744,7 @@ class EtnyPoXNode:
         Docker Hub once per node: Docker Hub rate-limits anonymous pulls per
         IPv4 address, and nodes behind one address share the allowance. The
         compose's services other than the securelock are started first; the
-        securelock once the trustedzone's enclave runtime is up or after
+        securelock once the trustedzone's enclave is created or after
         config.enclave_start_stagger_seconds (utils.await_enclave_runtime), so
         the two enclaves are not created through the EPC at the same time.
         Raises EnclaveFailed when the registry, the pull or the compose fails,
@@ -2789,7 +2789,7 @@ class EtnyPoXNode:
             raise EnclaveFailed(environment_failure('the enclave containers did not start', output))
         if staggered:
             up, waited = await_enclave_runtime(ENCLAVE_TRUSTEDZONE, config.enclave_start_stagger_seconds)
-            logger.info(f"Trustedzone enclave runtime {'up' if up else 'not seen'} after {waited:.0f} s; "
+            logger.info(f"Trustedzone enclave {'created' if up else 'not seen created'} after {waited:.0f} s; "
                         f"starting the securelock")
             code, output = run_subprocess_status(
                 ['docker-compose', '-f', self.order_docker_compose_file, 'up', '-d', ENCLAVE_SECURELOCK], logger)
