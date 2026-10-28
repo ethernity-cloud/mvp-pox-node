@@ -15,7 +15,7 @@ from utils import HardwareInfoProvider
 from minio import Minio
 from dotenv import load_dotenv
 
-# Load variables from .env and .env.conf if it exists
+# Load variables from .env if it exists
 if os.path.exists('.env'):
     load_dotenv('.env')
 
@@ -35,11 +35,11 @@ ipfs_gateway_url_default=os.environ.get('IPFS_GATEWAY_URL', 'https://ipfs.ethern
 ipfs_pin_retention_days_default = float(os.environ.get('IPFS_PIN_RETENTION_DAYS', 7))
 # Minimum minutes between cleanup runs. The cleanup is triggered from the
 # order-processing loop (the same place that calls the heartbeat), so this
-# throttles it to at most once per interval instead of once per order.
+# throttles it to at most once per interval.
 ipfs_cleanup_interval_minutes_default = float(os.environ.get('IPFS_CLEANUP_INTERVAL_MINUTES', 60))
 # How long an enclave image tree extracted under node/<network>/<cid>/ (a
-# securelock or trustedzone Docker registry, about 1.3 GB) is kept after an
-# order or integration test on this node last downloaded or reused it. The
+# securelock or trustedzone Docker registry) is kept after an order or
+# integration test on this node last downloaded or reused it. The
 # latest trustedzone of each configured name is kept regardless. 0 disables the
 # removal, as IPFS_PIN_RETENTION_DAYS=0 does: the sweep runs with the pin
 # cleanup.
@@ -198,16 +198,15 @@ uuid_filepath = Path(expanduser("~")) / "opt/etny/node/UUID"
 esr_abi_filepath = base_path / 'esr.abi'
 # Canonical deployments, keyed by network name as it appears in networks.ini.
 # "" (or an absent entry) means ESR is not deployed on that network and state
-# replication is simply skipped there.
+# replication is skipped there.
 #
 # Bloxberg mainnet and testnet are the SAME CHAIN (both chainId 8995), separated
 # by different protocol contracts, so both use the one deployment.
 esr_contract_addresses = {
-    # Nonce-aware enumerable registries (2026-08-15): commitFor relay, the
-    # enumeration API (commitSeq + entryCount/getEntriesFrom) and the PUBLIC
-    # per-(enclave, key) nonce (getNonce view), advancing by exactly 1 on
-    # every commit -- omitted (wire 0) is auto-assigned by the registry, a
-    # pinned value must be exactly stored + 1 (no gaps, no reuse).
+    # Each registry offers the commitFor relay, the enumeration API
+    # (entryCount/getEntriesFrom) and a public per-(enclave, key) nonce that
+    # advances by exactly 1 on every commit: a wire nonce of 0 is assigned by
+    # the registry, any other value must be the stored nonce + 1.
     "BLOXBERG_MAINNET": os.environ.get('ESR_CONTRACT_ADDRESS', "0x4Bf5cDE3BFD73dd10B707f8B123Ba631D2EBEAD2"),
     "BLOXBERG_TESTNET": os.environ.get('ESR_CONTRACT_ADDRESS', "0x0Ea1728EAE108FD3B9340ae91451348E2Cc6b4E4"),
     "BLOXBERG_TESTNET_UNSAFE": os.environ.get('ESR_CONTRACT_ADDRESS', "0x0Ea1728EAE108FD3B9340ae91451348E2Cc6b4E4"),
@@ -216,13 +215,13 @@ esr_contract_addresses = {
     "ETHEREUM_SEPOLIA": os.environ.get('ESR_CONTRACT_ADDRESS', "0x9927809B61122B2af3f3b3A3303875e0687b8eE3"),
     "ETHEREUM_SEPOLIA_UNSAFE": os.environ.get('ESR_CONTRACT_ADDRESS', "0x9927809B61122B2af3f3b3A3303875e0687b8eE3"),
 }
-# ethernity-cas SessionRegistry (CAS sessions -- distinct from the ESR
-# interactive-session rows replicated above): CAS sessions registered ON-CHAIN, bodies on
-# IPFS as CIDv1/raw/sha2-256 (the ESR blob recipe). The replication loop pins
-# every registered session body so the material distributes across operator
-# nodes after a pipeline deployment. Same chain note as the ESR: bloxberg
-# mainnet and testnet share chainId 8995. "" / absent = not deployed there,
-# replication skipped. An -unsafe network has no CAS, so no sessions.
+# ethernity-cas SessionRegistry (CAS sessions, distinct from the ESR
+# interactive-session rows replicated above): CAS sessions registered on
+# chain, bodies on IPFS as CIDv1/raw/sha2-256 (the ESR blob recipe). The
+# replication loop pins every registered session body, so a session a
+# pipeline deploys distributes across the operator nodes. "" / absent = not
+# deployed there, replication skipped. An -unsafe network has no CAS, so no
+# sessions.
 cas_session_registry_addresses = {
     "BLOXBERG_TESTNET": os.environ.get('CAS_SESSION_REGISTRY_ADDRESS', "0x78f0c5E92E7A9Ec2f2A36A4509ED4a75D0f9463B"),
     "LITVM_LITEFORGE": os.environ.get('LITVM_LITEFORGE_CAS_SESSION_REGISTRY_ADDRESS', "0xfA70B5Df7C773A21164cAc5413704117e4dEaB76"),
@@ -261,9 +260,9 @@ registered_image_verify_timeout_seconds = int(os.environ.get('REGISTERED_IMAGE_V
 # task: enumerate active validators, dial their published multiaddrs (onion
 # first), attest the answerer against its on-chain record, and rewrite
 # SCONE_CAS_ADDR in the order's compose. "" / absent = keep the compose's
-# baked-in CAS address (the pre-Sprint-4 behaviour). An -unsafe network's
-# entry only enumerates the validators for IPFS peering: its trustedzones'
-# composes name no CAS, so none is resolved.
+# baked-in CAS address. An -unsafe network's entry only enumerates the
+# validators for IPFS peering: its trustedzones' composes name no CAS, so
+# none is resolved.
 validator_registry_addresses = {
     "BLOXBERG_TESTNET": os.environ.get('VALIDATOR_REGISTRY_ADDRESS', "0x8CC8B1dc22f0E06193161CeC79d75987b0640e02"),
     "BLOXBERG_TESTNET_UNSAFE": os.environ.get('VALIDATOR_REGISTRY_ADDRESS', "0x8CC8B1dc22f0E06193161CeC79d75987b0640e02"),
@@ -311,8 +310,7 @@ cas_resolver_probe_timeout = int(os.environ.get('CAS_RESOLVER_PROBE_TIMEOUT', 10
 # gas it will spend relaying commits for ONE order, in wei of the native gas
 # token. A commit that would push the order total over this is refused and the
 # refusal is surfaced to the trustedzone as evidence (which terminates the
-# order). 0.1 POL default; on ~free chains (bloxberg, testnets) this is never
-# reached in practice.
+# order). Default 0.1 of the native token.
 esr_relay_gas_budget_wei = int(os.environ.get('ESR_RELAY_GAS_BUDGET_WEI', 10**17))  # 0.1 * 1e18
 # How far back to scan for StateCommitted events on the first pass, in blocks.
 # After that the node continues from the last block it processed.
@@ -327,10 +325,8 @@ esr_stage_fetch_seconds = float(os.environ.get('ESR_STAGE_FETCH_SECONDS', 120))
 # A session input whose bytes are not on IPFS yet is fetched for at most this
 # many seconds per tick of the enclave wait, and tried again on the next tick.
 session_input_fetch_seconds = float(os.environ.get('SESSION_INPUT_FETCH_SECONDS', 30))
-# How often the dedicated replication thread pins current ESR state + recent
-# protocol-contract result CIDs into the node's IPFS (seconds). Runs on its own
-# cadence rather than piggybacking on the hourly cache cleanup, so freshly
-# committed state is backed up promptly.
+# How often (seconds) the replication thread pins current ESR state and
+# recent protocol-contract result CIDs into the node's IPFS.
 esr_replication_interval_seconds = int(os.environ.get('ESR_REPLICATION_INTERVAL_SECONDS', 300))
 # How many of the most recent protocol orders the replication thread scans for
 # result CIDs each round.
@@ -338,20 +334,17 @@ esr_result_scan_orders = int(os.environ.get('ESR_RESULT_SCAN_ORDERS', 200))
 # How many of the most recent DO requests the replication thread scans for
 # payload/input/challenge/image CIDs to pin network-wide (0 disables).
 do_request_scan_requests = int(os.environ.get('DO_REQUEST_SCAN_REQUESTS', 200))
-# ESR state blobs are produced on another node and must propagate to ours.
-# Per replication cycle we try a missing CID up to esr_pin_attempts_per_cycle
-# times (a quick double-tap for propagation lag); the attempt counter persists
-# across cycle restarts, so retries accumulate until esr_pin_max_attempts total,
-# after which the CID is marked failed and never retried again.
+# An ESR state CID that is not fetchable yet is tried up to
+# ESR_PIN_ATTEMPTS_PER_CYCLE times per replication cycle; the attempt count
+# persists across cycles, and after ESR_PIN_MAX_ATTEMPTS in all the CID is
+# marked failed and not tried again.
 esr_pin_attempts_per_cycle = int(os.environ.get('ESR_PIN_ATTEMPTS_PER_CYCLE', 2))
 esr_pin_max_attempts = int(os.environ.get('ESR_PIN_MAX_ATTEMPTS', 10))
-# Per-attempt timeout (seconds) for replication pin_add. A replicated ESR/result
-# CID may not be fetchable yet; pinning it forces a bitswap fetch that otherwise
-# blocks for the full IPFS timeout (600s). With many replication threads sharing
-# one local daemon, those long blocks pile up and starve the order-processing
-# threads' own pins. Keep this SHORT so a not-yet-available CID fails fast,
-# counts as one attempt, and frees the daemon -- the retry policy handles the
-# rest across cycles.
+# Per-attempt timeout (seconds) of a replication pin_add. Pinning a CID no
+# peer provides yet blocks for the whole timeout, and the replication threads
+# share the local daemon with the order-processing threads' own pins, so a
+# short timeout ends the attempt (counted against ESR_PIN_MAX_ATTEMPTS) and
+# frees the daemon.
 esr_pin_attempt_timeout_seconds = int(os.environ.get('ESR_PIN_ATTEMPT_TIMEOUT_SECONDS', 30))
 
 # How many image trees' enclave images docker keeps: those of the trees run
@@ -365,8 +358,8 @@ enclave_image_trees_kept = int(os.environ.get('ENCLAVE_IMAGE_TREES_KEPT', 5))
 # is created (utils.ENCLAVE_RUNTIME_UP_MARKERS in its output), or after this
 # many seconds, whichever comes first; 0 starts every container of the
 # compose at once. Two enclaves created at the same time share the EPC: on a
-# 1 GiB EPC with two 1.3 GB enclaves the trustedzone took 35 s to create and
-# 105 s to reach its application, against 5.9 s and 18 s alone (2026-10-27).
+# 1 GiB EPC with two 1.3 GB enclaves the trustedzone takes 35 s to create and
+# 105 s to reach its application, against 5.9 s and 18 s alone.
 enclave_start_stagger_seconds = float(os.environ.get('ENCLAVE_START_STAGGER_SECONDS', 90))
 
 # logger
@@ -400,7 +393,7 @@ def add_network_override_arguments(parser: argparse.ArgumentParser, network_name
                 # Construct command-line argument name
                 arg_name = f"--{network_suffix.lower()}_{field.name.lower()}"
                 
-                # Determine the argument type based on the field typea
+                # Determine the argument type based on the field type
 
                 if field.type == bool:
                     arg_type = strtobool
@@ -442,10 +435,10 @@ def parse_networks(arguments: argparse.Namespace, parser: argparse.ArgumentParse
         # Every network but the -unsafe ones, which run only when named.
         selected_networks = [n for n in AVAILABLE_NETWORKS if not is_unsafe_network(n)]
     elif any(n in CURRENT_NETWORKS for n in lower_networks):
-        # If any special keyword is specified, load all networks
+        # "openbeta" selects the mainnets
         selected_networks = [ "polygon_mainnet", "bloxberg_mainnet" ]
     elif len(lower_networks) == 1 and lower_networks[0] in LEGACY_NETWORKS:
-        # If there's exactly one network and it's one of the SPECIFIC_NETWORKS
+        # A single legacy name selects the network it stands for
         single_network = lower_networks[0]
         if single_network == "bloxberg":
             selected_networks = ["bloxberg_mainnet"]
@@ -610,7 +603,7 @@ def parse_arguments(network_names: list) -> argparse.ArgumentParser:
         "--price",
         help="Task price(per hour).",
         type=float,
-        default=str(task_price_default),  # Replace with actual default value if available
+        default=str(task_price_default),
         required=False
     )
     parser.add_argument(

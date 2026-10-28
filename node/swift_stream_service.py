@@ -40,12 +40,10 @@ class SwiftStreamService:
             return False
 
     def restart_etny_swift_stream_and_reconnect(self):
-        # RECURSION BRAKE: every method in this file retries by calling this
-        # and then recursing into itself. A PERSISTENT S3 error (e.g. a key
-        # that simply does not exist) therefore used to recurse forever, at
-        # ~35s per level (observed live: an order thread wedged for hours).
-        # Cap the restart attempts inside a rolling window; past the cap this
-        # returns False and every caller falls through to its error return.
+        # Every method retries an S3 error by calling this and then itself
+        # again, so the restarts are capped at three per rolling five-minute
+        # window; past the cap this returns False and the caller returns its
+        # error.
         import time as _time
         now = _time.time()
         recent = [t for t in getattr(self, '_restart_times', []) if now - t < 300]
@@ -257,10 +255,8 @@ class SwiftStreamService:
             self.client.stat_object(bucket_name, object_name)
             return True, f"{object_name} exists in {bucket_name}."
         except S3Error as err:
-            # "Absent" is a normal answer, not a fault: NoSuchKey is the object
-            # missing, NoSuchBucket the bucket. Neither means the service is
-            # unhealthy, so neither should trigger a MinIO restart -- that used
-            # to happen for a missing bucket and cost a restart per call.
+            # NoSuchKey is the object missing, NoSuchBucket the bucket: neither
+            # is a service fault, so neither restarts MinIO.
             if err.code in ("NoSuchKey", "NoSuchBucket"):
                 return False, f"{object_name} does not exist in {bucket_name}."
 
@@ -271,12 +267,7 @@ class SwiftStreamService:
 
 
     def list_object_names(self, bucket_name: str) -> list:
-        """Object names in a bucket, or [] on failure.
-
-        _list_objects below only PRINTS and returns None, so it cannot be used
-        programmatically. This is the callable variant (used to find the ESR
-        state blobs an enclave has dropped for the node to pin).
-        """
+        """Object names in a bucket, or [] on failure."""
         try:
             return [obj.object_name for obj in self.client.list_objects(bucket_name)]
         except S3Error as err:
@@ -301,11 +292,7 @@ class SwiftStreamService:
                 print(f"_list_buckets failed: {err}")
 
     def _list_objects(self, bucket_name: str) -> None:
-        """Debug helper: PRINTS the objects in a bucket and returns nothing.
-
-        Use list_object_names() to actually get the names -- this one is for
-        eyeballing state during development only.
-        """
+        """Prints the objects in a bucket; list_object_names() returns them."""
         for name in self.list_object_names(bucket_name):
             print("-> ", name)
 

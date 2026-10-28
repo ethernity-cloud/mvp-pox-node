@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
-"""CAS resolution from the ValidatorRegistry (Sprint 4, node side).
+"""CAS resolution from the ValidatorRegistry.
 
-A node with NO configured CAS address discovers one from chain:
+A node whose network names a ValidatorRegistry
+(config.validator_registry_addresses) discovers its CAS from chain before a
+task runs:
 
   1. enumerate the ACTIVE validators in the ValidatorRegistry, starting the
      sweep at a rotating offset so the set shares the provisioning load;
@@ -18,9 +20,9 @@ A node with NO configured CAS address discovers one from chain:
 
 A registry entry pointing at a wrong host FAILS attestation and is skipped --
 it can slow resolution down, never redirect it. The quote's ECDSA/PCK chain
-is NOT verified here (that is the enclave's own duty, Sprint 5, and the
-enclave re-attests the CAS itself); what the node establishes is that the
-answering endpoint speaks for the on-chain validator identity it claims.
+is NOT verified here (the enclave attests the CAS itself); what the node
+establishes is that the answering endpoint speaks for the on-chain validator
+identity it claims.
 
 Multiaddrs advertise the ENCLAVE port. The REST/identity port follows the
 PAIRING CONVENTION `rest = 9081 + (enclave - 19765)`, the enclave port's offset
@@ -69,9 +71,8 @@ VALIDATOR_REGISTRY_ABI = [
                  {"name": "lastVoteBlock", "type": "uint64"},
                  {"name": "teeType", "type": "uint16"},
                  {"name": "operator", "type": "address"}]},
-    # Endpoints live in CasKeyStore. The registry used to forward reads to it,
-    # but those forwarders were removed when the contract hit the EIP-170 size
-    # limit, so the address is resolved here and the store is read directly.
+    # Endpoints live in CasKeyStore, whose address the registry publishes; the
+    # store is read directly.
     {"name": "keyStore", "type": "function", "stateMutability": "view",
      "inputs": [], "outputs": [{"type": "address"}]},
 ]
@@ -97,7 +98,7 @@ def validator_ipfs_multiaddrs(w3, registry_address, endpoints_address, logger):
     entries that carry no `/p2p/<id>` dropped. Several validators sharing one
     Kubo publish the same multiaddr; the list keeps one copy. Raises on a
     chain read that fails after retries, so the caller keeps its previous
-    peer set rather than dropping peers on an RPC hiccup."""
+    peer set."""
     reg = w3.eth.contract(address=w3.to_checksum_address(registry_address),
                           abi=VALIDATOR_REGISTRY_ABI)
     endpoints = w3.eth.contract(address=w3.to_checksum_address(endpoints_address),
@@ -122,8 +123,7 @@ def validator_ipfs_multiaddrs(w3, registry_address, endpoints_address, logger):
 def parse_multiaddr(ma):
     """/dns4|ip4/HOST/tcp/PORT or /onion3/ADDR/tcp/PORT -> (kind, host, port).
 
-    Unknown or partial forms return None -- an unparseable advert is skipped,
-    never guessed at.
+    Unknown or partial forms return None.
     """
     parts = [p for p in str(ma).split('/') if p != '']
     if len(parts) != 4 or parts[2] != 'tcp':
@@ -140,8 +140,8 @@ def parse_multiaddr(ma):
 
 
 def order_endpoints(multiaddrs):
-    """The design's dial order: /onion3 first, everything else after, both in
-    their published order."""
+    """Dial order: /onion3 first, everything else after, each in published
+    order."""
     parsed = [p for p in (parse_multiaddr(m) for m in multiaddrs) if p]
     onion = [p for p in parsed if p[0] == 'onion3']
     rest = [p for p in parsed if p[0] != 'onion3']
@@ -162,8 +162,8 @@ def _fetch_identity(host, timeout, rest_port=CAS_REST_PORT):
 
 
 def _chain(call, attempts=3, delay=2):
-    """Retry a chain read: bloxberg's public RPC returns transient 503s, and a
-    flaky node must slow resolution down, not knock a valid CAS out of it."""
+    """Retry a chain read with a growing delay: the public RPC returns
+    transient 503s."""
     import time
     last = None
     for i in range(attempts):
@@ -228,12 +228,9 @@ def resolve_cas(w3, registry_address, logger, probe_timeout=10,
     {'address', 'host', 'port', 'scone_cas_addr', 'mrenclave', 'cert_hash'}
     for the first endpoint that answers AND attests, or None.
 
-    The sweep starts at a ROTATING offset rather than index 0, so the set
-    shares the provisioning load: scanning from 0 every time would send every
-    node on the network to the same validator, leaving the rest idle and that
-    one a single point of failure. Order within the sweep is otherwise
-    unchanged, so a validator that does not answer still falls through to the
-    next -- rotation spreads the load, it does not weaken the failover.
+    The sweep starts at a random offset, so the validator set shares the
+    provisioning load, and continues in registry order, so a validator that
+    does not answer falls through to the next.
 
     `start_at` fixes the offset (tests, and pinning a node to one CAS);
     None picks one per call."""
@@ -245,9 +242,8 @@ def resolve_cas(w3, registry_address, logger, probe_timeout=10,
         logger.warning(f"CAS resolver: validatorCount failed: {e}")
         return None
 
-    # Resolved once for the whole sweep: it is the same address for every
-    # validator in the loop below. Without it there are no endpoints to dial,
-    # so this is fatal to resolution rather than something to skip past.
+    # The store address is the same for every validator, so it is read once
+    # for the whole sweep; without it there are no endpoints to dial.
     try:
         store = w3.eth.contract(
             address=w3.to_checksum_address(_chain(lambda: reg.caller().keyStore())),
@@ -269,9 +265,9 @@ def resolve_cas(w3, registry_address, logger, probe_timeout=10,
                 continue
             rec = _chain(lambda: reg.caller().validators(v))
             mrenclave, cert_hash = rec[0].hex(), rec[1].hex()
-            # ENS names first, per the design. Resolution needs an ENS
-            # registry on this chain; where there is none (bloxberg), the
-            # names are recorded but cannot be dialed.
+            # ENS names first. Resolution needs an ENS registry on the chain;
+            # bloxberg has none, so the names are recorded but cannot be
+            # dialed.
             for name in _chain(lambda: store.caller().ensNamesOf(v)):
                 try:
                     resolved = w3.ens.address(name)  # noqa: F841
@@ -300,10 +296,9 @@ def resolve_cas(w3, registry_address, logger, probe_timeout=10,
                     logger.warning(f"CAS resolver: {host} FAILED attestation: "
                                    f"{reason}; trying next")
                     continue
-                # ALWAYS carry the port. SCONE defaults SCONE_CAS_ADDR to
-                # 18765 when none is given, and our endpoints are published on
-                # 19765+, so a bare host sends the enclave to a port nothing
-                # listens on.
+                # The port is always carried: SCONE defaults SCONE_CAS_ADDR to
+                # port 18765 when none is given, and the endpoints are
+                # published on 19765 and up.
                 scone_addr = f'{host}:{port}'
                 logger.info(f"CAS resolver: selected {host} (validator {v}, "
                             f"MRENCLAVE {mrenclave[:16]}…)")

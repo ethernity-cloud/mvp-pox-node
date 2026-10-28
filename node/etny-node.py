@@ -96,9 +96,9 @@ RESULT_FUNDING_RETRY_SECONDS = 30
 # it is looked for on the chain (__placement_time_from_chain): the block time
 # the window is converted with is the configured average.
 PLACEMENT_LOOKBACK_MARGIN_BLOCKS = 20
-# How long a transaction's receipt is waited for; web3's default is 120 s,
-# which ten nodes placing orders in the same minute on the bloxberg testnet
-# exceeded, so the placement was sent again and its match taken for another
+# How long a transaction's receipt is waited for, in seconds. web3's default
+# of 120 s is shorter than a receipt takes on the bloxberg testnet under load;
+# a placement sent again after its receipt timed out matches as another
 # node's.
 RECEIPT_TIMEOUT_SECONDS = 600
 # How long the CAS selected for a task is kept for the next tasks, as long as
@@ -134,10 +134,9 @@ def tests_settled(network_name):
     dict.setdefault is atomic, so every thread gets the same Event."""
     return integration_tests_settled.setdefault(network_name, threading.Event())
 
-# process_network re-creates EtnyPoXNode every processing-loop cycle, so the ESR
-# replication background thread must be launched exactly ONCE per network per
-# process, not once per cycle. Guard the launch with a per-network flag under a
-# lock so re-created instances don't each spawn a new (leaking) thread.
+# process_network re-creates EtnyPoXNode every processing-loop cycle; the ESR
+# replication thread is launched once per network per process, guarded by a
+# per-network flag under a lock.
 _esr_replication_lock = threading.Lock()
 _esr_replication_started = set()  # network names whose replication thread is running
 _esr_replication_slots = [0]      # monotonically increasing stagger counter
@@ -222,16 +221,12 @@ class EtnyPoXNode:
     def close(self):
         """Close the HTTP sessions this handle opened.
 
-        A new handle is built on every process_network iteration, each with its
-        own HTTPProvider and connection pool. Dropping the reference does not
-        close the sockets: when the server sends FIN first they stay in
-        CLOSE-WAIT until the process exits, and the leaked descriptors
-        accumulate on the network that stays connected longest.
-
-        web3 7.x keeps sessions in provider._request_session_manager.
-        session_cache; there is no public close-all, so the cache is drained
-        directly. Best effort -- a failure here must not take down a caller
-        that has finished its work.
+        A handle is built on every process_network iteration, each with its
+        own HTTPProvider and connection pool; a dropped reference leaves the
+        sockets the server closed first in CLOSE-WAIT until the process exits.
+        web3 7.x keeps the sessions in provider._request_session_manager.
+        session_cache and has no close-all, so the cache is drained here.
+        Never raises.
         """
         provider = getattr(getattr(self, '_EtnyPoXNode__w3', None), 'provider', None)
         manager = getattr(provider, '_request_session_manager', None)
@@ -250,10 +245,10 @@ class EtnyPoXNode:
 
     def __init__(self, network, replication_only=False):
 
-        # replication_only: build just enough to mirror this network's results +
-        # ESR state (contracts, storage, IPFS) and skip everything that only the
-        # task-executing instance needs -- above all the SGX integration test, so
-        # a replication handle never runs or waits on it.
+        # replication_only: build what mirrors this network's results and ESR
+        # state (contracts, storage, IPFS) and nothing that only the
+        # task-executing instance needs; a replication handle neither runs nor
+        # waits on the SGX integration test.
         self.__replication_only = replication_only
 
         self.__address = None
@@ -328,9 +323,8 @@ class EtnyPoXNode:
 
             balance = self.__w3.eth.get_balance(self.__address)
 
-            # A replication-only handle never sends transactions, so it must not
-            # block on the gas-wait loop: it should keep mirroring state even on
-            # a gas-starved network (in fact, especially then).
+            # A replication-only handle sends no transactions and does not wait
+            # for gas: it mirrors state on a gas-starved network too.
             if not self.__replication_only and balance < int(network.minimum_gas_at_start):
                logger.error(f"Not enough gas at {self.__address} to run node agent, wating until enough balance is set")
 
@@ -364,19 +358,16 @@ class EtnyPoXNode:
             address=self.__w3.to_checksum_address(self.__network_config.heartbeat_contract_address),
             abi=self.__heart_beat_abi)
 
-        # Enclave State Registry (optional): only wired when this network has a
-        # deployment. Absent => state replication is skipped entirely, so a
-        # network without an ESR behaves exactly as before.
+        # Enclave State Registry: wired when this network has a deployment;
+        # without one, state replication is skipped.
         self.__esr = None
         self.__esr_last_block = 0
         # When each state object no node served is fetched again for an
         # order's staging (stage_esr_state_for_read).
         self.__esr_fetch_deferrals = FetchDeferrals()
         try:
-            # Network names are lowercase at runtime (e.g. "bloxberg_testnet")
-            # but the config keys are uppercase -- look up case-insensitively so
-            # the ESR actually resolves (a plain .get() silently returned None,
-            # which is why "No ESR deployed" was logged even where one exists).
+            # Network names are lowercase at runtime ("bloxberg_testnet") and
+            # the config keys uppercase, so the lookup is case-insensitive.
             esr_address = (config.esr_contract_addresses.get(
                 (self.__network_config.name or "").upper()) or "").strip()
             if esr_address:
@@ -389,8 +380,8 @@ class EtnyPoXNode:
             else:
                 logger.info(f"No Enclave State Registry deployed on {self.__network_config.name}; state replication disabled")
         except Exception as e:
-            # Never let ESR wiring stop the node from starting -- it is an
-            # add-on to replication, not part of task execution.
+            # A failure in the ESR wiring does not stop the node: the ESR
+            # serves replication, not task execution.
             self.__esr = None
             logger.warning(f"Could not initialise the Enclave State Registry: {e}")
 
@@ -486,10 +477,9 @@ class EtnyPoXNode:
            self.__migrate_cache()
            self.network_cache.add("NETWORK","MIGRATED_FROM_POLYGON")
 
-        # task_running_on is a single global mutex that serializes the ONE
-        # task-executing instance. A replication-only handle executes no tasks,
-        # so it must NOT wait on or take this mutex -- otherwise it blocks here
-        # forever while the processing instances keep re-acquiring it.
+        # task_running_on is the process-wide mutex of the task-executing
+        # instance; a replication-only handle executes no task and does not
+        # take it.
         if not self.__replication_only:
             acquire_task_slot(self.__network)
 
@@ -597,45 +587,30 @@ class EtnyPoXNode:
 
     @staticmethod
     def __looks_like_cid(value):
-        """True for values that plausibly are IPFS CIDs.
-
-        The contract accepts any non-empty string as the pointer, so a buggy
-        writer can commit something that is not a CID at all -- the live registry
-        currently has one entry holding a 0x… digest. That is a defect in
-        whatever wrote it, NOT a format to support: such entries are skipped and
-        logged, never pinned. Handing one to pin/add errors on every cleanup
-        pass, and a client would retry-loop on it forever.
-
-        CIDv0 is 46 chars starting "Qm"; CIDv1 is base32 starting "b".
+        """True for values shaped like IPFS CIDs: CIDv0 (46 characters
+        starting "Qm") or CIDv1 (base32, starting "b"). The contract accepts
+        any non-empty string as the pointer; a value of another shape is
+        skipped and logged, never pinned.
         """
         return looks_like_cid(value)
 
     def __esr_current_state_cids(self):
-        """CIDs that are the CURRENT state for some enclave/key in the registry.
-
-        Scans StateCommitted events, then confirms each (enclave, key) against
-        the contract's live getState. Confirming matters: the newest event we
-        happened to see is not necessarily the newest commit, and pinning
-        decisions must follow the chain, not our scan window.
-
-        Returns a set of CIDs, empty when ESR is unavailable for any reason --
-        an empty set means "protect nothing extra", never "unpin everything".
+        """The CIDs that are the current state of some enclave/key in the
+        registry: StateCommitted events are scanned and each (enclave, key)
+        confirmed against the contract's getState, since the newest event in
+        the scan window is not necessarily the newest commit. Empty when the
+        ESR is unavailable; an empty set protects nothing extra and unpins
+        nothing.
         """
-        # Records for EVERY enclave/key seen in the registry -- replication is a
-        # network-wide durability service, so we mirror the state of all
-        # enclaves that committed to the ESR, not only enclaves whose tasks
-        # happen to run on this node. Each record is
-        # {enclave, key, cid, version}; enclave IS the ESR identity address
-        # (the enclave signs commits with its identity key, so acct.address ==
-        # the ESR address), which makes (enclave, key) the unambiguous identity
-        # under which progress (last-pinned version) is tracked.
+        # Records for every enclave/key in the registry, not only the enclaves
+        # whose tasks run on this node: {enclave, key, cid, version}. enclave
+        # is the ESR identity address the enclave signs its commits with, so
+        # (enclave, key) identifies the progress (last pinned version).
         if self.__esr is None:
             return []
-        # Preferred: enumerate the registry directly (upgraded contract). One
-        # batched call per page gives every enclave/key with its current
-        # cid/version -- no event scanning, no block-range limits, no cursors to
-        # keep. Falls back to the log scan when the deployed contract predates
-        # the enumeration API.
+        # The registry is enumerated (entryCount/getEntriesFrom), one batched
+        # call per page; a contract without the enumeration API is read from
+        # its events.
         records = self.__esr_records_via_enumeration()
         if records is not None:
             return records
@@ -729,27 +704,19 @@ class EtnyPoXNode:
             start = stop + 1
         return out
 
-    # ------------------------------------------------------------------
-    # Shared pin bookkeeping for the replicators that previously retried
-    # dead CIDs forever (results, DO inputs, ESR session rows, CAS
-    # sessions). Same discipline as __replicate_esr_state: N attempts
-    # across rounds, then a PERSISTED give-up set, so a dead CID stops
-    # costing a 30s timeout every round. The give-up set is RESET whenever
-    # the validator set changes -- a new validator is a new potential
-    # provider, so give-up decisions go stale the moment the fleet grows.
-    # ------------------------------------------------------------------
+    # Pin bookkeeping shared by the result, DO input, ESR session row and CAS
+    # session replicators: esr_pin_max_attempts attempts across rounds, then
+    # a persisted give-up set. The set is reset when the validator set
+    # changes: a new validator is a new potential provider.
 
     def __repl_log_kept(self, kept, label):
         if kept:
             self.logger.info(f"Replicated {len(kept)} {label} object(s)")
 
     def __order_status(self, order_id):
-        """OrderStatus for order_id, or None on any failure.
-
-        Used to scope replication to LIVE work: inputs/sessions only while the
-        task is open, results only while validation is still pending. A dead
-        task's ciphertext no longer needs a fresh replica -- pinning it was the
-        bulk of the wasted 30s pin timeouts.
+        """OrderStatus for order_id, or None on any failure. Replication is
+        scoped to live work by it: inputs and sessions while the task is open,
+        results while validation is pending.
         """
         try:
             time.sleep(self.__network_config.rpc_delay / 1000)
@@ -758,12 +725,10 @@ class EtnyPoXNode:
             return None
 
     def __repl_pin(self, cid, label):
-        """One bookkept pin attempt. Returns True when the CID is pinned.
-
-        Self-contained: reads and persists its attempt/give-up state in
-        esr_progress, so call sites stay one line. A CID past its budget
-        (esr_pin_max_attempts, default 10) lands in the give-up set and is
-        skipped until the next validator-set change resets it.
+        """One bookkept pin attempt. Returns True when the CID is pinned. The
+        attempt and give-up state is read from and persisted in esr_progress.
+        A CID past its budget (esr_pin_max_attempts) lands in the give-up set
+        and is skipped until a validator-set change resets it.
         """
         try:
             failed = set(self.esr_progress.get('repl_pin_failed') or [])
@@ -801,22 +766,15 @@ class EtnyPoXNode:
             return False
 
     def __validator_set_fingerprint(self):
-        """Fingerprint of the ACTIVE CAS validator set, or None when unknown.
-
-        The CasRegistry (validator identity + votes) is not deployed yet; when
-        it is, this reads the active member list and hashes it, so the reset
-        below activates without further agent changes. Until then None means
-        "cannot tell" and no reset ever fires -- give-up sets behave as
-        permanent, exactly like the pre-existing ESR one.
+        """The fingerprint of the active CAS validator set, or None: the set
+        is not read, so the give-up sets are never reset
+        (__reset_giveups_if_validator_set_changed).
         """
         try:
             addr = (getattr(config, 'cas_validator_registry_addresses', {}) or {}).get(
                 (self.__network_config.name or "").upper())
             if not addr:
                 return None
-            # Future: enumerate active validators from the registry and hash
-            # the sorted address list. Returning None until the contract
-            # exists keeps behaviour unchanged.
             return None
         except Exception:
             return None
@@ -865,16 +823,9 @@ class EtnyPoXNode:
                 return set()
 
             pinned_versions = self.esr_progress.get('pinned_versions') or {}
-            # Per-CID pin-attempt counter, PERSISTED across cycles/restarts. An
-            # ESR state blob is produced by another node and must propagate to
-            # ours; it may not be fetchable on the first try. Policy:
-            #   - up to PINS_PER_CYCLE (2) fetch attempts PER replication cycle
-            #     (a quick double-tap for propagation delay), then
-            #   - keep trying on each subsequent cycle -- the counter persists,
-            #     so retries accumulate across cycle restarts -- until
-            #   - MAX_PIN_ATTEMPTS (10) total, after which the CID is marked
-            #     FAILED and never retried (give up after a long time rather
-            #     than hammering an unfetchable CID forever).
+            # Per-CID pin attempts, persisted across cycles and restarts: up to
+            # PINS_PER_CYCLE attempts per replication cycle, MAX_PIN_ATTEMPTS in
+            # all, after which the CID is marked failed and not tried again.
             PINS_PER_CYCLE = int(getattr(config, 'esr_pin_attempts_per_cycle', 2))
             MAX_PIN_ATTEMPTS = int(getattr(config, 'esr_pin_max_attempts', 10))
             pin_attempts = self.esr_progress.get('pin_attempts') or {}
@@ -915,8 +866,8 @@ class EtnyPoXNode:
                     )
                     break
 
-                # Up to PINS_PER_CYCLE quick attempts this cycle, but never past
-                # the persisted MAX_PIN_ATTEMPTS total.
+                # Up to PINS_PER_CYCLE attempts this cycle, within the persisted
+                # MAX_PIN_ATTEMPTS in all.
                 got = False
                 for _ in range(PINS_PER_CYCLE):
                     if pin_attempts.get(cid, 0) >= MAX_PIN_ATTEMPTS:
@@ -966,10 +917,9 @@ class EtnyPoXNode:
 
         Every completed order has a result recorded on-chain by
         _addResultToOrder in the form 'v<n>:<transaction_hex>:<result_cid>' (see
-        build_result_format_v3). The result blob lives on IPFS at result_cid, and
-        the same durability argument that applies to ESR state applies here: if
-        only the producing node pinned it, the result disappears when that node
-        does. Replicating recent result CIDs keeps them available network-wide.
+        build_result_format_v3). The result lives on IPFS at result_cid; one
+        pinned only by the producing node disappears with that node, so recent
+        result CIDs are replicated here.
 
         Best-effort and bounded (scan_limit recent orders, free-disk gated).
         Returns the set of CIDs it kept, so the caller can protect them from the
@@ -1285,9 +1235,9 @@ class EtnyPoXNode:
                         #  hashAlgo, registeredAt, exists)
                         if not rec[8]:
                             continue
-                        # LATEST-ONLY: a name's events are just discovery; the
-                        # body that gets pinned is the LATEST version's, so
-                        # superseded session definitions never cost a fetch.
+                        # A name's events discover the name; the body pinned is
+                        # its latest version's, so a superseded session body is
+                        # never fetched.
                         names_seen.add(rec[2])
                     except Exception as e:
                         self.logger.debug(
@@ -1433,8 +1383,8 @@ class EtnyPoXNode:
                         entry.pop(f'{verdict}_under', None)
                         entry['attempts'] = 0
                         entry['next_at'] = 0
-                # An entry recorded by 3.7.2 or 3.7.3 can hold a hash or compose that is not a canonical CID, and a
-                # peer of any form: the hash is refused here, under the current bounds, the compose and peer dropped.
+                # An entry whose hash or compose is not a canonical CID, or whose peer is not in canonical form:
+                # the hash is refused here, under the current bounds, the compose and peer dropped.
                 if not canonical_cid(ipfs_hash) and not entry.get('refused_under'):
                     entry.update(refused="its hash is not a canonical CID", refused_under=limits, pinned=False)
                 if entry.get('compose') and not canonical_cid(entry['compose']):
@@ -1660,9 +1610,9 @@ class EtnyPoXNode:
         record the refusal under the current bounds, keeping only what a later
         round reads. A CID another entry of this network that is not refused
         uses as its image or compose stays pinned, and is added to that
-        entry's pinned_cids. An entry pinned by 3.7.2 or 3.7.3 records no
-        pinned_cids, and its pins stay: they cannot be told from another use
-        of the same CIDs on this node. Returns whether anything was unpinned;
+        entry's pinned_cids. An entry without pinned_cids keeps its pins: they
+        cannot be told from another use of the same CIDs on this node.
+        Returns whether anything was unpinned;
         raises when an unpin does not take, before the refusal is recorded."""
         refusal = str(refusal)[:200]
         images = self.esr_progress.get('registered_images') or {}
@@ -1800,16 +1750,10 @@ class EtnyPoXNode:
             time.sleep(interval)
 
     def __maybe_clear_ipfs_cache(self):
-        """Run the pin cleanup at most once per configured interval.
-
-        Cleanup used to happen only in __init__, so a node that stayed up for
-        weeks never reclaimed anything until it was restarted. This is called
-        from the order-processing loop (alongside the heartbeat) and throttled by
-        IPFS_CLEANUP_INTERVAL_MINUTES so it costs one timestamp comparison per
-        order rather than a full sweep.
-
-        Never raises: reclaiming disk must not be able to interrupt order
-        processing.
+        """Run the pin cleanup at most once per IPFS_CLEANUP_INTERVAL_MINUTES.
+        Called from the order-processing loop beside the heartbeat; a call
+        within the interval costs one timestamp comparison. Never raises:
+        reclaiming disk does not interrupt order processing.
         """
         try:
             interval = float(getattr(config, 'ipfs_cleanup_interval_minutes_default', 60)) * 60
@@ -1954,22 +1898,19 @@ class EtnyPoXNode:
             else:
                 logger.warning(f"No timestamp found for {hash}. Unable to determine age. Skipping deletion.")
           else:
-            # A hash we must keep (current trustedzone image): make sure it stays
-            # pinned and refresh its cache entry so it is not aged out.
+            # A hash to keep (a current trustedzone image) is pinned if it is
+            # not, and its cache entry refreshed so it does not age out.
             self.storage.pin_add(hash)
             self.ipfs_cache.add(hash)
 
         if removed:
             logger.info(f"IPFS cleanup removed {removed} expired pin(s) (retention {retention_hours:.0f}h)")
 
-        # Unpinning above only REMOVES pins; the underlying blocks are not
-        # reclaimed until a garbage collection runs. Without a periodic GC the
-        # local datastore keeps growing with unpinned/expired content until it
-        # passes StorageMax and IPFS GC-thrashes -- which drops fresh
-        # fire-and-forget pins (the state-blob / result 404s). Run GC here, as
-        # part of the same throttled cleanup pass, so expired data is actually
-        # freed on a schedule. Best-effort: a GC failure must never disturb
-        # order processing. Opt out with IPFS_PERIODIC_GC=0.
+        # Unpinning removes pins only; the blocks are reclaimed by Kubo's
+        # garbage collection, run here as part of the same throttled pass
+        # (IPFS_PERIODIC_GC=0 disables it). A datastore that passes StorageMax
+        # without it makes Kubo collect at every add, which drops pins in
+        # flight. A GC failure does not disturb order processing.
         if str(os.environ.get('IPFS_PERIODIC_GC', '1')).strip() not in ('0', 'false', 'False'):
             try:
                 logger.info("Running periodic IPFS garbage collection to reclaim unpinned data")
@@ -2340,7 +2281,6 @@ class EtnyPoXNode:
             self.process_order_data["order_id"] = order_id
             self.process_order_data["process_order_retry_counter"] = 0
 
-        # this line should be checked later
         if not metadata:
             while True:
                 try:
@@ -2393,7 +2333,6 @@ class EtnyPoXNode:
         with open(self.cache_config.process_orders_cache_filepath, "w") as outfile:
             outfile.write(json_object)
 
-        #self.add_processor_to_order(order_id)
         try:
             version = 0
             if metadata[1].startswith('v3:'):
@@ -2511,9 +2450,9 @@ class EtnyPoXNode:
 
                 # Second wait
                 start_wait = time.time()
-                # The trustedzone's landed-check waits up to 5 blocks per started
-                # 64 commits (max 20 blocks for a full 256-commit run), so allow
-                # generous headroom on top of the relay work itself.
+                # The trustedzone waits up to 5 blocks per 64 started commits
+                # (20 blocks for 256) for its commits to land before it writes
+                # transaction.txt; this wait has headroom over that.
                 status_enclave = self.wait_for_enclave_v2(bucket_name, 'transaction.txt', 300, order_id=order_id)
                 elapsed_wait2 = time.time() - start_wait
             except EnclaveFailed as e:
@@ -2525,15 +2464,10 @@ class EtnyPoXNode:
             if failure is None:
                 logger.info('Enclave finished the execution')
 
-            # Pin any ESR state blobs the enclave wrote at the END of execution.
-            # serve_esr_state_pins runs on a 5s cadence DURING the wait loops,
-            # but the enclave typically writes state.<key>.enc at the same moment
-            # as result.txt -- which ends the wait loop -- so the final state
-            # blob can land in the bucket AFTER the last in-loop poll and never
-            # get pinned. Without this sweep the pointer is committed on-chain
-            # but the blob is only in Swift, so a later task's get() 404s. Do a
-            # final pass here (before the relay puts the pointer on-chain) so the
-            # blob is durable.
+            # Pin the ESR state objects the enclave wrote at the end of its run:
+            # it writes state.<key>.enc together with result.txt, which ends the
+            # wait loop, so an object written after the loop's last poll is
+            # pinned here, before the relay puts its pointer on chain.
             if self.__esr is not None:
                 try:
                     self.serve_esr_state_pins(bucket_name, time.time() + 60)
@@ -2548,29 +2482,23 @@ class EtnyPoXNode:
             # final sweep.)
             self.__relay_esr_commits(bucket_name, order_id)
 
-            # Final session sweep: deliver any raced inputs, pin remaining
+            # Final session sweep: deliver any raced inputs, pin the remaining
             # outputs and broadcast their signed rows (late notices included)
-            # BEFORE the result transaction goes out, so the notices and the
-            # completion land back-to-back -- same block in practice.
+            # before the result transaction goes out, so the notices precede
+            # the completion.
             try:
                 self.__serve_session(bucket_name, order_id)
             except Exception as e:
                 logger.debug(f'[session] final sweep skipped: {e}')
 
-            # Pin the signed authorization ledger to IPFS. The validator runs
-            # on an ISOLATED box and fetches the ledger BY THE CID the
-            # trustedzone attested into the result (content-addressed =>
-            # trustless delivery); without this pin the validator cannot
-            # verify the order and will invalidate it.
-            #
-            # Whether this order made commits at all is read from the ATTESTED
-            # result inside transaction.txt (fields 5-7 of the result string:
-            # merkleRoot:countByte:ledgerCid) -- not inferred from bucket
-            # contents. Zero root = the trustedzone attested "no commits";
-            # nothing is fetched or pinned. When commits exist, the staged
-            # ledger bytes are verified against the attested CID before
-            # pinning, so a corrupted staging file is never pinned under the
-            # wrong identity.
+            # Pin the signed authorization ledger: the validator fetches it by
+            # the CID the trustedzone attested into the result, and invalidates
+            # an order whose ledger it cannot fetch. Whether the order made
+            # commits is read from the attested result in transaction.txt
+            # (fields 5-7: merkleRoot:countByte:ledgerCid); a zero root means
+            # no commits, and nothing is fetched or pinned. The staged ledger
+            # bytes are checked against the attested CID before they are
+            # pinned.
             if self.__esr is not None:
                 try:
                     esr_root, esr_cid = '', ''
@@ -2628,13 +2556,9 @@ class EtnyPoXNode:
                 with open(f'{self.order_folder}/result.txt', 'w') as f:
                     f.write(result_data)
                 logger.debug(f'[v3] Result file successfully downloaded to {self.order_folder}/result.txt')
-                # Compute the CID locally and submit on-chain immediately; the
-                # actual IPFS add/pin runs in the background and retries on its
-                # own. Previously this blocked on upload() -- 10 attempts with an
-                # IPFS restart between failures -- so a slow or unhealthy daemon
-                # could stall the submission, and after 10 failures it RAISED,
-                # losing the on-chain result for work the enclave had already
-                # completed. The stall grew with the size of the result.
+                # The CID is computed locally and the result submitted at once;
+                # the IPFS add and pin run in the background with their own
+                # retries (Storage.pin_bytes_deferred).
                 result_hash = self.storage.pin_bytes_deferred(
                     result_data.encode('utf-8') if isinstance(result_data, str) else result_data,
                     name=f'result-{order_id}.txt')
@@ -2831,16 +2755,10 @@ class EtnyPoXNode:
         logger = self.logger
         deadline = time.time() + timeout
         logger.info(f'Checking if object {object_name} exists in bucket {bucket_name} for {timeout} seconds')
-        # Deliver prior ESR state INTO this order's bucket before the enclave
-        # tries to read it. The enclave's _fetch reads state.<cid>.enc from the
-        # bucket (it cannot reach IPFS), but each order gets a fresh bucket -- so
-        # without this, get() of state committed by a PREVIOUS order finds
-        # nothing and raises "Could not read state object". Stage the current
-        # (per getState) version's blob from IPFS so the read hits.
-        #
-        # Skip for the integration-test bucket: the SGX self-test runs a fixed
-        # payload that never reads ESR state, and staging there would only make
-        # the capability check depend on ESR/IPFS availability.
+        # Stage the current ESR state objects (getState) into this order's
+        # bucket: the enclave reads state.<cid>.enc from the bucket, cannot
+        # reach IPFS, and each order has a fresh bucket. Not for the
+        # integration-test bucket: its payload reads no ESR state.
         if self.__esr is not None and bucket_name != getattr(self, 'integration_bucket_name', 'etny-bucket-integration'):
             try:
                 self.stage_esr_state_for_read(bucket_name)
@@ -2872,8 +2790,8 @@ class EtnyPoXNode:
                     raise EnclaveFailed(reason)
             # While waiting on the enclave, serve any ESR state it has dropped
             # for pinning. The enclave blocks on the CID coming back, so this
-            # has to run DURING the wait, not after it. Polled every few seconds
-            # rather than every pass to keep the bucket listing cheap.
+            # runs during the wait, not after it, and polls the bucket every
+            # 5 s rather than every pass.
             if self.__esr is not None and (time.time() - last_state_poll) >= 5:
                 last_state_poll = time.time()
                 self.serve_esr_state_pins(bucket_name, deadline)
@@ -3018,36 +2936,19 @@ class EtnyPoXNode:
             self.__stage_esr_object(bucket_name, cid)
 
     def serve_esr_state_pins(self, bucket_name, deadline_ts):
-        """Pin ESR state blobs the enclave drops in the bucket.
+        """Pin the ESR state objects the enclave writes into the bucket.
 
-        The enclave cannot reach IPFS: the Kubo API binds 127.0.0.1 on the host,
-        so no container can talk to it (unlike MinIO, which is a container on the
-        ethernity network). Rather than exposing the admin API or adding a proxy,
-        the enclave writes the encrypted blob to the bucket it ALREADY uses and
-        the node pins it -- the same shape as the existing result.txt flow.
+        The enclave cannot reach IPFS (the Kubo API binds 127.0.0.1 on the
+        host; MinIO is a container on the ethernity network), so per key it
+        writes state.<key>.enc (the encrypted state) and state.<key>.cid (the
+        CID it computed from those bytes) into its bucket, and the node pins
+        the object once the CID matches its content. The node never supplies
+        the CID: the enclave commits the one it computed, so a node can refuse
+        to pin but cannot change what is committed. The enclave does not wait
+        for the pin; `deadline_ts` bounds the node's own time here. An object
+        whose CID does not match what the enclave published is not pinned.
 
-        Protocol, per key:
-            enclave writes  state.<key>.enc   (encrypted state blob)
-            enclave writes  state.<key>.cid   (the CID IT computed itself)
-            node pins the blob and confirms the CID matches its content
-
-        THE NODE NEVER SUPPLIES THE CID. The node is untrusted: if it returned
-        the CID, a malicious operator could pin the enclave's blob but hand back
-        the CID of different content, and the enclave would sign THAT onto the
-        chain -- clients would then fetch attacker-chosen state believing the
-        enclave authored it. Because a CID is a hash of the content, the enclave
-        derives it from the bytes it just encrypted and commits that. A hostile
-        node can refuse to pin, or pin something else, but it cannot change what
-        was committed: substitution is impossible rather than merely detectable.
-
-        That also means the enclave never waits on this: it commits as soon as it
-        has written the blob, and pinning is fire-and-forget from its point of
-        view. `deadline_ts` only bounds how long the node itself spends here.
-
-        The node still verifies, so it fails loudly instead of pinning a blob
-        whose CID does not match what the enclave published.
-
-        Never raises: a state pin failing must not fail the task itself.
+        Never raises: a failed state pin does not fail the task.
 
         The objects pinned for the current order are kept in
         self._esr_state_served (name -> the CID the enclave published; reset
@@ -3092,9 +2993,9 @@ class EtnyPoXNode:
                     self.logger.warning(f'Could not read {name} for pinning')
                     continue
 
-                # Confirm the enclave's CID actually describes this blob. A
-                # mismatch means the blob and the committed pointer disagree --
-                # pinning it would serve content that does not match the chain.
+                # The enclave's CID is checked against the object's bytes: a
+                # mismatch means the object and the committed pointer disagree,
+                # and pinning it would serve content the chain does not name.
                 computed = Storage.cid_of(blob)
                 if computed != declared_cid:
                     self.logger.warning(
@@ -3103,11 +3004,9 @@ class EtnyPoXNode:
                     )
                     continue
 
-                # Queue the add/pin in the background and move on: a large state
-                # blob must not hold up order processing, and a temporarily
-                # unhealthy IPFS should retry rather than drop the state. The CID
-                # is already known (the enclave computed it, we verified it), so
-                # there is nothing to wait for.
+                # The add and pin are queued in the background: the CID is
+                # known and verified, and a large object or an unhealthy Kubo
+                # does not hold order processing.
                 self.storage.pin_bytes_deferred(blob, name=name)
                 self.ipfs_cache.add(declared_cid)
                 served[name] = declared_cid
@@ -3201,11 +3100,9 @@ class EtnyPoXNode:
         return False
         
     def upload_result_to_ipfs(self, result_file):
-        """Blocking upload; kept for callers outside the v3 result path.
-
-        The v3 path now uses Storage.pin_bytes_deferred instead: this blocks for
-        up to 10 attempts with an IPFS restart between failures, and raises if
-        they all fail, which could stall or lose an on-chain result submission.
+        """Uploads `result_file` to IPFS, blocking: Storage.upload makes up to
+        10 attempts with an IPFS restart between failures and raises when all
+        fail. The v3 result path uses Storage.pin_bytes_deferred.
         """
         response = self.storage.upload(result_file)
         return response
@@ -3343,10 +3240,10 @@ class EtnyPoXNode:
 
         contents = contents.replace('[ETNY_ORDER_ID]', str(order))
 
-        # Sprint 4: when this network names a ValidatorRegistry, the CAS is
-        # RESOLVED from chain and attested before the task launches; the
-        # compose's baked-in SCONE_CAS_ADDR is rewritten to the winner. No
-        # resolution -> the compose default stands (logged by the resolver).
+        # When this network names a ValidatorRegistry, the CAS is resolved
+        # from the chain and attested before the task launches, and the
+        # compose's SCONE_CAS_ADDR is rewritten to the selected one. Without
+        # a resolution the compose default stands (logged by the resolver).
         # A compose without SCONE_CAS_ADDR (an -unsafe trustedzone's) contacts
         # no CAS, and none is resolved for it.
         resolved = self.__resolve_cas_for_task() if 'SCONE_CAS_ADDR=' in contents else None
@@ -3363,17 +3260,15 @@ class EtnyPoXNode:
             f.write(contents)
 
     def __resolve_cas_for_task(self):
-        """Chain-resolved CAS for this network, or None (use compose default).
-        The CAS selected within the last CAS_SELECTION_TTL_SECONDS is kept
-        while it still answers and attests (cas_resolver.recheck_cas): one
-        probe per task instead of the registry sweep, whose chain reads and
-        probes of every endpoint before the selected one, stale entries
-        included, took 3 s per task on the bloxberg testnet. The sweep runs
-        again for an older selection, so the rotation keeps spreading the
-        load over the validators, and for one that no longer attests.
+        """Chain-resolved CAS for this network, or None (the compose default
+        stands). The CAS selected within the last CAS_SELECTION_TTL_SECONDS
+        is kept while it answers and attests (cas_resolver.recheck_cas), one
+        probe per task; the registry sweep, which reads the chain and probes
+        every endpoint before the selected one, runs again for an older
+        selection, so the rotation spreads the load over the validators, and
+        for one that no longer attests.
 
-        Never raises: CAS resolution must not be able to stop task
-        processing that worked before Sprint 4.
+        Never raises: a failed CAS resolution does not stop task processing.
         """
         try:
             reg_address = (config.validator_registry_addresses.get(
@@ -3405,24 +3300,19 @@ class EtnyPoXNode:
         return None
 
     def __can_place_order(self, dp_req_id: int, do_req_id: int) -> bool:
+        """Whether this node places an order for DO request `do_req_id` with
+        its DP request `dp_req_id` at the current block: the nodes take turns
+        over a cycle of dispersion_factor blocks, and a request that missed
+        its block in its first cycle waits for the next cycle."""
         logger = self.logger
-
-        """
-        Determines if we can place an order at the current block,
-        with special handling if we're still in the 'first cycle'.
-
-        :param dp_req_id: Data Processesor request id
-        :param do_req_id: Data Owner request id
-        :return: True if this node can place an order now; otherwise False.
-        """
 
         current_block_number = self.__w3.eth.block_number
 
         # Decide how many nodes can place orders per block
-        # Use max(1, ...) to avoid zero if total_nodes_count < 25. A testnet
-        # (NETWORK_TYPE=TESTNET) is not dispersed: its heartbeat counts every
-        # node ever registered (3,657 on the bloxberg testnet in 2026-10), which
-        # would hold each request back for up to ~146 blocks.
+        # max(1, ...) keeps the count above zero for fewer than 25 nodes. A
+        # testnet (NETWORK_TYPE=TESTNET) is not dispersed: its heartbeat counts
+        # every node ever registered, which would hold each request back for a
+        # cycle of that many nodes.
         if self.__network_config.network_type == 'TESTNET':
             dispersion_factor = 1
         else:
@@ -3439,17 +3329,14 @@ class EtnyPoXNode:
         offset_mod = offset % dispersion_factor
         do_req_id_mod = do_req_id % dispersion_factor
 
-        # difference_raw tells us how far 'offset_mod' is from 'do_req_id_mod':
-        #   == 0 => aligned now
-        #   >  0 => we haven't reached do_req_id_mod yet in this cycle
-        #   <  0 => we've already passed do_req_id_mod in this cycle
+        # The distance from offset_mod to do_req_id_mod in the cycle: 0 at
+        # this node's block, > 0 before it, < 0 after it.
         difference_raw = do_req_id_mod - offset_mod
 
-        # CASE 1: Perfect alignment this block
         if difference_raw == 0:
             return True
 
-        # CASE 2: difference_raw > 0 => we are still "early"
+        # Before this node's block: wait for it.
         if difference_raw > 0:
             next_block = current_block_number + difference_raw
             logger.debug(
@@ -3457,14 +3344,12 @@ class EtnyPoXNode:
                 f"waiting {difference_raw} more block(s). Next block: {next_block}."
             )
             logger.info(f"DO Request {do_req_id} will be processed after block #{next_block}, current block is #{current_block_number}")
-            # Mark __is_first_cycle as False once we pass do_req_id_mod
             self.__is_first_cycle[do_req_id] = False
             return False
 
-        # CASE 3: difference_raw < 0 => we've missed our slot in the current cycle
+        # After this node's block in the current cycle: in the request's first
+        # cycle, wait for the block in the next cycle; afterwards, place now.
         if self.__is_first_cycle[do_req_id]:
-            # If it's the first cycle, we choose NOT to skip it, and wait for the next slot
-            # We wait for the next cycle.
             difference_next_cycle = difference_raw % dispersion_factor
             next_block = current_block_number + difference_next_cycle
             logger.debug(
@@ -3475,7 +3360,6 @@ class EtnyPoXNode:
             logger.info(f"Request will be processed after block #{next_block}, current block is #{current_block_number}")
             return False
         else:
-            # On subsequent cycles, if we missed our slot, skip waiting.
             logger.debug(
                 f"Offset={offset_mod}, required={do_req_id_mod}; "
                 f"we missed our slot (diff={difference_raw}), "
@@ -3499,12 +3383,11 @@ class EtnyPoXNode:
                 placed_at = order_placed_at(ORDERS_DIR, order_id)
                 if placed_at is None:
                     # An agent that did not record the placement (one that
-                    # took the placement for failed, or an earlier version):
-                    # the block of this node's _placeOrderEV for the order
-                    # gives it, looked for over the order's window; none
-                    # there means the window has passed. A chain read that
-                    # fails leaves the time unknown, and the order is resumed
-                    # with the full window, as before the record existed.
+                    # took the placement for failed): the block of this
+                    # node's _placeOrderEV for the order gives it, looked for
+                    # over the order's window; none there means the window has
+                    # passed. A chain read that fails leaves the time unknown,
+                    # and the order is resumed with the full window.
                     try:
                         placed_at = self.__placement_time_from_chain(order_id, do_req.duration)
                     except Exception as e:
@@ -3583,10 +3466,9 @@ class EtnyPoXNode:
             try:
                 self.__call_heart_beat()
 
-                # Reclaim expired pins. Throttled internally to at most once per
-                # IPFS_CLEANUP_INTERVAL_MINUTES, so this is a cheap timestamp
-                # check on most passes. Previously cleanup only ran at startup,
-                # so a long-lived node never reclaimed anything.
+                # Reclaim expired pins, at most once per
+                # IPFS_CLEANUP_INTERVAL_MINUTES; a pass within the interval
+                # costs one timestamp check.
                 self.__maybe_clear_ipfs_cache()
 
                 # Peering with the validators' IPFS nodes and re-announcing
@@ -3678,10 +3560,8 @@ class EtnyPoXNode:
 
 
                 # An unpinned request carries no node: the contract stores that
-                # as the zero address, while an older client may leave the
-                # field empty. Both mean "any node may take it" -- treating the
-                # zero address as a delegation silently skipped every unpinned
-                # request and cached it as ineligible forever.
+                # as the zero address, and a client may leave the field empty.
+                # Both mean that any node may take it.
                 delegated_to = (metadata[i][4] or '').strip()
                 try:
                     unpinned = delegated_to == '' or int(delegated_to, 16) == 0
@@ -3742,11 +3622,9 @@ class EtnyPoXNode:
                 except (exceptions.ContractLogicError, IndexError) as e:
                     logger.warning(f"Falied placing order: {e}")
                     release_task_slot(self.__network)
-                    # If OUR DP request is the matched/consumed one, no further
-                    # order can ever be placed with it -- break out so a fresh
-                    # DP request is created. Continuing here made every
-                    # subsequent placement fail with 'DP request already
-                    # matched' and the node stopped taking orders entirely.
+                    # A DP request of this node that is matched takes no
+                    # further order: the loop ends here and a new DP request
+                    # is created.
                     if 'DP request' in str(e) and 'already matched' in str(e):
                         logger.info(
                             f"DP request {self.__dprequest} is consumed; "
@@ -4083,12 +3961,10 @@ class EtnyPoXNode:
                             f"{self.__dprequest}: the protocol contract refuses it ({reason}), skipping processing")
                 self.doreq_cache.add(doreq_id)
                 raise exceptions.ContractLogicError(f"DO request {doreq_id} refused by the contract")
-            # Build the transaction INSIDE the retry loop so every attempt gets a
-            # fresh nonce. A reverted transaction still consumes its nonce, so
-            # re-sending the same pre-built txn after a revert (or after any
-            # other transaction from this account) fails every retry with
-            # "Transaction nonce is too low" until max_retries aborts the
-            # placement -- observed live as a 20x nonce-too-low cascade.
+            # The transaction is built inside the retry loop so every attempt
+            # takes a fresh nonce: a reverted transaction consumes its nonce,
+            # and a transaction built before it fails with "Transaction nonce
+            # is too low".
             unicorn_txn = placement.build_transaction(self.get_transaction_build())
             _hash = self.send_transaction(unicorn_txn)
             logger.info(f"TXID {_hash} pending... fingers crossed")
@@ -4180,12 +4056,9 @@ class EtnyPoXNode:
 
     def __reset_caches_of_another_contract(self, network):
         """The request and order caches hold ids of the protocol contract they
-        were built against. When a network's contract changes (Sepolia's
-        family of 2026-10-14 replaced one whose DO requests 0 to 9 the cache
-        held as done, so the new contract's request 0 was never taken), they
-        start again; `contract.txt` beside them names the contract they
-        belong to. A directory without the marker keeps its caches and takes
-        one."""
+        were built against. When a network's contract changes, they start
+        again: `contract.txt` beside them names the contract they belong to.
+        A directory without the marker keeps its caches and takes one."""
         marker = self.cache_config.base_path / 'contract.txt'
         current = str(network.contract_address).strip().lower()
         previous = marker.read_text().strip().lower() if marker.exists() else ''
@@ -4500,8 +4373,8 @@ class EtnyPoXNode:
             return
 
         def _order_key(n):
-            # esr.commit.<key16>.<rn>.json -> (key16, rn); legacy
-            # esr.commit.<rn>.json -> ('', rn). Per-key order is what matters.
+            # esr.commit.<key16>.<rn>.json -> (key16, rn); a file named
+            # esr.commit.<rn>.json -> ('', rn). The order within a key counts.
             parts = n.split('.')
             try:
                 if len(parts) == 5:
@@ -4514,9 +4387,8 @@ class EtnyPoXNode:
             (n for n in names if n.startswith('esr.commit.') and n.endswith('.json')
              and n not in self._esr_relayed_files),
             key=_order_key)
-        # PER-RUN CAP: never relay more than 256 commits for one order -- the
-        # trustedzone fails the task (code 38) beyond that anyway, so paying
-        # for the excess would be pure waste.
+        # At most 256 commits are relayed for one order: the trustedzone fails
+        # the task (code 38) beyond that.
         already = len(self._esr_relayed_files)
         if already + len(commit_files) > 256:
             keep = max(0, 256 - already)
@@ -4544,9 +4416,9 @@ class EtnyPoXNode:
                 # PUBLIC idempotency nonce. 0 = omitted: the registry assigns
                 # the next value in sequence itself; non-zero is client-pinned
                 # and must be exactly stored + 1. Required field -- every
-                # authorization carries it. Signature-bound: part of the
-                # digest the enclave signed, so altering or stripping it here
-                # would just make commitFor revert.
+                # authorization carries it. It is part of the digest the
+                # enclave signed, so commitFor reverts when it is altered or
+                # stripped here.
                 idem = int(a['nonce'])
                 sig = bytes.fromhex(a['signature'][2:])
             except Exception as e:
@@ -5111,9 +4983,8 @@ def release_task_slot(name):
     """
     Releases the task slot, but only if `name` still holds it.
 
-    The ownership test is what keeps a late release from clearing a slot that
-    another network has since taken. Returns True if this caller actually
-    released it.
+    The ownership test keeps a late release from clearing a slot that another
+    network has since taken. Returns True when this caller released it.
     """
     global task_running_on
     with task_cond:
@@ -5127,23 +4998,14 @@ _enclave_cleanup_lock = threading.Lock()
 _enclave_cleanup_done = False
 
 def terminate_stale_enclave_containers():
-    """Force-remove any enclave containers left over from a previous run.
+    """Remove the enclave containers a previous run of the agent left (a
+    restart during an order leaves them up): a leftover container with an
+    order compose's container name would stand in for the order's own.
 
-    The node agent may be restarted at any point in an order's lifecycle (manual
-    restart, crash, deploy). If it restarts while an order's enclaves are up, the
-    old containers survive -- and a stale container can poison the next order: a
-    leftover integration-test trustedzone (which loads the integration .env, runs
-    the test and exits) satisfies the container name the order compose expects, so
-    the real order's trustedzone never runs, no payload.securelock is produced,
-    and securelock waits forever while the node polls result.txt until it expires.
-
-    Runs AT MOST ONCE per process (guarded by _enclave_cleanup_done): it is a
-    startup-only clean slate. Any later call is a no-op -- critically, this stops
-    it from ever tearing down enclaves of an order that is legitimately running,
-    and keeps it from interfering with the periodic scheduler / thread restarts.
-    Must therefore be invoked once, before any network thread launches an enclave.
-    las is left running only if it is the shared, always-on attestation service;
-    the per-order enclave containers are always removed. Best-effort: never raises.
+    Runs once per process (_enclave_cleanup_done), before any network thread
+    starts an order's enclaves, so it never removes the containers of an
+    order in progress. The shared, always-on las_Qm... attestation service is
+    not matched; the per-order containers are. Never raises.
     """
     global _enclave_cleanup_done
     with _enclave_cleanup_lock:
@@ -5198,10 +5060,9 @@ def start_esr_replication_for_network(network):
             return
         _esr_replication_started.add(net_name)
 
-    # Stagger the replication-handle construction across networks. Each handle
-    # builds a small node (w3 + contracts + storage); doing all of them at once,
-    # in parallel with the order-processing instances also constructing, made
-    # them slow to reach their loop. A short per-network delay smooths that out.
+    # The replication handles are constructed a short delay apart per
+    # network: each builds a node (w3, contracts, storage) while the
+    # order-processing instances construct too.
     delay = _esr_replication_stagger_slot()
 
     def _worker():
@@ -5278,13 +5139,9 @@ class TaskManager:
 
     def start_threads(self, network_configs):
         logger.info("Starting new threads...")
-        # Each resilient_process is an infinite per-network loop that never
-        # returns, so it holds its worker for the life of the process. The pool
-        # must therefore have at least one worker PER network, or the networks
-        # past the cap never get a thread and are silently never processed
-        # (this stranded litvm_liteforge + ethereum_sepolia behind a hardcoded
-        # max_workers=5). Size to the network count so adding a network can
-        # never re-introduce that starvation.
+        # Each resilient_process is an infinite per-network loop that holds
+        # its worker for the life of the process, so the pool has one worker
+        # per network.
         worker_count = max(len(network_configs), 1)
         self.executor = concurrent.futures.ThreadPoolExecutor(max_workers=worker_count)
         self.futures = [
@@ -5325,8 +5182,7 @@ def initiate_restart(network_configs, task_manager):
 
 def run_scheduler(interval, network_configs, task_manager):
     """
-    Runs in a background thread. Every `interval` seconds, calls initiate_restart().
-    This is an infinite loop, so adjust as needed or provide a break condition.
+    Runs in a background thread: every `interval` seconds, initiate_restart().
     """
     while True:
         time.sleep(interval)
@@ -5369,10 +5225,8 @@ if __name__ == '__main__':
         sgx = SGXDriver()
         network_configs = config.parse_networks(args, parser, network_names)
 
-        # Clean slate: remove any enclave containers left over from a previous
-        # run BEFORE any network thread can launch an order's enclaves. A restart
-        # mid-order otherwise leaves stale containers (e.g. an integration-test
-        # trustedzone) that poison the next order's enclave handshake.
+        # Remove the enclave containers a previous run left, before any
+        # network thread starts an order's enclaves.
         terminate_stale_enclave_containers()
 
         # Create a TaskManager to hold executor/futures
@@ -5381,7 +5235,7 @@ if __name__ == '__main__':
         # Start the first batch of threads
         task_manager.start_threads(network_configs)
 
-        # Create a background scheduler that restarts every 20 seconds
+        # The scheduler restarts the network threads once a day.
         scheduler_thread = threading.Thread(
             target=run_scheduler,
             args=(24 * 60 * 60, network_configs, task_manager),
@@ -5389,7 +5243,7 @@ if __name__ == '__main__':
         )
         scheduler_thread.start()
 
-        # Keep main alive (or do other work)
+        # Keep main alive.
         logger.info("Main thread running. Press Ctrl+C to stop.")
         while True:
             time.sleep(1)

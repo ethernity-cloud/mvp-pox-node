@@ -1,22 +1,20 @@
 """
-Utils.py - Utility functions for the Ethernity CLOUD Agent.
+Helpers of the Ethernity CLOUD node agent (EtnyPoXNode).
 
-This module provides essential utilities for IPFS interactions, caching mechanisms, hardware information retrieval, and Ethereum transaction parsing. It is d
-esigned to support the EtnyPoXNode class in managing IPFS connections, downloading and uploading content, handling cache for performance and persistence, and
- ensuring thread-safe operations for multi-network setups.
-
-Key Components:
-- Storage Class: Manages IPFS operations, including connection, version checking/upgrading, downloading (with file/directory handling), uploading, pinning, a
-nd garbage collection. It ensures robust handling of files and directories, with special logic for tar archives and gzip compression during downloads.
-- Cache Classes: Provide in-memory and file-backed caching with limits, including list-based and timestamped variants for efficient storage and retrieval of
-hashes or values.
-- HardwareInfoProvider: Retrieves system hardware details like CPU count, free memory, and storage.
-- Transaction Parsing: Decodes Ethereum transaction bytes for contract interactions.
-- Thread Safety: Uses locks for IPFS upgrades and version cache accesses to handle concurrent network threads safely.
-
-This code hhandles IPFS upgrades with cache wipes across networks, download errors (e.g., directories as tars, gzip detection), and cleanup for conflicting p
-aths. It ensures plain files are downloaded without compression where possible, extracts tars for directories or wrapped files, skips PaxHeaders, and wipes c
-aches/files during upgrades without unpinning (as upgrade handles it).
+- Storage: the agent's IPFS client, over a Kubo daemon's HTTP API. Checks and
+  upgrades a local daemon's version, keeps the swarm peering list and the
+  connections to the configured peers, fetches content from the daemon or
+  from an HTTP gateway (files as they are, directories as tar archives),
+  adds, pins, announces and garbage-collects, and spools result pins that
+  have not landed yet. Version upgrades and the shared version cache are
+  serialized across the network threads with module-level locks.
+- Cache, ListCache, ListCacheWithTimestamp, MergedOrdersCache: file-backed
+  caches with an item limit, rewritten whole on each change.
+- HardwareInfoProvider: CPU count, free memory and free storage.
+- Functions on CIDs, enclave container states, order records, compose files
+  and image trees, used by the agent.
+- parse_transaction_bytes_ut: decodes a signed Ethereum transaction and the
+  contract call it carries.
 """
 
 from asyncio.log import logger
@@ -339,9 +337,8 @@ def image_trees(base_path):
 def stale_image_trees(trees, keep, now, retention_seconds, since=0.0):
     """The cids of `trees` ({cid: mtime}) not in `keep` last used more than
     `retention_seconds` before `now`, oldest first. A tree's last use is its
-    mtime, and no earlier than `since`: the node passes its start time, since
-    a tree extracted by an earlier version carries its extraction time, not
-    its last reuse."""
+    mtime, and no earlier than `since`: the node passes its start time, so no
+    tree counts as unused for longer than the node has been running."""
     last_used = {cid: max(mtime, since) for cid, mtime in trees.items()}
     return sorted((cid for cid, used in last_used.items() if cid not in keep and now - used > retention_seconds),
                   key=last_used.get)
@@ -440,8 +437,8 @@ ENCLAVE_IMAGES_MARKER = '.enclave-images'
 def enclave_image_trees(base_path):
     """The hashes of the image trees whose enclave images docker holds, the
     tree run most recently first, as recorded under `base_path` by
-    record_enclave_image_tree; a marker holding one bare hash, as node
-    versions before 3.7.45 wrote it, names that one tree."""
+    record_enclave_image_tree; a marker holding one bare hash instead of a
+    JSON list names that one tree."""
     try:
         with open(os.path.join(base_path, ENCLAVE_IMAGES_MARKER)) as marker:
             text = marker.read().strip()
@@ -738,8 +735,8 @@ def record_order_placement(orders_dir, order_id, placed_at):
 
 
 def order_placed_at(orders_dir, order_id):
-    """The recorded placement timestamp of `order_id`, or None for an order
-    placed by an agent that did not record it."""
+    """The recorded placement timestamp of `order_id`, or None when none is
+    recorded."""
     try:
         with open(order_placement_path(orders_dir, order_id)) as f:
             return int(f.read().strip())
@@ -937,9 +934,8 @@ class Storage:
         adapter = HTTPAdapter(pool_connections=max_workers, pool_maxsize=max_workers)
         self.session.mount("https://", adapter)
         self.executor = ThreadPoolExecutor(max_workers=max_workers)
-        # DHT announces run one at a time on their own worker: each is a full
-        # DHT walk, and sharing the pin executor would let a slow DHT hold
-        # result pins in the queue.
+        # DHT announces, each a full DHT walk, run one at a time on a worker
+        # of their own, apart from the pin executor.
         self.announce_executor = ThreadPoolExecutor(max_workers=1)
 
     def _check_and_upgrade_ipfs_version(self):
@@ -1164,8 +1160,7 @@ class Storage:
                         self.logger.error(f"Invalid multiaddr format: {url} "
                                           f"(must start with '/' and end in /p2p/<peer id>)")
                 # One add per peer carrying all of its addresses: the peering
-                # service replaces a peer's address list on every add, so an
-                # add per address would leave only the last one.
+                # service replaces a peer's address list on every add.
                 for pid, addrs in self._group_by_peer(u for u in swarm_list if u.startswith('/')).items():
                     if all(a in present for a in addrs):
                         self.logger.debug(f"Peer already configured: {addrs}")
@@ -1755,34 +1750,21 @@ class Storage:
         return unixfs_cid(content_bytes)
 
     def pin_bytes_deferred(self, content_bytes, name='blob', attempts=10, delay=30):
-        """Compute the CID now, return it, and pin in the BACKGROUND.
-
-        `upload()` blocks for up to 10 attempts with an IPFS service restart
-        between failures, and raises if they all fail. On the result path that
-        meant a slow or unhealthy IPFS could stall -- or lose -- an on-chain
-        result submission for work the enclave had already completed correctly,
-        and the stall grows with the size of the result.
-
-        The CID is computed locally (cid_of). The caller gets it immediately
-        and proceeds; the actual add/pin is queued on the existing executor and
-        retries on its own without holding anything up.
-
-        Returns the CID (never None, never raises).
-        """
+        """Pin `content_bytes` in the background: its CID is computed locally
+        (cid_of) and returned at once, the bytes are spooled under it
+        (_spool_pending_pin), and the add and pin run on the executor,
+        `attempts` times `delay` seconds apart. A spool whose pin does not
+        land stays for drain_pending_pins. Never raises."""
         cid = self.cid_of(content_bytes)
-        # Spool the content before returning. In-memory retries die with the
-        # process, and the result is then unrecoverable: the CID is on chain
-        # but no node holds the bytes. Written first so a crash between here
-        # and the first attempt still leaves the queue able to finish the pin.
+        # Spooled before the pin is queued: the bytes outlive the process, and
+        # drain_pending_pins pins them after a restart.
         self._spool_pending_pin(cid, content_bytes, name)
 
         def _work():
             for attempt in range(attempts):
                 try:
-                    # add_bytes_raw raises "Not connected" off self.connected
-                    # without calling the API, so a stale flag fails every
-                    # attempt identically no matter how healthy the daemon is.
-                    # Re-establish it here the way upload() does.
+                    # add_bytes_raw raises off self.connected without calling
+                    # the API; the connection is re-established first.
                     if not self.connected:
                         if self.connect():
                             self.connected = True
@@ -1795,17 +1777,15 @@ class Storage:
                         self.logger.info(f"Pinned {name} -> {cid} (background)")
                         self.provide(cid)
                         return
-                    # Keep the spool: the bytes are still unpinned under the CID
-                    # the caller published, so this needs looking at rather than
-                    # discarding.
+                    # The spool is kept: the bytes are not pinned under the
+                    # CID the caller published.
                     self.logger.warning(
                         f"Background pin of {name}: IPFS stored {stored}, expected {cid}")
                     return
                 except Exception as e:
                     self.logger.warning(
                         f"Background pin attempt {attempt + 1}/{attempts} for {name} failed: {e}")
-                    # Drop the flag so the next attempt reconnects instead of
-                    # replaying the same dead state.
+                    # The next attempt reconnects first.
                     self.connected = False
                     time.sleep(delay)
             # The spool stays on disk: drain_pending_pins picks it up on the
@@ -1817,8 +1797,8 @@ class Storage:
         try:
             self.executor.submit(_work)
         except Exception as e:
-            # Even losing the worker must not fail the caller: the CID is valid
-            # regardless, and other nodes replicate from the registry/chain.
+            # The caller keeps its CID; the spool holds the bytes for
+            # drain_pending_pins.
             self.logger.warning(f"Could not queue background pin for {name}: {e}")
         return cid
 
@@ -1828,11 +1808,10 @@ class Storage:
         return d
 
     def _spool_pending_pin(self, cid, content_bytes, name):
-        """Persist content that still needs pinning, keyed by CID.
-
-        Written via a temp file + rename so a crash mid-write cannot leave a
-        truncated blob that would later be re-added under the wrong CID.
-        """
+        """Write `content_bytes` under `cid` in the pending-pins directory, its
+        `name` beside it, through a temporary file and a rename, so no partly
+        written blob is filed under the CID. Nothing is written when `cid` is
+        spooled already. Never raises."""
         try:
             path = os.path.join(self._pending_pin_dir(), cid)
             if os.path.exists(path):
@@ -1845,8 +1824,8 @@ class Storage:
             with open(meta, 'w') as f:
                 f.write(name)
         except Exception as e:
-            # Never fail the caller: the in-memory retry still runs, this only
-            # costs durability across a restart.
+            # Not raised: the queued attempts still run; only a restart before
+            # one lands loses the pin.
             self.logger.warning(f"Could not spool pending pin for {name} ({cid}): {e}")
 
     def _unspool_pending_pin(self, cid):
@@ -1859,16 +1838,10 @@ class Storage:
                 self.logger.warning(f"Could not clear spooled pin {cid}{suffix}: {e}")
 
     def drain_pending_pins(self, limit=25):
-        """Re-attempt every spooled pin. Safe to call on any cycle.
-
-        This is what makes a failed pin survive an IPFS outage or a node
-        restart: the content is on disk, so the pin is retried until it lands
-        instead of being lost with the process that queued it.
-
-        Verifies the bytes still hash to the CID they are filed under -- a
-        corrupted spool must not be published under a CID the chain already
-        references.
-        """
+        """Add and pin up to `limit` of the spooled pins (_spool_pending_pin)
+        and return how many landed. A spool whose bytes do not hash to the CID
+        it is filed under is discarded. Returns 0 when no Kubo answers; the
+        first failed add ends the pass and marks the client disconnected."""
         try:
             d = self._pending_pin_dir()
             names = [n for n in os.listdir(d)
@@ -1922,19 +1895,10 @@ class Storage:
         return done
 
     def add_bytes_raw(self, content_bytes, name='blob'):
-        """Add bytes as CIDv1 with raw leaves in chunks of BLOCK_SIZE,
-        returning the CID.
-
-        The default `add` produces a CIDv0 dag-pb node (content wrapped in UnixFS
-        framing). With cid-version=1 + raw-leaves, content of up to one chunk is
-        a single raw block whose CID is base32(0x01 0x55 0x12 0x20 ||
-        sha256(content)), and larger content a UnixFS tree unixfs_cid()
-        reproduces -- so the enclave can compute the CID from the bytes it
-        authored and commit THAT to the chain, meaning a hostile node cannot
-        substitute different content for what was committed.
-
-        Returns the CID, or None on failure.
-        """
+        """Add `content_bytes` to the connected Kubo with RAW_ADD_PARAMS,
+        pinned, and return the CID it reports: the one unixfs_cid computes
+        from the bytes alone, as the enclaves and the runners do. Raises when
+        no Kubo is connected; None when the add response carries no Hash."""
         if not self.connected:
             raise Exception("Not connected")
         files = {'file': (name, content_bytes)}
@@ -2245,15 +2209,10 @@ class Storage:
                 self.logger.warning(f"ipfs-heal[storage] Datastore.StorageMax check failed: {e}")
 
     def restart_ipfs_service(self):
-        # One daemon is shared by every network thread, and each decides to
-        # restart it on its own errors. Unsynchronized, that is a storm: the
-        # first restart makes every other thread's call fail with connection
-        # refused, and each of those failures triggers another restart.
-        # Observed at 21:20:09 -- four networks restarting ipfs within 6s.
-        #
-        # The lock serializes them; the cooldown makes the followers skip
-        # entirely, since a restart that just happened is what broke their
-        # call in the first place.
+        # One daemon is shared by every network thread, and its restart fails
+        # every other thread's call in flight with connection refused. The lock
+        # serializes the restarts; a thread arriving within
+        # IPFS_RESTART_COOLDOWN of one reconnects instead of restarting again.
         with _ipfs_restart_lock:
             since = time.time() - _ipfs_last_restart[0]
             if since < IPFS_RESTART_COOLDOWN:
@@ -2271,9 +2230,8 @@ class Storage:
             )
             self.logger.info("IPFS service restarted successfully.")
             self.connected = self.connect()
-            # Drain before repo_gc, not after: gc reclaims unpinned data, and
-            # queued results are by definition unpinned. Pinning them first is
-            # what stops the collector from taking them.
+            # Spooled pins are added and pinned before repo_gc, which collects
+            # unpinned blocks.
             self.drain_pending_pins()
             self.repo_gc()
         except subprocess.CalledProcessError as e:
@@ -2326,14 +2284,12 @@ class Storage:
                 return
             self.logger.info(f'error while adding pin')
             self.logger.error(e)
-            # A single pin timeout is NORMAL (replication fail-fast on CIDs
-            # that have not propagated yet), so it must never restart the
-            # daemon by itself. But a long CONSECUTIVE streak across
-            # different CIDs is the signature of a daemon that still accepts
-            # connections yet answers nothing -- the one wedge state none of
-            # the other restart triggers catch. Escalate: past the streak
-            # threshold, run a cheap health probe; if even that times out,
-            # restart the local daemon (rate-limited).
+            # One failed pin restarts nothing: a pin of a CID not yet
+            # propagated times out in the normal course. Ten consecutive
+            # failures, across CIDs, mark a daemon that accepts connections
+            # but answers nothing; a local daemon is then probed with
+            # `version` and restarted when the probe fails too, at most once
+            # per 10 minutes.
             self._pin_fail_streak = getattr(self, '_pin_fail_streak', 0) + 1
             if (self._pin_fail_streak >= 10
                     and "127.0.0.1" in self.client_connect_url):
@@ -2358,9 +2314,7 @@ class Storage:
                         except Exception as restart_error:
                             self.logger.error(f"Failed to restart IPFS service: {restart_error}")
                     else:
-                        # Daemon answers cheap calls: not wedged, just busy
-                        # or the CIDs are unavailable. Reset the streak so we
-                        # only escalate on a fresh unbroken run of failures.
+                        # The daemon answers; the streak starts over.
                         self._pin_fail_streak = 0
             self._ensure_provider_path(suspect=True)
             raise
@@ -2489,7 +2443,7 @@ class Storage:
             resp.close()
         if reason:
             raise PinAborted(reason[0])
-        # Kubo reports a failure after the body has started in a trailer, and the body then simply ends.
+        # Kubo reports a failure after the body has started in a trailer; the body then ends.
         if not pinned:
             raise Exception(f"pin/add {cid} ended without pinning it")
 
@@ -2693,7 +2647,6 @@ class ListCache(Cache):
                 except ValueError:
                     converted_values.append(item)
             else:
-                # This should not happen due to type checks in add method
                 converted_values.append(item)
         return converted_values
     def __iter__(self):
@@ -2798,7 +2751,7 @@ class ListCacheWithTimestamp:
         if value in self.mem:
             # Update the timestamp for existing value
             self.mem[value]['timestamp'] = current_time
-            # Optionally, move the item to the end to represent recent use
+            # Moved to the end, so eviction takes the least recently added entry.
             self.mem.move_to_end(value)
         else:
             self.mem[value] = {'timestamp': current_time}
@@ -2971,10 +2924,6 @@ def parse_transaction_bytes_ut(contract_abi, bytes_input):
         chain_id = None
         v_standard = v
     try:
-        # Build the signature object
-        # signature = keys.Signature(vrs=(v_standard, tx.r, tx.s))
-        # Recover the public key
-        # public_key = signature.recover_public_key_from_msg_hash(tx_hash)
         sender_address = w3.eth.account.recover_transaction(bytes_input)
     except Exception as e:
         print(f"Error recovering sender address: {e}")

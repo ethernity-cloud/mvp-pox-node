@@ -320,9 +320,8 @@ class PayloadIntake:
 
     @staticmethod
     def _discard(backend, cid):
-        """Unpin a block that was added but is not the one requested. The
-        block itself is left to the garbage collector: `block/rm` walks the
-        pin set on a Kubo this size and takes a minute."""
+        """Unpin a block that was added but is not the one requested; the
+        garbage collector reclaims it (`block/rm` walks the whole pin set)."""
         if not cid:
             return
         try:

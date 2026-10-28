@@ -19,10 +19,9 @@ class CacheConfig:
         self.doreq_filepath = base_path / 'doreq_cache.txt'
         self.merged_orders_cache = base_path / 'merged_orders_cache.json'
         self.process_orders_cache_filepath = base_path / 'process_order_data.json'
-        # ESR/protocol replication progress, per network. Persists the scan
-        # resume points (last scanned block, last scanned order) and the last
-        # pinned version per (enclave,key), so replication resumes at the right
-        # height on restart instead of re-scanning the full lookback window.
+        # ESR/protocol replication progress, per network: the scan resume
+        # points (last scanned block, last scanned order) and the last pinned
+        # version per (enclave, key), so replication resumes there on restart.
         self.esr_progress_filepath = base_path / 'esr_progress.json'
 
         # Define all cache limits
