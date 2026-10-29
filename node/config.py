@@ -2,7 +2,7 @@ import os, sys, signal
 import argparse
 import logging.handlers
 from os.path import expanduser
-from dataclasses import dataclass, fields, replace
+from dataclasses import dataclass, fields, replace, MISSING
 from typing import List
 from pathlib import Path
 import dependency_manager
@@ -47,6 +47,17 @@ image_tree_retention_days_default = float(os.environ.get('IMAGE_TREE_RETENTION_D
 skip_integration_test = strtobool(os.environ.get('SKIP_INTEGRATION_TEST', "False"))
 kubo_url_default = os.environ.get('KUBO_URL')
 kubo_version_default =  os.environ.get('KUBO_VERSION')
+# ESR relay: the enclave signs each state commit (commitFor) and the NODE
+# submits it and pays gas, so no enclave wallet needs funding. To stop a
+# malicious payload from draining the operator, the node caps the CUMULATIVE
+# gas it spends relaying commits and session rows for ONE order, in wei of the
+# native gas token; a transaction that would push the order's total over the
+# cap is refused (an ESR refusal is surfaced to the trustedzone as evidence,
+# which terminates the order). <NETWORK>_ESR_RELAY_GAS_BUDGET_WEI sets a
+# network's cap; ESR_RELAY_GAS_BUDGET_WEI (0.1 of the native token) is the cap
+# of the networks without one. At Amoy's gas price a metadata row costs about
+# 0.012 POL, so its .env sets 1 POL.
+esr_relay_gas_budget_wei_default = int(os.environ.get('ESR_RELAY_GAS_BUDGET_WEI', 10**17))
 
 @dataclass(frozen=True)
 class NetworkConfig:
@@ -79,6 +90,8 @@ class NetworkConfig:
     reward_type: int
     network_fee: int
     enclave_fee: int
+    # Set from <NETWORK>_ESR_RELAY_GAS_BUDGET_WEI when the variable exists.
+    esr_relay_gas_budget_wei: int = esr_relay_gas_budget_wei_default
 
 # Platform requirements a trustedzone names in <NETWORK>_TRUSTEDZONE_IMAGES:
 #   dcap  provisioned by a CAS, which admits the enclave on a DCAP quote: the
@@ -311,14 +324,6 @@ ipfs_intake_retention_seconds = int(os.environ.get('IPFS_INTAKE_RETENTION_SECOND
 # Probe timeout per endpoint, seconds.
 cas_resolver_probe_timeout = int(os.environ.get('CAS_RESOLVER_PROBE_TIMEOUT', 10))
 
-# ESR relay: the enclave signs each state commit (commitFor) and the NODE
-# submits it and pays gas, so no enclave wallet needs funding. To stop a
-# malicious payload from draining the operator, the node caps the CUMULATIVE
-# gas it will spend relaying commits for ONE order, in wei of the native gas
-# token. A commit that would push the order total over this is refused and the
-# refusal is surfaced to the trustedzone as evidence (which terminates the
-# order). Default 0.1 of the native token.
-esr_relay_gas_budget_wei = int(os.environ.get('ESR_RELAY_GAS_BUDGET_WEI', 10**17))  # 0.1 * 1e18
 # How far back to scan for StateCommitted events on the first pass, in blocks.
 # After that the node continues from the last block it processed.
 esr_scan_lookback_blocks = int(os.environ.get('ESR_SCAN_LOOKBACK_BLOCKS', 50_000))
@@ -493,7 +498,9 @@ def parse_networks(arguments: argparse.Namespace, parser: argparse.ArgumentParse
                 # Fetch the value from environment variables
                 value = os.environ.get(env_var)
                 if value is None:
-                    missing_vars.append(env_var)
+                    # A field with a default keeps it when the variable is not set.
+                    if field.default is MISSING:
+                        missing_vars.append(env_var)
                 else:
                     # Convert the type if necessary
                     if field.type == bool:

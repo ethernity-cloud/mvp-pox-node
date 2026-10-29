@@ -4244,8 +4244,12 @@ class EtnyPoXNode:
             return False
         cost = gas_units * gas_price
         if st['spent'] + cost > budget:
-            logger.error(f"[session] order {order_id}: {label} would exceed the per-order gas budget "
-                         f"({st['spent'] + cost} > {budget} wei); stopping relay")
+            # Said once per row; the row is tried again every tick, at the
+            # gas price of that tick.
+            if st.get('budget_refused') != label:
+                st['budget_refused'] = label
+                logger.error(f"[session] order {order_id}: {label} would exceed the per-order gas budget "
+                             f"({st['spent'] + cost} > {budget} wei); not broadcast while it does")
             return False
         try:
             opts = {
@@ -4301,7 +4305,7 @@ class EtnyPoXNode:
         enclave attested inside its signed proof) and broadcast the proof as
         a DP-request metadata row from this node's wallet. Strictly in proof
         order; shares the ESR relay's per-order gas budget discipline."""
-        budget = int(config.esr_relay_gas_budget_wei)
+        budget = int(self.__network_config.esr_relay_gas_budget_wei)
         if not st['wallet_sent'] and not self.__session_relay_wallet(bucket_name, order_id, st, budget):
             return
         while True:
@@ -4341,8 +4345,9 @@ class EtnyPoXNode:
         Relay nonces are PER (enclave, key): each key's commits relay strictly
         in order, different keys are independent. To stop a malicious payload
         from draining the operator, the node keeps a running per-order gas
-        total and REFUSES to relay a commit that would push it over
-        config.esr_relay_gas_budget_wei. A refusal is not fatal here -- the
+        total and REFUSES to relay a commit that would push it over the
+        network's esr_relay_gas_budget_wei (<NETWORK>_ESR_RELAY_GAS_BUDGET_WEI,
+        or ESR_RELAY_GAS_BUDGET_WEI). A refusal is not fatal here -- the
         trustedzone independently re-prices the whole ledger and terminates the
         order, so the node just protects its wallet and moves on.
 
@@ -4390,7 +4395,7 @@ class EtnyPoXNode:
         if not commit_files:
             return
 
-        budget = int(config.esr_relay_gas_budget_wei)
+        budget = int(self.__network_config.esr_relay_gas_budget_wei)
         gas_price, fee_fields = self.__esr_fee()
         spent = self._esr_relay_spent
         relayed = 0

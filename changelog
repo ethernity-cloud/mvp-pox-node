@@ -1,3 +1,11 @@
+v3.7.17
+the per-order relay gas budget is a network setting
+  (<NETWORK>_ESR_RELAY_GAS_BUDGET_WEI; ESR_RELAY_GAS_BUDGET_WEI, 0.1 of the
+  native token, for the networks without one): Polygon Amoy's is 1 POL, a
+  metadata row costing about 0.012 POL there, where 0.1 POL held eight
+  session output rows
+a session row the budget refuses is logged once, not every tick
+
 v3.7.6
 the bloxberg testnet and its -unsafe twin run the integration tests of their
   nodenithy trustedzones (etny-nodenithy-testnet,
