@@ -87,8 +87,11 @@ parse_config_to_args() {
         key=$(echo "$key" | xargs)
         value=$(echo "$value" | xargs)
 
-        # Ignore the NETWORK parameter
-        if [[ "$key" == "NETWORK" ]] || [[ "$key" == "PRIVATE_KEY" ]]; then
+        # NETWORK and PRIVATE_KEY are passed as -n and -k below; CONTAINER_ENGINE
+        # and the KIRI_* keys are read by the VM's provisioning
+        # (etny-node-provision-kiri.sh), not by the agent.
+        if [[ "$key" == "NETWORK" ]] || [[ "$key" == "PRIVATE_KEY" ]] \
+            || [[ "$key" == "CONTAINER_ENGINE" ]] || [[ "$key" == KIRI_* ]]; then
             continue
         fi
 

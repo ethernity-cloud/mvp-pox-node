@@ -119,9 +119,14 @@ ADDRESS=0xf17f52151EbEF6C7334FAD080c5704D77216b732
 PRIVATE_KEY=AE6AE8E5CCBFB04590405997EE2D52D2B330726137B875053C36D94E974D162F
 RESULT_ADDRESS=0xC5fdf4076b8F3A5357c5E395ab970B5B54098Fef
 RESULT_PRIVATE_KEY=0DBBE8E4AE425A6D2687F1A7E3BA17BC98C673636790F1B8AD91193C05875EF1
+CONTAINER_ENGINE=docker
 EOF
 $
 ```
+
+`CONTAINER_ENGINE` is the engine the node VM runs its containers with:
+`docker` (Docker Engine, which the file means when the key is absent) or
+`kiri` (the Kiri engine; see "Container engine" below).
 
 
 ### 5. Start the node
@@ -164,6 +169,135 @@ $ ./etny-node-installer.sh
 A testnet comes in two kinds. `bloxberg_testnet`, `litvm_liteforge` and `ethereum_sepolia` run trustedzones provisioned by that chain's ethernity-cas validator set, which admits an enclave on a DCAP quote: the platform must produce one (requirement `dcap`, the default for a name in `<NETWORK>_TRUSTEDZONE_IMAGES`), and the set validates their orders in full, as on mainnet. `bloxberg_testnet_unsafe`, `litvm_liteforge_unsafe` and `ethereum_sepolia_unsafe` have the chain and contracts of the network they are named after and run only that network's `-unsafe` trustedzones (`etny-pynithy-testnet-unsafe`, `etny-nodenithy-testnet-unsafe`; `ecld-pynithy-litvm-testnet-unsafe`, `ecld-nodenithy-litvm-testnet-unsafe`; `ecld-pynithy-ethereum-sepolia-unsafe`, `ecld-nodenithy-ethereum-sepolia-unsafe`), which are debug-signed, self-sign their certificate from their measurement and contact no CAS: any platform with hardware SGX runs them (requirement `sgx`, written `name:sgx`), EPID-only and SGX1 with or without FLC included, and the validators judge their orders with the derived-signer check waived. Named together with the network it is named after, an `-unsafe` network joins it as one handle on their shared contract.
 
 The agent runs a trustedzone only after an integration test has passed on this platform: the trustedzone's own (`<NETWORK>_INTEGRATION_TEST_IMAGES`), or one that covers its requirement. A DCAP platform therefore runs both kinds; a platform whose CAS-provisioned test fails and whose `-unsafe` test passes runs the `-unsafe` trustedzones alone. The names it runs are logged at start (`Platform meets dcap and sgx: runs ...`), advertised in its DP request's `metadata4` (`trustedzones=<names>;ipfs=<peer id>`), and a DO request whose image metadata names another trustedzone (field 2) is not taken, with the reason logged. Mainnet has no `-unsafe` network.
+
+## Container engine
+
+`CONTAINER_ENGINE` in `config` selects the engine the node VM runs its
+containers with: `docker` (Docker Engine, the value the file means when the
+key is absent) or `kiri`. `roles/validate_config_file` refuses any other
+value. The agent drives the engine only through the `docker` and
+`docker-compose` commands, which reach the engine named by `DOCKER_HOST` in
+its environment, so the setting is consumed by the VM's provisioning: with
+`kiri`, `vagrant/qemu-3.1`, `qemu-6.2` and `qemu-8.2` copy
+`ubuntu/etny-node-provision-kiri.sh` into the VM and run it after
+`etny-node-provision-docker.sh`. The agent logs the engine it reached when it
+logs its environment at start (`Container engine: Kiri 0.1.18 at
+unix:///run/kiri/docker.sock`; `Container engine: none answers at ...` when
+no engine does, and the start goes on).
+
+`kiri-lite` is the Kiri container engine (https://runkiri.com,
+https://github.com/libracoder/kiri) packaged without a docker CLI: on a Linux
+host it runs containers on the host's kernel through its own init,
+`kiri-init`, and serves the Docker API (version 1.47) on
+`unix:///run/kiri/docker.sock` to the kiri group and root. The docker-ce CLI
+and the Compose plugin the docker provisioning installs stay the node's
+clients. It needs cgroup v2, overlayfs, nftables, veth and bridge devices, all
+in the box's kernel. A privileged container (every enclave container is one)
+gets a tmpfs `/dev` holding copies of the host's device nodes,
+`/dev/sgx_enclave` and `/dev/sgx_provision` among them, from kiri 0.1.18 on;
+0.1.17 mounts the host's devtmpfs into it instead, so the script refuses a
+package older than `0.1.18~`. kiri-init, kiri's agent, builds its nftables
+table `ip kiri` (the bridges' masquerade, the forward chain accepting their
+traffic, the published ports' DNAT) when it starts; kiri-init of 0.1.18 and
+of 0.1.18~etny1 rebuilds it with `NFT_MSG_DESTROYTABLE`, a message a kernel
+before 6.3 (the box's Ubuntu 22.04 kernel is 5.15) refuses with EINVAL, so on
+such a kernel those builds have no table: no masquerade, no kernel port
+forwarding, and the enclaves reach nothing outside the VM. kiri-lite
+`0.1.18~etny2` (kiri commit f05d33d) falls back to `NFT_MSG_DELTABLE`. The
+script checks for the table after starting kiri-init and refuses without it,
+naming the kernel; `dpkg --compare-versions` cannot tell the builds apart,
+since upstream `0.1.18` sorts above `0.1.18~etny2`.
+
+`etny-node-provision-kiri.sh` runs as root inside the VM, is idempotent, and:
+
+1. installs the kiri-lite package: the config file's `KIRI_LITE_DEB_URL`,
+   checked against `KIRI_LITE_DEB_SHA256`, when both are set (a package built
+   from a fork or served from a mirror); otherwise the kiri-lite package for
+   the VM's architecture that `SHA256SUMS-linux` of download.runkiri.com
+   names, after verifying that file's detached signature with the Kiri
+   Releases key, whose fingerprint
+   `900CB63F75328B627AF5549353263AE758141A6B` the script carries;
+2. writes `/etc/systemd/system/kiri.service.d/etny.conf` (`KIRI_IDLE_SECS=0`:
+   the daemon never powers off kiri-init; its default powers it off after 60 s
+   with no running container or exec and no API request, keeping the daemon,
+   its socket and the container records, and boots it again on the next
+   request; `KIRI_HTTP_PORT=18080` and `KIRI_HTTPS_PORT=18443`: its
+   container-domain routers, which have no off switch, leave ports 80 and
+   443), enables and starts `kiri.service`, waits for `/run/kiri/docker.sock`,
+   starts kiri-init (`POST /kiri/wake` on that socket) and checks that
+   `nft list table ip kiri` finds its table (above; `nft` is installed when
+   absent);
+3. adds `ufw route allow in on kiri0`, `out on kiri0`, and the same for
+   `kiri1`: the VM's default routed policy is deny; dockerd inserts its own
+   accept rules into the host's forward chain, kiri accepts its bridges'
+   traffic in the forward chain of its own table and adds nothing to the
+   host's, so without the rules its containers reach nothing outside the VM.
+   `kiri0` is kiri's default network, `kiri1` its first user network, the
+   compose network `ethernity`;
+4. while `docker.service` is active, refuses if a container other than the
+   registry (`registry`) and the object store (`etny-swift-stream`) is
+   running, since stopping dockerd stops every container with it, and stops
+   `etny-node.service`; then stops and disables `docker.service`,
+   `docker.socket` and `containerd.service` (they stay installed for the
+   rollback);
+5. writes `/etc/systemd/system/etny-node.service.d/container-engine.conf` with
+   `Environment=DOCKER_HOST=unix:///run/kiri/docker.sock` and reloads systemd;
+6. pulls `registry:2` through kiri;
+7. starts `etny-node.service` again when step 4 stopped it.
+
+It needs network access to download.runkiri.com (or to `KIRI_LITE_DEB_URL`)
+and to Docker Hub, and `curl`, `gpg`, `dpkg` and `nft` in the VM. Run by hand
+on a VM provisioned with docker, it moves that VM to kiri between orders: the
+agent is stopped before dockerd and started again on kiri once the drop-in is
+in place, and it pulls the enclave images again, since what dockerd holds in
+`/var/lib/docker` is not visible to kiri.
+
+Disk: kiri keeps each image layer twice, the compressed blob in its store
+(`/var/lib/kiri-daemon`) and the unpacked layer under `/var/lib/kiri`, where
+Docker keeps the unpacked layer alone. `docker rmi` and `docker image prune`,
+which the agent runs when it drops the image trees beyond
+`ENCLAVE_IMAGE_TREES_KEPT`, free the blobs; the unpacked layers are freed when
+the engine restarts (`systemctl restart kiri`), which stops every container:
+the registry and the object store come back by their restart policies, an
+order's enclaves (`restart: on-failure`) do not. A tree's images take up to
+some 8 GB, so the VM's disk holds the kept trees twice over between engine
+restarts.
+
+Rollback to dockerd (the script prints it too):
+
+```
+systemctl stop etny-node
+systemctl disable --now kiri
+rm -f /etc/systemd/system/etny-node.service.d/container-engine.conf
+systemctl daemon-reload
+systemctl enable --now containerd.service docker.socket docker.service
+systemctl start etny-node
+ufw route delete allow in on kiri0; ufw route delete allow out on kiri0
+ufw route delete allow in on kiri1; ufw route delete allow out on kiri1
+rm -f /etc/systemd/system/kiri.service.d/etny.conf; systemctl daemon-reload
+apt-get remove kiri-lite    # apt-get purge also deletes /var/lib/kiri and /var/lib/kiri-daemon
+```
+
+dockerd's containers and images are untouched by the switch, so the registry
+and the object store it ran come back as they were; set `CONTAINER_ENGINE`
+back to `docker` in `config` so that a reprovisioning does not install kiri
+again.
+
+Known limits of kiri as the engine:
+
+- unpacked layers are freed only when the engine starts: `docker rmi` and
+  `docker image prune` delete the compressed blobs alone (above);
+- `docker ps --filter ancestor=<image>` matches a container by the image
+  string of its create request, not by the image id that string resolves to,
+  as Docker does: the agent's filter, `ancestor=localhost:5000/etny-securelock`
+  (a registry:port reference without a tag), matches only a container created
+  from that identical string (kiri also matches an image id or id prefix, a
+  `*` glob, and a registry-less name with or without `:latest`); the agent's
+  start-up cleanup removes the enclave containers by name first, so the
+  ancestor sweep after it finds nothing to do in the normal case;
+- kiri adds no accept rules to the host's forward chain, so the `ufw route`
+  rules above are what gives its containers egress through a firewall whose
+  routed policy is deny.
 
 ## Mirror mode (REPLICATION_ONLY)
 

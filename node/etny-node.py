@@ -21,7 +21,7 @@ from web3 import middleware
 from web3.gas_strategies.time_based import fast_gas_price_strategy
 from web3.gas_strategies.rpc import rpc_gas_price_strategy
 
-from utils import get_or_generate_uuid, run_subprocess, run_subprocess_status, environment_failure, record_enclave_image_tree, compose_images, compose_services, await_enclave_runtime, tree_image_tag,revert_reason, wallet_covers, insufficient_funds, transaction_known, placement_block_of, WALLET_GAS_TRANSACTIONS, retry, holds_within, pinned_within, FetchDeferrals, staging_plan, remaining_order_seconds, record_order_placement, order_placed_at, pending_approvals, record_pending_approval, forget_pending_approval, ORDER_STARTED_KEY, DP_STARTED_ROW_CAPABILITY, order_started_row, ORDER_GRACE_SECONDS, session_wallet_attestation, Storage, Cache, ListCache, ListCacheWithTimestamp, MergedOrdersCache, subprocess, get_node_geo, HardwareInfoProvider, parse_transaction_bytes_ut, looks_like_cid, canonical_cid, PEER_MULTIADDR, next_registered_image, enclave_failure, enclave_may_have_failed, docker_container_states, docker_container_log_tail, stale_integration_tests, image_trees, stale_image_trees, directory_size, remove_tree, removal_leftovers
+from utils import get_or_generate_uuid, run_subprocess, run_subprocess_status, environment_failure, record_enclave_image_tree, compose_images, compose_services, await_enclave_runtime, tree_image_tag,revert_reason, wallet_covers, insufficient_funds, transaction_known, placement_block_of, WALLET_GAS_TRANSACTIONS, retry, holds_within, pinned_within, FetchDeferrals, staging_plan, remaining_order_seconds, record_order_placement, order_placed_at, pending_approvals, record_pending_approval, forget_pending_approval, ORDER_STARTED_KEY, DP_STARTED_ROW_CAPABILITY, order_started_row, ORDER_GRACE_SECONDS, session_wallet_attestation, Storage, Cache, ListCache, ListCacheWithTimestamp, MergedOrdersCache, subprocess, get_node_geo, HardwareInfoProvider, parse_transaction_bytes_ut, looks_like_cid, canonical_cid, PEER_MULTIADDR, next_registered_image, enclave_failure, enclave_may_have_failed, docker_container_states, docker_container_log_tail, container_engine, stale_integration_tests, image_trees, stale_image_trees, directory_size, remove_tree, removal_leftovers
 import scone_image
 from models import *
 from error_messages import errorMessages
@@ -456,6 +456,17 @@ class EtnyPoXNode:
         logger.info(f"Node free memory: %s", self.__free_memory);
         logger.info(f"Node free storage: %s", self.__free_storage);
         logger.info(f"Node geo: %s", self.__node_geo);
+        # The engine the node's docker and docker-compose commands reach: the
+        # one at DOCKER_HOST (unix:///run/kiri/docker.sock under
+        # CONTAINER_ENGINE=kiri), else the docker CLI's default endpoint. A
+        # replication-only handle runs no container.
+        if not self.__replication_only:
+            endpoint = os.environ.get('DOCKER_HOST') or "the docker CLI's default endpoint"
+            engine = container_engine()
+            if engine:
+                logger.info("Container engine: %s %s at %s", engine[0], engine[1], endpoint)
+            else:
+                logger.warning("Container engine: none answers at %s", endpoint)
         logger.info("Trustedzones: %s", ", ".join(
             f"{name} ({requirement})" for name, requirement in self.__trustedzones.items()))
         logger.info("Integration tests: %s", ", ".join(self.__integration_images))

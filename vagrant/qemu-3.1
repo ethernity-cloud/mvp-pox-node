@@ -19,7 +19,18 @@
 
 Vagrant.configure("2") do |config|
   interface = `ip a | grep '2:' | head -1 | awk '{print $2}' | awk -F ':' '{print $1}'`
-  
+  # CONTAINER_ENGINE in the config file beside this Vagrantfile (docker when
+  # absent): kiri adds ubuntu/etny-node-provision-kiri.sh after the docker
+  # provisioning (README, "Container engine").
+  container_engine = "docker"
+  config_file = File.join(File.dirname(__FILE__), "config")
+  if File.file?(config_file)
+    File.foreach(config_file) do |line|
+      key, value = line.strip.split("=", 2)
+      container_engine = value.strip if key == "CONTAINER_ENGINE" && value
+    end
+  end
+
   config.vm.define :etnyvm1 do |etnyvm1|
     etnyvm1.vm.box = "generic/ubuntu2204"
     etnyvm1.vm.provider :libvirt do |domain|
@@ -43,6 +54,9 @@ Vagrant.configure("2") do |config|
       :type => 'direct'
     etnyvm1.vm.provision "file", source: "./ubuntu/etny-node-provision-dns.sh", destination: "~/etny/node/etny-node-provision-dns.sh"
     etnyvm1.vm.provision "file", source: "./ubuntu/etny-node-provision-docker.sh", destination: "~/etny/node/etny-node-provision-docker.sh"
+    if container_engine == "kiri"
+      etnyvm1.vm.provision "file", source: "./ubuntu/etny-node-provision-kiri.sh", destination: "~/etny/node/etny-node-provision-kiri.sh"
+    end
     etnyvm1.vm.provision "file", source: "./ubuntu/etny-node-isgx-removal-tool.sh", destination: "~/etny/node/etny-node-isgx-removal-tool.sh"
     etnyvm1.vm.provision "file", source: "./ubuntu/etny-node-provision-sgx.sh", destination: "~/etny/node/etny-node-provision-sgx.sh"
     etnyvm1.vm.provision "file", source: "./ubuntu/etny-node-disable-upgrades.sh", destination: "~/etny/node/etny-node-disable-upgrades.sh"
@@ -59,8 +73,12 @@ Vagrant.configure("2") do |config|
       inline: "/bin/bash /home/vagrant/etny/node/etny-node-provision-sgx.sh"
     etnyvm1.vm.provision "shell",
       inline: "/bin/bash /home/vagrant/etny/node/etny-node-provision-docker.sh"
+    if container_engine == "kiri"
+      etnyvm1.vm.provision "shell",
+        inline: "/bin/bash /home/vagrant/etny/node/etny-node-provision-kiri.sh"
+    end
     etnyvm1.vm.provision "shell",
-      inline: "/bin/bash /home/vagrant/etny/node/etny-node-disable-upgrades.sh" 
+      inline: "/bin/bash /home/vagrant/etny/node/etny-node-disable-upgrades.sh"
     etnyvm1.vm.provision "shell",
       inline: "/bin/bash /home/vagrant/etny/node/etny-node-provision-python.sh"
     etnyvm1.vm.provision "shell",

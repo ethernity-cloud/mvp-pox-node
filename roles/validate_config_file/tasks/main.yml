@@ -14,6 +14,13 @@
     _vals: "{{ _arr|map('regex_replace', '^(.*?)=(.*)$', '\\2')|map('trim')|list }}"
   failed_when: config_file_map.PRIVATE_KEY is undefined
 
+# CONTAINER_ENGINE selects the node VM's container engine (README, "Container
+# engine"): docker, which the file means when the key is absent, or kiri.
+- name: Validate CONTAINER_ENGINE
+  fail:
+    msg: "CONTAINER_ENGINE is '{{ config_file_map.CONTAINER_ENGINE }}' in {{ config_file_name }}; its values are docker and kiri"
+  when: (config_file_map.CONTAINER_ENGINE | default('docker')) not in ['docker', 'kiri']
+
 
 - name: Get ethkey info with error handling
   shell: "./ethkey info {{ config_file_map.PRIVATE_KEY }}"

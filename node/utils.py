@@ -308,6 +308,37 @@ def docker_container_log_tail(name, lines=500, timeout=5):
     return out.stdout.decode(errors='replace') if out.returncode == 0 else ''
 
 
+# docker version's Go template over the engine's answer: the server's platform
+# name ("Docker Engine - Community"; "Kiri") and its version, space-separated.
+CONTAINER_ENGINE_FORMAT = '{{.Server.Platform.Name}} {{.Server.Version}}'
+
+
+def container_engine_in(text):
+    """(platform name, version) from the output of `docker version --format
+    CONTAINER_ENGINE_FORMAT`: the version is the last field of the first
+    non-empty line, the platform name the fields before it (a name of several
+    words is joined with single spaces; '' when the engine gives none). None
+    when the text has no field."""
+    for line in (text or '').splitlines():
+        fields = line.split()
+        if fields:
+            return ' '.join(fields[:-1]), fields[-1]
+    return None
+
+
+def container_engine(timeout=5):
+    """The (platform name, version) of the container engine the node's docker
+    commands reach, the one at DOCKER_HOST in the environment or at the docker
+    CLI's default endpoint, from one `docker version`; None when docker is not
+    installed, reaches no engine or does not answer within `timeout` seconds."""
+    try:
+        out = subprocess.run(['docker', 'version', '--format', CONTAINER_ENGINE_FORMAT],
+                             capture_output=True, text=True, timeout=timeout)
+    except (subprocess.SubprocessError, OSError):
+        return None
+    return container_engine_in(out.stdout) if out.returncode == 0 else None
+
+
 def stale_integration_tests(passed, latest):
     """The trustedzone names whose passed integration test ran on an image the
     registry no longer certifies as that name's latest: `passed` is {name:

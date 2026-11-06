@@ -1,3 +1,30 @@
+v3.7.18
+the config file's CONTAINER_ENGINE (docker, which an absent key means, or
+  kiri) selects the node VM's container engine; roles/validate_config_file
+  refuses any other value, and the start script passes neither it nor the
+  KIRI_* keys to the agent
+with kiri, the vagrant templates run ubuntu/etny-node-provision-kiri.sh after
+  the docker provisioning: it installs kiri-lite 0.1.18~ or later (the
+  package KIRI_LITE_DEB_URL and KIRI_LITE_DEB_SHA256 name, else the one
+  download.runkiri.com's SHA256SUMS-linux names, that file verified with the
+  Kiri Releases key 900CB63F75328B627AF5549353263AE758141A6B), sets
+  KIRI_IDLE_SECS=0 (kiri-init, the agent, is never powered off when idle)
+  and the container-domain routers' ports 18080 and 18443, starts kiri and
+  kiri-init and refuses when the nftables table ip kiri is missing (kiri-init
+  of 0.1.18 and of 0.1.18~etny1 builds none on a kernel before 6.3, Ubuntu
+  22.04's 5.15; 0.1.18~etny2 does), allows routing on its bridges kiri0 and
+  kiri1 in ufw, refuses while a container other than the registry and the
+  object store runs under dockerd, stops etny-node, stops and disables
+  dockerd, docker.socket and containerd, keeping the docker CLI and the
+  compose plugin as the node's clients, points etny-node at
+  unix:///run/kiri/docker.sock, pulls registry:2 through kiri and starts
+  etny-node again; its rollback is printed and in the README ("Container
+  engine")
+the agent logs the container engine its docker commands reach when it logs
+  its environment at start (Container engine: <platform> <version> at
+  <DOCKER_HOST>), from one docker version; an engine that does not answer is
+  logged, not fatal
+
 v3.7.17
 the per-order relay gas budget is a network setting
   (<NETWORK>_ESR_RELAY_GAS_BUDGET_WEI; ESR_RELAY_GAS_BUDGET_WEI, 0.1 of the
