@@ -1,0 +1,288 @@
+From f05d33d3765144125899ecd53b4816e32a86643c Mon Sep 17 00:00:00 2001
+From: Ethernity CLOUD <contact@ethernity.cloud>
+Date: Fri, 6 Nov 2026 11:59:53 +0100
+Subject: [PATCH] kiri-init: the nftables table rebuild falls back from
+ NFT_MSG_DESTROYTABLE to NFT_MSG_DELTABLE on a kernel before 6.3, and to no
+ removal when there is no table yet. Linux added the destroy message in 6.3; a
+ 5.15 kernel (Ubuntu 22.04) answers the whole batch with EINVAL, so on such a
+ host the agent built no table at all: it logged "no uplink: Invalid
+ argument", containers had no masquerade and every published port fell back to
+ the user-space relay ("kernel port forwarding failed"). request_replacing
+ sends the batch build() makes with the destroy message, on EINVAL again with
+ a delete message, and on that batch's ENOENT (no table) with none; a batch is
+ applied whole or not at all, so a refused one leaves the kernel's tables as
+ they were. install_nat_from, install_nat6 and remove_nat build their batches
+ through it. Version 0.1.18-etny2.
+
+---
+ Cargo.toml                            |   2 +-
+ crates/kiri-init/src/linux/netlink.rs | 213 +++++++++++++++-----------
+ 2 files changed, 128 insertions(+), 87 deletions(-)
+
+diff --git a/Cargo.toml b/Cargo.toml
+index f319187..3fb532f 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -5,7 +5,7 @@ members = ["crates/*", "xtask"]
+ [workspace.package]
+ # The Ethernity node's build of v0.1.18 (82e13b5): the package sorts before
+ # the upstream 0.1.18 release (dpkg reads the "-" as "~"), which replaces it.
+-version = "0.1.18-etny1"
++version = "0.1.18-etny2"
+ edition = "2024"
+ license = "Apache-2.0"
+ publish = false
+diff --git a/crates/kiri-init/src/linux/netlink.rs b/crates/kiri-init/src/linux/netlink.rs
+index 40315f4..bf895df 100644
+--- a/crates/kiri-init/src/linux/netlink.rs
++++ b/crates/kiri-init/src/linux/netlink.rs
+@@ -370,9 +370,38 @@ const NFNL_MSG_BATCH_END: u16 = 0x11;
+ const NFT_MSG_NEWTABLE: u16 = 0;
+ /// Like DELTABLE, but no error when there is no such table (Linux 6.3+).
+ const NFT_MSG_DESTROYTABLE: u16 = 26;
++/// Removes a table; ENOENT when there is none.
++const NFT_MSG_DELTABLE: u16 = 2;
+ const NFT_MSG_NEWCHAIN: u16 = 3;
+ const NFT_MSG_NEWRULE: u16 = 6;
+ 
++/// The message that removes table `kiri` of `family` before it is rebuilt,
++/// when `kind` names one (`NFT_MSG_DESTROYTABLE` or `NFT_MSG_DELTABLE`).
++fn drop_table(family: u8, kind: Option<u16>) -> Option<Msg> {
++    kind.map(|k| {
++        let mut m = nft_in(family, k, NLM_F_ACK);
++        m.attr_str(1, "kiri"); // NFTA_TABLE_NAME
++        m
++    })
++}
++
++/// Sends the batch `build` makes, whose table removal is the message kind
++/// given: `NFT_MSG_DESTROYTABLE` first; on a kernel before 6.3, which refuses
++/// that message type with EINVAL, `NFT_MSG_DELTABLE`; and no removal at all
++/// when that answers ENOENT, there being no table yet. A batch is applied
++/// whole or not at all, so a refused one leaves the kernel's tables as they
++/// were.
++fn request_replacing(nl: &mut Netlink, build: &dyn Fn(Option<u16>) -> Vec<Msg>) -> io::Result<()> {
++    match nl.request(&mut build(Some(NFT_MSG_DESTROYTABLE))) {
++        Err(e) if e.raw_os_error() == Some(libc::EINVAL) => {}
++        other => return other,
++    }
++    match nl.request(&mut build(Some(NFT_MSG_DELTABLE))) {
++        Err(e) if e.raw_os_error() == Some(libc::ENOENT) => nl.request(&mut build(None)),
++        other => other,
++    }
++}
++
+ fn nfgen(family: u8, res_id: u16) -> [u8; 4] {
+     let mut b = [0u8; 4];
+     b[0] = family;
+@@ -768,39 +797,45 @@ fn masq6_rule(subnet: [u8; 16], prefix: u8) -> Msg {
+ pub fn install_nat6(subnets: &[([u8; 16], u8)], bridges: &[String]) -> io::Result<()> {
+     let v6 = libc::NFPROTO_IPV6 as u8;
+     let mut nl = Netlink::open(libc::NETLINK_NETFILTER)?;
+-    let mut begin = Msg::new(NFNL_MSG_BATCH_BEGIN, 0);
+-    begin.raw(&nfgen(libc::AF_UNSPEC as u8, NFNL_SUBSYS_NFTABLES));
+-    let mut destroy = nft_in(v6, NFT_MSG_DESTROYTABLE, NLM_F_ACK);
+-    destroy.attr_str(1, "kiri");
+-    let mut end = Msg::new(NFNL_MSG_BATCH_END, 0);
+-    end.raw(&nfgen(libc::AF_UNSPEC as u8, NFNL_SUBSYS_NFTABLES));
+-    let mut msgs = vec![begin, destroy];
+-    if !subnets.is_empty() {
+-        let mut table = nft_in(v6, NFT_MSG_NEWTABLE, NLM_F_ACK | NLM_F_CREATE);
+-        table.attr_str(1, "kiri");
+-        let mut chain = nft_in(v6, NFT_MSG_NEWCHAIN, NLM_F_ACK | NLM_F_CREATE);
+-        chain.attr_str(1, "kiri").attr_str(3, "postrouting");
+-        chain.nest(4).attr_be32(1, 4).attr_be32(2, 100).end();
+-        chain.attr_be32(5, 1).attr_str(7, "nat");
+-        msgs.push(table);
+-        msgs.push(chain);
+-        msgs.extend(subnets.iter().map(|(s, p)| masq6_rule(*s, *p)));
+-        msgs.extend(forward_filter_in(v6, bridges));
+-    }
+-    msgs.push(end);
+-    nl.request(&mut msgs)
++    let build = |drop: Option<u16>| -> Vec<Msg> {
++        let mut begin = Msg::new(NFNL_MSG_BATCH_BEGIN, 0);
++        begin.raw(&nfgen(libc::AF_UNSPEC as u8, NFNL_SUBSYS_NFTABLES));
++        let mut end = Msg::new(NFNL_MSG_BATCH_END, 0);
++        end.raw(&nfgen(libc::AF_UNSPEC as u8, NFNL_SUBSYS_NFTABLES));
++        let mut msgs = vec![begin];
++        msgs.extend(drop_table(v6, drop));
++        if !subnets.is_empty() {
++            let mut table = nft_in(v6, NFT_MSG_NEWTABLE, NLM_F_ACK | NLM_F_CREATE);
++            table.attr_str(1, "kiri");
++            let mut chain = nft_in(v6, NFT_MSG_NEWCHAIN, NLM_F_ACK | NLM_F_CREATE);
++            chain.attr_str(1, "kiri").attr_str(3, "postrouting");
++            chain.nest(4).attr_be32(1, 4).attr_be32(2, 100).end();
++            chain.attr_be32(5, 1).attr_str(7, "nat");
++            msgs.push(table);
++            msgs.push(chain);
++            msgs.extend(subnets.iter().map(|(s, p)| masq6_rule(*s, *p)));
++            msgs.extend(forward_filter_in(v6, bridges));
++        }
++        msgs.push(end);
++        msgs
++    };
++    request_replacing(&mut nl, &build)
+ }
+ 
+ /// Removes Kiri's table (a Linux host's engine stopping), if there is one.
+ pub fn remove_nat() -> io::Result<()> {
+     let mut nl = Netlink::open(libc::NETLINK_NETFILTER)?;
+-    let mut begin = Msg::new(NFNL_MSG_BATCH_BEGIN, 0);
+-    begin.raw(&nfgen(libc::AF_UNSPEC as u8, NFNL_SUBSYS_NFTABLES));
+-    let mut destroy = nft(NFT_MSG_DESTROYTABLE, NLM_F_ACK);
+-    destroy.attr_str(1, "kiri");
+-    let mut end = Msg::new(NFNL_MSG_BATCH_END, 0);
+-    end.raw(&nfgen(libc::AF_UNSPEC as u8, NFNL_SUBSYS_NFTABLES));
+-    nl.request(&mut [begin, destroy, end])
++    let build = |drop: Option<u16>| -> Vec<Msg> {
++        let mut begin = Msg::new(NFNL_MSG_BATCH_BEGIN, 0);
++        begin.raw(&nfgen(libc::AF_UNSPEC as u8, NFNL_SUBSYS_NFTABLES));
++        let mut end = Msg::new(NFNL_MSG_BATCH_END, 0);
++        end.raw(&nfgen(libc::AF_UNSPEC as u8, NFNL_SUBSYS_NFTABLES));
++        let mut msgs = vec![begin];
++        msgs.extend(drop_table(libc::NFPROTO_IPV4 as u8, drop));
++        msgs.push(end);
++        msgs
++    };
++    request_replacing(&mut nl, &build)
+ }
+ 
+ /// Kiri's NAT table:
+@@ -827,69 +862,75 @@ pub fn remove_nat() -> io::Result<()> {
+ pub fn install_nat_from(uplink_index: i32, host_addr: [u8; 4], host_port: u16, redirect: bool, dnat: &[Dnat], gateway: [u8; 4], bridges: &[String], local: Option<&[[u8; 4]]>) -> io::Result<()> {
+     let mut nl = Netlink::open(libc::NETLINK_NETFILTER)?;
+     // The table is replaced, not appended to (on a Linux host it outlives
+-    // the agent and changes with every published port). Destroying it in
+-    // the same batch keeps the old one if anything below is refused.
+-    let mut begin = Msg::new(NFNL_MSG_BATCH_BEGIN, 0);
+-    begin.raw(&nfgen(libc::AF_UNSPEC as u8, NFNL_SUBSYS_NFTABLES));
+-    let mut destroy = nft(NFT_MSG_DESTROYTABLE, NLM_F_ACK);
+-    destroy.attr_str(1, "kiri");
+-
+-    let mut table = nft(NFT_MSG_NEWTABLE, NLM_F_ACK | NLM_F_CREATE);
+-    table.attr_str(1, "kiri"); // NFTA_TABLE_NAME
+-
+-    let mut chain = nft(NFT_MSG_NEWCHAIN, NLM_F_ACK | NLM_F_CREATE);
+-    chain.attr_str(1, "kiri").attr_str(3, "postrouting"); // NFTA_CHAIN_TABLE, NFTA_CHAIN_NAME
+-    chain.nest(4).attr_be32(1, 4).attr_be32(2, 100).end(); // NFTA_CHAIN_HOOK: hooknum POSTROUTING, priority
+-    chain.attr_be32(5, 1).attr_str(7, "nat"); // NFTA_CHAIN_POLICY accept, NFTA_CHAIN_TYPE
+-
+-    let mut rule = nft(NFT_MSG_NEWRULE, NLM_F_ACK | NLM_F_CREATE | 0x800); // NLM_F_APPEND
+-    rule.attr_str(1, "kiri").attr_str(2, "postrouting"); // NFTA_RULE_TABLE, NFTA_RULE_CHAIN
+-    rule.nest(4); // NFTA_RULE_EXPRESSIONS
+-    // meta load oif => reg 1 (NFTA_META_DREG, NFTA_META_KEY = NFT_META_OIF, which is 5)
+-    rule.nest(1).attr_str(1, "meta").nest(2).attr_be32(1, 1).attr_be32(2, 5).end().end();
+-    // cmp eq reg 1, uplink index
+-    rule.nest(1).attr_str(1, "cmp").nest(2).attr_be32(1, 1).attr_be32(2, 0);
+-    rule.nest(3).attr(1, &(uplink_index as u32).to_ne_bytes()).end().end().end();
+-    // masquerade
+-    rule.nest(1).attr_str(1, "masq").end();
+-    rule.end();
++    // the agent and changes with every published port). Removing it in the
++    // same batch keeps the old one if anything below is refused; the removal
++    // message is the kernel's (`request_replacing`).
++    let build = |drop: Option<u16>| -> Vec<Msg> {
++        let mut begin = Msg::new(NFNL_MSG_BATCH_BEGIN, 0);
++        begin.raw(&nfgen(libc::AF_UNSPEC as u8, NFNL_SUBSYS_NFTABLES));
++
++        let mut table = nft(NFT_MSG_NEWTABLE, NLM_F_ACK | NLM_F_CREATE);
++        table.attr_str(1, "kiri"); // NFTA_TABLE_NAME
++
++        let mut chain = nft(NFT_MSG_NEWCHAIN, NLM_F_ACK | NLM_F_CREATE);
++        chain.attr_str(1, "kiri").attr_str(3, "postrouting"); // NFTA_CHAIN_TABLE, NFTA_CHAIN_NAME
++        chain.nest(4).attr_be32(1, 4).attr_be32(2, 100).end(); // NFTA_CHAIN_HOOK: hooknum POSTROUTING, priority
++        chain.attr_be32(5, 1).attr_str(7, "nat"); // NFTA_CHAIN_POLICY accept, NFTA_CHAIN_TYPE
++
++        let mut rule = nft(NFT_MSG_NEWRULE, NLM_F_ACK | NLM_F_CREATE | 0x800); // NLM_F_APPEND
++        rule.attr_str(1, "kiri").attr_str(2, "postrouting"); // NFTA_RULE_TABLE, NFTA_RULE_CHAIN
++        rule.nest(4); // NFTA_RULE_EXPRESSIONS
++        // meta load oif => reg 1 (NFTA_META_DREG, NFTA_META_KEY = NFT_META_OIF, which is 5)
++        rule.nest(1).attr_str(1, "meta").nest(2).attr_be32(1, 1).attr_be32(2, 5).end().end();
++        // cmp eq reg 1, uplink index
++        rule.nest(1).attr_str(1, "cmp").nest(2).attr_be32(1, 1).attr_be32(2, 0);
++        rule.nest(3).attr(1, &(uplink_index as u32).to_ne_bytes()).end().end().end();
++        // masquerade
++        rule.nest(1).attr_str(1, "masq").end();
++        rule.end();
+ 
+-    let mut end = Msg::new(NFNL_MSG_BATCH_END, 0);
+-    end.raw(&nfgen(libc::AF_UNSPEC as u8, NFNL_SUBSYS_NFTABLES));
+-    if !redirect {
+-        // A Linux host: no host.docker.internal redirect, but its published
+-        // ports are DNATed here (prerouting for the LAN, output for the host
+-        // itself), the whole table rebuilt on every change, atomically.
+-        let mut msgs = vec![begin, destroy, table, chain, rule];
++        let mut end = Msg::new(NFNL_MSG_BATCH_END, 0);
++        end.raw(&nfgen(libc::AF_UNSPEC as u8, NFNL_SUBSYS_NFTABLES));
++        let mut msgs = vec![begin];
++        msgs.extend(drop_table(libc::NFPROTO_IPV4 as u8, drop));
++        msgs.push(table);
++        msgs.push(chain);
++        msgs.push(rule);
++        if !redirect {
++            // A Linux host: no host.docker.internal redirect, but its published
++            // ports are DNATed here (prerouting for the LAN, output for the host
++            // itself), the whole table rebuilt on every change, atomically.
++            msgs.extend(forward_filter(bridges));
++            msgs.extend(localnet_guard());
++            msgs.push(nat_chain("prerouting", 0, -100));
++            msgs.push(nat_chain("output", 3, -100));
++            for d in dnat {
++                msgs.extend(dnat_rules("prerouting", d, local));
++                msgs.extend(dnat_rules("output", d, local));
++            }
++            msgs.push(end);
++            return msgs;
++        }
++        msgs.push(nat_chain("prerouting", 0, -100)); // NF_INET_PRE_ROUTING
++        msgs.push(nat_chain("output", 3, -100)); // NF_INET_LOCAL_OUT
++        msgs.push(dns_redirect_rule(host_addr));
++        // Only from Kiri's own bridges: the LAN must not reach the loopback relay.
++        msgs.push(redirect_rule("prerouting", host_addr, host_port, true));
++        // The host's own connections (and `--network host` containers).
++        msgs.push(redirect_rule("output", host_addr, host_port, false));
+         msgs.extend(forward_filter(bridges));
+         msgs.extend(localnet_guard());
+-        msgs.push(nat_chain("prerouting", 0, -100));
+-        msgs.push(nat_chain("output", 3, -100));
+-        for d in dnat {
+-            msgs.extend(dnat_rules("prerouting", d, local));
+-            msgs.extend(dnat_rules("output", d, local));
++        msgs.push(host_relay_guard(host_port));
++        for d in dnat.iter().filter(|d| !d.udp) {
++            msgs.push(dnat_rule_from("prerouting", d, Some((uplink_index, gateway))));
++        }
++        if dnat.iter().any(|d| !d.udp) {
++            msgs.push(published_masq_rule(uplink_index, gateway));
+         }
+         msgs.push(end);
+-        return nl.request(&mut msgs);
+-    }
+-    let pre = nat_chain("prerouting", 0, -100); // NF_INET_PRE_ROUTING
+-    let out = nat_chain("output", 3, -100); // NF_INET_LOCAL_OUT
+-    // Only from Kiri's own bridges: the LAN must not reach the loopback relay.
+-    let pre_rule = redirect_rule("prerouting", host_addr, host_port, true);
+-    // The host's own connections (and `--network host` containers).
+-    let out_rule = redirect_rule("output", host_addr, host_port, false);
+-    let mut msgs = vec![begin, destroy, table, chain, rule, pre, out, dns_redirect_rule(host_addr), pre_rule, out_rule];
+-    msgs.extend(forward_filter(bridges));
+-    msgs.extend(localnet_guard());
+-    msgs.push(host_relay_guard(host_port));
+-    for d in dnat.iter().filter(|d| !d.udp) {
+-        msgs.push(dnat_rule_from("prerouting", d, Some((uplink_index, gateway))));
+-    }
+-    if dnat.iter().any(|d| !d.udp) {
+-        msgs.push(published_masq_rule(uplink_index, gateway));
+-    }
+-    msgs.push(end);
+-    nl.request(&mut msgs)
++        msgs
++    };
++    request_replacing(&mut nl, &build)
+ }
+ 
+ #[cfg(test)]
+-- 
+2.51.2.windows.1
+
