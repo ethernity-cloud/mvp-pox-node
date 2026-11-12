@@ -1,0 +1,48 @@
+{
+  "description": "RESERVATION-DESIGN.md §2 (farms): the invitation a farm owner wallet signs for one node, as EIP-712 typed data under the reservation broker's domain; the node presents farm, expiresAt and the signature to joinFarm, which recovers the owner and admits the node; membership has no expiry (leaveFarm, removeFromFarm or a join to another farm end it), the invitation is refused after expiresAt and after the one joinFarm it served. The configuration string is what the node agent reads from <NETWORK>_FARM_INVITE.",
+  "generator": "spec/make/farm-invite.js",
+  "domain": {
+    "name": "ReservationBroker",
+    "version": "1",
+    "chainId": 80002,
+    "verifyingContract": "0x000000000000000000000000000000000000b0a0"
+  },
+  "domainNote": "name and version are the broker's constants; chainId and verifyingContract are the deployment's (test values here); a verifier rebuilds the domain from the broker it talks to, never from this file",
+  "types": {
+    "FarmInvite": [
+      {
+        "name": "farm",
+        "type": "address"
+      },
+      {
+        "name": "node",
+        "type": "address"
+      },
+      {
+        "name": "expiresAt",
+        "type": "uint64"
+      }
+    ]
+  },
+  "primaryType": "FarmInvite",
+  "typeString": "FarmInvite(address farm,address node,uint64 expiresAt)",
+  "typeHash": "0x27f4cda7115324e972b1c75a38d31be9fcdd559603e22f172e682a3ffa0a2fb1",
+  "example": {
+    "farm": "0x87b0d4c3e407101c8969e9c41e474dfa3bbf3df8",
+    "node": "0xb9e098d324da980046cfd31e6ce34c5c70792607",
+    "expiresAt": 4102444800,
+    "digest": "0x0b0e541a0a257341cc728e4c5e8b2c3f17500a53f1ec2fcfe4c3189c89ac7133",
+    "signature": "0xd8071beee8543219d6426b6fb5fb8686ef17f07a8003da74a5014e94646c4dc30e1de490bca5b6377d07b7275c95dc4d86a5e57e037babccc1feae42e4831d561b",
+    "recoveredOwner": "0x87b0d4c3e407101c8969e9c41e474dfa3bbf3df8",
+    "configString": "0x87b0d4c3e407101c8969e9c41e474dfa3bbf3df8:4102444800:0xd8071beee8543219d6426b6fb5fb8686ef17f07a8003da74a5014e94646c4dc30e1de490bca5b6377d07b7275c95dc4d86a5e57e037babccc1feae42e4831d561b"
+  },
+  "rules": {
+    "binding": "farm must equal the recovered signer, or, when farm has code, farm.isValidSignature(digest, signature) must return 0x1626ba7e (EIP-1271; the owner wallet is the farm either way); node must equal msg.sender of joinFarm; block.timestamp must be at most expiresAt; the domain binds the invitation to one broker and one chain; the digest is recorded at joinFarm and refused again (one join per invitation; a fresh one carries another expiresAt)",
+    "membership": "a node is of one farm at most: joinFarm on another farm leaves the first; leaveFarm by the node and removeFromFarm by the owner clear it; a node that left returns on a fresh invitation only, its earlier one being used",
+    "configString": "<farm>:<expiresAt>:<signature>, the farm lower-case hex with 0x, expiresAt decimal unix seconds, the signature 65 bytes 0x hex (r, s, v)"
+  },
+  "keys": {
+    "ownerPrivateKey": "0x1631ff4f8e6bcd6fc77de71a27de545a491788e7bed0e428b0c6fa0f5654dba5",
+    "nodePrivateKey": "0x57a74f65d0dab7bf8230da1da0aa52dda2c5d7d4c3fe7537792893347c1b524a"
+  }
+}

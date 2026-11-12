@@ -1,0 +1,70 @@
+[
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "orderId",
+        "type": "uint256"
+      }
+    ],
+    "name": "handoverOf",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "found",
+        "type": "bool"
+      },
+      {
+        "internalType": "uint256",
+        "name": "predecessor",
+        "type": "uint256"
+      },
+      {
+        "internalType": "bool",
+        "name": "successorPlaced",
+        "type": "bool"
+      },
+      {
+        "internalType": "uint256",
+        "name": "successor",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint64",
+        "name": "fromBlock",
+        "type": "uint64"
+      },
+      {
+        "internalType": "uint64",
+        "name": "toBlock",
+        "type": "uint64"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "doRequestId",
+        "type": "uint256"
+      }
+    ],
+    "name": "holderOf",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "found",
+        "type": "bool"
+      },
+      {
+        "internalType": "address",
+        "name": "holder",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  }
+]

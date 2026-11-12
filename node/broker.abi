@@ -1,0 +1,3155 @@
+[
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "id",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "broker",
+        "type": "address"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "previous",
+        "type": "address"
+      }
+    ],
+    "name": "BrokerAssigned",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "id",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "broker",
+        "type": "address"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "keeper",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint8",
+        "name": "misses",
+        "type": "uint8"
+      }
+    ],
+    "name": "BrokerMissed",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "broker",
+        "type": "address"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "to",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "amountWei",
+        "type": "uint256"
+      }
+    ],
+    "name": "BrokerRewardsWithdrawn",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "id",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "orderId",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint32",
+        "name": "seq",
+        "type": "uint32"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "rowNumber",
+        "type": "uint256"
+      }
+    ],
+    "name": "Called",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "dproc",
+        "type": "address"
+      },
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "orderId",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "enum IReservationBroker.FailureReason",
+        "name": "reason",
+        "type": "uint8"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint64",
+        "name": "recommitAfter",
+        "type": "uint64"
+      }
+    ],
+    "name": "CommitmentBreached",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "dproc",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint64",
+        "name": "until",
+        "type": "uint64"
+      }
+    ],
+    "name": "Committed",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "id",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "orderId",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint64",
+        "name": "fromBlock",
+        "type": "uint64"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint64",
+        "name": "toBlock",
+        "type": "uint64"
+      }
+    ],
+    "name": "EndWindowRecorded",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "id",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "refundedWei",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "retainedWei",
+        "type": "uint256"
+      }
+    ],
+    "name": "Ended",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "id",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "allocationWei",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "escrowWei",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "hourCostWei",
+        "type": "uint256"
+      }
+    ],
+    "name": "Exhausted",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "node",
+        "type": "address"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "farm",
+        "type": "address"
+      }
+    ],
+    "name": "FarmJoined",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "node",
+        "type": "address"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "farm",
+        "type": "address"
+      }
+    ],
+    "name": "FarmLeft",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "farm",
+        "type": "address"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "rewardAddress",
+        "type": "address"
+      }
+    ],
+    "name": "FarmRewardSet",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "id",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "orderId",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint64",
+        "name": "since",
+        "type": "uint64"
+      }
+    ],
+    "name": "GasWait",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "id",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "predecessor",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "successor",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "bool",
+        "name": "byResult",
+        "type": "bool"
+      }
+    ],
+    "name": "HandedOver",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "id",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "orderId",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "successorNode",
+        "type": "address"
+      }
+    ],
+    "name": "HandoverAcceptanceVoided",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "id",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "orderId",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "successorNode",
+        "type": "address"
+      }
+    ],
+    "name": "HandoverAccepted",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "id",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "orderId",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "dproc",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "toAllocationWei",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "returnedWei",
+        "type": "uint256"
+      }
+    ],
+    "name": "HandoverGasSettled",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "id",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "orderId",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "dproc",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint64",
+        "name": "fromBlock",
+        "type": "uint64"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint64",
+        "name": "toBlock",
+        "type": "uint64"
+      },
+      {
+        "indexed": false,
+        "internalType": "address",
+        "name": "farm",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "address",
+        "name": "appointed",
+        "type": "address"
+      }
+    ],
+    "name": "HandoverRequested",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "id",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "keeper",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "amountWei",
+        "type": "uint256"
+      }
+    ],
+    "name": "KeeperRefunded",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "dproc",
+        "type": "address"
+      },
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "orderId",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "enum IReservationBroker.FailureReason",
+        "name": "reason",
+        "type": "uint8"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint8",
+        "name": "failuresInWindow",
+        "type": "uint8"
+      }
+    ],
+    "name": "NodeFailureRecorded",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "id",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "orderId",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "dproc",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "enum IReservationBroker.FailureReason",
+        "name": "reason",
+        "type": "uint8"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint64",
+        "name": "excludedUntil",
+        "type": "uint64"
+      }
+    ],
+    "name": "NodeSwapped",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "id",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "orderId",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "dproc",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint64",
+        "name": "approvedAt",
+        "type": "uint64"
+      }
+    ],
+    "name": "OrderApproved",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "id",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "orderId",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "addedWei",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "gasPriceCapWei",
+        "type": "uint256"
+      }
+    ],
+    "name": "OrderChainFeeRaised",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "id",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "orderId",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint8",
+        "name": "outcome",
+        "type": "uint8"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "workWei",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "premiumWei",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "feesWei",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "chainPaidWei",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "refundWei",
+        "type": "uint256"
+      }
+    ],
+    "name": "OrderEnded",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "id",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "orderId",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "dproc",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "doRequestId",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "dpRequestId",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint32",
+        "name": "cu",
+        "type": "uint32"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint16",
+        "name": "durationHours",
+        "type": "uint16"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint64",
+        "name": "endSlot",
+        "type": "uint64"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "escrowWei",
+        "type": "uint256"
+      }
+    ],
+    "name": "OrderPlaced",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "id",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "orderId",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "dproc",
+        "type": "address"
+      }
+    ],
+    "name": "OrderRejected",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "id",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "orderId",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "broker",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "amountWei",
+        "type": "uint256"
+      }
+    ],
+    "name": "PremiumRetained",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "components": [
+          {
+            "internalType": "uint32",
+            "name": "minTermHours",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "maxTermHours",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint256",
+            "name": "floorPerCuHourWei",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "premium",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "reserveShare",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint16",
+            "name": "minOrderHours",
+            "type": "uint16"
+          },
+          {
+            "internalType": "uint8",
+            "name": "matchScan",
+            "type": "uint8"
+          },
+          {
+            "internalType": "uint32",
+            "name": "handoverSeconds",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "inputCutoffSeconds",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "handoverNoticeSeconds",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "handoverWindowBlocks",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "handoverWindowMinBlocks",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "handoverPrepSeconds",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "blockMillis",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "farmClaimSeconds",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "appointeeClaimSeconds",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "handoverCooldownSeconds",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "openHandoverSuspensionSeconds",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint256",
+            "name": "handoverGasDepositWei",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint32",
+            "name": "preferredNodeTimeoutSeconds",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "openOrderTimeoutSeconds",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "excludeSeconds",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "failureWindowSeconds",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "commitMinSeconds",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "recommitDelaySeconds",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint256",
+            "name": "gasTopUpTrigger",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "maxExtensionRatio",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "keeperGasCapWei",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint32",
+            "name": "brokerGraceSeconds",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint8",
+            "name": "brokerMissesToReassign",
+            "type": "uint8"
+          }
+        ],
+        "indexed": false,
+        "internalType": "struct IReservationBroker.ReservationParams",
+        "name": "params",
+        "type": "tuple"
+      }
+    ],
+    "name": "ReservationParamsSet",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "id",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "from",
+        "type": "address"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "to",
+        "type": "address"
+      }
+    ],
+    "name": "ReservationTransferred",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "id",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "holder",
+        "type": "address"
+      },
+      {
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "label",
+        "type": "bytes32"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint32",
+        "name": "cu",
+        "type": "uint32"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint64",
+        "name": "start",
+        "type": "uint64"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint64",
+        "name": "end",
+        "type": "uint64"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "pricePerCuHourWei",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "basePricePerCuHourWei",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint8",
+        "name": "feePercent",
+        "type": "uint8"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "allocationWei",
+        "type": "uint256"
+      }
+    ],
+    "name": "Reserved",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "id",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "enum IReservationBroker.State",
+        "name": "state",
+        "type": "uint8"
+      }
+    ],
+    "name": "StateChanged",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "id",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "label",
+        "type": "bytes32"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint8",
+        "name": "feePercent",
+        "type": "uint8"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "hourCostWei",
+        "type": "uint256"
+      }
+    ],
+    "name": "TemplateSet",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "id",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint64",
+        "name": "lostSeconds",
+        "type": "uint64"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint64",
+        "name": "newEnd",
+        "type": "uint64"
+      }
+    ],
+    "name": "TermExtended",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "id",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "from",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "amountWei",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "allocationWei",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint32",
+        "name": "remainingHours",
+        "type": "uint32"
+      }
+    ],
+    "name": "ToppedUp",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "id",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint64",
+        "name": "secondsWaiting",
+        "type": "uint64"
+      }
+    ],
+    "name": "Unmatched",
+    "type": "event"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "orderId",
+        "type": "uint256"
+      }
+    ],
+    "name": "acceptHandover",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "id",
+        "type": "uint256"
+      }
+    ],
+    "name": "assignBroker",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "brokerRegistry",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "broker",
+        "type": "address"
+      }
+    ],
+    "name": "brokerRewardsWei",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "id",
+        "type": "uint256"
+      },
+      {
+        "internalType": "string",
+        "name": "cid",
+        "type": "string"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "checksum",
+        "type": "bytes32"
+      }
+    ],
+    "name": "call",
+    "outputs": [
+      {
+        "internalType": "uint32",
+        "name": "seq",
+        "type": "uint32"
+      }
+    ],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "id",
+        "type": "uint256"
+      }
+    ],
+    "name": "closeCall",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint64",
+        "name": "untilTs",
+        "type": "uint64"
+      }
+    ],
+    "name": "commitReserved",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "dproc",
+        "type": "address"
+      }
+    ],
+    "name": "commitmentOf",
+    "outputs": [
+      {
+        "components": [
+          {
+            "internalType": "uint64",
+            "name": "until",
+            "type": "uint64"
+          },
+          {
+            "internalType": "uint64",
+            "name": "breachedAt",
+            "type": "uint64"
+          },
+          {
+            "internalType": "uint64",
+            "name": "recommitAfter",
+            "type": "uint64"
+          },
+          {
+            "internalType": "uint64",
+            "name": "lastHandoverAt",
+            "type": "uint64"
+          },
+          {
+            "internalType": "uint64",
+            "name": "handoverAllowedAfter",
+            "type": "uint64"
+          },
+          {
+            "internalType": "uint64",
+            "name": "suspendedUntil",
+            "type": "uint64"
+          }
+        ],
+        "internalType": "struct IReservationBroker.Commitment",
+        "name": "",
+        "type": "tuple"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "doRequestId",
+        "type": "uint256"
+      }
+    ],
+    "name": "doRequestReservation",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "found",
+        "type": "bool"
+      },
+      {
+        "internalType": "uint256",
+        "name": "id",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "id",
+        "type": "uint256"
+      },
+      {
+        "internalType": "address",
+        "name": "dproc",
+        "type": "address"
+      }
+    ],
+    "name": "excludedUntil",
+    "outputs": [
+      {
+        "internalType": "uint64",
+        "name": "",
+        "type": "uint64"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "node",
+        "type": "address"
+      }
+    ],
+    "name": "farmOf",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "farm",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "farm",
+        "type": "address"
+      }
+    ],
+    "name": "farmRewardOf",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "rewardAddress",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "orderId",
+        "type": "uint256"
+      }
+    ],
+    "name": "handoverOf",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "found",
+        "type": "bool"
+      },
+      {
+        "internalType": "uint256",
+        "name": "predecessor",
+        "type": "uint256"
+      },
+      {
+        "internalType": "bool",
+        "name": "successorPlaced",
+        "type": "bool"
+      },
+      {
+        "internalType": "uint256",
+        "name": "successor",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint64",
+        "name": "fromBlock",
+        "type": "uint64"
+      },
+      {
+        "internalType": "uint64",
+        "name": "toBlock",
+        "type": "uint64"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "doRequestId",
+        "type": "uint256"
+      }
+    ],
+    "name": "holderOf",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "found",
+        "type": "bool"
+      },
+      {
+        "internalType": "address",
+        "name": "holder",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "farm",
+        "type": "address"
+      },
+      {
+        "internalType": "uint64",
+        "name": "expiresAt",
+        "type": "uint64"
+      },
+      {
+        "internalType": "bytes",
+        "name": "signature",
+        "type": "bytes"
+      }
+    ],
+    "name": "joinFarm",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "leaveFarm",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "id",
+        "type": "uint256"
+      }
+    ],
+    "name": "nextDue",
+    "outputs": [
+      {
+        "internalType": "uint64",
+        "name": "",
+        "type": "uint64"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "dproc",
+        "type": "address"
+      }
+    ],
+    "name": "nodeFailures",
+    "outputs": [
+      {
+        "internalType": "uint8",
+        "name": "failuresInWindow",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint64",
+        "name": "lastFailureAt",
+        "type": "uint64"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "orderId",
+        "type": "uint256"
+      }
+    ],
+    "name": "orderEndSlot",
+    "outputs": [
+      {
+        "internalType": "uint64",
+        "name": "",
+        "type": "uint64"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "orderId",
+        "type": "uint256"
+      }
+    ],
+    "name": "orderReservation",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "found",
+        "type": "bool"
+      },
+      {
+        "internalType": "uint256",
+        "name": "id",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "params",
+    "outputs": [
+      {
+        "components": [
+          {
+            "internalType": "uint32",
+            "name": "minTermHours",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "maxTermHours",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint256",
+            "name": "floorPerCuHourWei",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "premium",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "reserveShare",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint16",
+            "name": "minOrderHours",
+            "type": "uint16"
+          },
+          {
+            "internalType": "uint8",
+            "name": "matchScan",
+            "type": "uint8"
+          },
+          {
+            "internalType": "uint32",
+            "name": "handoverSeconds",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "inputCutoffSeconds",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "handoverNoticeSeconds",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "handoverWindowBlocks",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "handoverWindowMinBlocks",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "handoverPrepSeconds",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "blockMillis",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "farmClaimSeconds",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "appointeeClaimSeconds",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "handoverCooldownSeconds",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "openHandoverSuspensionSeconds",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint256",
+            "name": "handoverGasDepositWei",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint32",
+            "name": "preferredNodeTimeoutSeconds",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "openOrderTimeoutSeconds",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "excludeSeconds",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "failureWindowSeconds",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "commitMinSeconds",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "recommitDelaySeconds",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint256",
+            "name": "gasTopUpTrigger",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "maxExtensionRatio",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "keeperGasCapWei",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint32",
+            "name": "brokerGraceSeconds",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint8",
+            "name": "brokerMissesToReassign",
+            "type": "uint8"
+          }
+        ],
+        "internalType": "struct IReservationBroker.ReservationParams",
+        "name": "",
+        "type": "tuple"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "id",
+        "type": "uint256"
+      }
+    ],
+    "name": "pause",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "id",
+        "type": "uint256"
+      }
+    ],
+    "name": "pendingOrdersOf",
+    "outputs": [
+      {
+        "internalType": "uint256[]",
+        "name": "orderIds",
+        "type": "uint256[]"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "performanceOracle",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "pox",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "pricing",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint32",
+        "name": "cu",
+        "type": "uint32"
+      },
+      {
+        "internalType": "uint32",
+        "name": "termHours",
+        "type": "uint32"
+      },
+      {
+        "components": [
+          {
+            "internalType": "bytes32",
+            "name": "label",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "uint8",
+            "name": "cpu",
+            "type": "uint8"
+          },
+          {
+            "internalType": "uint8",
+            "name": "mem",
+            "type": "uint8"
+          },
+          {
+            "internalType": "uint8",
+            "name": "storageGB",
+            "type": "uint8"
+          },
+          {
+            "internalType": "uint8",
+            "name": "bw",
+            "type": "uint8"
+          },
+          {
+            "internalType": "uint16",
+            "name": "orderHours",
+            "type": "uint16"
+          },
+          {
+            "internalType": "uint32",
+            "name": "handoverTimeOfDay",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "minCu",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint8",
+            "name": "maxStrikes",
+            "type": "uint8"
+          },
+          {
+            "internalType": "uint8",
+            "name": "maxNodeFailures",
+            "type": "uint8"
+          },
+          {
+            "internalType": "uint32",
+            "name": "startTimeoutSeconds",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "responseTimeoutSeconds",
+            "type": "uint32"
+          },
+          {
+            "internalType": "address",
+            "name": "preferredNode",
+            "type": "address"
+          },
+          {
+            "internalType": "uint16",
+            "name": "relaysPerHour",
+            "type": "uint16"
+          },
+          {
+            "internalType": "uint256",
+            "name": "gasLevel",
+            "type": "uint256"
+          },
+          {
+            "internalType": "bool",
+            "name": "gasTopUpFromAllocation",
+            "type": "bool"
+          },
+          {
+            "internalType": "string",
+            "name": "metadata1",
+            "type": "string"
+          },
+          {
+            "internalType": "string",
+            "name": "metadata2",
+            "type": "string"
+          },
+          {
+            "internalType": "string",
+            "name": "metadata3",
+            "type": "string"
+          }
+        ],
+        "internalType": "struct IReservationBroker.Template",
+        "name": "template",
+        "type": "tuple"
+      }
+    ],
+    "name": "quoteReservation",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "pricePerCuHourWei",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "basePricePerCuHourWei",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "computeWei",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "suggestedGasAllowanceWei",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "hourCostWei",
+        "type": "uint256"
+      },
+      {
+        "internalType": "bool",
+        "name": "admissible",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "reader",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "id",
+        "type": "uint256"
+      }
+    ],
+    "name": "remainingHours",
+    "outputs": [
+      {
+        "internalType": "uint32",
+        "name": "hoursLeft",
+        "type": "uint32"
+      },
+      {
+        "internalType": "uint256",
+        "name": "hourCostWei",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "id",
+        "type": "uint256"
+      },
+      {
+        "internalType": "address",
+        "name": "preferredNode",
+        "type": "address"
+      }
+    ],
+    "name": "rematch",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "node",
+        "type": "address"
+      }
+    ],
+    "name": "removeFromFarm",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "dproc",
+        "type": "address"
+      },
+      {
+        "internalType": "uint256",
+        "name": "judgedOrderId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "enum IReservationBroker.FailureReason",
+        "name": "reason",
+        "type": "uint8"
+      }
+    ],
+    "name": "reportFailure",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "orderId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint64",
+        "name": "fromBlock",
+        "type": "uint64"
+      },
+      {
+        "internalType": "uint64",
+        "name": "toBlock",
+        "type": "uint64"
+      },
+      {
+        "internalType": "address",
+        "name": "appointedSuccessor",
+        "type": "address"
+      }
+    ],
+    "name": "requestHandover",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "holder",
+        "type": "address"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "label",
+        "type": "bytes32"
+      }
+    ],
+    "name": "reservationByLabel",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "found",
+        "type": "bool"
+      },
+      {
+        "internalType": "uint256",
+        "name": "id",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "reservationCount",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "id",
+        "type": "uint256"
+      }
+    ],
+    "name": "reservationOf",
+    "outputs": [
+      {
+        "components": [
+          {
+            "internalType": "address",
+            "name": "holder",
+            "type": "address"
+          },
+          {
+            "internalType": "uint32",
+            "name": "cu",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint64",
+            "name": "start",
+            "type": "uint64"
+          },
+          {
+            "internalType": "uint64",
+            "name": "end",
+            "type": "uint64"
+          },
+          {
+            "internalType": "uint256",
+            "name": "pricePerCuHourWei",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "basePricePerCuHourWei",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint8",
+            "name": "feePercent",
+            "type": "uint8"
+          },
+          {
+            "internalType": "uint256",
+            "name": "allocationWei",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "escrowedWei",
+            "type": "uint256"
+          },
+          {
+            "internalType": "enum IReservationBroker.State",
+            "name": "state",
+            "type": "uint8"
+          },
+          {
+            "internalType": "bool",
+            "name": "hasOrder",
+            "type": "bool"
+          },
+          {
+            "internalType": "uint256",
+            "name": "currentDoRequest",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "currentOrder",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint32",
+            "name": "pendingSettlements",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "callSeq",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "callsThisOrder",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint64",
+            "name": "lastCallAt",
+            "type": "uint64"
+          },
+          {
+            "internalType": "uint64",
+            "name": "handoverFromBlock",
+            "type": "uint64"
+          },
+          {
+            "internalType": "uint64",
+            "name": "handoverToBlock",
+            "type": "uint64"
+          },
+          {
+            "internalType": "bool",
+            "name": "successorPlaced",
+            "type": "bool"
+          },
+          {
+            "internalType": "uint256",
+            "name": "successorOrder",
+            "type": "uint256"
+          },
+          {
+            "internalType": "address",
+            "name": "handoverAcceptedBy",
+            "type": "address"
+          },
+          {
+            "internalType": "uint64",
+            "name": "gasWaitSince",
+            "type": "uint64"
+          },
+          {
+            "internalType": "uint64",
+            "name": "unmatchedSince",
+            "type": "uint64"
+          },
+          {
+            "internalType": "uint64",
+            "name": "holderIdleSeconds",
+            "type": "uint64"
+          },
+          {
+            "internalType": "uint64",
+            "name": "lostSeconds",
+            "type": "uint64"
+          },
+          {
+            "internalType": "address",
+            "name": "broker",
+            "type": "address"
+          },
+          {
+            "internalType": "uint8",
+            "name": "brokerMisses",
+            "type": "uint8"
+          }
+        ],
+        "internalType": "struct IReservationBroker.Reservation",
+        "name": "",
+        "type": "tuple"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "holder",
+        "type": "address"
+      }
+    ],
+    "name": "reservationsOf",
+    "outputs": [
+      {
+        "internalType": "uint256[]",
+        "name": "ids",
+        "type": "uint256[]"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint32",
+        "name": "cu",
+        "type": "uint32"
+      },
+      {
+        "internalType": "uint32",
+        "name": "termHours",
+        "type": "uint32"
+      },
+      {
+        "internalType": "uint256",
+        "name": "maxPricePerCuHourWei",
+        "type": "uint256"
+      },
+      {
+        "components": [
+          {
+            "internalType": "bytes32",
+            "name": "label",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "uint8",
+            "name": "cpu",
+            "type": "uint8"
+          },
+          {
+            "internalType": "uint8",
+            "name": "mem",
+            "type": "uint8"
+          },
+          {
+            "internalType": "uint8",
+            "name": "storageGB",
+            "type": "uint8"
+          },
+          {
+            "internalType": "uint8",
+            "name": "bw",
+            "type": "uint8"
+          },
+          {
+            "internalType": "uint16",
+            "name": "orderHours",
+            "type": "uint16"
+          },
+          {
+            "internalType": "uint32",
+            "name": "handoverTimeOfDay",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "minCu",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint8",
+            "name": "maxStrikes",
+            "type": "uint8"
+          },
+          {
+            "internalType": "uint8",
+            "name": "maxNodeFailures",
+            "type": "uint8"
+          },
+          {
+            "internalType": "uint32",
+            "name": "startTimeoutSeconds",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "responseTimeoutSeconds",
+            "type": "uint32"
+          },
+          {
+            "internalType": "address",
+            "name": "preferredNode",
+            "type": "address"
+          },
+          {
+            "internalType": "uint16",
+            "name": "relaysPerHour",
+            "type": "uint16"
+          },
+          {
+            "internalType": "uint256",
+            "name": "gasLevel",
+            "type": "uint256"
+          },
+          {
+            "internalType": "bool",
+            "name": "gasTopUpFromAllocation",
+            "type": "bool"
+          },
+          {
+            "internalType": "string",
+            "name": "metadata1",
+            "type": "string"
+          },
+          {
+            "internalType": "string",
+            "name": "metadata2",
+            "type": "string"
+          },
+          {
+            "internalType": "string",
+            "name": "metadata3",
+            "type": "string"
+          }
+        ],
+        "internalType": "struct IReservationBroker.Template",
+        "name": "template",
+        "type": "tuple"
+      },
+      {
+        "internalType": "uint256",
+        "name": "gasAllowanceWei",
+        "type": "uint256"
+      }
+    ],
+    "name": "reserve",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "id",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "reservedCu",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "registry",
+        "type": "address"
+      }
+    ],
+    "name": "setBrokerRegistry",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "rewardAddress",
+        "type": "address"
+      }
+    ],
+    "name": "setFarmReward",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "oracle",
+        "type": "address"
+      }
+    ],
+    "name": "setPerformanceOracle",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "components": [
+          {
+            "internalType": "uint32",
+            "name": "minTermHours",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "maxTermHours",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint256",
+            "name": "floorPerCuHourWei",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "premium",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "reserveShare",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint16",
+            "name": "minOrderHours",
+            "type": "uint16"
+          },
+          {
+            "internalType": "uint8",
+            "name": "matchScan",
+            "type": "uint8"
+          },
+          {
+            "internalType": "uint32",
+            "name": "handoverSeconds",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "inputCutoffSeconds",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "handoverNoticeSeconds",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "handoverWindowBlocks",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "handoverWindowMinBlocks",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "handoverPrepSeconds",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "blockMillis",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "farmClaimSeconds",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "appointeeClaimSeconds",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "handoverCooldownSeconds",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "openHandoverSuspensionSeconds",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint256",
+            "name": "handoverGasDepositWei",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint32",
+            "name": "preferredNodeTimeoutSeconds",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "openOrderTimeoutSeconds",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "excludeSeconds",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "failureWindowSeconds",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "commitMinSeconds",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "recommitDelaySeconds",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint256",
+            "name": "gasTopUpTrigger",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "maxExtensionRatio",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "keeperGasCapWei",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint32",
+            "name": "brokerGraceSeconds",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint8",
+            "name": "brokerMissesToReassign",
+            "type": "uint8"
+          }
+        ],
+        "internalType": "struct IReservationBroker.ReservationParams",
+        "name": "newParams",
+        "type": "tuple"
+      }
+    ],
+    "name": "setReservationParams",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "id",
+        "type": "uint256"
+      },
+      {
+        "components": [
+          {
+            "internalType": "bytes32",
+            "name": "label",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "uint8",
+            "name": "cpu",
+            "type": "uint8"
+          },
+          {
+            "internalType": "uint8",
+            "name": "mem",
+            "type": "uint8"
+          },
+          {
+            "internalType": "uint8",
+            "name": "storageGB",
+            "type": "uint8"
+          },
+          {
+            "internalType": "uint8",
+            "name": "bw",
+            "type": "uint8"
+          },
+          {
+            "internalType": "uint16",
+            "name": "orderHours",
+            "type": "uint16"
+          },
+          {
+            "internalType": "uint32",
+            "name": "handoverTimeOfDay",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "minCu",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint8",
+            "name": "maxStrikes",
+            "type": "uint8"
+          },
+          {
+            "internalType": "uint8",
+            "name": "maxNodeFailures",
+            "type": "uint8"
+          },
+          {
+            "internalType": "uint32",
+            "name": "startTimeoutSeconds",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "responseTimeoutSeconds",
+            "type": "uint32"
+          },
+          {
+            "internalType": "address",
+            "name": "preferredNode",
+            "type": "address"
+          },
+          {
+            "internalType": "uint16",
+            "name": "relaysPerHour",
+            "type": "uint16"
+          },
+          {
+            "internalType": "uint256",
+            "name": "gasLevel",
+            "type": "uint256"
+          },
+          {
+            "internalType": "bool",
+            "name": "gasTopUpFromAllocation",
+            "type": "bool"
+          },
+          {
+            "internalType": "string",
+            "name": "metadata1",
+            "type": "string"
+          },
+          {
+            "internalType": "string",
+            "name": "metadata2",
+            "type": "string"
+          },
+          {
+            "internalType": "string",
+            "name": "metadata3",
+            "type": "string"
+          }
+        ],
+        "internalType": "struct IReservationBroker.Template",
+        "name": "template",
+        "type": "tuple"
+      }
+    ],
+    "name": "setTemplate",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "trigger",
+        "type": "address"
+      }
+    ],
+    "name": "setValidatorTrigger",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "id",
+        "type": "uint256"
+      }
+    ],
+    "name": "start",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "id",
+        "type": "uint256"
+      }
+    ],
+    "name": "supervise",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "acted",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "id",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "dpRequestId",
+        "type": "uint256"
+      }
+    ],
+    "name": "superviseWith",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "acted",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes4",
+        "name": "interfaceId",
+        "type": "bytes4"
+      }
+    ],
+    "name": "supportsInterface",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "id",
+        "type": "uint256"
+      }
+    ],
+    "name": "sweep",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "id",
+        "type": "uint256"
+      }
+    ],
+    "name": "templateOf",
+    "outputs": [
+      {
+        "components": [
+          {
+            "internalType": "bytes32",
+            "name": "label",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "uint8",
+            "name": "cpu",
+            "type": "uint8"
+          },
+          {
+            "internalType": "uint8",
+            "name": "mem",
+            "type": "uint8"
+          },
+          {
+            "internalType": "uint8",
+            "name": "storageGB",
+            "type": "uint8"
+          },
+          {
+            "internalType": "uint8",
+            "name": "bw",
+            "type": "uint8"
+          },
+          {
+            "internalType": "uint16",
+            "name": "orderHours",
+            "type": "uint16"
+          },
+          {
+            "internalType": "uint32",
+            "name": "handoverTimeOfDay",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "minCu",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint8",
+            "name": "maxStrikes",
+            "type": "uint8"
+          },
+          {
+            "internalType": "uint8",
+            "name": "maxNodeFailures",
+            "type": "uint8"
+          },
+          {
+            "internalType": "uint32",
+            "name": "startTimeoutSeconds",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "responseTimeoutSeconds",
+            "type": "uint32"
+          },
+          {
+            "internalType": "address",
+            "name": "preferredNode",
+            "type": "address"
+          },
+          {
+            "internalType": "uint16",
+            "name": "relaysPerHour",
+            "type": "uint16"
+          },
+          {
+            "internalType": "uint256",
+            "name": "gasLevel",
+            "type": "uint256"
+          },
+          {
+            "internalType": "bool",
+            "name": "gasTopUpFromAllocation",
+            "type": "bool"
+          },
+          {
+            "internalType": "string",
+            "name": "metadata1",
+            "type": "string"
+          },
+          {
+            "internalType": "string",
+            "name": "metadata2",
+            "type": "string"
+          },
+          {
+            "internalType": "string",
+            "name": "metadata3",
+            "type": "string"
+          }
+        ],
+        "internalType": "struct IReservationBroker.Template",
+        "name": "",
+        "type": "tuple"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "token",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "id",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "amountWei",
+        "type": "uint256"
+      }
+    ],
+    "name": "topUp",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "id",
+        "type": "uint256"
+      },
+      {
+        "internalType": "address",
+        "name": "to",
+        "type": "address"
+      }
+    ],
+    "name": "transfer",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "validatorTriggerAddress",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "orderId",
+        "type": "uint256"
+      }
+    ],
+    "name": "withdrawAcceptance",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "broker",
+        "type": "address"
+      },
+      {
+        "internalType": "uint256",
+        "name": "amountWei",
+        "type": "uint256"
+      }
+    ],
+    "name": "withdrawBrokerRewards",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  }
+]

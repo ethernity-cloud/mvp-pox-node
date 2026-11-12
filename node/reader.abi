@@ -1,0 +1,630 @@
+[
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "id",
+        "type": "uint256"
+      }
+    ],
+    "name": "_getDORequestV2",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "downer",
+        "type": "address"
+      },
+      {
+        "internalType": "uint8",
+        "name": "cpu",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint8",
+        "name": "mem",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint8",
+        "name": "storageGB",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint8",
+        "name": "bw",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint16",
+        "name": "duration",
+        "type": "uint16"
+      },
+      {
+        "internalType": "uint8",
+        "name": "instances",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint256",
+        "name": "maxPricePerCuHourWei",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "reservedPricePerCuHourWei",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint32",
+        "name": "maxCu",
+        "type": "uint32"
+      },
+      {
+        "internalType": "uint16",
+        "name": "relaysPerHour",
+        "type": "uint16"
+      },
+      {
+        "internalType": "uint256",
+        "name": "gasLevel",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "chainFeeWei",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "escrowWei",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "status",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "id",
+        "type": "uint256"
+      }
+    ],
+    "name": "_getDPRequestV2",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "dproc",
+        "type": "address"
+      },
+      {
+        "internalType": "uint8",
+        "name": "cpu",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint8",
+        "name": "mem",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint8",
+        "name": "storageGB",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint8",
+        "name": "bw",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint16",
+        "name": "duration",
+        "type": "uint16"
+      },
+      {
+        "internalType": "uint32",
+        "name": "cu",
+        "type": "uint32"
+      },
+      {
+        "internalType": "uint256",
+        "name": "tipPerCuHourWei",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint64",
+        "name": "expiresAt",
+        "type": "uint64"
+      },
+      {
+        "internalType": "uint32",
+        "name": "createdAt",
+        "type": "uint32"
+      },
+      {
+        "internalType": "bool",
+        "name": "acceptsReserved",
+        "type": "bool"
+      },
+      {
+        "internalType": "uint256",
+        "name": "status",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "orderId",
+        "type": "uint256"
+      }
+    ],
+    "name": "_getOrderTerms",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "pricePerCuHourWei",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint32",
+        "name": "cu",
+        "type": "uint32"
+      },
+      {
+        "internalType": "uint256",
+        "name": "chainFeeWei",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "chainSpentWei",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "gasPriceCapWei",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "gasAllocated",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "tokenPerPol",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint8",
+        "name": "trustedZoneFee",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint8",
+        "name": "secureLockFee",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint64",
+        "name": "placedAt",
+        "type": "uint64"
+      },
+      {
+        "internalType": "uint64",
+        "name": "approvedAt",
+        "type": "uint64"
+      },
+      {
+        "internalType": "uint64",
+        "name": "startedAt",
+        "type": "uint64"
+      },
+      {
+        "internalType": "uint64",
+        "name": "lastOutputAt",
+        "type": "uint64"
+      },
+      {
+        "internalType": "uint64",
+        "name": "terminatedAt",
+        "type": "uint64"
+      },
+      {
+        "internalType": "uint64",
+        "name": "resultAt",
+        "type": "uint64"
+      },
+      {
+        "internalType": "uint64",
+        "name": "successorStartedAt",
+        "type": "uint64"
+      },
+      {
+        "internalType": "uint16",
+        "name": "esrCommits",
+        "type": "uint16"
+      },
+      {
+        "internalType": "uint256",
+        "name": "esrGasWei",
+        "type": "uint256"
+      },
+      {
+        "internalType": "bool",
+        "name": "reserved",
+        "type": "bool"
+      },
+      {
+        "internalType": "bool",
+        "name": "recorded",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "fromId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "count",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint8",
+        "name": "cpu",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint8",
+        "name": "mem",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint8",
+        "name": "storageGB",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint8",
+        "name": "bw",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint32",
+        "name": "maxCu",
+        "type": "uint32"
+      }
+    ],
+    "name": "cheapestOffer",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "id",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "tipPerCuHourWei",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint32",
+        "name": "cu",
+        "type": "uint32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "fromIndex",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "count",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint8",
+        "name": "cpu",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint8",
+        "name": "mem",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint8",
+        "name": "storageGB",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint8",
+        "name": "bw",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint32",
+        "name": "minCu",
+        "type": "uint32"
+      },
+      {
+        "internalType": "uint32",
+        "name": "maxCu",
+        "type": "uint32"
+      }
+    ],
+    "name": "committedOffers",
+    "outputs": [
+      {
+        "internalType": "uint256[]",
+        "name": "ids",
+        "type": "uint256[]"
+      },
+      {
+        "internalType": "uint32[]",
+        "name": "cus",
+        "type": "uint32[]"
+      },
+      {
+        "internalType": "address[]",
+        "name": "dprocs",
+        "type": "address[]"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "string",
+        "name": "metadata1",
+        "type": "string"
+      }
+    ],
+    "name": "publisherFees",
+    "outputs": [
+      {
+        "internalType": "uint8",
+        "name": "trustedZoneFee",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint8",
+        "name": "secureLockFee",
+        "type": "uint8"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "quote",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "pricePerCuHourWei",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "tokenPerPol",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "avgGasPriceWei",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "smoothedUtilization",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "capacityCu",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "loadCu",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "epochIndex",
+        "type": "uint256"
+      },
+      {
+        "components": [
+          {
+            "internalType": "uint256",
+            "name": "baseMinWei",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "baseRefWei",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "uRef",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "alpha",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "growth",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "decay",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint8",
+            "name": "k",
+            "type": "uint8"
+          },
+          {
+            "internalType": "uint8",
+            "name": "beta",
+            "type": "uint8"
+          },
+          {
+            "internalType": "uint32",
+            "name": "cRef",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "cuMax",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "epochSeconds",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "dpRequestTtl",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint16",
+            "name": "maxOrderHours",
+            "type": "uint16"
+          },
+          {
+            "internalType": "uint32",
+            "name": "gasPerRow",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "gasPerCommit",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "gasPerResult",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "gasEmaWindowEpochs",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint64",
+            "name": "priorityFeeWei",
+            "type": "uint64"
+          },
+          {
+            "internalType": "uint32",
+            "name": "oracleStaleSeconds",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint8",
+            "name": "divergenceBoundPercent",
+            "type": "uint8"
+          },
+          {
+            "internalType": "uint32",
+            "name": "emaWindowEpochs",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "cuMaxDefault",
+            "type": "uint32"
+          }
+        ],
+        "internalType": "struct IPoxPricing.PricingParams",
+        "name": "params",
+        "type": "tuple"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "orderId",
+        "type": "uint256"
+      }
+    ],
+    "name": "settlementOf",
+    "outputs": [
+      {
+        "internalType": "uint16",
+        "name": "hoursBilled",
+        "type": "uint16"
+      },
+      {
+        "internalType": "uint256",
+        "name": "workWei",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "feesWei",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "chainPaidWei",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "refundWei",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint8",
+        "name": "outcome",
+        "type": "uint8"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  }
+]

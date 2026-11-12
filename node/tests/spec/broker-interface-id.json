@@ -1,0 +1,15 @@
+{
+  "description": "IReservationBroker.supportsInterface (interfaces/IReservationBroker.sol): the ERC-165 ids the broker answers true for, each the XOR of the selectors of every function the interface declares in its own body (type(I).interfaceId), computed over the exported ABIs; the resolver id is what the trustedzones and the intake check a data owner for before reading holderOf and handoverOf, the broker id is the whole surface.",
+  "generator": "spec/make/broker-interface-id.js",
+  "resolver": {
+    "selectors": {
+      "handoverOf": "0xe040c72c",
+      "holderOf": "0xdbacc237"
+    },
+    "interfaceId": "0x3bec051b"
+  },
+  "broker": {
+    "interfaceId": "0xcd3dfd35",
+    "functionCount": 57
+  }
+}

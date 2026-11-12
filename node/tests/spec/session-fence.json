@@ -1,0 +1,69 @@
+{
+  "description": "The fence signal (RESERVATION-DESIGN.md section 2; PRICING-PLAN.md section 5): on every reserved order (caller.securelock resolved to a holder) the trustedzone writes session.fence before session.input.0, carrying the bound the securelock fences the registry at (the window's toBlock when toBlock passed without the predecessor's result inside the window, the predecessor's result block for the inheritor of a landed hand-off) or kind none with bound 0 when no fence is due; the securelock of a reserved order waits for it, bounded by READY_WINDOW, before reading its first input; an unreserved order has no fence object and no wait. The plaintext is compact JSON, encrypted for the securelock as session.config is, and signed by the trustedzone over the challenge, the order id, the object name and the plaintext: the replay binding the securelock signs session.ready and session.output.<seq> with (<challenge>:<order_id>:<object>: ahead of the data), applied here by the trustedzone. session.config, session.input.<seq> and session.control are signed over their plaintext alone, so the securelocks' plain-data verifier of trustedzone objects (get_and_verify_trustedzone_object, getVerifiedTrustedzoneObject) does not apply to the fence: the fence's verifier rebuilds the signed text from the order's challenge and id. The order and the challenge are result-v5.json's, the key capability-record.json's trustedzone key.",
+  "generator": "spec/make/session-fence.js",
+  "objects": {
+    "nodenithy": {
+      "fence": "session.fence.securelock",
+      "signature": "session.fence.sig.securelock"
+    },
+    "pynithy": {
+      "fence": "session.fence.securelock",
+      "signature": "session.fence.securelock.sig"
+    },
+    "rule": "both trustedzones write session.fence.securelock (every object a trustedzone stages for its securelock carries the .securelock suffix); the signature object is named in the stack's own order of the suffixes, <object>.sig.securelock by the JS trustedzone (session.config.sig.securelock, read by etny_session_exec.js) and <object>.securelock.sig by the Python one (session.config.securelock.sig, read by securelock.py get_and_verify_trustedzone_object); the trustedzone of each stack writes its own stack's names, the signature object before the data object (the securelock acts on the presence of the data object and reads the signature right after it), both encrypted for the securelock's public key as session.config and its signature are"
+  },
+  "plaintext": {
+    "layout": "{\"order_id\":<n>,\"bound\":<block>,\"kind\":\"toBlock\"|\"resultBlock\"|\"none\"}",
+    "keys": [
+      "order_id",
+      "bound",
+      "kind"
+    ],
+    "kinds": [
+      "toBlock",
+      "resultBlock",
+      "none"
+    ],
+    "rule": "compact JSON (no whitespace) with exactly these three keys in this order: order_id the order id as a JSON number, bound the block number the securelock fences the registry at as a JSON number (0 with kind none), kind one of toBlock (the window's toBlock: the window's successor when toBlock passed without the predecessor's result inside it, and an inheritor after a missed window), resultBlock (the predecessor's orderResultAt block: the inheritor of a landed hand-off, its own orderPlacedAt not earlier than that result) or none (no fence due: a successor placed before a result that landed inside the window, or a reserved order with no predecessor). The securelock refuses any other key set, type or kind, and a bound of 0 with a kind other than none."
+  },
+  "signature": {
+    "signedTextLayout": "<challenge>:<order_id>:session.fence:<plaintext>",
+    "signedTextRule": "the enclave challenge the trustedzone drew for the order (result field 3), the order id in decimal, the object name session.fence (bare, without the .securelock suffix) and the plaintext, joined with colons; the binding the securelock signs session.ready, session.output.<seq> and securelock.ready with, applied by the trustedzone, binding this order, this enclave's challenge and the object's name; not the plain-plaintext signature of session.config, session.input.<seq> and session.control, whose verifier in the securelocks does not apply to the fence",
+    "scheme": "ECDSA P-384 over SHA-256 of the UTF-8 signed text, DER, lower-case hex without 0x (the trustedzones' signData / sign_data), under the trustedzone's identity key, which the securelock verifies against the trustedzone's registry certificate",
+    "key": "capability-record.json trustedzoneKey (privateKeyPem signs, publicKeyPem verifies)",
+    "kRule": "P-384 signing draws a random k, so a fresh signature differs from signatureDerHex byte for byte; both verify. The generator keeps the stored signature while it verifies over the current signed text."
+  },
+  "timing": {
+    "rule": "written before session.input.0 on every reserved order, whatever the kind; the securelock of a reserved order waits for it before reading its first input, bounded by READY_WINDOW (180 s), and ends the task on the bound's expiry; with kind none it fences nothing and reads its first input at once; on an unreserved order (caller.securelock the runner's wallet) nothing is written and nothing is awaited",
+    "readyWindowSeconds": 180
+  },
+  "examples": {
+    "toBlock": {
+      "name": "toBlock",
+      "orderId": 4101,
+      "bound": 52646961,
+      "kind": "toBlock",
+      "plaintext": "{\"order_id\":4101,\"bound\":52646961,\"kind\":\"toBlock\"}",
+      "signedText": "k7p2x9qv4m1zr8t3hw6n:4101:session.fence:{\"order_id\":4101,\"bound\":52646961,\"kind\":\"toBlock\"}",
+      "signatureDerHex": "3066023100f2e454ca3733a1dfd3537d0bd5989d45cb293a879ec09a4d917ef4578cb954313dbc91994f5d8ded70b3bea360720d9302310087a6bc39ae4c514ce20d2803cc884cde0fcbd3d741040998d1d2b7aab3c0084b57fd046ac04b4a06353098351bd20bd4"
+    },
+    "resultBlock": {
+      "name": "resultBlock",
+      "orderId": 4101,
+      "bound": 52646850,
+      "kind": "resultBlock",
+      "plaintext": "{\"order_id\":4101,\"bound\":52646850,\"kind\":\"resultBlock\"}",
+      "signedText": "k7p2x9qv4m1zr8t3hw6n:4101:session.fence:{\"order_id\":4101,\"bound\":52646850,\"kind\":\"resultBlock\"}",
+      "signatureDerHex": "3065023100abe976bfb49bb6773a115f4faef7cdee58b299694df36c6014b6fb79f693eb2dcdeb1442ef1f17d306873cabc8a7f8320230216ed5abf6b4ae3924adbbec5cdad47c308ec1ca2d1ff6358734e3ad8c11336558bef9aa9bd2c56ca0aea2701c511c28"
+    },
+    "none": {
+      "name": "none",
+      "orderId": 4101,
+      "bound": 0,
+      "kind": "none",
+      "plaintext": "{\"order_id\":4101,\"bound\":0,\"kind\":\"none\"}",
+      "signedText": "k7p2x9qv4m1zr8t3hw6n:4101:session.fence:{\"order_id\":4101,\"bound\":0,\"kind\":\"none\"}",
+      "signatureDerHex": "306402306a5af8e8bd63e4a4e26f5386423e356318b56ccd9bfd0039722f0934b60838da439a827be552e00f8584e1f12bc7f659023024ff4a3df879c410417437a16af089f481ab31c6a2519f678329ccae466145a7c28a17df6ce79d9fb3d5974ccacc2110"
+    }
+  }
+}

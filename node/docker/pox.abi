@@ -1,1489 +1,2869 @@
 [
-	{
-		"anonymous": false,
-		"inputs": [
-			{
-				"indexed": true,
-				"internalType": "address",
-				"name": "tokenOwner",
-				"type": "address"
-			},
-			{
-				"indexed": true,
-				"internalType": "address",
-				"name": "spender",
-				"type": "address"
-			},
-			{
-				"indexed": false,
-				"internalType": "uint256",
-				"name": "tokens",
-				"type": "uint256"
-			}
-		],
-		"name": "Approval",
-		"type": "event"
-	},
-	{
-		"anonymous": false,
-		"inputs": [
-			{
-				"indexed": true,
-				"internalType": "address",
-				"name": "_from",
-				"type": "address"
-			},
-			{
-				"indexed": true,
-				"internalType": "address",
-				"name": "_to",
-				"type": "address"
-			}
-		],
-		"name": "OwnershipTransferred",
-		"type": "event"
-	},
-	{
-		"anonymous": false,
-		"inputs": [
-			{
-				"indexed": true,
-				"internalType": "address",
-				"name": "_from",
-				"type": "address"
-			},
-			{
-				"indexed": true,
-				"internalType": "address",
-				"name": "_to",
-				"type": "address"
-			}
-		],
-		"name": "ProxyTransferred",
-		"type": "event"
-	},
-	{
-		"anonymous": false,
-		"inputs": [
-			{
-				"indexed": true,
-				"internalType": "address",
-				"name": "from",
-				"type": "address"
-			},
-			{
-				"indexed": true,
-				"internalType": "address",
-				"name": "to",
-				"type": "address"
-			},
-			{
-				"indexed": false,
-				"internalType": "uint256",
-				"name": "tokens",
-				"type": "uint256"
-			}
-		],
-		"name": "Transfer",
-		"type": "event"
-	},
-	{
-		"anonymous": false,
-		"inputs": [
-			{
-				"indexed": true,
-				"internalType": "address",
-				"name": "_from",
-				"type": "address"
-			},
-			{
-				"indexed": false,
-				"internalType": "uint256",
-				"name": "_rowNumber",
-				"type": "uint256"
-			}
-		],
-		"name": "_addDORequestEV",
-		"type": "event"
-	},
-	{
-		"anonymous": false,
-		"inputs": [
-			{
-				"indexed": true,
-				"internalType": "address",
-				"name": "_from",
-				"type": "address"
-			},
-			{
-				"indexed": false,
-				"internalType": "uint256",
-				"name": "_rowNumber",
-				"type": "uint256"
-			}
-		],
-		"name": "_addDPRequestEV",
-		"type": "event"
-	},
-	{
-		"anonymous": false,
-		"inputs": [
-			{
-				"indexed": true,
-				"internalType": "address",
-				"name": "_from",
-				"type": "address"
-			},
-			{
-				"indexed": false,
-				"internalType": "uint256",
-				"name": "_orderNumber",
-				"type": "uint256"
-			}
-		],
-		"name": "_placeOrderEV",
-		"type": "event"
-	},
-	{
-		"payable": true,
-		"stateMutability": "payable",
-		"type": "fallback"
-	},
-	{
-		"constant": false,
-		"inputs": [
-			{
-				"internalType": "uint8",
-				"name": "_cpuRequest",
-				"type": "uint8"
-			},
-			{
-				"internalType": "uint8",
-				"name": "_memRequest",
-				"type": "uint8"
-			},
-			{
-				"internalType": "uint8",
-				"name": "_storageRequest",
-				"type": "uint8"
-			},
-			{
-				"internalType": "uint8",
-				"name": "_bandwidthRequest",
-				"type": "uint8"
-			},
-			{
-				"internalType": "uint16",
-				"name": "_duration",
-				"type": "uint16"
-			},
-			{
-				"internalType": "uint8",
-				"name": "_instances",
-				"type": "uint8"
-			},
-			{
-				"internalType": "uint8",
-				"name": "_maxPrice",
-				"type": "uint8"
-			},
-			{
-				"internalType": "string",
-				"name": "_metadata1",
-				"type": "string"
-			},
-			{
-				"internalType": "string",
-				"name": "_metadata2",
-				"type": "string"
-			},
-			{
-				"internalType": "string",
-				"name": "_metadata3",
-				"type": "string"
-			},
-			{
-				"internalType": "string",
-				"name": "_metadata4",
-				"type": "string"
-			}
-		],
-		"name": "_addDORequest",
-		"outputs": [
-			{
-				"internalType": "uint256",
-				"name": "_rowNumber",
-				"type": "uint256"
-			}
-		],
-		"payable": false,
-		"stateMutability": "nonpayable",
-		"type": "function"
-	},
-	{
-		"constant": false,
-		"inputs": [
-			{
-				"internalType": "uint8",
-				"name": "_cpuRequest",
-				"type": "uint8"
-			},
-			{
-				"internalType": "uint8",
-				"name": "_memRequest",
-				"type": "uint8"
-			},
-			{
-				"internalType": "uint8",
-				"name": "_storageRequest",
-				"type": "uint8"
-			},
-			{
-				"internalType": "uint8",
-				"name": "_bandwidthRequest",
-				"type": "uint8"
-			},
-			{
-				"internalType": "uint16",
-				"name": "_duration",
-				"type": "uint16"
-			},
-			{
-				"internalType": "uint8",
-				"name": "_minPrice",
-				"type": "uint8"
-			},
-			{
-				"internalType": "string",
-				"name": "_metadata1",
-				"type": "string"
-			},
-			{
-				"internalType": "string",
-				"name": "_metadata2",
-				"type": "string"
-			},
-			{
-				"internalType": "string",
-				"name": "_metadata3",
-				"type": "string"
-			},
-			{
-				"internalType": "string",
-				"name": "_metadata4",
-				"type": "string"
-			}
-		],
-		"name": "_addDPRequest",
-		"outputs": [
-			{
-				"internalType": "uint256",
-				"name": "_rowNumber",
-				"type": "uint256"
-			}
-		],
-		"payable": false,
-		"stateMutability": "nonpayable",
-		"type": "function"
-	},
-	{
-		"constant": false,
-		"inputs": [
-			{
-				"internalType": "uint256",
-				"name": "_requestListItem",
-				"type": "uint256"
-			},
-			{
-				"internalType": "string",
-				"name": "_key",
-				"type": "string"
-			},
-			{
-				"internalType": "string",
-				"name": "_value",
-				"type": "string"
-			}
-		],
-		"name": "_addMetadataToDPRequest",
-		"outputs": [
-			{
-				"internalType": "uint256",
-				"name": "_rowNumber",
-				"type": "uint256"
-			}
-		],
-		"payable": false,
-		"stateMutability": "nonpayable",
-		"type": "function"
-	},
-	{
-		"constant": false,
-		"inputs": [
-			{
-				"internalType": "uint256",
-				"name": "_requestListItem",
-				"type": "uint256"
-			},
-			{
-				"internalType": "string",
-				"name": "_key",
-				"type": "string"
-			},
-			{
-				"internalType": "string",
-				"name": "_value",
-				"type": "string"
-			}
-		],
-		"name": "_addMetadataToRequest",
-		"outputs": [
-			{
-				"internalType": "uint256",
-				"name": "_rowNumber",
-				"type": "uint256"
-			}
-		],
-		"payable": false,
-		"stateMutability": "nonpayable",
-		"type": "function"
-	},
-	{
-		"constant": false,
-		"inputs": [
-			{
-				"internalType": "uint256",
-				"name": "_orderItem",
-				"type": "uint256"
-			},
-			{
-				"internalType": "address",
-				"name": "processor",
-				"type": "address"
-			}
-		],
-		"name": "_addProcessorToOrder",
-		"outputs": [
-			{
-				"internalType": "bool",
-				"name": "success",
-				"type": "bool"
-			}
-		],
-		"payable": false,
-		"stateMutability": "nonpayable",
-		"type": "function"
-	},
-	{
-		"constant": false,
-		"inputs": [
-			{
-				"internalType": "uint256",
-				"name": "_orderItem",
-				"type": "uint256"
-			},
-			{
-				"internalType": "string",
-				"name": "_result",
-				"type": "string"
-			}
-		],
-		"name": "_addResultToOrder",
-		"outputs": [
-			{
-				"internalType": "bool",
-				"name": "success",
-				"type": "bool"
-			}
-		],
-		"payable": false,
-		"stateMutability": "nonpayable",
-		"type": "function"
-	},
-	{
-		"constant": false,
-		"inputs": [
-			{
-				"internalType": "address",
-				"name": "addr",
-				"type": "address"
-			}
-		],
-		"name": "_addToPresaleRound",
-		"outputs": [
-			{
-				"internalType": "bool",
-				"name": "",
-				"type": "bool"
-			}
-		],
-		"payable": false,
-		"stateMutability": "nonpayable",
-		"type": "function"
-	},
-	{
-		"constant": false,
-		"inputs": [
-			{
-				"internalType": "address",
-				"name": "addr",
-				"type": "address"
-			}
-		],
-		"name": "_addToPrivateSaleRound",
-		"outputs": [
-			{
-				"internalType": "bool",
-				"name": "",
-				"type": "bool"
-			}
-		],
-		"payable": false,
-		"stateMutability": "nonpayable",
-		"type": "function"
-	},
-	{
-		"constant": false,
-		"inputs": [
-			{
-				"internalType": "address",
-				"name": "addr",
-				"type": "address"
-			}
-		],
-		"name": "_addToPublicOneRound",
-		"outputs": [
-			{
-				"internalType": "bool",
-				"name": "",
-				"type": "bool"
-			}
-		],
-		"payable": false,
-		"stateMutability": "nonpayable",
-		"type": "function"
-	},
-	{
-		"constant": false,
-		"inputs": [
-			{
-				"internalType": "address",
-				"name": "addr",
-				"type": "address"
-			}
-		],
-		"name": "_addToPublicTwoRound",
-		"outputs": [
-			{
-				"internalType": "bool",
-				"name": "",
-				"type": "bool"
-			}
-		],
-		"payable": false,
-		"stateMutability": "nonpayable",
-		"type": "function"
-	},
-	{
-		"constant": false,
-		"inputs": [
-			{
-				"internalType": "address",
-				"name": "addr",
-				"type": "address"
-			}
-		],
-		"name": "_addToSeedRound",
-		"outputs": [
-			{
-				"internalType": "bool",
-				"name": "",
-				"type": "bool"
-			}
-		],
-		"payable": false,
-		"stateMutability": "nonpayable",
-		"type": "function"
-	},
-	{
-		"constant": false,
-		"inputs": [
-			{
-				"internalType": "uint256",
-				"name": "_orderItem",
-				"type": "uint256"
-			}
-		],
-		"name": "_approveOrder",
-		"outputs": [
-			{
-				"internalType": "bool",
-				"name": "success",
-				"type": "bool"
-			}
-		],
-		"payable": false,
-		"stateMutability": "nonpayable",
-		"type": "function"
-	},
-	{
-		"constant": false,
-		"inputs": [
-			{
-				"internalType": "uint256",
-				"name": "_requestListItem",
-				"type": "uint256"
-			}
-		],
-		"name": "_cancelDORequest",
-		"outputs": [],
-		"payable": false,
-		"stateMutability": "nonpayable",
-		"type": "function"
-	},
-	{
-		"constant": false,
-		"inputs": [
-			{
-				"internalType": "uint256",
-				"name": "_requestListItem",
-				"type": "uint256"
-			}
-		],
-		"name": "_cancelDPRequest",
-		"outputs": [],
-		"payable": false,
-		"stateMutability": "nonpayable",
-		"type": "function"
-	},
-	{
-		"constant": true,
-		"inputs": [],
-		"name": "_getBaseLockTimestamp",
-		"outputs": [
-			{
-				"internalType": "uint128",
-				"name": "",
-				"type": "uint128"
-			}
-		],
-		"payable": false,
-		"stateMutability": "view",
-		"type": "function"
-	},
-	{
-		"constant": true,
-		"inputs": [
-			{
-				"internalType": "uint256",
-				"name": "_requestListItem",
-				"type": "uint256"
-			}
-		],
-		"name": "_getDORequest",
-		"outputs": [
-			{
-				"internalType": "address",
-				"name": "downer",
-				"type": "address"
-			},
-			{
-				"internalType": "uint8",
-				"name": "cpuRequest",
-				"type": "uint8"
-			},
-			{
-				"internalType": "uint8",
-				"name": "memoryRequest",
-				"type": "uint8"
-			},
-			{
-				"internalType": "uint8",
-				"name": "storageRequest",
-				"type": "uint8"
-			},
-			{
-				"internalType": "uint8",
-				"name": "bandwidthRequest",
-				"type": "uint8"
-			},
-			{
-				"internalType": "uint16",
-				"name": "duration",
-				"type": "uint16"
-			},
-			{
-				"internalType": "uint8",
-				"name": "maxPrice",
-				"type": "uint8"
-			},
-			{
-				"internalType": "uint256",
-				"name": "status",
-				"type": "uint256"
-			}
-		],
-		"payable": false,
-		"stateMutability": "view",
-		"type": "function"
-	},
-	{
-		"constant": true,
-		"inputs": [
-			{
-				"internalType": "uint256",
-				"name": "_requestListItem",
-				"type": "uint256"
-			}
-		],
-		"name": "_getDORequestMetadata",
-		"outputs": [
-			{
-				"internalType": "address",
-				"name": "downer",
-				"type": "address"
-			},
-			{
-				"internalType": "string",
-				"name": "metadata1",
-				"type": "string"
-			},
-			{
-				"internalType": "string",
-				"name": "metadata2",
-				"type": "string"
-			},
-			{
-				"internalType": "string",
-				"name": "metadata3",
-				"type": "string"
-			},
-			{
-				"internalType": "string",
-				"name": "metadata4",
-				"type": "string"
-			}
-		],
-		"payable": false,
-		"stateMutability": "view",
-		"type": "function"
-	},
-	{
-		"constant": true,
-		"inputs": [],
-		"name": "_getDORequestsCount",
-		"outputs": [
-			{
-				"internalType": "uint256",
-				"name": "_length",
-				"type": "uint256"
-			}
-		],
-		"payable": false,
-		"stateMutability": "view",
-		"type": "function"
-	},
-	{
-		"constant": true,
-		"inputs": [
-			{
-				"internalType": "uint256",
-				"name": "_requestListItem",
-				"type": "uint256"
-			}
-		],
-		"name": "_getDPRequest",
-		"outputs": [
-			{
-				"internalType": "address",
-				"name": "dproc",
-				"type": "address"
-			},
-			{
-				"internalType": "uint8",
-				"name": "cpuRequest",
-				"type": "uint8"
-			},
-			{
-				"internalType": "uint8",
-				"name": "memoryRequest",
-				"type": "uint8"
-			},
-			{
-				"internalType": "uint8",
-				"name": "storageRequest",
-				"type": "uint8"
-			},
-			{
-				"internalType": "uint8",
-				"name": "bandwidthRequest",
-				"type": "uint8"
-			},
-			{
-				"internalType": "uint16",
-				"name": "duration",
-				"type": "uint16"
-			},
-			{
-				"internalType": "uint8",
-				"name": "minPrice",
-				"type": "uint8"
-			},
-			{
-				"internalType": "uint256",
-				"name": "status",
-				"type": "uint256"
-			}
-		],
-		"payable": false,
-		"stateMutability": "view",
-		"type": "function"
-	},
-	{
-		"constant": true,
-		"inputs": [
-			{
-				"internalType": "uint256",
-				"name": "_requestListItem",
-				"type": "uint256"
-			}
-		],
-		"name": "_getDPRequestMetadata",
-		"outputs": [
-			{
-				"internalType": "address",
-				"name": "dproc",
-				"type": "address"
-			},
-			{
-				"internalType": "string",
-				"name": "metadata1",
-				"type": "string"
-			},
-			{
-				"internalType": "string",
-				"name": "metadata2",
-				"type": "string"
-			},
-			{
-				"internalType": "string",
-				"name": "metadata3",
-				"type": "string"
-			},
-			{
-				"internalType": "string",
-				"name": "metadata4",
-				"type": "string"
-			}
-		],
-		"payable": false,
-		"stateMutability": "view",
-		"type": "function"
-	},
-	{
-		"constant": true,
-		"inputs": [],
-		"name": "_getDPRequestsCount",
-		"outputs": [
-			{
-				"internalType": "uint256",
-				"name": "_length",
-				"type": "uint256"
-			}
-		],
-		"payable": false,
-		"stateMutability": "view",
-		"type": "function"
-	},
-	{
-		"constant": true,
-		"inputs": [
-			{
-				"internalType": "address",
-				"name": "addr",
-				"type": "address"
-			}
-		],
-		"name": "_getLockoutTimestamp",
-		"outputs": [
-			{
-				"internalType": "uint128",
-				"name": "",
-				"type": "uint128"
-			}
-		],
-		"payable": false,
-		"stateMutability": "view",
-		"type": "function"
-	},
-	{
-		"constant": true,
-		"inputs": [
-			{
-				"internalType": "uint256",
-				"name": "_requestListItem",
-				"type": "uint256"
-			}
-		],
-		"name": "_getMetadataCountForDPRequest",
-		"outputs": [
-			{
-				"internalType": "uint256",
-				"name": "_length",
-				"type": "uint256"
-			}
-		],
-		"payable": false,
-		"stateMutability": "view",
-		"type": "function"
-	},
-	{
-		"constant": true,
-		"inputs": [
-			{
-				"internalType": "uint256",
-				"name": "_requestListItem",
-				"type": "uint256"
-			}
-		],
-		"name": "_getMetadataCountForRequest",
-		"outputs": [
-			{
-				"internalType": "uint256",
-				"name": "_length",
-				"type": "uint256"
-			}
-		],
-		"payable": false,
-		"stateMutability": "view",
-		"type": "function"
-	},
-	{
-		"constant": true,
-		"inputs": [
-			{
-				"internalType": "uint256",
-				"name": "_requestListItem",
-				"type": "uint256"
-			},
-			{
-				"internalType": "uint256",
-				"name": "_metadataItem",
-				"type": "uint256"
-			}
-		],
-		"name": "_getMetadataValueForDPRequest",
-		"outputs": [
-			{
-				"internalType": "string",
-				"name": "key",
-				"type": "string"
-			},
-			{
-				"internalType": "string",
-				"name": "value",
-				"type": "string"
-			}
-		],
-		"payable": false,
-		"stateMutability": "view",
-		"type": "function"
-	},
-	{
-		"constant": true,
-		"inputs": [
-			{
-				"internalType": "uint256",
-				"name": "_requestListItem",
-				"type": "uint256"
-			},
-			{
-				"internalType": "uint256",
-				"name": "_metadataItem",
-				"type": "uint256"
-			}
-		],
-		"name": "_getMetadataValueForRequest",
-		"outputs": [
-			{
-				"internalType": "string",
-				"name": "key",
-				"type": "string"
-			},
-			{
-				"internalType": "string",
-				"name": "value",
-				"type": "string"
-			}
-		],
-		"payable": false,
-		"stateMutability": "view",
-		"type": "function"
-	},
-	{
-		"constant": true,
-		"inputs": [],
-		"name": "_getMyDOOrders",
-		"outputs": [
-			{
-				"internalType": "uint256[]",
-				"name": "req",
-				"type": "uint256[]"
-			}
-		],
-		"payable": false,
-		"stateMutability": "view",
-		"type": "function"
-	},
-	{
-		"constant": true,
-		"inputs": [],
-		"name": "_getMyDORequests",
-		"outputs": [
-			{
-				"internalType": "uint256[]",
-				"name": "req",
-				"type": "uint256[]"
-			}
-		],
-		"payable": false,
-		"stateMutability": "view",
-		"type": "function"
-	},
-	{
-		"constant": true,
-		"inputs": [],
-		"name": "_getMyDPRequests",
-		"outputs": [
-			{
-				"internalType": "uint256[]",
-				"name": "req",
-				"type": "uint256[]"
-			}
-		],
-		"payable": false,
-		"stateMutability": "view",
-		"type": "function"
-	},
-	{
-		"constant": true,
-		"inputs": [
-			{
-				"internalType": "uint256",
-				"name": "_orderItem",
-				"type": "uint256"
-			}
-		],
-		"name": "_getOrder",
-		"outputs": [
-			{
-				"internalType": "address",
-				"name": "downer",
-				"type": "address"
-			},
-			{
-				"internalType": "address",
-				"name": "dproc",
-				"type": "address"
-			},
-			{
-				"internalType": "uint256",
-				"name": "doRequest",
-				"type": "uint256"
-			},
-			{
-				"internalType": "uint256",
-				"name": "dpRequest",
-				"type": "uint256"
-			},
-			{
-				"internalType": "uint256",
-				"name": "status",
-				"type": "uint256"
-			}
-		],
-		"payable": false,
-		"stateMutability": "view",
-		"type": "function"
-	},
-	{
-		"constant": true,
-		"inputs": [],
-		"name": "_getOrdersCount",
-		"outputs": [
-			{
-				"internalType": "uint256",
-				"name": "_length",
-				"type": "uint256"
-			}
-		],
-		"payable": false,
-		"stateMutability": "view",
-		"type": "function"
-	},
-	{
-		"constant": true,
-		"inputs": [
-			{
-				"internalType": "uint256",
-				"name": "_orderItem",
-				"type": "uint256"
-			}
-		],
-		"name": "_getResultFromOrder",
-		"outputs": [
-			{
-				"internalType": "string",
-				"name": "_Result",
-				"type": "string"
-			}
-		],
-		"payable": false,
-		"stateMutability": "view",
-		"type": "function"
-	},
-	{
-		"constant": false,
-		"inputs": [
-			{
-				"internalType": "uint256",
-				"name": "_doRequestItem",
-				"type": "uint256"
-			},
-			{
-				"internalType": "uint256",
-				"name": "_dpRequestItem",
-				"type": "uint256"
-			}
-		],
-		"name": "_placeOrder",
-		"outputs": [
-			{
-				"internalType": "uint256",
-				"name": "_orderNumber",
-				"type": "uint256"
-			}
-		],
-		"payable": false,
-		"stateMutability": "nonpayable",
-		"type": "function"
-	},
-	{
-		"constant": false,
-		"inputs": [
-			{
-				"internalType": "address",
-				"name": "addr",
-				"type": "address"
-			}
-		],
-		"name": "_removeLockoutTimestamp",
-		"outputs": [
-			{
-				"internalType": "bool",
-				"name": "",
-				"type": "bool"
-			}
-		],
-		"payable": false,
-		"stateMutability": "nonpayable",
-		"type": "function"
-	},
-	{
-		"constant": false,
-		"inputs": [
-			{
-				"internalType": "uint128",
-				"name": "timestamp",
-				"type": "uint128"
-			}
-		],
-		"name": "_setBaseLockTimestamp",
-		"outputs": [
-			{
-				"internalType": "bool",
-				"name": "",
-				"type": "bool"
-			}
-		],
-		"payable": false,
-		"stateMutability": "nonpayable",
-		"type": "function"
-	},
-	{
-		"constant": true,
-		"inputs": [],
-		"name": "_totalSupply",
-		"outputs": [
-			{
-				"internalType": "uint256",
-				"name": "",
-				"type": "uint256"
-			}
-		],
-		"payable": false,
-		"stateMutability": "view",
-		"type": "function"
-	},
-	{
-		"constant": false,
-		"inputs": [],
-		"name": "acceptOwnership",
-		"outputs": [],
-		"payable": false,
-		"stateMutability": "nonpayable",
-		"type": "function"
-	},
-	{
-		"constant": true,
-		"inputs": [
-			{
-				"internalType": "address",
-				"name": "tokenOwner",
-				"type": "address"
-			},
-			{
-				"internalType": "address",
-				"name": "spender",
-				"type": "address"
-			}
-		],
-		"name": "allowance",
-		"outputs": [
-			{
-				"internalType": "uint256",
-				"name": "remaining",
-				"type": "uint256"
-			}
-		],
-		"payable": false,
-		"stateMutability": "view",
-		"type": "function"
-	},
-	{
-		"constant": false,
-		"inputs": [
-			{
-				"internalType": "address",
-				"name": "spender",
-				"type": "address"
-			},
-			{
-				"internalType": "uint256",
-				"name": "tokens",
-				"type": "uint256"
-			}
-		],
-		"name": "approve",
-		"outputs": [
-			{
-				"internalType": "bool",
-				"name": "success",
-				"type": "bool"
-			}
-		],
-		"payable": false,
-		"stateMutability": "nonpayable",
-		"type": "function"
-	},
-	{
-		"constant": false,
-		"inputs": [
-			{
-				"internalType": "address",
-				"name": "spender",
-				"type": "address"
-			},
-			{
-				"internalType": "uint256",
-				"name": "tokens",
-				"type": "uint256"
-			},
-			{
-				"internalType": "bytes",
-				"name": "data",
-				"type": "bytes"
-			}
-		],
-		"name": "approveAndCall",
-		"outputs": [
-			{
-				"internalType": "bool",
-				"name": "success",
-				"type": "bool"
-			}
-		],
-		"payable": false,
-		"stateMutability": "nonpayable",
-		"type": "function"
-	},
-	{
-		"constant": true,
-		"inputs": [
-			{
-				"internalType": "address",
-				"name": "tokenOwner",
-				"type": "address"
-			}
-		],
-		"name": "balanceOf",
-		"outputs": [
-			{
-				"internalType": "uint256",
-				"name": "balance",
-				"type": "uint256"
-			}
-		],
-		"payable": false,
-		"stateMutability": "view",
-		"type": "function"
-	},
-	{
-		"constant": true,
-		"inputs": [],
-		"name": "callerAddress",
-		"outputs": [
-			{
-				"internalType": "address",
-				"name": "",
-				"type": "address"
-			}
-		],
-		"payable": false,
-		"stateMutability": "view",
-		"type": "function"
-	},
-	{
-		"constant": true,
-		"inputs": [],
-		"name": "decimals",
-		"outputs": [
-			{
-				"internalType": "uint8",
-				"name": "",
-				"type": "uint8"
-			}
-		],
-		"payable": false,
-		"stateMutability": "view",
-		"type": "function"
-	},
-	{
-		"constant": true,
-		"inputs": [],
-		"name": "implementation",
-		"outputs": [
-			{
-				"internalType": "address",
-				"name": "",
-				"type": "address"
-			}
-		],
-		"payable": false,
-		"stateMutability": "view",
-		"type": "function"
-	},
-	{
-		"constant": true,
-		"inputs": [],
-		"name": "implementationPro",
-		"outputs": [
-			{
-				"internalType": "address",
-				"name": "",
-				"type": "address"
-			}
-		],
-		"payable": false,
-		"stateMutability": "view",
-		"type": "function"
-	},
-	{
-		"constant": true,
-		"inputs": [],
-		"name": "name",
-		"outputs": [
-			{
-				"internalType": "string",
-				"name": "",
-				"type": "string"
-			}
-		],
-		"payable": false,
-		"stateMutability": "view",
-		"type": "function"
-	},
-	{
-		"constant": true,
-		"inputs": [],
-		"name": "newOwner",
-		"outputs": [
-			{
-				"internalType": "address",
-				"name": "",
-				"type": "address"
-			}
-		],
-		"payable": false,
-		"stateMutability": "view",
-		"type": "function"
-	},
-	{
-		"constant": true,
-		"inputs": [],
-		"name": "owner",
-		"outputs": [
-			{
-				"internalType": "address",
-				"name": "",
-				"type": "address"
-			}
-		],
-		"payable": false,
-		"stateMutability": "view",
-		"type": "function"
-	},
-	{
-		"constant": true,
-		"inputs": [],
-		"name": "symbol",
-		"outputs": [
-			{
-				"internalType": "string",
-				"name": "",
-				"type": "string"
-			}
-		],
-		"payable": false,
-		"stateMutability": "view",
-		"type": "function"
-	},
-	{
-		"constant": true,
-		"inputs": [],
-		"name": "totalSupply",
-		"outputs": [
-			{
-				"internalType": "uint256",
-				"name": "",
-				"type": "uint256"
-			}
-		],
-		"payable": false,
-		"stateMutability": "view",
-		"type": "function"
-	},
-	{
-		"constant": false,
-		"inputs": [
-			{
-				"internalType": "address",
-				"name": "to",
-				"type": "address"
-			},
-			{
-				"internalType": "uint256",
-				"name": "tokens",
-				"type": "uint256"
-			}
-		],
-		"name": "transfer",
-		"outputs": [
-			{
-				"internalType": "bool",
-				"name": "success",
-				"type": "bool"
-			}
-		],
-		"payable": false,
-		"stateMutability": "nonpayable",
-		"type": "function"
-	},
-	{
-		"constant": false,
-		"inputs": [
-			{
-				"internalType": "address",
-				"name": "tokenAddress",
-				"type": "address"
-			},
-			{
-				"internalType": "uint256",
-				"name": "tokens",
-				"type": "uint256"
-			}
-		],
-		"name": "transferAnyERC20Token",
-		"outputs": [
-			{
-				"internalType": "bool",
-				"name": "success",
-				"type": "bool"
-			}
-		],
-		"payable": false,
-		"stateMutability": "nonpayable",
-		"type": "function"
-	},
-	{
-		"constant": false,
-		"inputs": [
-			{
-				"internalType": "address",
-				"name": "from",
-				"type": "address"
-			},
-			{
-				"internalType": "address",
-				"name": "to",
-				"type": "address"
-			},
-			{
-				"internalType": "uint256",
-				"name": "tokens",
-				"type": "uint256"
-			}
-		],
-		"name": "transferFrom",
-		"outputs": [
-			{
-				"internalType": "bool",
-				"name": "success",
-				"type": "bool"
-			}
-		],
-		"payable": false,
-		"stateMutability": "nonpayable",
-		"type": "function"
-	},
-	{
-		"constant": false,
-		"inputs": [
-			{
-				"internalType": "address",
-				"name": "_newOwner",
-				"type": "address"
-			}
-		],
-		"name": "transferOwnership",
-		"outputs": [],
-		"payable": false,
-		"stateMutability": "nonpayable",
-		"type": "function"
-	},
-	{
-		"constant": false,
-		"inputs": [
-			{
-				"internalType": "address",
-				"name": "_newProxy",
-				"type": "address"
-			}
-		],
-		"name": "transferProxy",
-		"outputs": [],
-		"payable": false,
-		"stateMutability": "nonpayable",
-		"type": "function"
-	}
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "extension",
+        "type": "address"
+      }
+    ],
+    "payable": false,
+    "stateMutability": "nonpayable",
+    "type": "constructor"
+  },
+  {
+    "payable": false,
+    "stateMutability": "nonpayable",
+    "type": "fallback"
+  },
+  {
+    "constant": false,
+    "inputs": [
+      {
+        "internalType": "uint8",
+        "name": "_cpuRequest",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint8",
+        "name": "_memRequest",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint8",
+        "name": "_storageRequest",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint8",
+        "name": "_bandwidthRequest",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint16",
+        "name": "_duration",
+        "type": "uint16"
+      },
+      {
+        "internalType": "uint8",
+        "name": "_instances",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint8",
+        "name": "_maxPrice",
+        "type": "uint8"
+      },
+      {
+        "internalType": "string",
+        "name": "_metadata1",
+        "type": "string"
+      },
+      {
+        "internalType": "string",
+        "name": "_metadata2",
+        "type": "string"
+      },
+      {
+        "internalType": "string",
+        "name": "_metadata3",
+        "type": "string"
+      },
+      {
+        "internalType": "string",
+        "name": "_metadata4",
+        "type": "string"
+      }
+    ],
+    "name": "_addDORequest",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "_rowNumber",
+        "type": "uint256"
+      }
+    ],
+    "payable": false,
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "constant": false,
+    "inputs": [
+      {
+        "internalType": "uint8",
+        "name": "_cpuRequest",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint8",
+        "name": "_memRequest",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint8",
+        "name": "_storageRequest",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint8",
+        "name": "_bandwidthRequest",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint16",
+        "name": "_duration",
+        "type": "uint16"
+      },
+      {
+        "internalType": "uint8",
+        "name": "_minPrice",
+        "type": "uint8"
+      },
+      {
+        "internalType": "string",
+        "name": "_metadata1",
+        "type": "string"
+      },
+      {
+        "internalType": "string",
+        "name": "_metadata2",
+        "type": "string"
+      },
+      {
+        "internalType": "string",
+        "name": "_metadata3",
+        "type": "string"
+      },
+      {
+        "internalType": "string",
+        "name": "_metadata4",
+        "type": "string"
+      }
+    ],
+    "name": "_addDPRequest",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "_rowNumber",
+        "type": "uint256"
+      }
+    ],
+    "payable": false,
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "constant": false,
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_requestListItem",
+        "type": "uint256"
+      },
+      {
+        "internalType": "string",
+        "name": "_key",
+        "type": "string"
+      },
+      {
+        "internalType": "string",
+        "name": "_value",
+        "type": "string"
+      }
+    ],
+    "name": "_addMetadataToDPRequest",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "_rowNumber",
+        "type": "uint256"
+      }
+    ],
+    "payable": false,
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "constant": false,
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "requestId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "string[]",
+        "name": "keys",
+        "type": "string[]"
+      },
+      {
+        "internalType": "string[]",
+        "name": "values",
+        "type": "string[]"
+      }
+    ],
+    "name": "_addMetadataToDPRequestBatch",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "firstRowNumber",
+        "type": "uint256"
+      }
+    ],
+    "payable": false,
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "constant": false,
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_requestListItem",
+        "type": "uint256"
+      },
+      {
+        "internalType": "string",
+        "name": "_key",
+        "type": "string"
+      },
+      {
+        "internalType": "string",
+        "name": "_value",
+        "type": "string"
+      }
+    ],
+    "name": "_addMetadataToRequest",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "_rowNumber",
+        "type": "uint256"
+      }
+    ],
+    "payable": false,
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "constant": false,
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_orderItem",
+        "type": "uint256"
+      },
+      {
+        "internalType": "address",
+        "name": "processor",
+        "type": "address"
+      }
+    ],
+    "name": "_addProcessorToOrder",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "success",
+        "type": "bool"
+      }
+    ],
+    "payable": false,
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "constant": false,
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_orderItem",
+        "type": "uint256"
+      },
+      {
+        "internalType": "string",
+        "name": "_result",
+        "type": "string"
+      }
+    ],
+    "name": "_addResultToOrder",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "success",
+        "type": "bool"
+      }
+    ],
+    "payable": false,
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "constant": false,
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "orderId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "string",
+        "name": "result",
+        "type": "string"
+      },
+      {
+        "internalType": "uint16",
+        "name": "esrCommits",
+        "type": "uint16"
+      },
+      {
+        "internalType": "uint256",
+        "name": "esrGasWei",
+        "type": "uint256"
+      }
+    ],
+    "name": "_addResultToOrderV2",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "success",
+        "type": "bool"
+      }
+    ],
+    "payable": false,
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "constant": false,
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_orderItem",
+        "type": "uint256"
+      }
+    ],
+    "name": "_approveOrder",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "success",
+        "type": "bool"
+      }
+    ],
+    "payable": false,
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "constant": false,
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_requestListItem",
+        "type": "uint256"
+      }
+    ],
+    "name": "_cancelDORequest",
+    "outputs": [],
+    "payable": false,
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "constant": false,
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_requestListItem",
+        "type": "uint256"
+      }
+    ],
+    "name": "_cancelDPRequest",
+    "outputs": [],
+    "payable": false,
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "constant": true,
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_requestListItem",
+        "type": "uint256"
+      }
+    ],
+    "name": "_getDORequest",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "downer",
+        "type": "address"
+      },
+      {
+        "internalType": "uint8",
+        "name": "cpuRequest",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint8",
+        "name": "memoryRequest",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint8",
+        "name": "storageRequest",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint8",
+        "name": "bandwidthRequest",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint16",
+        "name": "duration",
+        "type": "uint16"
+      },
+      {
+        "internalType": "uint8",
+        "name": "maxPrice",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint256",
+        "name": "status",
+        "type": "uint256"
+      }
+    ],
+    "payable": false,
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "constant": true,
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_requestListItem",
+        "type": "uint256"
+      }
+    ],
+    "name": "_getDORequestMetadata",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "downer",
+        "type": "address"
+      },
+      {
+        "internalType": "string",
+        "name": "metadata1",
+        "type": "string"
+      },
+      {
+        "internalType": "string",
+        "name": "metadata2",
+        "type": "string"
+      },
+      {
+        "internalType": "string",
+        "name": "metadata3",
+        "type": "string"
+      },
+      {
+        "internalType": "string",
+        "name": "metadata4",
+        "type": "string"
+      }
+    ],
+    "payable": false,
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "constant": true,
+    "inputs": [],
+    "name": "_getDORequestsCount",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "_length",
+        "type": "uint256"
+      }
+    ],
+    "payable": false,
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "constant": true,
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_requestListItem",
+        "type": "uint256"
+      }
+    ],
+    "name": "_getDPRequest",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "dproc",
+        "type": "address"
+      },
+      {
+        "internalType": "uint8",
+        "name": "cpuRequest",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint8",
+        "name": "memoryRequest",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint8",
+        "name": "storageRequest",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint8",
+        "name": "bandwidthRequest",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint16",
+        "name": "duration",
+        "type": "uint16"
+      },
+      {
+        "internalType": "uint8",
+        "name": "minPrice",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint256",
+        "name": "status",
+        "type": "uint256"
+      }
+    ],
+    "payable": false,
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "constant": true,
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_requestListItem",
+        "type": "uint256"
+      }
+    ],
+    "name": "_getDPRequestMetadata",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "dproc",
+        "type": "address"
+      },
+      {
+        "internalType": "string",
+        "name": "metadata1",
+        "type": "string"
+      },
+      {
+        "internalType": "string",
+        "name": "metadata2",
+        "type": "string"
+      },
+      {
+        "internalType": "string",
+        "name": "metadata3",
+        "type": "string"
+      },
+      {
+        "internalType": "string",
+        "name": "metadata4",
+        "type": "string"
+      }
+    ],
+    "payable": false,
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "constant": true,
+    "inputs": [],
+    "name": "_getDPRequestsCount",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "_length",
+        "type": "uint256"
+      }
+    ],
+    "payable": false,
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "constant": true,
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_requestListItem",
+        "type": "uint256"
+      }
+    ],
+    "name": "_getDPRequestWithCreationDate",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "dproc",
+        "type": "address"
+      },
+      {
+        "internalType": "uint8",
+        "name": "cpuRequest",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint8",
+        "name": "memoryRequest",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint8",
+        "name": "storageRequest",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint8",
+        "name": "bandwidthRequest",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint16",
+        "name": "duration",
+        "type": "uint16"
+      },
+      {
+        "internalType": "uint8",
+        "name": "minPrice",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint256",
+        "name": "status",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint32",
+        "name": "createdAt",
+        "type": "uint32"
+      }
+    ],
+    "payable": false,
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "constant": true,
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_requestListItem",
+        "type": "uint256"
+      }
+    ],
+    "name": "_getMetadataCountForDPRequest",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "_length",
+        "type": "uint256"
+      }
+    ],
+    "payable": false,
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "constant": true,
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_requestListItem",
+        "type": "uint256"
+      }
+    ],
+    "name": "_getMetadataCountForRequest",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "_length",
+        "type": "uint256"
+      }
+    ],
+    "payable": false,
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "constant": true,
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_requestListItem",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "_metadataItem",
+        "type": "uint256"
+      }
+    ],
+    "name": "_getMetadataValueForDPRequest",
+    "outputs": [
+      {
+        "internalType": "string",
+        "name": "key",
+        "type": "string"
+      },
+      {
+        "internalType": "string",
+        "name": "value",
+        "type": "string"
+      }
+    ],
+    "payable": false,
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "constant": true,
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_requestListItem",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "_metadataItem",
+        "type": "uint256"
+      }
+    ],
+    "name": "_getMetadataValueForRequest",
+    "outputs": [
+      {
+        "internalType": "string",
+        "name": "key",
+        "type": "string"
+      },
+      {
+        "internalType": "string",
+        "name": "value",
+        "type": "string"
+      }
+    ],
+    "payable": false,
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "constant": true,
+    "inputs": [],
+    "name": "_getMyDOOrders",
+    "outputs": [
+      {
+        "internalType": "uint256[]",
+        "name": "req",
+        "type": "uint256[]"
+      }
+    ],
+    "payable": false,
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "constant": true,
+    "inputs": [],
+    "name": "_getMyDORequests",
+    "outputs": [
+      {
+        "internalType": "uint256[]",
+        "name": "req",
+        "type": "uint256[]"
+      }
+    ],
+    "payable": false,
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "constant": true,
+    "inputs": [],
+    "name": "_getMyDPRequests",
+    "outputs": [
+      {
+        "internalType": "uint256[]",
+        "name": "req",
+        "type": "uint256[]"
+      }
+    ],
+    "payable": false,
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "constant": true,
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_orderItem",
+        "type": "uint256"
+      }
+    ],
+    "name": "_getOrder",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "downer",
+        "type": "address"
+      },
+      {
+        "internalType": "address",
+        "name": "dproc",
+        "type": "address"
+      },
+      {
+        "internalType": "uint256",
+        "name": "doRequest",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "dpRequest",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "status",
+        "type": "uint256"
+      }
+    ],
+    "payable": false,
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "constant": true,
+    "inputs": [],
+    "name": "_getOrdersCount",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "_length",
+        "type": "uint256"
+      }
+    ],
+    "payable": false,
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "constant": true,
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_orderItem",
+        "type": "uint256"
+      }
+    ],
+    "name": "_getRequiredValidators",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "_Result",
+        "type": "uint256"
+      }
+    ],
+    "payable": false,
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "constant": true,
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_orderItem",
+        "type": "uint256"
+      }
+    ],
+    "name": "_getResultFromOrder",
+    "outputs": [
+      {
+        "internalType": "string",
+        "name": "_Result",
+        "type": "string"
+      }
+    ],
+    "payable": false,
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "constant": false,
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_doRequestItem",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "_dpRequestItem",
+        "type": "uint256"
+      }
+    ],
+    "name": "_placeOrder",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "_orderNumber",
+        "type": "uint256"
+      }
+    ],
+    "payable": false,
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "constant": false,
+    "inputs": [],
+    "name": "acceptOwnership",
+    "outputs": [],
+    "payable": false,
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "constant": true,
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "dproc",
+        "type": "address"
+      }
+    ],
+    "name": "acceptsReserved",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "payable": false,
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "constant": false,
+    "inputs": [
+      {
+        "internalType": "uint8",
+        "name": "cpu",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint8",
+        "name": "mem",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint8",
+        "name": "storageGB",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint8",
+        "name": "bw",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint16",
+        "name": "duration",
+        "type": "uint16"
+      },
+      {
+        "internalType": "uint256",
+        "name": "pricePerCuHourWei",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint32",
+        "name": "maxCu",
+        "type": "uint32"
+      },
+      {
+        "internalType": "uint16",
+        "name": "relaysPerHour",
+        "type": "uint16"
+      },
+      {
+        "internalType": "uint256",
+        "name": "gasLevel",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint8",
+        "name": "trustedZoneFee",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint8",
+        "name": "secureLockFee",
+        "type": "uint8"
+      },
+      {
+        "internalType": "string",
+        "name": "metadata1",
+        "type": "string"
+      },
+      {
+        "internalType": "string",
+        "name": "metadata2",
+        "type": "string"
+      },
+      {
+        "internalType": "string",
+        "name": "metadata3",
+        "type": "string"
+      }
+    ],
+    "name": "addDORequestReserved",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "requestId",
+        "type": "uint256"
+      }
+    ],
+    "payable": false,
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "constant": false,
+    "inputs": [
+      {
+        "internalType": "uint8",
+        "name": "cpu",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint8",
+        "name": "mem",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint8",
+        "name": "storageGB",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint8",
+        "name": "bw",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint16",
+        "name": "duration",
+        "type": "uint16"
+      },
+      {
+        "internalType": "uint8",
+        "name": "instances",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint256",
+        "name": "maxPricePerCuHourWei",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint32",
+        "name": "maxCu",
+        "type": "uint32"
+      },
+      {
+        "internalType": "uint16",
+        "name": "relaysPerHour",
+        "type": "uint16"
+      },
+      {
+        "internalType": "uint256",
+        "name": "gasLevel",
+        "type": "uint256"
+      },
+      {
+        "internalType": "string",
+        "name": "metadata1",
+        "type": "string"
+      },
+      {
+        "internalType": "string",
+        "name": "metadata2",
+        "type": "string"
+      },
+      {
+        "internalType": "string",
+        "name": "metadata3",
+        "type": "string"
+      },
+      {
+        "internalType": "string",
+        "name": "metadata4",
+        "type": "string"
+      }
+    ],
+    "name": "addDORequestV2",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "requestId",
+        "type": "uint256"
+      }
+    ],
+    "payable": false,
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "constant": false,
+    "inputs": [
+      {
+        "internalType": "uint8",
+        "name": "cpu",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint8",
+        "name": "mem",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint8",
+        "name": "storageGB",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint8",
+        "name": "bw",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint16",
+        "name": "duration",
+        "type": "uint16"
+      },
+      {
+        "internalType": "uint32",
+        "name": "cu",
+        "type": "uint32"
+      },
+      {
+        "internalType": "uint256",
+        "name": "tipPerCuHourWei",
+        "type": "uint256"
+      },
+      {
+        "internalType": "string",
+        "name": "metadata1",
+        "type": "string"
+      },
+      {
+        "internalType": "string",
+        "name": "metadata2",
+        "type": "string"
+      },
+      {
+        "internalType": "string",
+        "name": "metadata3",
+        "type": "string"
+      },
+      {
+        "internalType": "string",
+        "name": "metadata4",
+        "type": "string"
+      }
+    ],
+    "name": "addDPRequestV2",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "requestId",
+        "type": "uint256"
+      }
+    ],
+    "payable": false,
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "constant": false,
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "id",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint8",
+        "name": "reason",
+        "type": "uint8"
+      }
+    ],
+    "name": "cancelDPRequestByValidators",
+    "outputs": [],
+    "payable": false,
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "constant": true,
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "orderId",
+        "type": "uint256"
+      }
+    ],
+    "name": "chainSpent",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "payable": false,
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "constant": true,
+    "inputs": [],
+    "name": "devAddress",
+    "outputs": [
+      {
+        "internalType": "address payable",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "payable": false,
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "constant": true,
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "id",
+        "type": "uint256"
+      }
+    ],
+    "name": "doTerms",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "maxPricePerCuHourWei",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "reservedPricePerCuHourWei",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint32",
+        "name": "maxCu",
+        "type": "uint32"
+      },
+      {
+        "internalType": "uint16",
+        "name": "relaysPerHour",
+        "type": "uint16"
+      },
+      {
+        "internalType": "uint256",
+        "name": "gasLevel",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "chainFeeWei",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint8",
+        "name": "instances",
+        "type": "uint8"
+      },
+      {
+        "internalType": "bool",
+        "name": "reserved",
+        "type": "bool"
+      },
+      {
+        "internalType": "bool",
+        "name": "recorded",
+        "type": "bool"
+      }
+    ],
+    "payable": false,
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "constant": true,
+    "inputs": [],
+    "name": "dpRequestCancellerAddress",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "payable": false,
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "constant": true,
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "id",
+        "type": "uint256"
+      }
+    ],
+    "name": "dpTerms",
+    "outputs": [
+      {
+        "internalType": "uint32",
+        "name": "cu",
+        "type": "uint32"
+      },
+      {
+        "internalType": "uint256",
+        "name": "tipPerCuHourWei",
+        "type": "uint256"
+      },
+      {
+        "internalType": "bool",
+        "name": "acceptsReservedOrders",
+        "type": "bool"
+      },
+      {
+        "internalType": "uint64",
+        "name": "expiresAt",
+        "type": "uint64"
+      },
+      {
+        "internalType": "bool",
+        "name": "recorded",
+        "type": "bool"
+      }
+    ],
+    "payable": false,
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "constant": true,
+    "inputs": [],
+    "name": "ecAddress",
+    "outputs": [
+      {
+        "internalType": "address payable",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "payable": false,
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "constant": true,
+    "inputs": [],
+    "name": "erc20Address",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "payable": false,
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "constant": true,
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "doRequestId",
+        "type": "uint256"
+      }
+    ],
+    "name": "escrowOf",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "payable": false,
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "constant": true,
+    "inputs": [],
+    "name": "ethStorageAddress",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "payable": false,
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "constant": false,
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "orderId",
+        "type": "uint256"
+      }
+    ],
+    "name": "expireOrder",
+    "outputs": [],
+    "payable": false,
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "constant": true,
+    "inputs": [],
+    "name": "imageRegistryAddress",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "payable": false,
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "constant": false,
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "doRequestId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "amountWei",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "gasLevel",
+        "type": "uint256"
+      }
+    ],
+    "name": "increaseChainFee",
+    "outputs": [],
+    "payable": false,
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "constant": false,
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_orderItem",
+        "type": "uint256"
+      }
+    ],
+    "name": "invalidate",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "success",
+        "type": "bool"
+      }
+    ],
+    "payable": false,
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "constant": false,
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "orderId",
+        "type": "uint256"
+      }
+    ],
+    "name": "invalidateLive",
+    "outputs": [],
+    "payable": false,
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "constant": true,
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "orderId",
+        "type": "uint256"
+      }
+    ],
+    "name": "linkedSuccessorOf",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "set",
+        "type": "bool"
+      },
+      {
+        "internalType": "uint256",
+        "name": "successorOrderId",
+        "type": "uint256"
+      }
+    ],
+    "payable": false,
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "constant": false,
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "orderId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "successorOrderId",
+        "type": "uint256"
+      }
+    ],
+    "name": "linkSuccessor",
+    "outputs": [],
+    "payable": false,
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "constant": true,
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "doRequestId",
+        "type": "uint256"
+      }
+    ],
+    "name": "liveOrders",
+    "outputs": [
+      {
+        "internalType": "uint8",
+        "name": "",
+        "type": "uint8"
+      }
+    ],
+    "payable": false,
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "constant": true,
+    "inputs": [],
+    "name": "NETWORK_FEE_PERCENT",
+    "outputs": [
+      {
+        "internalType": "uint8",
+        "name": "",
+        "type": "uint8"
+      }
+    ],
+    "payable": false,
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "constant": true,
+    "inputs": [],
+    "name": "newOwner",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "payable": false,
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "constant": true,
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "orderId",
+        "type": "uint256"
+      }
+    ],
+    "name": "orderApprovedAt",
+    "outputs": [
+      {
+        "internalType": "uint64",
+        "name": "",
+        "type": "uint64"
+      }
+    ],
+    "payable": false,
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "constant": true,
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "orderId",
+        "type": "uint256"
+      }
+    ],
+    "name": "orderFees",
+    "outputs": [
+      {
+        "internalType": "uint8",
+        "name": "trustedZone",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint8",
+        "name": "secureLock",
+        "type": "uint8"
+      },
+      {
+        "internalType": "bool",
+        "name": "recorded",
+        "type": "bool"
+      }
+    ],
+    "payable": false,
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "constant": true,
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "orderId",
+        "type": "uint256"
+      }
+    ],
+    "name": "orderLastOutputAt",
+    "outputs": [
+      {
+        "internalType": "uint64",
+        "name": "",
+        "type": "uint64"
+      }
+    ],
+    "payable": false,
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "constant": true,
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "dpRequestId",
+        "type": "uint256"
+      }
+    ],
+    "name": "orderOfDPRequest",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "found",
+        "type": "bool"
+      },
+      {
+        "internalType": "uint256",
+        "name": "orderId",
+        "type": "uint256"
+      }
+    ],
+    "payable": false,
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "constant": true,
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "orderId",
+        "type": "uint256"
+      }
+    ],
+    "name": "orderPlacedAt",
+    "outputs": [
+      {
+        "internalType": "uint64",
+        "name": "",
+        "type": "uint64"
+      }
+    ],
+    "payable": false,
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "constant": true,
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "orderId",
+        "type": "uint256"
+      }
+    ],
+    "name": "orderReport",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "reserved",
+        "type": "bool"
+      },
+      {
+        "internalType": "bool",
+        "name": "recorded",
+        "type": "bool"
+      },
+      {
+        "internalType": "uint16",
+        "name": "esrCommits",
+        "type": "uint16"
+      },
+      {
+        "internalType": "uint256",
+        "name": "esrGasWei",
+        "type": "uint256"
+      }
+    ],
+    "payable": false,
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "constant": true,
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "orderId",
+        "type": "uint256"
+      }
+    ],
+    "name": "orderResultAt",
+    "outputs": [
+      {
+        "internalType": "uint64",
+        "name": "at",
+        "type": "uint64"
+      },
+      {
+        "internalType": "uint64",
+        "name": "blockNumber",
+        "type": "uint64"
+      }
+    ],
+    "payable": false,
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "constant": true,
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "orderId",
+        "type": "uint256"
+      }
+    ],
+    "name": "orderSettlement",
+    "outputs": [
+      {
+        "internalType": "uint16",
+        "name": "hoursBilled",
+        "type": "uint16"
+      },
+      {
+        "internalType": "uint256",
+        "name": "refundWei",
+        "type": "uint256"
+      }
+    ],
+    "payable": false,
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "constant": true,
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "orderId",
+        "type": "uint256"
+      }
+    ],
+    "name": "orderStartedAt",
+    "outputs": [
+      {
+        "internalType": "uint64",
+        "name": "",
+        "type": "uint64"
+      }
+    ],
+    "payable": false,
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "constant": true,
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "orderId",
+        "type": "uint256"
+      }
+    ],
+    "name": "orderTerminatedAt",
+    "outputs": [
+      {
+        "internalType": "uint64",
+        "name": "",
+        "type": "uint64"
+      }
+    ],
+    "payable": false,
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "constant": true,
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "orderId",
+        "type": "uint256"
+      }
+    ],
+    "name": "orderTerms",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "pricePerCuHourWei",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint32",
+        "name": "cu",
+        "type": "uint32"
+      },
+      {
+        "internalType": "uint256",
+        "name": "chainFeeWei",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "gasPriceCapWei",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "gasAllocated",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "tokenPerPol",
+        "type": "uint256"
+      }
+    ],
+    "payable": false,
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "constant": true,
+    "inputs": [],
+    "name": "owner",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "payable": false,
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "constant": true,
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "orderId",
+        "type": "uint256"
+      }
+    ],
+    "name": "paidOut",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "payable": false,
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "constant": true,
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "dproc",
+        "type": "address"
+      }
+    ],
+    "name": "payoutAddressOf",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "payable": false,
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "constant": true,
+    "inputs": [],
+    "name": "pricingAddress",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "payable": false,
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "constant": true,
+    "inputs": [],
+    "name": "pricingVersion",
+    "outputs": [
+      {
+        "internalType": "uint8",
+        "name": "",
+        "type": "uint8"
+      }
+    ],
+    "payable": false,
+    "stateMutability": "pure",
+    "type": "function"
+  },
+  {
+    "constant": true,
+    "inputs": [
+      {
+        "internalType": "string",
+        "name": "metadata1",
+        "type": "string"
+      }
+    ],
+    "name": "publisherFees",
+    "outputs": [
+      {
+        "internalType": "uint8",
+        "name": "trustedZoneFee",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint8",
+        "name": "secureLockFee",
+        "type": "uint8"
+      }
+    ],
+    "payable": false,
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "constant": true,
+    "inputs": [],
+    "name": "readerAddress",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "payable": false,
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "constant": false,
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "id",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "tipPerCuHourWei",
+        "type": "uint256"
+      }
+    ],
+    "name": "refreshDPRequest",
+    "outputs": [],
+    "payable": false,
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "constant": false,
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "orderId",
+        "type": "uint256"
+      }
+    ],
+    "name": "rejectOrder",
+    "outputs": [],
+    "payable": false,
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "constant": true,
+    "inputs": [],
+    "name": "reservationBrokerAddress",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "payable": false,
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "constant": false,
+    "inputs": [
+      {
+        "internalType": "bool",
+        "name": "accepts",
+        "type": "bool"
+      }
+    ],
+    "name": "setAcceptsReserved",
+    "outputs": [],
+    "payable": false,
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "constant": false,
+    "inputs": [
+      {
+        "internalType": "address payable",
+        "name": "newDevAddress",
+        "type": "address"
+      }
+    ],
+    "name": "setDevAddress",
+    "outputs": [],
+    "payable": false,
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "constant": false,
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "canceller",
+        "type": "address"
+      }
+    ],
+    "name": "setDPRequestCanceller",
+    "outputs": [],
+    "payable": false,
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "constant": false,
+    "inputs": [
+      {
+        "internalType": "address payable",
+        "name": "newEcAddress",
+        "type": "address"
+      }
+    ],
+    "name": "setEcAddress",
+    "outputs": [],
+    "payable": false,
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "constant": false,
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "newErc20Address",
+        "type": "address"
+      }
+    ],
+    "name": "setEthernityCloudERC20Address",
+    "outputs": [],
+    "payable": false,
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "constant": false,
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "newEthStorageAddress",
+        "type": "address"
+      }
+    ],
+    "name": "setEthernityCloudStorageAddress",
+    "outputs": [],
+    "payable": false,
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "constant": false,
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "newImageRegistryAddress",
+        "type": "address"
+      }
+    ],
+    "name": "setImageRegistryAddress",
+    "outputs": [],
+    "payable": false,
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "constant": false,
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "payout",
+        "type": "address"
+      }
+    ],
+    "name": "setPayoutAddress",
+    "outputs": [],
+    "payable": false,
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "constant": false,
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "pricing",
+        "type": "address"
+      }
+    ],
+    "name": "setPricing",
+    "outputs": [],
+    "payable": false,
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "constant": false,
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "reader",
+        "type": "address"
+      }
+    ],
+    "name": "setReader",
+    "outputs": [],
+    "payable": false,
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "constant": false,
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "broker",
+        "type": "address"
+      }
+    ],
+    "name": "setReservationBroker",
+    "outputs": [],
+    "payable": false,
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "constant": true,
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "orderId",
+        "type": "uint256"
+      }
+    ],
+    "name": "settlementOutcome",
+    "outputs": [
+      {
+        "internalType": "uint8",
+        "name": "",
+        "type": "uint8"
+      }
+    ],
+    "payable": false,
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "constant": false,
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "newValidatorRegistryAddress",
+        "type": "address"
+      }
+    ],
+    "name": "setValidatorRegistryAddress",
+    "outputs": [],
+    "payable": false,
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "constant": false,
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "orderId",
+        "type": "uint256"
+      }
+    ],
+    "name": "terminateOrder",
+    "outputs": [],
+    "payable": false,
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "constant": false,
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "_newOwner",
+        "type": "address"
+      }
+    ],
+    "name": "transferOwnership",
+    "outputs": [],
+    "payable": false,
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "constant": false,
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_orderItem",
+        "type": "uint256"
+      },
+      {
+        "internalType": "address",
+        "name": "_validatorPayee",
+        "type": "address"
+      }
+    ],
+    "name": "validate",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "success",
+        "type": "bool"
+      }
+    ],
+    "payable": false,
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "constant": true,
+    "inputs": [],
+    "name": "VALIDATOR_FEE_PERCENT",
+    "outputs": [
+      {
+        "internalType": "uint8",
+        "name": "",
+        "type": "uint8"
+      }
+    ],
+    "payable": false,
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "constant": true,
+    "inputs": [],
+    "name": "validatorRegistryAddress",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "payable": false,
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "constant": true,
+    "inputs": [],
+    "name": "VERSION",
+    "outputs": [
+      {
+        "internalType": "string",
+        "name": "",
+        "type": "string"
+      }
+    ],
+    "payable": false,
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "_from",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "_rowNumber",
+        "type": "uint256"
+      }
+    ],
+    "name": "_addDORequestEV",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "_from",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "_rowNumber",
+        "type": "uint256"
+      }
+    ],
+    "name": "_addDPRequestEV",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "_downer",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "address",
+        "name": "_dproc",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "_orderNumber",
+        "type": "uint256"
+      }
+    ],
+    "name": "_orderApprovedEV",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "_orderNumber",
+        "type": "uint256"
+      }
+    ],
+    "name": "_orderClosedEV",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "_orderNumber",
+        "type": "uint256"
+      }
+    ],
+    "name": "_orderInvalidatedEV",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "_orderNumber",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "_doRequestId",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "_dpRequestId",
+        "type": "uint256"
+      }
+    ],
+    "name": "_orderPlacedEV",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "_orderNumber",
+        "type": "uint256"
+      }
+    ],
+    "name": "_orderValidatedEV",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "_from",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "_orderNumber",
+        "type": "uint256"
+      }
+    ],
+    "name": "_placeOrderEV",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "dproc",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "bool",
+        "name": "accepts",
+        "type": "bool"
+      }
+    ],
+    "name": "AcceptsReservedSet",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "doRequestId",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "orderId",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "addedWei",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "chainFeeWei",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "gasPriceCapWei",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "gasAllocated",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "tokenPerPol",
+        "type": "uint256"
+      }
+    ],
+    "name": "ChainFeeIncreased",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "id",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "dproc",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint8",
+        "name": "reason",
+        "type": "uint8"
+      }
+    ],
+    "name": "DPRequestCancelled",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "id",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint64",
+        "name": "expiresAt",
+        "type": "uint64"
+      }
+    ],
+    "name": "DPRequestRefreshed",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "orderId",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "refundWei",
+        "type": "uint256"
+      }
+    ],
+    "name": "OrderExpired",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "orderId",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "refundWei",
+        "type": "uint256"
+      }
+    ],
+    "name": "OrderInvalidatedLive",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "orderId",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "doRequestId",
+        "type": "uint256"
+      }
+    ],
+    "name": "OrderRejected",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "orderId",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "workWei",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "feesWei",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "chainPaidWei",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "refundWei",
+        "type": "uint256"
+      }
+    ],
+    "name": "OrderSettled",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "orderId",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint64",
+        "name": "terminatedAt",
+        "type": "uint64"
+      }
+    ],
+    "name": "OrderTerminated",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "orderId",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "rowNumber",
+        "type": "uint256"
+      }
+    ],
+    "name": "OutputRowAdded",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "_from",
+        "type": "address"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "_to",
+        "type": "address"
+      }
+    ],
+    "name": "OwnershipTransferred",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "dproc",
+        "type": "address"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "payout",
+        "type": "address"
+      }
+    ],
+    "name": "PayoutAddressSet",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "orderId",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "successorOrderId",
+        "type": "uint256"
+      }
+    ],
+    "name": "SuccessorLinked",
+    "type": "event"
+  }
 ]

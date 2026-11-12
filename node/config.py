@@ -92,6 +92,18 @@ class NetworkConfig:
     enclave_fee: int
     # Set from <NETWORK>_ESR_RELAY_GAS_BUDGET_WEI when the variable exists.
     esr_relay_gas_budget_wei: int = esr_relay_gas_budget_wei_default
+    # The operator's tip in token weis per CU-hour, added to the gas tip of a
+    # 1.2 DP request (<NETWORK>_TIP_PER_CU_HOUR_WEI).
+    tip_per_cu_hour_wei: int = 0
+    # Whether the node's 1.2 DP request accepts reserved orders placed by the
+    # reservation broker (<NETWORK>_ACCEPT_RESERVED).
+    accept_reserved: bool = True
+    # A farm invitation "<farm>:<expiresAt>:<signature>" the node joins on a
+    # broker network (<NETWORK>_FARM_INVITE); empty for none.
+    farm_invite: str = ''
+    # Whether the node accepts the handovers its farm's members announce
+    # (<NETWORK>_FARM_ACCEPT).
+    farm_accept: bool = True
 
 # Platform requirements a trustedzone names in <NETWORK>_TRUSTEDZONE_IMAGES:
 #   dcap  provisioned by a CAS, which admits the enclave on a DCAP quote: the
@@ -199,9 +211,22 @@ image_registry_address = None
 
 base_path = Path(__file__).parent
 
+# The PoX ABI is the 1.2 union (pox-smart-contract-litvm
+# abi/EthernityImplementationV2_1_2.json): the 1.0/1.1 entries are a subset
+# of it, so one file binds a legacy and a 1.2 contract alike.
 abi_filepath = base_path / 'docker/pox.abi'
 image_registry_abi_filepath = base_path / 'image_registry.abi'
 heart_beat_abi_filepath = base_path / 'heart_beat.abi'
+# The contracts a 1.2 PoX names (readerAddress, pricingAddress,
+# reservationBrokerAddress), the broker's token and the resolver interface a
+# reserved request's owner answers; copied from pox-smart-contract-litvm abi/
+# (IPoxReader, IPoxPricing, IReservationBroker, IReservationResolver,
+# IEthernityCloudERC20).
+reader_abi_filepath = base_path / 'reader.abi'
+pricing_abi_filepath = base_path / 'pricing.abi'
+broker_abi_filepath = base_path / 'broker.abi'
+resolver_abi_filepath = base_path / 'resolver.abi'
+erc20_abi_filepath = base_path / 'erc20.abi'
 uuid_filepath = Path(expanduser("~")) / "opt/etny/node/UUID"
 
 # --- Enclave State Registry (ESR) ------------------------------------------
@@ -384,6 +409,14 @@ logger.setLevel(logging.DEBUG if os.environ.get('LOG_LEVEL') == 'debug' else log
 
 contract_call_frequency = int(os.environ.get('CONTRACT_CALL_FREQUENCY', 43200))
 
+def parse_bool(value: str) -> bool:
+    """The bool of a NetworkConfig bool field's text ("0", "false", "no",
+    "1", "true", "yes", ...): strtobool's 0/1 as a bool, which web3 takes
+    for an ABI bool argument (setAcceptsReserved) where an int is refused.
+    A text that is no boolean raises ValueError."""
+    return bool(strtobool(value))
+
+
 def add_network_override_arguments(parser: argparse.ArgumentParser, network_names: list):
     """
     Dynamically add command-line arguments to override environment variables
@@ -408,7 +441,7 @@ def add_network_override_arguments(parser: argparse.ArgumentParser, network_name
                 # Determine the argument type based on the field type
 
                 if field.type == bool:
-                    arg_type = strtobool
+                    arg_type = parse_bool
                 else:
                     arg_type = field.type if field.type != int else int
 
@@ -505,8 +538,8 @@ def parse_networks(arguments: argparse.Namespace, parser: argparse.ArgumentParse
                     # Convert the type if necessary
                     if field.type == bool:
                         try:
-                            value = strtobool(value)
-                        except argparse.ArgumentTypeError as e:
+                            value = parse_bool(value)
+                        except ValueError as e:
                             logger.error(f"Invalid boolean for {env_var}: {value}")
                             raise EnvironmentError(f"Invalid boolean value for {env_var}: {value}") from e
                     elif field.type == int:

@@ -23,6 +23,8 @@ from web3.gas_strategies.rpc import rpc_gas_price_strategy
 
 from utils import get_or_generate_uuid, run_subprocess, run_subprocess_status, environment_failure, record_enclave_image_tree, compose_images, compose_services, await_enclave_runtime, tree_image_tag,revert_reason, wallet_covers, insufficient_funds, transaction_known, placement_block_of, WALLET_GAS_TRANSACTIONS, retry, holds_within, pinned_within, FetchDeferrals, staging_plan, remaining_order_seconds, record_order_placement, order_placed_at, pending_approvals, record_pending_approval, forget_pending_approval, ORDER_STARTED_KEY, DP_STARTED_ROW_CAPABILITY, order_started_row, ORDER_GRACE_SECONDS, session_wallet_attestation, Storage, Cache, ListCache, ListCacheWithTimestamp, MergedOrdersCache, subprocess, get_node_geo, HardwareInfoProvider, parse_transaction_bytes_ut, looks_like_cid, canonical_cid, PEER_MULTIADDR, next_registered_image, enclave_failure, enclave_may_have_failed, docker_container_states, docker_container_log_tail, stale_integration_tests, image_trees, stale_image_trees, directory_size, remove_tree, removal_leftovers
 import scone_image
+import pox12
+from constants import INTEGRATION_TEST_SECONDS, INTEGRATION_TEST_RETRY_MIN_SECONDS, INTEGRATION_TEST_RETRY_MAX_SECONDS, INTEGRATION_TEST_REGISTRY_CHECK_SECONDS
 from models import *
 from error_messages import errorMessages
 from swift_stream_service import SwiftStreamService
@@ -62,12 +64,9 @@ integration_test_lock = threading.RLock()
 integration_test_passed = {}
 integration_test_retry = {}
 integration_tests_settled = {}
-INTEGRATION_TEST_RETRY_MIN_SECONDS = 600
-INTEGRATION_TEST_RETRY_MAX_SECONDS = 6 * 3600
 # Where an order's files live, under the network's working directory: its
 # placement record (utils.record_order_placement) and its order folder.
 ORDERS_DIR = './orders'
-INTEGRATION_TEST_REGISTRY_CHECK_SECONDS = 300
 # The container names every published dApp compose gives its enclaves, polled
 # while an order's result is awaited (wait_for_enclave_v2): the trustedzone
 # writes the awaited result, the securelock writes its own for the trustedzone.
@@ -384,6 +383,8 @@ class EtnyPoXNode:
             # serves replication, not task execution.
             self.__esr = None
             logger.warning(f"Could not initialise the Enclave State Registry: {e}")
+
+        self.__bind_pox_generation()
 
         # ethernity-cas SessionRegistry -- same wiring pattern as the ESR
         # above: resolved per network, and never allowed to stop the node.
@@ -4064,6 +4065,53 @@ class EtnyPoXNode:
         if previous != current:
             marker.write_text(current)
 
+    def __bind_pox_generation(self):
+        """Probes the protocol contract for pricingVersion() and binds the 1.2
+        handles when it answers: the reader, the pricing, the broker and its
+        token (pox12.chain_handles), None each for a zero address. A legacy
+        contract leaves every handle None and the generation legacy. The
+        probe and the address reads are each tried ten times, three seconds
+        apart, on an RPC failure; past that a node handle raises, as the
+        balance read in __init__ does, and a replication-only handle takes
+        the contract as legacy and logs the failed step. Bound to the
+        contract the handle is built on (a changed contract address builds a
+        new handle); a replication-only handle probes the same and sends
+        nothing."""
+        logger = self.logger
+        address = self.__etny.address
+        self.__pox_is_12 = False
+        self.__reader = self.__pricing = self.__broker = self.__token = None
+        step = 'pricingVersion probe'
+        answered, is_12 = retry(pox12.pox_generation, self.__etny.functions.pricingVersion().call, attempts=10, delay=3)
+        if answered and is_12:
+            abis = {}
+            for name, path in (('reader', config.reader_abi_filepath), ('pricing', config.pricing_abi_filepath),
+                               ('broker', config.broker_abi_filepath), ('erc20', config.erc20_abi_filepath)):
+                with open(path) as f:
+                    abis[name] = f.read()
+            step = 'readerAddress, pricingAddress, reservationBrokerAddress and token reads'
+            answered, handles = retry(pox12.chain_handles, self.__etny, self.__w3, abis, attempts=10, delay=3)
+            if answered:
+                self.__pox_is_12 = True
+                self.__reader = handles['reader']
+                self.__pricing = handles['pricing']
+                self.__broker = handles['broker']
+                self.__token = handles['token']
+        if not answered:
+            if not self.__replication_only:
+                raise Exception(f"Protocol contract {address}: the {step} failed on the RPC")
+            logger.warning(f"Protocol contract {address}: the {step} failed on the RPC; taken as legacy")
+        if self.__pox_is_12:
+            named = {name: handle.address for name, handle in
+                     (('reader', self.__reader), ('pricing', self.__pricing),
+                      ('broker', self.__broker), ('token', self.__token)) if handle is not None}
+            logger.info(f"Protocol contract {address}: pox=1.2 "
+                        + ' '.join(f"{name}={value}" for name, value in named.items()))
+            if self.__reader is None:
+                logger.info(f"Protocol contract {address}: no reader; the DO requests are compared as on a legacy contract")
+        else:
+            logger.info(f"Protocol contract {address}: pox=legacy")
+
     def get_transaction_build(self, existing_nonce=None):
         logger = self.logger
 
@@ -4604,7 +4652,7 @@ class EtnyPoXNode:
         try:
             self.__start_enclave_environment(enclave_image_hash)
             logger.debug('Waiting for execution of integration test enclave')
-            status_enclave = self.wait_for_enclave_v2(self.integration_bucket_name, integration_test_file, 300)
+            status_enclave = self.wait_for_enclave_v2(self.integration_bucket_name, integration_test_file, INTEGRATION_TEST_SECONDS)
         except EnclaveFailed as e:
             logger.warning(f'Integration test of {image}: {e}')
             status_enclave = False
@@ -4859,7 +4907,7 @@ class EtnyPoXNode:
                 logger.info('Skipping hearbeat on inactive network...');
                 return
 
-            logger.info('Calling hearbeat...')
+            logger.info(f"Calling hearbeat... pox={'1.2' if self.__pox_is_12 else 'legacy'}")
             params = [
                 "v" + config.version
             ]

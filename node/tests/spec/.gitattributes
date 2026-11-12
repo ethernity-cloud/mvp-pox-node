@@ -1,0 +1,3 @@
+# The fixture copies are compared byte for byte with pox-smart-contract-litvm/spec/
+# and with MANIFEST.sha256: no line-ending conversion on checkout.
+* -text

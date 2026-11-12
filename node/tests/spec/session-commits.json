@@ -1,0 +1,194 @@
+{
+  "description": "RESERVATION-DESIGN.md §2 (the eighth review): a session step's commits are staged with its output as session.commit.<n>.<key16>.<relayNonce>.json, never esr.commit.*.json, and the step's signed output envelope carries their names (commits) and the signed authorization records with the securelock's ESR wallet (esr), the session's ledger; the trustedzone stages the names beside the row's proof as session.output.<seq>.commits; the node relays a session.commit file only once a .commits object names it and that etny-so row's receipt is in, one no object names never, and esr.commit.*.json (the fence's or a plain task's) as it appears.",
+  "generator": "spec/make/session-commits.js",
+  "chainId": 31337,
+  "registry": "0x1dc58496ed1ca66fd1e0b51fa28a9e7451970843",
+  "orderId": 4101,
+  "esr": {
+    "wallet": "0x7b1b9cf0a2b4dbbd395874f0225855a909c96ff9",
+    "enclaveWalletPrivateKey": "0xf5f7e4fc5cbe5efbfad59895c3f29bab8187b113eb40bea5da310550b5590388"
+  },
+  "record": {
+    "fields": [
+      "enclave",
+      "keyHash",
+      "cid",
+      "expectedVersion",
+      "relayNonce",
+      "nonce",
+      "signature",
+      "callerUsed",
+      "owned"
+    ],
+    "digestRule": "keccak256(abi.encode(\"EnclaveStateRegistry.commitFor\", chainId, registry, enclave, keyHash, keccak256(bytes(cid)), expectedVersion, relayNonce, nonce)): EnclaveStateRegistry.commitDigest",
+    "signatureRule": "EIP-191 personal_sign of the 32-byte digest (eth-account encode_defunct, ethers signMessage over the digest bytes) by the ESR wallet; commitFor recovers it and requires the signer to be the enclave; the trustedzone vets every record in an envelope against esr.wallet the same way before counting it",
+    "callerRule": "callerUsed is the task caller the step ran under, which the trustedzone requires to equal the holder it attested; owned marks a commit to an owned key"
+  },
+  "envelope": {
+    "layout": "{ack, code, data, commits, esr: {wallet, commits}}",
+    "rules": [
+      "ack, code and data as today: the input object number answered, the payload code, the payload output",
+      "commits: the names of the step's session.commit.<n>.<key16>.<relayNonce>.json files, n the step's output object number, in key then relay-nonce order; an empty list for a step without commits",
+      "esr.commits: the signed authorization records of those commits in the same order, the objects ecld_state appends to esr.authorizations.json; esr.wallet the securelock's ESR address; a session's ESR ledger is the concatenation of its steps' esr.commits in staging order, the bytes esr.authorizations.json holds",
+      "the envelope is signed and encrypted for the trustedzone as every step output is; the trustedzone takes esr.commits as the ledger whichever way the session ends, so a transfer stop or a toBlock cut leaves it a ledger to sign the ESR fields over",
+      "esr.authorizations.json on a session: the securelock rewrites it after each session.output.<n> envelope as the compact JSON array of every staged step's records in staging order (a step cut by transfer or never emitted contributes nothing); the trustedzone's session ledger is the concatenation of the records it took from the envelopes of the rows it staged, serialised compactly (JSON.stringify / json.dumps with separators (\",\", \":\")) with the record objects' nine keys in record order, exactly as esrCommitDigest hashes them, so the two are byte-equal; when the result envelope's esr.commits also exists the two must be equal, else SECURITY_VIOLATION; the agent pins the file as the attested ledger when its raw CIDv1 equals result field 6"
+    ]
+  },
+  "authorizations": {
+    "name": "esr.authorizations.json",
+    "afterSteps": [
+      {
+        "outputObject": 3,
+        "content": "[{\"enclave\":\"0x7b1b9cf0a2b4dbbd395874f0225855a909c96ff9\",\"keyHash\":\"0x2c0e8db8fb1343f00f1c6b57af1cf6bf785c6b487e5c99ae90a4e98907f27011\",\"cid\":\"bafkreif45d2w2awn7ifohja6vwuolygphwsbusn4hpb2st7qxigesxp4oi\",\"expectedVersion\":7,\"relayNonce\":7,\"nonce\":8,\"signature\":\"0x4e10b5e39ebd3d402eadaa5fe5946cc10daefe3696d3a041dfc328b52b65e4ca747314772f07bab040c982743be8393dfc9dbef32902ac3edb2899ff616e92961b\",\"callerUsed\":\"0x5d4e1b3cf4ad01a7c7a9c1f6a2d4e8b9c0f1a2b3\",\"owned\":true},{\"enclave\":\"0x7b1b9cf0a2b4dbbd395874f0225855a909c96ff9\",\"keyHash\":\"0x294581730c448338d12ce339c62128c40da67944d48abf7602945382589f22a1\",\"cid\":\"bafkreibqu2ybobxjrw46y2u5xw4kmx4qjecowj6icufsbzsgwbjkvm6hdm\",\"expectedVersion\":0,\"relayNonce\":0,\"nonce\":1,\"signature\":\"0xfcde5dc2cac28413ea9121de2d879bf96c408dc925c83ef1769254cbb03b42312dd7683646ab152b0d4f0967d01ac36a96aaa7ee45a726425235b5ab6369865b1b\",\"callerUsed\":\"0x5d4e1b3cf4ad01a7c7a9c1f6a2d4e8b9c0f1a2b3\",\"owned\":true}]"
+      },
+      {
+        "outputObject": 4,
+        "content": "[{\"enclave\":\"0x7b1b9cf0a2b4dbbd395874f0225855a909c96ff9\",\"keyHash\":\"0x2c0e8db8fb1343f00f1c6b57af1cf6bf785c6b487e5c99ae90a4e98907f27011\",\"cid\":\"bafkreif45d2w2awn7ifohja6vwuolygphwsbusn4hpb2st7qxigesxp4oi\",\"expectedVersion\":7,\"relayNonce\":7,\"nonce\":8,\"signature\":\"0x4e10b5e39ebd3d402eadaa5fe5946cc10daefe3696d3a041dfc328b52b65e4ca747314772f07bab040c982743be8393dfc9dbef32902ac3edb2899ff616e92961b\",\"callerUsed\":\"0x5d4e1b3cf4ad01a7c7a9c1f6a2d4e8b9c0f1a2b3\",\"owned\":true},{\"enclave\":\"0x7b1b9cf0a2b4dbbd395874f0225855a909c96ff9\",\"keyHash\":\"0x294581730c448338d12ce339c62128c40da67944d48abf7602945382589f22a1\",\"cid\":\"bafkreibqu2ybobxjrw46y2u5xw4kmx4qjecowj6icufsbzsgwbjkvm6hdm\",\"expectedVersion\":0,\"relayNonce\":0,\"nonce\":1,\"signature\":\"0xfcde5dc2cac28413ea9121de2d879bf96c408dc925c83ef1769254cbb03b42312dd7683646ab152b0d4f0967d01ac36a96aaa7ee45a726425235b5ab6369865b1b\",\"callerUsed\":\"0x5d4e1b3cf4ad01a7c7a9c1f6a2d4e8b9c0f1a2b3\",\"owned\":true}]"
+      }
+    ],
+    "ledgerJson": "[{\"enclave\":\"0x7b1b9cf0a2b4dbbd395874f0225855a909c96ff9\",\"keyHash\":\"0x2c0e8db8fb1343f00f1c6b57af1cf6bf785c6b487e5c99ae90a4e98907f27011\",\"cid\":\"bafkreif45d2w2awn7ifohja6vwuolygphwsbusn4hpb2st7qxigesxp4oi\",\"expectedVersion\":7,\"relayNonce\":7,\"nonce\":8,\"signature\":\"0x4e10b5e39ebd3d402eadaa5fe5946cc10daefe3696d3a041dfc328b52b65e4ca747314772f07bab040c982743be8393dfc9dbef32902ac3edb2899ff616e92961b\",\"callerUsed\":\"0x5d4e1b3cf4ad01a7c7a9c1f6a2d4e8b9c0f1a2b3\",\"owned\":true},{\"enclave\":\"0x7b1b9cf0a2b4dbbd395874f0225855a909c96ff9\",\"keyHash\":\"0x294581730c448338d12ce339c62128c40da67944d48abf7602945382589f22a1\",\"cid\":\"bafkreibqu2ybobxjrw46y2u5xw4kmx4qjecowj6icufsbzsgwbjkvm6hdm\",\"expectedVersion\":0,\"relayNonce\":0,\"nonce\":1,\"signature\":\"0xfcde5dc2cac28413ea9121de2d879bf96c408dc925c83ef1769254cbb03b42312dd7683646ab152b0d4f0967d01ac36a96aaa7ee45a726425235b5ab6369865b1b\",\"callerUsed\":\"0x5d4e1b3cf4ad01a7c7a9c1f6a2d4e8b9c0f1a2b3\",\"owned\":true}]",
+    "ledgerCid": "bafkreifh3kce37empbm2q2bzvh3mkdimlawnvskrgatrzfgkgayjpgafje",
+    "rule": "the file after each step's envelope; the content after the last step is the session's ledger, whose raw CIDv1 is result field 6 (esrLedgerCid) and whose records' leaves give fields 4 and 5"
+  },
+  "objects": {
+    "nodenithy": {
+      "output": "session.output.<n>.securelock",
+      "commitFile": "session.commit.<n>.<key16>.<relayNonce>.json",
+      "fenceCommitFile": "esr.commit.<key16>.<relayNonce>.json",
+      "commitsObject": "session.output.<seq>.commits"
+    },
+    "pynithy": {
+      "output": "session.output.<n>",
+      "commitFile": "session.commit.<n>.<key16>.<relayNonce>.json",
+      "fenceCommitFile": "esr.commit.<key16>.<relayNonce>.json",
+      "commitsObject": "session.output.<seq>.commits"
+    },
+    "rule": "the JS securelock appends .securelock to the envelope object as to every object it writes; the commit files and the fence's are bare in both stacks, the agent reading one name; the .commits object is the trustedzone's, bare in both stacks, written beside session.output.<seq>.proof"
+  },
+  "steps": {
+    "withCommits": {
+      "outputObject": 3,
+      "envelope": {
+        "ack": 3,
+        "code": 0,
+        "data": "balance updated",
+        "commits": [
+          "session.commit.3.2c0e8db8fb1343f0.7.json",
+          "session.commit.3.294581730c448338.0.json"
+        ],
+        "esr": {
+          "wallet": "0x7b1b9cf0a2b4dbbd395874f0225855a909c96ff9",
+          "commits": [
+            {
+              "enclave": "0x7b1b9cf0a2b4dbbd395874f0225855a909c96ff9",
+              "keyHash": "0x2c0e8db8fb1343f00f1c6b57af1cf6bf785c6b487e5c99ae90a4e98907f27011",
+              "cid": "bafkreif45d2w2awn7ifohja6vwuolygphwsbusn4hpb2st7qxigesxp4oi",
+              "expectedVersion": 7,
+              "relayNonce": 7,
+              "nonce": 8,
+              "signature": "0x4e10b5e39ebd3d402eadaa5fe5946cc10daefe3696d3a041dfc328b52b65e4ca747314772f07bab040c982743be8393dfc9dbef32902ac3edb2899ff616e92961b",
+              "callerUsed": "0x5d4e1b3cf4ad01a7c7a9c1f6a2d4e8b9c0f1a2b3",
+              "owned": true
+            },
+            {
+              "enclave": "0x7b1b9cf0a2b4dbbd395874f0225855a909c96ff9",
+              "keyHash": "0x294581730c448338d12ce339c62128c40da67944d48abf7602945382589f22a1",
+              "cid": "bafkreibqu2ybobxjrw46y2u5xw4kmx4qjecowj6icufsbzsgwbjkvm6hdm",
+              "expectedVersion": 0,
+              "relayNonce": 0,
+              "nonce": 1,
+              "signature": "0xfcde5dc2cac28413ea9121de2d879bf96c408dc925c83ef1769254cbb03b42312dd7683646ab152b0d4f0967d01ac36a96aaa7ee45a726425235b5ab6369865b1b",
+              "callerUsed": "0x5d4e1b3cf4ad01a7c7a9c1f6a2d4e8b9c0f1a2b3",
+              "owned": true
+            }
+          ]
+        }
+      },
+      "envelopeJson": "{\"ack\":3,\"code\":0,\"data\":\"balance updated\",\"commits\":[\"session.commit.3.2c0e8db8fb1343f0.7.json\",\"session.commit.3.294581730c448338.0.json\"],\"esr\":{\"wallet\":\"0x7b1b9cf0a2b4dbbd395874f0225855a909c96ff9\",\"commits\":[{\"enclave\":\"0x7b1b9cf0a2b4dbbd395874f0225855a909c96ff9\",\"keyHash\":\"0x2c0e8db8fb1343f00f1c6b57af1cf6bf785c6b487e5c99ae90a4e98907f27011\",\"cid\":\"bafkreif45d2w2awn7ifohja6vwuolygphwsbusn4hpb2st7qxigesxp4oi\",\"expectedVersion\":7,\"relayNonce\":7,\"nonce\":8,\"signature\":\"0x4e10b5e39ebd3d402eadaa5fe5946cc10daefe3696d3a041dfc328b52b65e4ca747314772f07bab040c982743be8393dfc9dbef32902ac3edb2899ff616e92961b\",\"callerUsed\":\"0x5d4e1b3cf4ad01a7c7a9c1f6a2d4e8b9c0f1a2b3\",\"owned\":true},{\"enclave\":\"0x7b1b9cf0a2b4dbbd395874f0225855a909c96ff9\",\"keyHash\":\"0x294581730c448338d12ce339c62128c40da67944d48abf7602945382589f22a1\",\"cid\":\"bafkreibqu2ybobxjrw46y2u5xw4kmx4qjecowj6icufsbzsgwbjkvm6hdm\",\"expectedVersion\":0,\"relayNonce\":0,\"nonce\":1,\"signature\":\"0xfcde5dc2cac28413ea9121de2d879bf96c408dc925c83ef1769254cbb03b42312dd7683646ab152b0d4f0967d01ac36a96aaa7ee45a726425235b5ab6369865b1b\",\"callerUsed\":\"0x5d4e1b3cf4ad01a7c7a9c1f6a2d4e8b9c0f1a2b3\",\"owned\":true}]}}",
+      "commitFiles": [
+        {
+          "name": "session.commit.3.2c0e8db8fb1343f0.7.json",
+          "content": "{\"enclave\":\"0x7b1b9cf0a2b4dbbd395874f0225855a909c96ff9\",\"keyHash\":\"0x2c0e8db8fb1343f00f1c6b57af1cf6bf785c6b487e5c99ae90a4e98907f27011\",\"cid\":\"bafkreif45d2w2awn7ifohja6vwuolygphwsbusn4hpb2st7qxigesxp4oi\",\"expectedVersion\":7,\"relayNonce\":7,\"nonce\":8,\"signature\":\"0x4e10b5e39ebd3d402eadaa5fe5946cc10daefe3696d3a041dfc328b52b65e4ca747314772f07bab040c982743be8393dfc9dbef32902ac3edb2899ff616e92961b\",\"callerUsed\":\"0x5d4e1b3cf4ad01a7c7a9c1f6a2d4e8b9c0f1a2b3\",\"owned\":true}"
+        },
+        {
+          "name": "session.commit.3.294581730c448338.0.json",
+          "content": "{\"enclave\":\"0x7b1b9cf0a2b4dbbd395874f0225855a909c96ff9\",\"keyHash\":\"0x294581730c448338d12ce339c62128c40da67944d48abf7602945382589f22a1\",\"cid\":\"bafkreibqu2ybobxjrw46y2u5xw4kmx4qjecowj6icufsbzsgwbjkvm6hdm\",\"expectedVersion\":0,\"relayNonce\":0,\"nonce\":1,\"signature\":\"0xfcde5dc2cac28413ea9121de2d879bf96c408dc925c83ef1769254cbb03b42312dd7683646ab152b0d4f0967d01ac36a96aaa7ee45a726425235b5ab6369865b1b\",\"callerUsed\":\"0x5d4e1b3cf4ad01a7c7a9c1f6a2d4e8b9c0f1a2b3\",\"owned\":true}"
+        }
+      ],
+      "commitsObject": {
+        "name": "session.output.3.commits",
+        "content": "[\"session.commit.3.2c0e8db8fb1343f0.7.json\",\"session.commit.3.294581730c448338.0.json\"]"
+      }
+    },
+    "withoutCommits": {
+      "outputObject": 4,
+      "envelope": {
+        "ack": 4,
+        "code": 0,
+        "data": "read only",
+        "commits": [],
+        "esr": {
+          "wallet": "0x7b1b9cf0a2b4dbbd395874f0225855a909c96ff9",
+          "commits": []
+        }
+      },
+      "envelopeJson": "{\"ack\":4,\"code\":0,\"data\":\"read only\",\"commits\":[],\"esr\":{\"wallet\":\"0x7b1b9cf0a2b4dbbd395874f0225855a909c96ff9\",\"commits\":[]}}",
+      "commitFiles": [],
+      "commitsObject": {
+        "name": "session.output.4.commits",
+        "content": "[]"
+      }
+    }
+  },
+  "fence": {
+    "name": "esr.commit.2c0e8db8fb1343f0.8.json",
+    "content": "{\"enclave\":\"0x7b1b9cf0a2b4dbbd395874f0225855a909c96ff9\",\"keyHash\":\"0x2c0e8db8fb1343f00f1c6b57af1cf6bf785c6b487e5c99ae90a4e98907f27011\",\"cid\":\"bafkreif45d2w2awn7ifohja6vwuolygphwsbusn4hpb2st7qxigesxp4oi\",\"expectedVersion\":8,\"relayNonce\":8,\"nonce\":9,\"signature\":\"0x0045bd13dc0231b45d327b53e9aa6020f719fc4ce1dcbc32503591003af620c13bcf11af75e0fa47bc93be75afb5ae7c4f440b31bdb66f2bb93b34ff5a9e3c171c\",\"callerUsed\":\"0x5d4e1b3cf4ad01a7c7a9c1f6a2d4e8b9c0f1a2b3\",\"owned\":true}",
+    "rule": "the fence's and a plain task's authorizations keep the esr.commit name; the agent relays them as they appear"
+  },
+  "orphan": {
+    "name": "session.commit.9.0000000000000000.0.json",
+    "rule": "a session.commit file no .commits object names is never relayed; a step's commit is staged a trustedzone tick before its names are, and this name tells the agent to wait"
+  },
+  "relay": {
+    "rule": "on a session order the agent relays a session.commit file only once a session.output.<seq>.commits names it and that etny-so row's receipt is in, in key then relay-nonce order, one no list names never; esr.commit.*.json as it appears; on a plain task every esr.commit.*.json as it appears",
+    "beforeReceipt": {
+      "listing": [
+        "esr.commit.2c0e8db8fb1343f0.8.json",
+        "session.commit.3.294581730c448338.0.json",
+        "session.commit.3.2c0e8db8fb1343f0.7.json",
+        "session.commit.9.0000000000000000.0.json",
+        "session.output.3.commits",
+        "session.output.4.commits"
+      ],
+      "relayNow": [
+        "esr.commit.2c0e8db8fb1343f0.8.json"
+      ],
+      "held": [
+        "session.commit.3.2c0e8db8fb1343f0.7.json",
+        "session.commit.3.294581730c448338.0.json"
+      ],
+      "never": [
+        "session.commit.9.0000000000000000.0.json"
+      ]
+    },
+    "afterReceipt": {
+      "listing": [
+        "esr.commit.2c0e8db8fb1343f0.8.json",
+        "session.commit.3.294581730c448338.0.json",
+        "session.commit.3.2c0e8db8fb1343f0.7.json",
+        "session.commit.9.0000000000000000.0.json",
+        "session.output.3.commits",
+        "session.output.4.commits"
+      ],
+      "relayNow": [
+        "esr.commit.2c0e8db8fb1343f0.8.json",
+        "session.commit.3.2c0e8db8fb1343f0.7.json",
+        "session.commit.3.294581730c448338.0.json"
+      ],
+      "held": [],
+      "never": [
+        "session.commit.9.0000000000000000.0.json"
+      ]
+    }
+  }
+}

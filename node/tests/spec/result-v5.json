@@ -1,0 +1,884 @@
+{
+  "description": "Plan amendment 8 (result string v5): every result carries fifteen colon-separated positional fields -- the v4 task and ESR fields, the five session fields with zero roots, 00 counts and status 0f when there is no session, then etny-esr-commits=<n>, etny-cu-delivered=<...> and etny-esr-gas=<wei>. Seven examples: plain task, session, ESR task with three relayed commits, probed task, session transferred cleanly at a handover (task code 41, session status 06), session transferred by force (task code 42, session status 07), the successor's session replaying the forced one's cut input (its first output row answering the predecessor's unanswered input).",
+  "generator": "spec/make/result-v5.js",
+  "version": "v5",
+  "separator": ":",
+  "fieldCount": 15,
+  "fields": [
+    {
+      "index": 0,
+      "name": "version",
+      "value": "\"v5\""
+    },
+    {
+      "index": 1,
+      "name": "taskCode",
+      "value": "decimal task code (task_status.js)"
+    },
+    {
+      "index": 2,
+      "name": "resultChecksum",
+      "value": "sha256 hex of the task result string"
+    },
+    {
+      "index": 3,
+      "name": "enclaveChallenge",
+      "value": "20 lower-case alphanumerics drawn by the trustedzone"
+    },
+    {
+      "index": 4,
+      "name": "esrMerkleRoot",
+      "value": "64 hex, root over the authorised commit leaves; all zero when none"
+    },
+    {
+      "index": 5,
+      "name": "esrCount",
+      "value": "one byte hex, bias-1 (00 = 1 commit, ff = 256); 00 under a zero root"
+    },
+    {
+      "index": 6,
+      "name": "esrLedgerCid",
+      "value": "raw CIDv1 (base32, b-prefixed) of the attested ledger JSON; empty when none"
+    },
+    {
+      "index": 7,
+      "name": "siRoot",
+      "value": "64 hex, root over keccak256 of each etny-si row value; all zero when none"
+    },
+    {
+      "index": 8,
+      "name": "siCount",
+      "value": "one byte hex, bias-1 under a non-zero root; 00 under a zero root"
+    },
+    {
+      "index": 9,
+      "name": "soRoot",
+      "value": "64 hex, root over keccak256 of each etny-so row value; all zero when none"
+    },
+    {
+      "index": 10,
+      "name": "soCount",
+      "value": "one byte hex, bias-1 under a non-zero root; 00 under a zero root"
+    },
+    {
+      "index": 11,
+      "name": "sessionStatus",
+      "value": "one byte hex from the session status table; 0f when the order had no session"
+    },
+    {
+      "index": 12,
+      "name": "esrCommits",
+      "value": "etny-esr-commits=<n>, decimal count of relayed commits the trustedzone saw land (verifyCommitsLanded); 0 when none"
+    },
+    {
+      "index": 13,
+      "name": "cuDelivered",
+      "value": "etny-cu-delivered=<cu x 1000>|<run nonce>|<t0>|<t1>|<validator>|<sig t0>|<sig t1>|<block0>|<block1>, or etny-cu-delivered= when the order was not probed"
+    },
+    {
+      "index": 14,
+      "name": "esrGas",
+      "value": "etny-esr-gas=<wei>, decimal gas-token weis the landed commit transactions cost (sum over the landing transactions of gasUsed x effectiveGasPrice from their receipts, a batch counted once); 0 when none"
+    }
+  ],
+  "constants": {
+    "zeroRoot": "0000000000000000000000000000000000000000000000000000000000000000",
+    "noSessionStatus": "0f",
+    "sessionStatusCodes": {
+      "closed": 0,
+      "complete-at-timeout": 1,
+      "expired-idle": 2,
+      "expired-unprocessed": 3,
+      "flooded": 4,
+      "unsupported-securelock": 5,
+      "transferred": 6,
+      "transfer-forced": 7
+    },
+    "sessionStatusRule": "the code of the session status as one hex byte; a status not in the table, and an order without a session, write 0f (15)",
+    "serviceTransferredCode": 41,
+    "serviceTransferForcedCode": 42,
+    "countByteRule": "bias-1: byte + 1 entries under a non-zero root; a zero root pins the count at 0 whatever the byte, and the trustedzones write 00 there",
+    "orderId": 4101,
+    "successorOrderId": 4102,
+    "enclaveChallenge": "k7p2x9qv4m1zr8t3hw6n"
+  },
+  "examples": {
+    "plain": {
+      "name": "plain",
+      "inputs": {
+        "taskResult": "Hello, World!",
+        "taskCode": 0
+      },
+      "fields": [
+        {
+          "index": 0,
+          "name": "version",
+          "value": "v5"
+        },
+        {
+          "index": 1,
+          "name": "taskCode",
+          "value": "0"
+        },
+        {
+          "index": 2,
+          "name": "resultChecksum",
+          "value": "dffd6021bb2bd5b0af676290809ec3a53191dd81c7f70a4b28688a362182986f"
+        },
+        {
+          "index": 3,
+          "name": "enclaveChallenge",
+          "value": "k7p2x9qv4m1zr8t3hw6n"
+        },
+        {
+          "index": 4,
+          "name": "esrMerkleRoot",
+          "value": "0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        {
+          "index": 5,
+          "name": "esrCount",
+          "value": "00"
+        },
+        {
+          "index": 6,
+          "name": "esrLedgerCid",
+          "value": ""
+        },
+        {
+          "index": 7,
+          "name": "siRoot",
+          "value": "0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        {
+          "index": 8,
+          "name": "siCount",
+          "value": "00"
+        },
+        {
+          "index": 9,
+          "name": "soRoot",
+          "value": "0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        {
+          "index": 10,
+          "name": "soCount",
+          "value": "00"
+        },
+        {
+          "index": 11,
+          "name": "sessionStatus",
+          "value": "0f"
+        },
+        {
+          "index": 12,
+          "name": "esrCommits",
+          "value": "etny-esr-commits=0"
+        },
+        {
+          "index": 13,
+          "name": "cuDelivered",
+          "value": "etny-cu-delivered="
+        },
+        {
+          "index": 14,
+          "name": "esrGas",
+          "value": "etny-esr-gas=0"
+        }
+      ],
+      "result": "v5:0:dffd6021bb2bd5b0af676290809ec3a53191dd81c7f70a4b28688a362182986f:k7p2x9qv4m1zr8t3hw6n:0000000000000000000000000000000000000000000000000000000000000000:00::0000000000000000000000000000000000000000000000000000000000000000:00:0000000000000000000000000000000000000000000000000000000000000000:00:0f:etny-esr-commits=0:etny-cu-delivered=:etny-esr-gas=0"
+    },
+    "session": {
+      "name": "session",
+      "inputs": {
+        "taskResult": "{\"session\":\"closed\",\"inputs\":2,\"outputs\":2}",
+        "taskCode": 0,
+        "sessionStatus": "closed",
+        "taskWallet": "0x40680ca06d992501822586eb6bf65db227f105d8",
+        "taskWalletPrivateKey": "0x3be6cb93aaba68d1e0ad080f98728b1a11e06ad0ca6f465dafb174749942f66d",
+        "inputRows": [
+          "v1:0:4101:bafkreiffq37nia2t7hlpwaaou5xilbe6i3rivtjr2t24a2zphyjij6e7la:a586fed40353f9d6fb000ea76e85849e46e28acd31d4f5c06b2f3e1284f89f58",
+          "v1:1:4101:bafkreif7zt2czkb4s2rvsqn4sqqtmgu76q5zas7g6oxnszpglnej63ghv4:bfccf42ca83c96a35941bc9421361a9ff43b904be6f3aed965e65b489f6cc7af"
+        ],
+        "outputValues": [
+          "v1:0:4101:0:ok:0:bafkreifgd3qs3yevw7haomfvoaanbnggkwlsmk6nbvgjkhtuiszxxs4tha:a61ee12de095b7ce0730b57000d0b4c65597262bcd0d4c951e7444b37bcb9338:0x6e2ff1b7b212c2ea587a4d900f4b4facca44b6925884366be4ab0587583137ab59e3817fb83fc3af6b1117990dd364b14cdb051fab22e70229b0936e861e09231b",
+          "v1:1:4101:1:ok:0:bafkreicwqmr4vvjvozrcfozsjs6a6yjg2h2h22ibaumdisipcdm7uo6l6a:568323cad535766222bb324cbc0f6126d1f47d6901051834490f10d9fa3bcbf0:0x96f5054ad02896728519b789ee180dc3fc34dee28876785db307179e45878cdd0a8bb4f6e0681d740fc4131762255c8893cb185de661dfa43e199f10c63cd1f01b"
+        ],
+        "rootRule": "leaf = keccak256(utf8 row value exactly as stored on chain); root = Merkle root, odd node paired with itself; count byte bias-1"
+      },
+      "fields": [
+        {
+          "index": 0,
+          "name": "version",
+          "value": "v5"
+        },
+        {
+          "index": 1,
+          "name": "taskCode",
+          "value": "0"
+        },
+        {
+          "index": 2,
+          "name": "resultChecksum",
+          "value": "180edc7b0e462ea92529ec3e68442a575f53ce34384bd6f53cdc845993dbb46c"
+        },
+        {
+          "index": 3,
+          "name": "enclaveChallenge",
+          "value": "k7p2x9qv4m1zr8t3hw6n"
+        },
+        {
+          "index": 4,
+          "name": "esrMerkleRoot",
+          "value": "0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        {
+          "index": 5,
+          "name": "esrCount",
+          "value": "00"
+        },
+        {
+          "index": 6,
+          "name": "esrLedgerCid",
+          "value": ""
+        },
+        {
+          "index": 7,
+          "name": "siRoot",
+          "value": "ceb5d8c50b7698746fe058e0551b171e819accd2315fa5b8eb5dd4f74ca2dd4d"
+        },
+        {
+          "index": 8,
+          "name": "siCount",
+          "value": "01"
+        },
+        {
+          "index": 9,
+          "name": "soRoot",
+          "value": "77e911d2943aa9523dba8af18c210146475c5d595ae05c08f99bf3e11d716e43"
+        },
+        {
+          "index": 10,
+          "name": "soCount",
+          "value": "01"
+        },
+        {
+          "index": 11,
+          "name": "sessionStatus",
+          "value": "00"
+        },
+        {
+          "index": 12,
+          "name": "esrCommits",
+          "value": "etny-esr-commits=0"
+        },
+        {
+          "index": 13,
+          "name": "cuDelivered",
+          "value": "etny-cu-delivered="
+        },
+        {
+          "index": 14,
+          "name": "esrGas",
+          "value": "etny-esr-gas=0"
+        }
+      ],
+      "result": "v5:0:180edc7b0e462ea92529ec3e68442a575f53ce34384bd6f53cdc845993dbb46c:k7p2x9qv4m1zr8t3hw6n:0000000000000000000000000000000000000000000000000000000000000000:00::ceb5d8c50b7698746fe058e0551b171e819accd2315fa5b8eb5dd4f74ca2dd4d:01:77e911d2943aa9523dba8af18c210146475c5d595ae05c08f99bf3e11d716e43:01:00:etny-esr-commits=0:etny-cu-delivered=:etny-esr-gas=0"
+    },
+    "esr": {
+      "name": "esr",
+      "inputs": {
+        "taskResult": "{\"ecld\":1,\"esr\":{\"wallet\":\"0x7b1b9cf0a2b4dbbd395874f0225855a909c96ff9\",\"commits\":[{\"enclave\":\"0x7b1b9cf0a2b4dbbd395874f0225855a909c96ff9\",\"keyHash\":\"0x949dadce9c1f348fef31d83f2bf256dcbd297ae3f068dda9181adf7c1bd0a1ad\",\"cid\":\"bafkreihtnnc25amibhxcjlrerhw2x7r46kqsmj5wskoap7d2hoef2qkniq\",\"expectedVersion\":1,\"relayNonce\":1,\"nonce\":1001,\"signature\":\"0xd23bf96f552a79463ed36188240ab7da5a1fc680b7a91e9c9c17c928db4de3f343ab56cb5f15c39c5d5da21de1e0d21d1ec68977a85fd508e492e502d9816e331b\",\"callerUsed\":\"0x5d4e1b3cf4ad01a7c7a9c1f6a2d4e8b9c0f1a2b3\",\"owned\":true},{\"enclave\":\"0x7b1b9cf0a2b4dbbd395874f0225855a909c96ff9\",\"keyHash\":\"0xc364eabba7facd62188f7298559b7cf78c76c412d4993a8ff4ca5dfc431defca\",\"cid\":\"bafkreiaenf374joyspw7qwjhysqdqjelcyoewe2ddufvxfej5c7rphmjvy\",\"expectedVersion\":2,\"relayNonce\":2,\"nonce\":1002,\"signature\":\"0xe5dd93c520179ad71e4abbf78e2b45e6212d96c1f542bc282539535aaaec972f64b409d2127972d3ad8ae397ce7bfadd777d4fdbe44b9cbfa13aaf4ec4fe06181b\",\"callerUsed\":\"0x5d4e1b3cf4ad01a7c7a9c1f6a2d4e8b9c0f1a2b3\",\"owned\":true},{\"enclave\":\"0x7b1b9cf0a2b4dbbd395874f0225855a909c96ff9\",\"keyHash\":\"0xbdad7fa586b12c372dcf937f9e3e530cc058d0451930e4382a2ee40a84d964dc\",\"cid\":\"bafkreicm57r7aabj5skl64dry7ha7puttpv52od4h72mqcz5z3holpipb4\",\"expectedVersion\":3,\"relayNonce\":3,\"nonce\":1003,\"signature\":\"0x1e1c19896ce6401a292288264c3cc357cefaaf8496b1cde1a59c31942c73885b5ee4b38da117981aecddca0cc06fa3f931c34831e1968fc3348388f49001da841b\",\"callerUsed\":\"0x5d4e1b3cf4ad01a7c7a9c1f6a2d4e8b9c0f1a2b3\",\"owned\":true}]},\"result\":\"state committed\"}",
+        "taskCode": 0,
+        "enclaveWallet": "0x7b1b9cf0a2b4dbbd395874f0225855a909c96ff9",
+        "enclaveWalletPrivateKey": "0xf5f7e4fc5cbe5efbfad59895c3f29bab8187b113eb40bea5da310550b5590388",
+        "chainId": 31337,
+        "registry": "0x1dc58496ed1ca66fd1e0b51fa28a9e7451970843",
+        "callerUsed": "0x5d4e1b3cf4ad01a7c7a9c1f6a2d4e8b9c0f1a2b3",
+        "commits": [
+          {
+            "enclave": "0x7b1b9cf0a2b4dbbd395874f0225855a909c96ff9",
+            "keyHash": "0x949dadce9c1f348fef31d83f2bf256dcbd297ae3f068dda9181adf7c1bd0a1ad",
+            "cid": "bafkreihtnnc25amibhxcjlrerhw2x7r46kqsmj5wskoap7d2hoef2qkniq",
+            "expectedVersion": 1,
+            "relayNonce": 1,
+            "nonce": 1001,
+            "signature": "0xd23bf96f552a79463ed36188240ab7da5a1fc680b7a91e9c9c17c928db4de3f343ab56cb5f15c39c5d5da21de1e0d21d1ec68977a85fd508e492e502d9816e331b",
+            "callerUsed": "0x5d4e1b3cf4ad01a7c7a9c1f6a2d4e8b9c0f1a2b3",
+            "owned": true
+          },
+          {
+            "enclave": "0x7b1b9cf0a2b4dbbd395874f0225855a909c96ff9",
+            "keyHash": "0xc364eabba7facd62188f7298559b7cf78c76c412d4993a8ff4ca5dfc431defca",
+            "cid": "bafkreiaenf374joyspw7qwjhysqdqjelcyoewe2ddufvxfej5c7rphmjvy",
+            "expectedVersion": 2,
+            "relayNonce": 2,
+            "nonce": 1002,
+            "signature": "0xe5dd93c520179ad71e4abbf78e2b45e6212d96c1f542bc282539535aaaec972f64b409d2127972d3ad8ae397ce7bfadd777d4fdbe44b9cbfa13aaf4ec4fe06181b",
+            "callerUsed": "0x5d4e1b3cf4ad01a7c7a9c1f6a2d4e8b9c0f1a2b3",
+            "owned": true
+          },
+          {
+            "enclave": "0x7b1b9cf0a2b4dbbd395874f0225855a909c96ff9",
+            "keyHash": "0xbdad7fa586b12c372dcf937f9e3e530cc058d0451930e4382a2ee40a84d964dc",
+            "cid": "bafkreicm57r7aabj5skl64dry7ha7puttpv52od4h72mqcz5z3holpipb4",
+            "expectedVersion": 3,
+            "relayNonce": 3,
+            "nonce": 1003,
+            "signature": "0x1e1c19896ce6401a292288264c3cc357cefaaf8496b1cde1a59c31942c73885b5ee4b38da117981aecddca0cc06fa3f931c34831e1968fc3348388f49001da841b",
+            "callerUsed": "0x5d4e1b3cf4ad01a7c7a9c1f6a2d4e8b9c0f1a2b3",
+            "owned": true
+          }
+        ],
+        "recordRule": "each entry is the authorization record of session-commits.json (enclave, keyHash, cid, expectedVersion, relayNonce, nonce, signature, callerUsed, owned, in this key order): signature is the EIP-191 personal_sign by the enclave wallet of EnclaveStateRegistry.commitDigest(chainId, registry, enclave, keyHash, keccak256(cid), expectedVersion, relayNonce, nonce), so it recovers to enclave and verifies only against this chainId and registry; the validators (ethernity-cas esr_ledger::parse) refuse an entry without it",
+        "leafRule": "keccak256(abi.encode(address enclave, bytes32 keyHash, bytes32 keccak256(cid), uint256 expectedVersion, uint256 relayNonce, uint256 nonce)); root as for the session rows; signature, callerUsed and owned are not in the leaf",
+        "ledgerJson": "[{\"enclave\":\"0x7b1b9cf0a2b4dbbd395874f0225855a909c96ff9\",\"keyHash\":\"0x949dadce9c1f348fef31d83f2bf256dcbd297ae3f068dda9181adf7c1bd0a1ad\",\"cid\":\"bafkreihtnnc25amibhxcjlrerhw2x7r46kqsmj5wskoap7d2hoef2qkniq\",\"expectedVersion\":1,\"relayNonce\":1,\"nonce\":1001,\"signature\":\"0xd23bf96f552a79463ed36188240ab7da5a1fc680b7a91e9c9c17c928db4de3f343ab56cb5f15c39c5d5da21de1e0d21d1ec68977a85fd508e492e502d9816e331b\",\"callerUsed\":\"0x5d4e1b3cf4ad01a7c7a9c1f6a2d4e8b9c0f1a2b3\",\"owned\":true},{\"enclave\":\"0x7b1b9cf0a2b4dbbd395874f0225855a909c96ff9\",\"keyHash\":\"0xc364eabba7facd62188f7298559b7cf78c76c412d4993a8ff4ca5dfc431defca\",\"cid\":\"bafkreiaenf374joyspw7qwjhysqdqjelcyoewe2ddufvxfej5c7rphmjvy\",\"expectedVersion\":2,\"relayNonce\":2,\"nonce\":1002,\"signature\":\"0xe5dd93c520179ad71e4abbf78e2b45e6212d96c1f542bc282539535aaaec972f64b409d2127972d3ad8ae397ce7bfadd777d4fdbe44b9cbfa13aaf4ec4fe06181b\",\"callerUsed\":\"0x5d4e1b3cf4ad01a7c7a9c1f6a2d4e8b9c0f1a2b3\",\"owned\":true},{\"enclave\":\"0x7b1b9cf0a2b4dbbd395874f0225855a909c96ff9\",\"keyHash\":\"0xbdad7fa586b12c372dcf937f9e3e530cc058d0451930e4382a2ee40a84d964dc\",\"cid\":\"bafkreicm57r7aabj5skl64dry7ha7puttpv52od4h72mqcz5z3holpipb4\",\"expectedVersion\":3,\"relayNonce\":3,\"nonce\":1003,\"signature\":\"0x1e1c19896ce6401a292288264c3cc357cefaaf8496b1cde1a59c31942c73885b5ee4b38da117981aecddca0cc06fa3f931c34831e1968fc3348388f49001da841b\",\"callerUsed\":\"0x5d4e1b3cf4ad01a7c7a9c1f6a2d4e8b9c0f1a2b3\",\"owned\":true}]",
+        "cidRule": "raw CIDv1 (0x01 0x55 0x12 0x20 || sha256) base32 of the UTF-8 JSON of the attested commits array, the records serialised compactly (JSON.stringify / json.dumps with separators (\",\", \":\")) with their nine keys in record order: the bytes the securelock stages as esr.authorizations.json and the trustedzone hashes in esrCommitDigest",
+        "authorised": 3,
+        "landed": 3,
+        "landingReceipts": [
+          {
+            "gasUsed": 148213,
+            "effectiveGasPrice": 62000000000
+          },
+          {
+            "gasUsed": 148201,
+            "effectiveGasPrice": 61500000000
+          },
+          {
+            "gasUsed": 148225,
+            "effectiveGasPrice": 63000000000
+          }
+        ],
+        "esrGasWei": "27641742500000000",
+        "countRule": "field 5 is the authorised count as a bias-1 byte (3 commits = 02); field 12 is the landed count in decimal (etny-esr-commits=3). The PoX takes the landed count as the esrCommits parameter of _addResultToOrderV2 and the validators require it to equal field 12.",
+        "gasRule": "field 14 is the gas-token weis the landing transactions cost, the sum of gasUsed x effectiveGasPrice over their receipts (a commitForBatch transaction counted once for every commit it carries), in decimal (etny-esr-gas=<wei>). The PoX takes it as the esrGasWei parameter of _addResultToOrderV2, accrues min(esrGasWei, esrCommits x gasPerCommit x the order's gas price cap) to the order's chainSpent, and the validators require the parameter to equal field 14."
+      },
+      "fields": [
+        {
+          "index": 0,
+          "name": "version",
+          "value": "v5"
+        },
+        {
+          "index": 1,
+          "name": "taskCode",
+          "value": "0"
+        },
+        {
+          "index": 2,
+          "name": "resultChecksum",
+          "value": "30de2218ca0d0af4e87096f054ce46c3868bbc6c26e3b668802e400824dd80a0"
+        },
+        {
+          "index": 3,
+          "name": "enclaveChallenge",
+          "value": "k7p2x9qv4m1zr8t3hw6n"
+        },
+        {
+          "index": 4,
+          "name": "esrMerkleRoot",
+          "value": "19f47a6645815eb491c9835effb168157db6ec127ab806eedac86fd0a2ea703f"
+        },
+        {
+          "index": 5,
+          "name": "esrCount",
+          "value": "02"
+        },
+        {
+          "index": 6,
+          "name": "esrLedgerCid",
+          "value": "bafkreidspmoigauzlox6cshweg4kp2jbphgkl22q7v32jggny7gurfhjoi"
+        },
+        {
+          "index": 7,
+          "name": "siRoot",
+          "value": "0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        {
+          "index": 8,
+          "name": "siCount",
+          "value": "00"
+        },
+        {
+          "index": 9,
+          "name": "soRoot",
+          "value": "0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        {
+          "index": 10,
+          "name": "soCount",
+          "value": "00"
+        },
+        {
+          "index": 11,
+          "name": "sessionStatus",
+          "value": "0f"
+        },
+        {
+          "index": 12,
+          "name": "esrCommits",
+          "value": "etny-esr-commits=3"
+        },
+        {
+          "index": 13,
+          "name": "cuDelivered",
+          "value": "etny-cu-delivered="
+        },
+        {
+          "index": 14,
+          "name": "esrGas",
+          "value": "etny-esr-gas=27641742500000000"
+        }
+      ],
+      "result": "v5:0:30de2218ca0d0af4e87096f054ce46c3868bbc6c26e3b668802e400824dd80a0:k7p2x9qv4m1zr8t3hw6n:19f47a6645815eb491c9835effb168157db6ec127ab806eedac86fd0a2ea703f:02:bafkreidspmoigauzlox6cshweg4kp2jbphgkl22q7v32jggny7gurfhjoi:0000000000000000000000000000000000000000000000000000000000000000:00:0000000000000000000000000000000000000000000000000000000000000000:00:0f:etny-esr-commits=3:etny-cu-delivered=:etny-esr-gas=27641742500000000"
+    },
+    "probed": {
+      "name": "probed",
+      "inputs": {
+        "taskResult": "Hello, World!",
+        "taskCode": 0,
+        "source": "capability-record.json: cu, runNonce, t0, t1, validator.address, timeStatements.t0/t1.signature.serialized, block0, block1",
+        "deliveredRule": "nine values: cu x 1000 of the probe, the run nonce the trustedzone drew for the probe, the two validator timestamps, the validator address lower-case, the two 65-byte signatures 0x hex, then the block field of the t0 and t1 statements in decimal, taken by the trustedzone from the two time answers it holds; a production probe draws its own nonce and its t1 - t0 is the probe length. The validators recover the two signatures over the statements rebuilt with node = the order's dproc, nonce, t and block from this field."
+      },
+      "fields": [
+        {
+          "index": 0,
+          "name": "version",
+          "value": "v5"
+        },
+        {
+          "index": 1,
+          "name": "taskCode",
+          "value": "0"
+        },
+        {
+          "index": 2,
+          "name": "resultChecksum",
+          "value": "dffd6021bb2bd5b0af676290809ec3a53191dd81c7f70a4b28688a362182986f"
+        },
+        {
+          "index": 3,
+          "name": "enclaveChallenge",
+          "value": "k7p2x9qv4m1zr8t3hw6n"
+        },
+        {
+          "index": 4,
+          "name": "esrMerkleRoot",
+          "value": "0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        {
+          "index": 5,
+          "name": "esrCount",
+          "value": "00"
+        },
+        {
+          "index": 6,
+          "name": "esrLedgerCid",
+          "value": ""
+        },
+        {
+          "index": 7,
+          "name": "siRoot",
+          "value": "0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        {
+          "index": 8,
+          "name": "siCount",
+          "value": "00"
+        },
+        {
+          "index": 9,
+          "name": "soRoot",
+          "value": "0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        {
+          "index": 10,
+          "name": "soCount",
+          "value": "00"
+        },
+        {
+          "index": 11,
+          "name": "sessionStatus",
+          "value": "0f"
+        },
+        {
+          "index": 12,
+          "name": "esrCommits",
+          "value": "etny-esr-commits=0"
+        },
+        {
+          "index": 13,
+          "name": "cuDelivered",
+          "value": "etny-cu-delivered=2500|0xf9324b49b24c8561481ef6b84ec6cbeabd1ccd691e3e55f109d1243ea864e569|1761724800|1761724830|0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278|0x32dac36e060115ab6b0c8904fe92c8588affd0fec146186f68a61902a2f89d7f20c5392feeb2db341616f71eb82f6309fde0c8f6bdd9cd0237f21e43482551a81c|0x00f6af616becd151b753b09ee4830c51df8449e840a57a135160facdccf410a8203b15fc4d879e3c9a9cd94befa207d5032f1ef951731f26d5db40bc0d85278c1b|29000000|29000015"
+        },
+        {
+          "index": 14,
+          "name": "esrGas",
+          "value": "etny-esr-gas=0"
+        }
+      ],
+      "result": "v5:0:dffd6021bb2bd5b0af676290809ec3a53191dd81c7f70a4b28688a362182986f:k7p2x9qv4m1zr8t3hw6n:0000000000000000000000000000000000000000000000000000000000000000:00::0000000000000000000000000000000000000000000000000000000000000000:00:0000000000000000000000000000000000000000000000000000000000000000:00:0f:etny-esr-commits=0:etny-cu-delivered=2500|0xf9324b49b24c8561481ef6b84ec6cbeabd1ccd691e3e55f109d1243ea864e569|1761724800|1761724830|0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278|0x32dac36e060115ab6b0c8904fe92c8588affd0fec146186f68a61902a2f89d7f20c5392feeb2db341616f71eb82f6309fde0c8f6bdd9cd0237f21e43482551a81c|0x00f6af616becd151b753b09ee4830c51df8449e840a57a135160facdccf410a8203b15fc4d879e3c9a9cd94befa207d5032f1ef951731f26d5db40bc0d85278c1b|29000000|29000015:etny-esr-gas=0"
+    },
+    "transferred": {
+      "name": "transferred",
+      "inputs": {
+        "taskResult": "{\"session\":\"transferred\",\"inputs\":2,\"outputs\":2}",
+        "taskCode": 41,
+        "sessionStatus": "transferred",
+        "taskWallet": "0x40680ca06d992501822586eb6bf65db227f105d8",
+        "inputRows": [
+          "v1:0:4101:bafkreiffq37nia2t7hlpwaaou5xilbe6i3rivtjr2t24a2zphyjij6e7la:a586fed40353f9d6fb000ea76e85849e46e28acd31d4f5c06b2f3e1284f89f58",
+          "v1:1:4101:bafkreif7zt2czkb4s2rvsqn4sqqtmgu76q5zas7g6oxnszpglnej63ghv4:bfccf42ca83c96a35941bc9421361a9ff43b904be6f3aed965e65b489f6cc7af"
+        ],
+        "outputValues": [
+          "v1:0:4101:0:ok:0:bafkreifgd3qs3yevw7haomfvoaanbnggkwlsmk6nbvgjkhtuiszxxs4tha:a61ee12de095b7ce0730b57000d0b4c65597262bcd0d4c951e7444b37bcb9338:0x6e2ff1b7b212c2ea587a4d900f4b4facca44b6925884366be4ab0587583137ab59e3817fb83fc3af6b1117990dd364b14cdb051fab22e70229b0936e861e09231b",
+          "v1:1:4101:1:ok:0:bafkreicwqmr4vvjvozrcfozsjs6a6yjg2h2h22ibaumdisipcdm7uo6l6a:568323cad535766222bb324cbc0f6126d1f47d6901051834490f10d9fa3bcbf0:0x96f5054ad02896728519b789ee180dc3fc34dee28876785db307179e45878cdd0a8bb4f6e0681d740fc4131762255c8893cb185de661dfa43e199f10c63cd1f01b"
+        ],
+        "codeRule": "SERVICE_TRANSFERRED (41) is asserted by the trustedzone alone when it transfers the service inside the order's window, its end window or an announced one (RESERVATION-DESIGN.md §2, §3): from fromBlock no further input lands; it forwards every row of its request, the securelock finishes the task in hand, the session is closed as on v1:close once every row is forwarded and the securelock is idle with nothing pending, the code taken from the outputs the trustedzone holds once the securelock's heartbeat has stopped (every forwarded input answered), the commits signed by then are landed, and the result is signed over them with the session status transferred (06). Not a securelock code and not a refund code: the validators validate it as served hours on a reserved order whose window opened at or before the result's block, and invalidate it anywhere else."
+      },
+      "fields": [
+        {
+          "index": 0,
+          "name": "version",
+          "value": "v5"
+        },
+        {
+          "index": 1,
+          "name": "taskCode",
+          "value": "41"
+        },
+        {
+          "index": 2,
+          "name": "resultChecksum",
+          "value": "9a619a23f4e8626e9b1a22d3d1fee129d85f27546aa5f22eeb2d3485f36193f9"
+        },
+        {
+          "index": 3,
+          "name": "enclaveChallenge",
+          "value": "k7p2x9qv4m1zr8t3hw6n"
+        },
+        {
+          "index": 4,
+          "name": "esrMerkleRoot",
+          "value": "0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        {
+          "index": 5,
+          "name": "esrCount",
+          "value": "00"
+        },
+        {
+          "index": 6,
+          "name": "esrLedgerCid",
+          "value": ""
+        },
+        {
+          "index": 7,
+          "name": "siRoot",
+          "value": "ceb5d8c50b7698746fe058e0551b171e819accd2315fa5b8eb5dd4f74ca2dd4d"
+        },
+        {
+          "index": 8,
+          "name": "siCount",
+          "value": "01"
+        },
+        {
+          "index": 9,
+          "name": "soRoot",
+          "value": "77e911d2943aa9523dba8af18c210146475c5d595ae05c08f99bf3e11d716e43"
+        },
+        {
+          "index": 10,
+          "name": "soCount",
+          "value": "01"
+        },
+        {
+          "index": 11,
+          "name": "sessionStatus",
+          "value": "06"
+        },
+        {
+          "index": 12,
+          "name": "esrCommits",
+          "value": "etny-esr-commits=0"
+        },
+        {
+          "index": 13,
+          "name": "cuDelivered",
+          "value": "etny-cu-delivered="
+        },
+        {
+          "index": 14,
+          "name": "esrGas",
+          "value": "etny-esr-gas=0"
+        }
+      ],
+      "result": "v5:41:9a619a23f4e8626e9b1a22d3d1fee129d85f27546aa5f22eeb2d3485f36193f9:k7p2x9qv4m1zr8t3hw6n:0000000000000000000000000000000000000000000000000000000000000000:00::ceb5d8c50b7698746fe058e0551b171e819accd2315fa5b8eb5dd4f74ca2dd4d:01:77e911d2943aa9523dba8af18c210146475c5d595ae05c08f99bf3e11d716e43:01:06:etny-esr-commits=0:etny-cu-delivered=:etny-esr-gas=0"
+    },
+    "forced": {
+      "name": "transfer-forced",
+      "inputs": {
+        "taskResult": "{\"session\":\"transfer-forced\",\"inputs\":2,\"outputs\":1}",
+        "taskCode": 42,
+        "sessionStatus": "transfer-forced",
+        "taskWallet": "0x40680ca06d992501822586eb6bf65db227f105d8",
+        "inputRows": [
+          "v1:0:4101:bafkreiffq37nia2t7hlpwaaou5xilbe6i3rivtjr2t24a2zphyjij6e7la:a586fed40353f9d6fb000ea76e85849e46e28acd31d4f5c06b2f3e1284f89f58",
+          "v1:1:4101:bafkreif7zt2czkb4s2rvsqn4sqqtmgu76q5zas7g6oxnszpglnej63ghv4:bfccf42ca83c96a35941bc9421361a9ff43b904be6f3aed965e65b489f6cc7af"
+        ],
+        "outputValues": [
+          "v1:0:4101:0:ok:0:bafkreifgd3qs3yevw7haomfvoaanbnggkwlsmk6nbvgjkhtuiszxxs4tha:a61ee12de095b7ce0730b57000d0b4c65597262bcd0d4c951e7444b37bcb9338:0x6e2ff1b7b212c2ea587a4d900f4b4facca44b6925884366be4ab0587583137ab59e3817fb83fc3af6b1117990dd364b14cdb051fab22e70229b0936e861e09231b"
+        ],
+        "enclaveWallet": "0x7b1b9cf0a2b4dbbd395874f0225855a909c96ff9",
+        "commits": [
+          {
+            "enclave": "0x7b1b9cf0a2b4dbbd395874f0225855a909c96ff9",
+            "keyHash": "0x949dadce9c1f348fef31d83f2bf256dcbd297ae3f068dda9181adf7c1bd0a1ad",
+            "cid": "bafkreihtnnc25amibhxcjlrerhw2x7r46kqsmj5wskoap7d2hoef2qkniq",
+            "expectedVersion": 1,
+            "relayNonce": 1,
+            "nonce": 1001,
+            "signature": "0xd23bf96f552a79463ed36188240ab7da5a1fc680b7a91e9c9c17c928db4de3f343ab56cb5f15c39c5d5da21de1e0d21d1ec68977a85fd508e492e502d9816e331b",
+            "callerUsed": "0x5d4e1b3cf4ad01a7c7a9c1f6a2d4e8b9c0f1a2b3",
+            "owned": true
+          },
+          {
+            "enclave": "0x7b1b9cf0a2b4dbbd395874f0225855a909c96ff9",
+            "keyHash": "0xc364eabba7facd62188f7298559b7cf78c76c412d4993a8ff4ca5dfc431defca",
+            "cid": "bafkreiaenf374joyspw7qwjhysqdqjelcyoewe2ddufvxfej5c7rphmjvy",
+            "expectedVersion": 2,
+            "relayNonce": 2,
+            "nonce": 1002,
+            "signature": "0xe5dd93c520179ad71e4abbf78e2b45e6212d96c1f542bc282539535aaaec972f64b409d2127972d3ad8ae397ce7bfadd777d4fdbe44b9cbfa13aaf4ec4fe06181b",
+            "callerUsed": "0x5d4e1b3cf4ad01a7c7a9c1f6a2d4e8b9c0f1a2b3",
+            "owned": true
+          },
+          {
+            "enclave": "0x7b1b9cf0a2b4dbbd395874f0225855a909c96ff9",
+            "keyHash": "0xbdad7fa586b12c372dcf937f9e3e530cc058d0451930e4382a2ee40a84d964dc",
+            "cid": "bafkreicm57r7aabj5skl64dry7ha7puttpv52od4h72mqcz5z3holpipb4",
+            "expectedVersion": 3,
+            "relayNonce": 3,
+            "nonce": 1003,
+            "signature": "0x1e1c19896ce6401a292288264c3cc357cefaaf8496b1cde1a59c31942c73885b5ee4b38da117981aecddca0cc06fa3f931c34831e1968fc3348388f49001da841b",
+            "callerUsed": "0x5d4e1b3cf4ad01a7c7a9c1f6a2d4e8b9c0f1a2b3",
+            "owned": true
+          }
+        ],
+        "ledgerJson": "[{\"enclave\":\"0x7b1b9cf0a2b4dbbd395874f0225855a909c96ff9\",\"keyHash\":\"0x949dadce9c1f348fef31d83f2bf256dcbd297ae3f068dda9181adf7c1bd0a1ad\",\"cid\":\"bafkreihtnnc25amibhxcjlrerhw2x7r46kqsmj5wskoap7d2hoef2qkniq\",\"expectedVersion\":1,\"relayNonce\":1,\"nonce\":1001,\"signature\":\"0xd23bf96f552a79463ed36188240ab7da5a1fc680b7a91e9c9c17c928db4de3f343ab56cb5f15c39c5d5da21de1e0d21d1ec68977a85fd508e492e502d9816e331b\",\"callerUsed\":\"0x5d4e1b3cf4ad01a7c7a9c1f6a2d4e8b9c0f1a2b3\",\"owned\":true},{\"enclave\":\"0x7b1b9cf0a2b4dbbd395874f0225855a909c96ff9\",\"keyHash\":\"0xc364eabba7facd62188f7298559b7cf78c76c412d4993a8ff4ca5dfc431defca\",\"cid\":\"bafkreiaenf374joyspw7qwjhysqdqjelcyoewe2ddufvxfej5c7rphmjvy\",\"expectedVersion\":2,\"relayNonce\":2,\"nonce\":1002,\"signature\":\"0xe5dd93c520179ad71e4abbf78e2b45e6212d96c1f542bc282539535aaaec972f64b409d2127972d3ad8ae397ce7bfadd777d4fdbe44b9cbfa13aaf4ec4fe06181b\",\"callerUsed\":\"0x5d4e1b3cf4ad01a7c7a9c1f6a2d4e8b9c0f1a2b3\",\"owned\":true},{\"enclave\":\"0x7b1b9cf0a2b4dbbd395874f0225855a909c96ff9\",\"keyHash\":\"0xbdad7fa586b12c372dcf937f9e3e530cc058d0451930e4382a2ee40a84d964dc\",\"cid\":\"bafkreicm57r7aabj5skl64dry7ha7puttpv52od4h72mqcz5z3holpipb4\",\"expectedVersion\":3,\"relayNonce\":3,\"nonce\":1003,\"signature\":\"0x1e1c19896ce6401a292288264c3cc357cefaaf8496b1cde1a59c31942c73885b5ee4b38da117981aecddca0cc06fa3f931c34831e1968fc3348388f49001da841b\",\"callerUsed\":\"0x5d4e1b3cf4ad01a7c7a9c1f6a2d4e8b9c0f1a2b3\",\"owned\":true}]",
+        "landingReceipts": [
+          {
+            "gasUsed": 148213,
+            "effectiveGasPrice": 62000000000
+          },
+          {
+            "gasUsed": 148201,
+            "effectiveGasPrice": 61500000000
+          },
+          {
+            "gasUsed": 148225,
+            "effectiveGasPrice": 63000000000
+          }
+        ],
+        "esrGasWei": "27641742500000000",
+        "ledgerRule": "the predecessor's ledger is the steps' attested records carried in the securelock's signed output envelopes (RESERVATION-DESIGN.md §2); the securelock stopped by transfer writes no result envelope, so fields 4-6, 12 and 14 are signed over those records, the ones landed by toBlock (here the ESR example's three commits, all landed)",
+        "codeRule": "SERVICE_TRANSFER_FORCED (42) is asserted by the trustedzone alone when the securelock is still busy HANDOVER_FORCE_SECONDS (two minutes) before the toBlock of the order's window, its end window or an announced one (RESERVATION-DESIGN.md §2, §3): the securelock is sent the signed transfer control and stops the step in hand, discarding the step's held commit authorisations, the commits signed by then are landed, and the result is signed over the steps' attested records (fields 4-6, 12 and 14 non-zero here, the ESR example's three commits) with the session status transfer-forced (07), the code taken from the outputs the trustedzone holds once the securelock's heartbeat has stopped (every forwarded input answered: 41). Not a securelock code and not a refund code: validated as SERVICE_TRANSFERRED is, the session gate admitting unanswered input rows as the tail of the inputs only, at least one (here the second). The unanswered inputs (every etny-si row of the predecessor's request without an etny-so row acknowledging it, signed by the predecessor's task wallet, landed by the predecessor's bound, its result's block inside the window and toBlock otherwise, the rows' blocks from the PoX's OutputRowAdded logs, in sequence order) are replayed by the successor as its first inputs, on the state the last commit left; the runner resends nothing (the replayed example)."
+      },
+      "fields": [
+        {
+          "index": 0,
+          "name": "version",
+          "value": "v5"
+        },
+        {
+          "index": 1,
+          "name": "taskCode",
+          "value": "42"
+        },
+        {
+          "index": 2,
+          "name": "resultChecksum",
+          "value": "7f5181529085a1a9abb4486ea940e69d2328275b7054bd0fa1afa9e7460ec712"
+        },
+        {
+          "index": 3,
+          "name": "enclaveChallenge",
+          "value": "k7p2x9qv4m1zr8t3hw6n"
+        },
+        {
+          "index": 4,
+          "name": "esrMerkleRoot",
+          "value": "19f47a6645815eb491c9835effb168157db6ec127ab806eedac86fd0a2ea703f"
+        },
+        {
+          "index": 5,
+          "name": "esrCount",
+          "value": "02"
+        },
+        {
+          "index": 6,
+          "name": "esrLedgerCid",
+          "value": "bafkreidspmoigauzlox6cshweg4kp2jbphgkl22q7v32jggny7gurfhjoi"
+        },
+        {
+          "index": 7,
+          "name": "siRoot",
+          "value": "ceb5d8c50b7698746fe058e0551b171e819accd2315fa5b8eb5dd4f74ca2dd4d"
+        },
+        {
+          "index": 8,
+          "name": "siCount",
+          "value": "01"
+        },
+        {
+          "index": 9,
+          "name": "soRoot",
+          "value": "04933b3c02873c8f280914960f843c9f5ee69a0bfe58653dd5557ce488e83bf9"
+        },
+        {
+          "index": 10,
+          "name": "soCount",
+          "value": "00"
+        },
+        {
+          "index": 11,
+          "name": "sessionStatus",
+          "value": "07"
+        },
+        {
+          "index": 12,
+          "name": "esrCommits",
+          "value": "etny-esr-commits=3"
+        },
+        {
+          "index": 13,
+          "name": "cuDelivered",
+          "value": "etny-cu-delivered="
+        },
+        {
+          "index": 14,
+          "name": "esrGas",
+          "value": "etny-esr-gas=27641742500000000"
+        }
+      ],
+      "result": "v5:42:7f5181529085a1a9abb4486ea940e69d2328275b7054bd0fa1afa9e7460ec712:k7p2x9qv4m1zr8t3hw6n:19f47a6645815eb491c9835effb168157db6ec127ab806eedac86fd0a2ea703f:02:bafkreidspmoigauzlox6cshweg4kp2jbphgkl22q7v32jggny7gurfhjoi:ceb5d8c50b7698746fe058e0551b171e819accd2315fa5b8eb5dd4f74ca2dd4d:01:04933b3c02873c8f280914960f843c9f5ee69a0bfe58653dd5557ce488e83bf9:00:07:etny-esr-commits=3:etny-cu-delivered=:etny-esr-gas=27641742500000000"
+    },
+    "replayed": {
+      "name": "replayed",
+      "inputs": {
+        "taskResult": "{\"session\":\"closed\",\"inputs\":2,\"outputs\":3,\"replayed\":1}",
+        "taskCode": 0,
+        "sessionStatus": "closed",
+        "orderId": 4102,
+        "predecessorOrderId": 4101,
+        "taskWallet": "0x4f0c196e1f0af7a89f246df2ae8f4b0a88fa55ec",
+        "taskWalletPrivateKey": "0x4fec522d8df03bd109da4d45489e235edb8f8cd602cfbd145e439a910f4f17a1",
+        "replayedInputRows": [
+          "v1:1:4101:bafkreif7zt2czkb4s2rvsqn4sqqtmgu76q5zas7g6oxnszpglnej63ghv4:bfccf42ca83c96a35941bc9421361a9ff43b904be6f3aed965e65b489f6cc7af"
+        ],
+        "replayedSeqs": [
+          1
+        ],
+        "inputRows": [
+          "v1:0:4102:bafkreidkdr7kp2e42klksqwqslpot5e4lhbss5qmmke33httiruxb6p6da:6a1c7ea7e89cd296a942d092dee9f49c59c329760c6289bd9e73446970f9fe18",
+          "v1:1:4102:bafkreif47rsrywj2inl5lqpgw4fd5flrtkz3dw74tg7cq6h5qkepk5qsx4:bcfc651c593a4357d5c1e6b70a3e95719ab3b1dbfc99be2878fd8288f57612bf"
+        ],
+        "outputValues": [
+          "v1:0:4102:1:ok:0:bafkreifd56yvfkpez7itezpbboxoe6cx5mtylfvcdteqn6npremlp75nmm:a3efb152a9e4cfd13265e10baee27857eb278596a21cc906f9af8918b7ffad63:0x9a11afc71f5b7b554da73990144a179565c06e0955b887f7bb99d9f5b0c516ae25c7559527541f346980035dda9a52cf56dd5743dac2be7cd8d7f5ca4724c9b31c",
+          "v1:1:4102:0:ok:0:bafkreihonyc6ex2kg4sbb7r4krhfjocb3enrpyg4awk6kxu54yejrl63mu:ee6e05e25f4a372410fe3c544e54b841d91b17e0dc0595e55e9de60898afdb65:0x662f4d1c44aa2be7614d5843e5c84b4527079630a8dface9bd32435977ab2ad167741fd1a66a14b2a695f650cabcbb7d7c192d6d47e4f7f1a19b61f9658f4c7b1c",
+          "v1:2:4102:1:ok:0:bafkreibdadldxiqgly2jlrtpob4wnpqj2lfu2eosqlcs53iuxch64rtc4m:2300d63ba2065e3495c66f707966be09d2cb4d11d282c52eed14b88fee4662e3:0x2fecc6ea18e8c4e2e4c5852a71433b56f521514fb5948fd46a5bab08f22ce86b0cffe67f30f91370de94911523402cd7b9f5a81a1de455e3cbd1879b2cee884a1c"
+        ],
+        "replayRule": "The successor of a forced handover or a missed window reads the predecessor's request (handoverOf names it) and takes every etny-si row without an etny-so row acknowledging it, signed by the predecessor's task wallet, landed by the predecessor's bound (its result's block when inside the window, toBlock otherwise; the PoX's OutputRowAdded logs after it name the rows that landed later, the row getters answering the current state), in sequence order (here the predecessor's seq 1, the transfer-forced example's second input; the node stages each ciphertext as session.replay.<seq>, one it cannot fetch answered by the trustedzone with notice 54 SESSION_REPLAY_UNAVAILABLE), forwards the f staged (here all r) to its securelock as session.input.0..f-1 and the holder's rows, numbered from 0 again on the successor, as session.input.n+f. Its first r output rows answer the replays, row k carrying the predecessor's seq as its ack and signed as any output row, so its soCount exceeds its siCount by r; the replayed rows are in the predecessor's siRoot and in neither root of the successor as inputs. The validators, reading the same predecessor rows, leave the first r output rows out of the coverage of the successor's inputs; the runner takes them as the answers to the inputs it holds unanswered on the predecessor and matches the successor's inputs against its rows from r (RESERVATION-DESIGN.md §2).",
+        "rootRule": "leaf = keccak256(utf8 row value exactly as stored on chain); root = Merkle root, odd node paired with itself; count byte bias-1; siRoot over the successor's own input rows only"
+      },
+      "fields": [
+        {
+          "index": 0,
+          "name": "version",
+          "value": "v5"
+        },
+        {
+          "index": 1,
+          "name": "taskCode",
+          "value": "0"
+        },
+        {
+          "index": 2,
+          "name": "resultChecksum",
+          "value": "7a43cb6dafa4fc42bfa63dc19d92c68f70e3c63db1c60784188360fd471631ad"
+        },
+        {
+          "index": 3,
+          "name": "enclaveChallenge",
+          "value": "k7p2x9qv4m1zr8t3hw6n"
+        },
+        {
+          "index": 4,
+          "name": "esrMerkleRoot",
+          "value": "0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        {
+          "index": 5,
+          "name": "esrCount",
+          "value": "00"
+        },
+        {
+          "index": 6,
+          "name": "esrLedgerCid",
+          "value": ""
+        },
+        {
+          "index": 7,
+          "name": "siRoot",
+          "value": "cdd965c7234cf232eaf632c8573a973fd5cf22bf70d052443fdcf71f5409193d"
+        },
+        {
+          "index": 8,
+          "name": "siCount",
+          "value": "01"
+        },
+        {
+          "index": 9,
+          "name": "soRoot",
+          "value": "689e8449a1d28174325fb555981e89688648d05d48ed1cac4e75da6a64e38f4f"
+        },
+        {
+          "index": 10,
+          "name": "soCount",
+          "value": "02"
+        },
+        {
+          "index": 11,
+          "name": "sessionStatus",
+          "value": "00"
+        },
+        {
+          "index": 12,
+          "name": "esrCommits",
+          "value": "etny-esr-commits=0"
+        },
+        {
+          "index": 13,
+          "name": "cuDelivered",
+          "value": "etny-cu-delivered="
+        },
+        {
+          "index": 14,
+          "name": "esrGas",
+          "value": "etny-esr-gas=0"
+        }
+      ],
+      "result": "v5:0:7a43cb6dafa4fc42bfa63dc19d92c68f70e3c63db1c60784188360fd471631ad:k7p2x9qv4m1zr8t3hw6n:0000000000000000000000000000000000000000000000000000000000000000:00::cdd965c7234cf232eaf632c8573a973fd5cf22bf70d052443fdcf71f5409193d:01:689e8449a1d28174325fb555981e89688648d05d48ed1cac4e75da6a64e38f4f:02:00:etny-esr-commits=0:etny-cu-delivered=:etny-esr-gas=0"
+    }
+  },
+  "session": {
+    "taskWalletPrivateKey": "0x3be6cb93aaba68d1e0ad080f98728b1a11e06ad0ca6f465dafb174749942f66d"
+  },
+  "esr": {
+    "enclaveWalletPrivateKey": "0xf5f7e4fc5cbe5efbfad59895c3f29bab8187b113eb40bea5da310550b5590388"
+  },
+  "replayed": {
+    "taskWalletPrivateKey": "0x4fec522d8df03bd109da4d45489e235edb8f8cd602cfbd145e439a910f4f17a1"
+  }
+}

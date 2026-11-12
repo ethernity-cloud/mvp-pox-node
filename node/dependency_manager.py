@@ -8,7 +8,10 @@ REQUIRED_PACKAGES = {
     "python-dotenv": "1.0.1",
     "minio": "7.2.13",
     "web3": "7.6.1",
-    "bs4": "0.0.2"
+    "bs4": "0.0.2",
+    # ECDSA P-384 over a SHA-256 prehash, for the etny-sw row's signature;
+    # the version Ubuntu 22.04's python3-cryptography carries on the node VMs.
+    "cryptography": "3.4.8"
 }
 
 
