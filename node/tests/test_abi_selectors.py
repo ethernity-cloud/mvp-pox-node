@@ -108,6 +108,7 @@ CALLS = {
         "orderEndSlot(uint256)",
         "orderReservation(uint256)",
         "reservationOf(uint256)",
+        "reservationCount()",
         "templateOf(uint256)",
         "supportsInterface(bytes4)",
     ],

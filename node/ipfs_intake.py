@@ -16,7 +16,11 @@ of owner_signature_message(network, doRequestId), the same for every payload
 of the request), up to OWNER_SIGNED_PAYLOADS_PER_REQUEST per request: a
 session's runner lodges each input's bytes before it commits the row that
 names them, so a runner that stops between the two leaves no row without
-bytes, and the node reads the bytes the moment it reads the row.
+bytes, and the node reads the bytes the moment it reads the row. The owner
+is the request's downer, or, when the downer is a contract that answers
+ERC-165 for IReservationResolver (the reservation broker, which places a
+reservation's requests), the holder its holderOf(doRequestId) names; a
+resolver that finds no holder for the request lodges nothing.
 
 Limits: bodies above `max_bytes` (100 MiB) are refused with 413; one accepted
 upload per (network, request, cid), a repeat answers 200 without reading the
@@ -36,13 +40,29 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+from eth_abi.exceptions import DecodingError
 from eth_account import Account
 from eth_account.messages import encode_defunct
+from web3.exceptions import BadFunctionCallOutput, ContractLogicError
 
+import config
 from models import Order, OrderStatus
 from utils import looks_like_cid
 
 _PATH = re.compile(r'^/payload/([a-z0-9_]+)/(\d+)/([A-Za-z0-9]+)$')
+
+# IReservationResolver's ERC-165 id (tests/spec/broker-interface-id.json): the
+# XOR of the holderOf(uint256) and handoverOf(uint256) selectors.
+RESOLVER_INTERFACE_ID = bytes.fromhex('3bec051b')
+# What the intake calls on a request owner that is a contract: ERC-165's
+# supportsInterface and the resolver's holderOf, both declared by the broker's
+# ABI (node/broker.abi, IReservationBroker, which extends IReservationResolver
+# in pox-smart-contract-litvm interfaces/IReservationBroker.sol);
+# node/resolver.abi declares no supportsInterface.
+RESOLVER_ABI = json.loads(config.broker_abi_filepath.read_text(encoding='utf-8'))
+# _request_owner's answer for a request whose owner is a resolver that finds
+# no holder for it.
+NO_HOLDER = ''
 
 # The header of an upload lodged before the request names its CID: the request
 # owner's EIP-191 signature of owner_signature_message(network, doRequestId).
@@ -133,6 +153,23 @@ class NetworkBackend:
         self.storage = storage
         self.logger = logger
         self.orders_scanned = 0
+
+    def resolver(self, address):
+        """The IReservationResolver at `address`: the contract there, under
+        RESOLVER_ABI, when the address has code and answers true to ERC-165
+        for RESOLVER_INTERFACE_ID; None for an address without code and for
+        a contract that answers false, reverts or answers nothing decodable.
+        An RPC failure propagates."""
+        w3 = self.contract.w3
+        checksummed = w3.to_checksum_address(address)
+        if not w3.eth.get_code(checksummed):
+            return None
+        candidate = w3.eth.contract(address=checksummed, abi=RESOLVER_ABI)
+        try:
+            answers = bool(candidate.caller().supportsInterface(RESOLVER_INTERFACE_ID))
+        except (ContractLogicError, BadFunctionCallOutput, DecodingError):
+            return None
+        return candidate if answers else None
 
 
 class PayloadIntake:
@@ -247,6 +284,10 @@ class PayloadIntake:
                 log.info(f"[intake] {network} request {do_req}: not on chain after "
                          f"{self.chain_wait_seconds}s; refusing {cid}")
                 return 404, {'error': f'DO request {do_req} not found on chain'}
+            if owner == NO_HOLDER:
+                log.info(f"[intake] {network} request {do_req}: its owner is a resolver that finds no holder "
+                         f"for it; refusing {cid}")
+                return 403, {'error': "the request's owner resolves no holder"}
             if not signed_by(owner_signature_message(network, do_req), owner_signature, owner):
                 log.info(f"[intake] {network} request {do_req}: the signature lodging {cid} "
                          f"is not the owner's; refusing")
@@ -295,9 +336,17 @@ class PayloadIntake:
 
     @staticmethod
     def _request_owner(backend, do_req):
-        """The address that created DO request `do_req` (its downer). Raises
-        when the request cannot be read."""
-        return str(backend.contract.caller()._getDORequest(do_req)[0])
+        """The address whose signature lodges payloads of DO request `do_req`:
+        its downer, or, when the downer is a contract answering ERC-165 for
+        IReservationResolver (backend.resolver), the holder its
+        holderOf(do_req) names; NO_HOLDER when that resolver finds none.
+        Raises when the request or the resolver cannot be read."""
+        downer = str(backend.contract.caller()._getDORequest(do_req)[0])
+        resolver = backend.resolver(downer)
+        if resolver is None:
+            return downer
+        found, holder = resolver.caller().holderOf(int(do_req))
+        return str(holder) if found else NO_HOLDER
 
     @staticmethod
     def _request_cids(backend, do_req):

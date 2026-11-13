@@ -165,6 +165,58 @@ A testnet comes in two kinds. `bloxberg_testnet`, `litvm_liteforge` and `ethereu
 
 The agent runs a trustedzone only after an integration test has passed on this platform: the trustedzone's own (`<NETWORK>_INTEGRATION_TEST_IMAGES`), or one that covers its requirement. A DCAP platform therefore runs both kinds; a platform whose CAS-provisioned test fails and whose `-unsafe` test passes runs the `-unsafe` trustedzones alone. The names it runs are logged at start (`Platform meets dcap and sgx: runs ...`), advertised in its DP request's `metadata4` (`trustedzones=<names>;ipfs=<peer id>`), and a DO request whose image metadata names another trustedzone (field 2) is not taken, with the reason logged. Mainnet has no `-unsafe` network.
 
+## The 1.2 PoX (release 3.8.0)
+
+At start the agent probes each network's protocol contract for
+`pricingVersion()`. A contract that answers is a 1.2 PoX
+(pox-smart-contract-litvm): the agent binds the reader, the pricing, the
+reservation broker and the ECLD token the contract names and logs
+`pox=1.2 reader=... pricing=...`; one that reverts is a legacy contract and
+runs as before (`pox=legacy`). `polygon_amoy` and `polygon_amoy_unsafe` bind
+the 1.2 implementation `0x3Aa1A0d7A8A9DaE9e13345D3261afe86D67326A4`.
+
+On a 1.2 PoX the node's offer is `addDPRequestV2`, carrying the compute
+units of its capability record and a tip per CU-hour, and is refreshed an hour
+before its expiry (`refreshDPRequest`; the pricing's `dpRequestTtl` sets the
+expiry). The record comes from the trustedzone's integration test, which now
+waits `INTEGRATION_TEST_SECONDS` (900 s): the test writes
+`capability.time.etny` and `capability.etny`, the agent admits the record
+(`record admitted` in the log) and keeps it in `node/<network>/capability.json`
+for seven days, re-measuring a day before. A V2 DO request is judged on its
+recorded terms against the reader's quote plus the tip; an order's relays are
+paid from the order's own chain fee at its gas price cap, and the agent waits
+while the chain's gas price is above the cap (`gas wait` in the log). The
+result of a recorded order is posted with `_addResultToOrderV2`.
+
+Settings, per network in `node/.env` or the operator's `config` (every one
+optional; `node/.env.example` documents them all):
+
+- `<NETWORK>_TIP_PER_CU_HOUR_WEI` (0): the operator's tip in token wei per
+  CU-hour, added to the gas the node prices into its offer.
+- `<NETWORK>_ACCEPT_RESERVED` (true): whether the offer accepts the reserved
+  orders the reservation broker places; `0` keeps the node on spot orders.
+- `<NETWORK>_FARM_INVITE` (empty): a farm owner's invitation
+  `<farm>:<expiresAt>:<signature>`, joined at start with `joinFarm`; a refused
+  invitation is logged once and the node stays farmless until a fresh one.
+- `<NETWORK>_FARM_ACCEPT` (true): whether the node accepts the handovers its
+  farm's members announce.
+
+The broker items run only on a network whose contract names a broker (none is
+deployed yet). There, `etny-node.py --handover --network <name>
+[--appoint <node>]` asks the running agent to announce the handover of the
+reserved order it runs and prints its answer; the agent serves the order to
+the announced window, posts the result and adds no next DP request. The
+systemd unit sends SIGHUP on a stop (`KillSignal=SIGHUP`): while a reserved
+order runs the agent does the same, otherwise it stops as before;
+`TimeoutStopSec=21600` lets a stop wait for the window, and
+`ubuntu/etny-node-start.sh` installs the repository's unit whenever it differs
+from the installed one, so the unit travels with `git pull`. The handover's
+gas deposit is pulled in ECLD, so the node wallet needs an ECLD balance for
+it beside its gas.
+
+The agent's Python dependencies gain `cryptography` 3.4.8, which
+`dependency_manager` installs at start as it does the others.
+
 ## Mirror mode (REPLICATION_ONLY)
 
 `REPLICATION_ONLY=True` runs the agent as a mirror: no SGX, no DP requests, no
@@ -187,6 +239,18 @@ fetched, so a registration whose node is gone costs a lookup, not a fetch
 run to its bounds. `IPFS_INTAKE_BIND=host:port` adds the
 payload intake (`ipfs_intake.py`). A private key is still required for the
 chain reads' account context; the mirror sends no transaction.
+
+Of the 1.2 PoX the mirror loads the configuration only: it probes each
+contract's generation and binds the broker the contract names (reading no fee
+percents, running no integration test and sending nothing), and on a network
+with a broker it pins the artefacts every reservation's template names
+(`templateOf`: the enclave images and compose, the payload, the challenge and
+the session request) for the reservation's term, walking the reservations
+from a cursor kept in `esr_progress.json`. The intake takes a payload lodged
+on the signature of the request's owner, and when that owner is a contract
+answering ERC-165 for `IReservationResolver` (the broker), on the signature
+of the holder its `holderOf` names; a request for which the resolver finds no
+holder is refused.
 
 Settings, in the environment: `ESR_REPLICATION_INTERVAL_SECONDS` (300) is
 the cadence of the replication round, which scans the registry for new

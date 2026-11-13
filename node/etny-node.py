@@ -22,7 +22,7 @@ from web3 import middleware
 from web3.gas_strategies.time_based import fast_gas_price_strategy
 from web3.gas_strategies.rpc import rpc_gas_price_strategy
 
-from utils import get_or_generate_uuid, run_subprocess, run_subprocess_status, environment_failure, record_enclave_image_tree, compose_images, compose_services, await_enclave_runtime, tree_image_tag,revert_reason, wallet_covers, insufficient_funds, transaction_known, placement_block_of, WALLET_GAS_TRANSACTIONS, retry, holds_within, pinned_within, FetchDeferrals, staging_plan, remaining_order_seconds, record_order_placement, order_placed_at, pending_approvals, record_pending_approval, forget_pending_approval, ORDER_STARTED_KEY, order_started_row, ORDER_GRACE_SECONDS, session_wallet_attestation, Storage, Cache, ListCache, ListCacheWithTimestamp, MergedOrdersCache, subprocess, get_node_geo, HardwareInfoProvider, parse_transaction_bytes_ut, looks_like_cid, canonical_cid, PEER_MULTIADDR, next_registered_image, enclave_failure, enclave_may_have_failed, docker_container_states, docker_container_log_tail, stale_integration_tests, integration_tests_due, runnable_trustedzones, image_trees, stale_image_trees, directory_size, remove_tree, removal_leftovers, integration_env, order_env, dp_terms, tip_per_cu_hour_wei, dp_request_arguments, metadata_key, record_key, resume_admits, dp_request_disposition, bounded_cancel, admits_do_request, do_request_compare, placement_refusal_disposition, settlement_line, order_window, order_relay_ledger_path, ledger_rebuild, result_fields, result_send_decision, SESSION_WALLET_KEY, SESSION_OUTPUT_KEY
+from utils import get_or_generate_uuid, run_subprocess, run_subprocess_status, environment_failure, record_enclave_image_tree, compose_images, compose_services, await_enclave_runtime, tree_image_tag,revert_reason, wallet_covers, insufficient_funds, transaction_known, placement_block_of, WALLET_GAS_TRANSACTIONS, retry, holds_within, pinned_within, FetchDeferrals, staging_plan, remaining_order_seconds, record_order_placement, order_placed_at, pending_approvals, record_pending_approval, forget_pending_approval, ORDER_STARTED_KEY, order_started_row, ORDER_GRACE_SECONDS, session_wallet_attestation, Storage, Cache, ListCache, ListCacheWithTimestamp, MergedOrdersCache, subprocess, get_node_geo, HardwareInfoProvider, parse_transaction_bytes_ut, looks_like_cid, canonical_cid, PEER_MULTIADDR, next_registered_image, enclave_failure, enclave_may_have_failed, docker_container_states, docker_container_log_tail, stale_integration_tests, integration_tests_due, runnable_trustedzones, image_trees, stale_image_trees, directory_size, remove_tree, removal_leftovers, integration_env, order_env, dp_terms, tip_per_cu_hour_wei, dp_request_arguments, metadata_key, record_key, resume_admits, dp_request_disposition, bounded_cancel, do_request_verdict, refusal_cached, do_request_compare, placement_refusal_disposition, settlement_line, order_window, order_relay_ledger_path, ledger_rebuild, result_fields, result_send_decision, SESSION_WALLET_KEY, SESSION_OUTPUT_KEY
 import scone_image
 import pox12
 import capability
@@ -1248,6 +1248,73 @@ class EtnyPoXNode:
             self.logger.warning(f"Session replication skipped: {e}")
             return kept
 
+    def __replicate_reservation_templates(self):
+        """Pin the template artefacts of every reservation of this network's
+        broker for its term (PHASE-E-PLAN.md F.8, E36).
+
+        A reservation's template (templateOf) names, in its metadata1 to
+        metadata3, the artefacts of every order the broker places for it: the
+        enclave images and compose, the payload, the challenge and the
+        session request; the holder lodges them once, under the first placed
+        request, and every later order of the term reads them from the
+        network. The round reads the reservations added since the last one
+        (reservationCount, from the 'next_id' kept in esr_progress
+        'reservation_templates', with each one's end), pins the current
+        template's CIDs of every reservation whose term runs
+        (broker.template_pins_due, which reads the end of a reservation
+        again once the recorded one has passed, the term being extended by
+        its lost seconds) and drops an ended one from the record; its
+        artefacts then age out through the retention sweep. Nothing on a
+        network without a broker. Returns the CIDs it kept. Never raises.
+        """
+        kept = set()
+        if self.__broker is None:
+            return kept
+        try:
+            state = self.esr_progress.get('reservation_templates') or {}
+            ends = {int(rid): int(end) for rid, end in (state.get('ends') or {}).items()}
+            next_id = int(state.get('next_id') or 0)
+            count = int(self.__broker.caller().reservationCount())
+
+            def read_end(rid):
+                time.sleep(self.__network_config.rpc_delay / 1000)
+                return broker.reservation_end(self.__broker.caller().reservationOf(rid))
+
+            for rid in range(next_id, count):
+                ends[rid] = read_end(rid)
+            live, ended = broker.template_pins_due(ends, time.time(), read_end)
+            for rid in ended:
+                ends.pop(rid, None)
+            for rid in live:
+                free_gb = HardwareInfoProvider.get_free_storage()
+                if free_gb < config.esr_min_free_storage_gb:
+                    self.logger.warning(
+                        f"Free storage {free_gb}GB below ESR_MIN_FREE_STORAGE_GB; "
+                        f"stopping reservation template replication for this round")
+                    break
+                try:
+                    time.sleep(self.__network_config.rpc_delay / 1000)
+                    cids = broker.template_cids(self.__broker.caller().templateOf(rid))
+                except Exception as e:
+                    self.logger.debug(f"reservation {rid}: templateOf not read ({e})")
+                    continue
+                for cid in cids:
+                    if cid in kept:
+                        continue
+                    try:
+                        if self.__repl_pin(cid, "reservation template"):
+                            self.ipfs_cache.add(cid)
+                            kept.add(cid)
+                    except Exception as e:
+                        self.logger.debug(f"Could not pin reservation {rid} template object {cid}: {e}")
+            self.esr_progress.add('reservation_templates',
+                                  {'next_id': count, 'ends': {str(rid): end for rid, end in ends.items()}})
+            self.__repl_log_kept(kept, "reservation template")
+            return kept
+        except Exception as e:
+            self.logger.warning(f"Reservation template replication skipped: {e}")
+            return kept
+
     def __replicate_cas_session_registry(self):
         """Pin the body of every session registered in the SessionRegistry.
 
@@ -1813,6 +1880,7 @@ class EtnyPoXNode:
                 self.__replicate_protocol_results()
                 self.__replicate_do_request_inputs()
                 self.__replicate_session_rows()
+                self.__replicate_reservation_templates()
                 self.__replicate_cas_session_registry()
                 self.__replicate_registered_images()
                 # A replication-only process has no order loop, so its peering
@@ -5211,19 +5279,14 @@ class EtnyPoXNode:
                     logger.debug(f"resource:requested/available| cpu:{doreq[i].cpu}/{req.cpu} memory:{doreq[i].memory}/{req.memory} storage:{doreq[i].storage}/{req.storage} bandwidth:{doreq[i].bandwidth}/{req.bandwidth}");
                     continue
 
+                # The price (utils.do_request_verdict): without a quote the
+                # legacy uint8 compare; with the pass's quote the request's
+                # recorded terms against the quote's price plus this node's
+                # tip and its cu. A refusal that holds for the request's life
+                # is cached (utils.refusal_cached), a price refusal is not.
                 if quote is None:
-                    # The legacy compare: the request's uint8 price at least
-                    # this node's.
-                    if doreq[i].price < req.price:
-                        self.doreq_cache.add(i)
-                        logger.debug(f"DO request {i}: price {doreq[i].price} below this node's {req.price}; skipping to next request")
-                        continue
+                    refusal = do_request_verdict(doreq[i].price, req.price)
                 else:
-                    # The 1.2 compare (utils.admits_do_request): the request's
-                    # recorded terms against the quote's price plus this
-                    # node's tip and its cu; a reserved request and one whose
-                    # maxCu this node exceeds are cached, a price refusal is
-                    # not (the quote moves every epoch).
                     try:
                         if i not in do_v2:
                             do_v2[i] = DORequestV2(self.__reader.caller()._getDORequestV2(i))
@@ -5234,13 +5297,13 @@ class EtnyPoXNode:
                     except Exception as e:
                         logger.debug(f"DO request {i}: its terms were not read ({e}); next pass")
                         continue
-                    refusal = admits_do_request(do_v2[i], doreq[i].price, quote[0], terms.tip, terms.cu,
-                                                self.__fee_percents, publisher_fees[i])
-                    if refusal is not None:
-                        if refusal.kind in ('reserved', 'cu'):
-                            self.doreq_cache.add(i)
-                        logger.debug(f"DO request {i}: {refusal.text}; skipping to next request")
-                        continue
+                    refusal = do_request_verdict(doreq[i].price, req.price, quote[0], do_v2[i], terms.tip, terms.cu,
+                                                 self.__fee_percents, publisher_fees[i])
+                if refusal is not None:
+                    if refusal_cached(refusal):
+                        self.doreq_cache.add(i)
+                    logger.debug(f"DO request {i}: {refusal.text}; skipping to next request")
+                    continue
 
 
                 # An unpinned request carries no node: the contract stores that
@@ -5783,15 +5846,19 @@ class EtnyPoXNode:
         balance read in __init__ does, and a replication-only handle takes
         the contract as legacy and logs the failed step. Bound to the
         contract the handle is built on (a changed contract address builds a
-        new handle); a replication-only handle probes the same and sends
+        new handle). A replication-only handle makes the probe and the
+        address reads (its intake and its template replication read the
+        broker), reads no fee percents (it judges no DO request) and sends
         nothing."""
         logger = self.logger
         address = self.__etny.address
         self.__pox_is_12 = False
         self.__reader = self.__pricing = self.__broker = self.__token = None
         # (NETWORK_FEE_PERCENT, VALIDATOR_FEE_PERCENT) of a 1.2 contract, the
-        # legacy DO requests' fee-inclusive compare.
+        # legacy DO requests' fee-inclusive compare; None on a replication-only
+        # handle.
         self.__fee_percents = None
+        percents = None
         step = 'pricingVersion probe'
         answered, is_12 = retry(pox12.pox_generation, self.__etny.functions.pricingVersion().call, attempts=10, delay=3)
         if answered and is_12:
@@ -5802,7 +5869,7 @@ class EtnyPoXNode:
                     abis[name] = f.read()
             step = 'readerAddress, pricingAddress, reservationBrokerAddress and token reads'
             answered, handles = retry(pox12.chain_handles, self.__etny, self.__w3, abis, attempts=10, delay=3)
-            if answered:
+            if answered and not self.__replication_only:
                 step = 'NETWORK_FEE_PERCENT and VALIDATOR_FEE_PERCENT reads'
                 answered, percents = retry(self.__read_fee_percents, attempts=10, delay=3)
             if answered:
@@ -5820,10 +5887,11 @@ class EtnyPoXNode:
             named = {name: handle.address for name, handle in
                      (('reader', self.__reader), ('pricing', self.__pricing),
                       ('broker', self.__broker), ('token', self.__token)) if handle is not None}
+            fees = (f" fees=network {self.__fee_percents[0]}% validator {self.__fee_percents[1]}%"
+                    if self.__fee_percents is not None else "")
             logger.info(f"Protocol contract {address}: pox=1.2 "
-                        + ' '.join(f"{name}={value}" for name, value in named.items())
-                        + f" fees=network {self.__fee_percents[0]}% validator {self.__fee_percents[1]}%")
-            if self.__reader is None:
+                        + ' '.join(f"{name}={value}" for name, value in named.items()) + fees)
+            if self.__reader is None and not self.__replication_only:
                 logger.info(f"Protocol contract {address}: no reader; the DO requests are compared as on a legacy contract")
         else:
             logger.info(f"Protocol contract {address}: pox=legacy")

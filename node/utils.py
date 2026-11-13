@@ -779,9 +779,13 @@ ONE_CU = 1000
 DPTerms = namedtuple('DPTerms', 'cu tip accepts_reserved expires_at recorded')
 # The reader's settlementOf(orderId) answer.
 Settlement = namedtuple('Settlement', 'hours_billed work_wei fees_wei chain_paid_wei refund_wei outcome')
-# Why a DO request is not taken (admits_do_request): the kind, one of
-# 'reserved', 'price', 'cu' and 'legacy-price', and the text logged.
+# Why a DO request is not taken (do_request_verdict): the kind, one of
+# 'legacy', 'reserved', 'price', 'cu' and 'legacy-price', and the text logged.
 Refusal = namedtuple('Refusal', 'kind text')
+# The refusals the pre-filter caches against the DO request, which they hold
+# for: the legacy compare's, a reserved request's and a maxCu refusal. A
+# price refusal is not cached: the quote moves every epoch.
+CACHED_REFUSALS = ('legacy', 'reserved', 'cu')
 
 
 def dp_terms(raw):
@@ -921,6 +925,30 @@ def admits_do_request(do_v2, legacy_price_tokens, price_per_cu_hour_wei, tip, cu
         return Refusal('legacy-price', f"bid {bid} wei per CU-hour with {percents - 100}% fees above the legacy "
                                        f"request's price {max_price_wei} wei")
     return None
+
+
+def do_request_verdict(legacy_price_tokens, node_price_tokens, quote_price_wei=None, do_v2=None, tip=0, cu=0,
+                       fee_percents=(0, 0), publisher_fees=(0, 0)):
+    """Why the pre-filter skips a DO request whose resources fit, a Refusal,
+    or None when the request goes on to the placement. Without a quote
+    (`quote_price_wei` None: a legacy contract, or a 1.2 one without a
+    reader) the legacy compare runs: the request's uint8 price
+    (`legacy_price_tokens`) at least this node's (`node_price_tokens`); a V2
+    request priced below one token reads 0 there and is skipped, as every
+    agent before 3.8.0 skips it. With the pass's quote, admits_do_request
+    judges the request's recorded terms (`do_v2`) against the quote's price
+    plus this node's `tip` and its `cu`."""
+    if quote_price_wei is None:
+        if int(legacy_price_tokens) < int(node_price_tokens):
+            return Refusal('legacy', f"price {legacy_price_tokens} below this node's {node_price_tokens}")
+        return None
+    return admits_do_request(do_v2, legacy_price_tokens, quote_price_wei, tip, cu, fee_percents, publisher_fees)
+
+
+def refusal_cached(refusal):
+    """Whether the pre-filter caches `refusal` against the DO request
+    (CACHED_REFUSALS), so the request is not judged again."""
+    return refusal.kind in CACHED_REFUSALS
 
 
 def do_request_compare(has_reader, terms):

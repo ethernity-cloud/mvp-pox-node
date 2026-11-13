@@ -1,3 +1,97 @@
+v3.8.0
+the agent runs on the 1.2 PoX (pox-smart-contract-litvm) beside the legacy
+  contracts: at start it probes each network's contract for pricingVersion()
+  and, where it answers, binds the reader, the pricing, the reservation broker
+  and the ECLD token the contract names (the log line "pox=1.2 reader=...");
+  a contract that reverts is legacy and runs as before. polygon_amoy and
+  polygon_amoy_unsafe bind the 1.2 implementation
+  0x3Aa1A0d7A8A9DaE9e13345D3261afe86D67326A4 (node/.env); the request and
+  order caches of a network whose contract address changed start again
+the integration test waits INTEGRATION_TEST_SECONDS (900 s, from 300) for the
+  trustedzone's result and reads capability.time.etny and capability.etny
+  before context_test.etny and the bucket clean-up: the node's capability
+  record (its benchmarked compute units, the validators' two time statements
+  and the trustedzone's P-384 signature). A record is admitted when a seated
+  validator signed both statements, the record names the agent's wallet, the
+  trustedzone requires dcap and the cu is within CU_MAX_THOUSANDTHS; it is
+  kept in node/<network>/capability.json across restarts, stands seven days
+  from its t1 and is re-measured a day before; an -unsafe or sgx trustedzone
+  writes no record the agent admits. The integration .env and every order
+  .env carry ETNY_NODE_ADDRESS (the wallet adding the DP requests); the first
+  order after a new record carries ETNY_PROBE_FIRST=1; ETNY_NGROK_AUTHTOKEN is
+  no longer injected
+on a 1.2 contract the DP request is addDPRequestV2 with the record's cu and a
+  tip per CU-hour: <NETWORK>_TIP_PER_CU_HOUR_WEI (0) plus the node's own gas
+  (the DP request, the placement and the started row, from a moving average of
+  its status-1 receipts in node/<network>/gas_profile.json, seeded from
+  node/gas_profile_seed.json) at the pricing's average gas price, over one
+  CU-hour; metadata3 and metadata4 carry the record's fourteen keys (metadata3
+  cuval, cun, cut0, cut1, cub0, cub1, cusig0, cusig1; metadata4 cu, cuv, cuat,
+  cusig, cuheap, cuworkers, the record's trustedzone first in its list). The
+  request is refreshed (refreshDPRequest) an hour before its expiry from the
+  idle tick and the enclave wait, re-added when it carries another record or
+  the other accept-reserved flag, cancelled in at most CANCEL_ATTEMPTS sends,
+  and a request the validators cancelled (DPRequestCancelled) is re-tested
+  before the next one. The pre-filter judges a V2 DO request on its recorded
+  terms against the reader's quote plus the tip and the node's cu (a reserved
+  request is left to the broker, a legacy request is judged with the network,
+  validator and publisher fees); a sub-token V2 request, which the legacy
+  getter reads as price 0, is still skipped where no quote is read, as every
+  3.7.x agent skips it. settlementOf is logged after the result
+the relay: the session rows are served before the commits in the enclave-wait
+  tick and the final sweep; a row counts on a status-1 receipt; a
+  session.commit.<n>.<key16>.<relayNonce>.json is relayed once a
+  session.output.<seq>.commits names it and that row's receipt is in,
+  esr.commit.*.json as it appears, at most ESR_LEDGER_CAP (256) per order; the
+  trustedzone's etny-sw row is relayed on every order. One gas ledger per
+  order (orders/<id>/relay.json), the order's chainFeeWei at its
+  gasPriceCapWei on a recorded 1.2 order (re-read for a raise), the network's
+  <NETWORK>_ESR_RELAY_GAS_BUDGET_WEI on legacy orders only; a relay or result
+  whose base fee plus priority fee is above the cap waits ("gas wait" in the
+  log), bounded by the order's end; two or more commits of one enclave at a
+  tick go as one commitForBatch and two or more pending rows as one
+  _addMetadataToDPRequestBatch
+the result of a recorded 1.2 order is posted with _addResultToOrderV2 carrying
+  the v5 result's commit count and gas sum; the wait for the enclave's
+  transaction.txt lasts to the order's deadline while the enclave lives; a
+  result held by the gas price past the order's end is sent at the live price
+  up to the operator's fee ceiling for RESULT_SEND_GRACE_SECONDS (3600), then
+  abandoned with a log line
+the reservation broker, on a 1.2 contract that names one (none is deployed
+  yet): setAcceptsReserved and commitReserved at every start unless
+  <NETWORK>_ACCEPT_RESERVED=0 (true), the window extended while the agent
+  runs; an order the broker places on the node's offer approved and run at
+  once; <NETWORK>_FARM_INVITE (<farm>:<expiresAt>:<signature>) joins the farm
+  with joinFarm, <NETWORK>_FARM_ACCEPT (true) accepts the handovers the farm's
+  members and the node's appointers announce; the successor of a handover
+  window stages the predecessor's unanswered inputs as session.replay.<seq>
+  and the state objects the fence needs as state.<cid>.enc. The handover's
+  gas deposit is pulled in ECLD: the node wallet holds the deposit and
+  approves the broker for it. `etny-node.py --handover --network <name>
+  [--appoint <node>]` asks the running agent to announce the handover of the
+  reserved order it runs (node/<network>/handover.json) and prints its
+  answer; the agent serves the order to the window, posts the result and
+  adds no next DP request. SIGHUP, the unit's KillSignal, does the same while
+  a reserved order runs and its announcement is not refused (the drain state
+  survives the daily restart) and stops the agent as before otherwise;
+  ubuntu/etc/systemd/system/etny-node.service sets TimeoutStopSec=21600 so a
+  stop waits for the window, and ubuntu/etny-node-start.sh installs the
+  repository's unit when it differs from the installed one
+the mirror (REPLICATION_ONLY): probes the contract's generation and binds the
+  broker, reads no fee percents and sends nothing; on a broker network it pins
+  the artefacts every reservation's template names for the reservation's term
+  (esr_progress 'reservation_templates'); the payload intake resolves a
+  request whose owner answers ERC-165 for IReservationResolver to the holder
+  holderOf names, and refuses one for which it finds no holder
+settings: <NETWORK>_TIP_PER_CU_HOUR_WEI, <NETWORK>_ACCEPT_RESERVED,
+  <NETWORK>_FARM_INVITE and <NETWORK>_FARM_ACCEPT (above), each defaulted when
+  absent; node/.env.example documents every variable
+dependency_manager pins cryptography 3.4.8 (the etny-sw row's P-384 check)
+the constants of the above are in node/constants.py; the agent's ABI files
+  (node/docker/pox.abi the 1.2 union, node/esr.abi, node/reader.abi,
+  node/pricing.abi, node/broker.abi, node/resolver.abi, node/erc20.abi) ship
+  with the release
+
 v3.7.17
 the per-order relay gas budget is a network setting
   (<NETWORK>_ESR_RELAY_GAS_BUDGET_WEI; ESR_RELAY_GAS_BUDGET_WEI, 0.1 of the

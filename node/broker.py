@@ -15,6 +15,7 @@ from collections import namedtuple
 
 from constants import BROKER_TX_PER_TICK, COMMIT_WINDOW_FACTOR, HANDOVER_REQUEST_TIMEOUT_SECONDS
 from models import OrderStatus, RequestStatus
+from utils import looks_like_cid
 
 DAY = 86400
 # How often the --handover command reads the marker file for the answer.
@@ -52,6 +53,11 @@ HandoverRequested = namedtuple('HandoverRequested', 'id order_id dproc from_bloc
 # end in IReservationBroker.Reservation.
 TEMPLATE_HANDOVER_TIME_OF_DAY = 6
 RESERVATION_END = 3
+# The positions of metadata1, metadata2 and metadata3 in
+# IReservationBroker.Template: the strings naming the artefacts (the enclave
+# images and compose, the payload, the challenge, the session request) of
+# every order the broker places for the reservation.
+TEMPLATE_METADATA = (('metadata1', 16), ('metadata2', 17), ('metadata3', 18))
 
 ROLE_PREDECESSOR = 'predecessor'
 ROLE_SUCCESSOR = 'successor'
@@ -93,6 +99,38 @@ def template_handover_time_of_day(raw):
 def reservation_end(raw):
     """end of a reservationOf(id) struct."""
     return int(_field(raw, 'end', RESERVATION_END))
+
+
+def template_cids(raw):
+    """The CIDs a templateOf(id) struct names: every colon-separated token of
+    its metadata1, metadata2 and metadata3 shaped like a CID, in order, each
+    once."""
+    cids = []
+    for name, index in TEMPLATE_METADATA:
+        for token in str(_field(raw, name, index) or '').split(':'):
+            cid = token.strip()
+            if looks_like_cid(cid) and cid not in cids:
+                cids.append(cid)
+    return cids
+
+
+def template_pins_due(ends, now, read_end):
+    """What the mirror's round does with the reservations it holds, {id: end}
+    (reservationOf(id).end, the term's last second): (the ids whose term runs
+    at `now`, whose template artefacts are pinned this round, in id order;
+    the ids whose term has ended, dropped from the record). A reservation's
+    end moves on by its lost seconds (IReservationBroker.Reservation.end), so
+    an id whose recorded end has passed is read again through `read_end(id)`
+    before it is judged, and `ends` takes the fresh value. An ended
+    reservation's artefacts leave the pin set through the retention sweep."""
+    live, ended = [], []
+    for rid in sorted(ends):
+        end = int(ends[rid])
+        if end <= now:
+            end = int(read_end(rid))
+            ends[rid] = end
+        (live if end > now else ended).append(rid)
+    return live, ended
 
 
 def window_role(window, own_order_id):
