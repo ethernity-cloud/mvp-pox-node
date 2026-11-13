@@ -63,6 +63,18 @@ git fetch origin
 git reset --hard origin/master
 git pull
 
+# The repo's unit file is the installed one: a changed unit (TimeoutStopSec,
+# the signal) is copied into place and systemd reloaded, effective at the
+# next stop.
+REPO_UNIT=/home/vagrant/etny/node/etny-repo/ubuntu/etc/systemd/system/etny-node.service
+INSTALLED_UNIT=/etc/systemd/system/etny-node.service
+if [ -f "$REPO_UNIT" ] && ! cmp -s "$REPO_UNIT" "$INSTALLED_UNIT"
+then
+  cp "$REPO_UNIT" "$INSTALLED_UNIT"
+  systemctl daemon-reload
+  echo "etny-node.service updated from the repository"
+fi
+
 parse_config_to_args() {
     local config_file="/home/vagrant/etny/node/config"
     local args=()

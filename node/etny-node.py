@@ -1,7 +1,8 @@
 #!/usr/bin/python3
 
 import io, os, re, time, json, sys, argparse, threading
-import base64, hashlib
+import hashlib
+import signal
 from types import SimpleNamespace
 from collections import defaultdict
 import concurrent.futures
@@ -21,12 +22,15 @@ from web3 import middleware
 from web3.gas_strategies.time_based import fast_gas_price_strategy
 from web3.gas_strategies.rpc import rpc_gas_price_strategy
 
-from utils import get_or_generate_uuid, run_subprocess, run_subprocess_status, environment_failure, record_enclave_image_tree, compose_images, compose_services, await_enclave_runtime, tree_image_tag,revert_reason, wallet_covers, insufficient_funds, transaction_known, placement_block_of, WALLET_GAS_TRANSACTIONS, retry, holds_within, pinned_within, FetchDeferrals, staging_plan, remaining_order_seconds, record_order_placement, order_placed_at, pending_approvals, record_pending_approval, forget_pending_approval, ORDER_STARTED_KEY, order_started_row, ORDER_GRACE_SECONDS, session_wallet_attestation, Storage, Cache, ListCache, ListCacheWithTimestamp, MergedOrdersCache, subprocess, get_node_geo, HardwareInfoProvider, parse_transaction_bytes_ut, looks_like_cid, canonical_cid, PEER_MULTIADDR, next_registered_image, enclave_failure, enclave_may_have_failed, docker_container_states, docker_container_log_tail, stale_integration_tests, integration_tests_due, runnable_trustedzones, image_trees, stale_image_trees, directory_size, remove_tree, removal_leftovers, integration_env, order_env, dp_terms, tip_per_cu_hour_wei, dp_request_arguments, metadata_key, record_key, resume_admits, dp_request_disposition, bounded_cancel, admits_do_request, do_request_compare, placement_refusal_disposition, settlement_line
+from utils import get_or_generate_uuid, run_subprocess, run_subprocess_status, environment_failure, record_enclave_image_tree, compose_images, compose_services, await_enclave_runtime, tree_image_tag,revert_reason, wallet_covers, insufficient_funds, transaction_known, placement_block_of, WALLET_GAS_TRANSACTIONS, retry, holds_within, pinned_within, FetchDeferrals, staging_plan, remaining_order_seconds, record_order_placement, order_placed_at, pending_approvals, record_pending_approval, forget_pending_approval, ORDER_STARTED_KEY, order_started_row, ORDER_GRACE_SECONDS, session_wallet_attestation, Storage, Cache, ListCache, ListCacheWithTimestamp, MergedOrdersCache, subprocess, get_node_geo, HardwareInfoProvider, parse_transaction_bytes_ut, looks_like_cid, canonical_cid, PEER_MULTIADDR, next_registered_image, enclave_failure, enclave_may_have_failed, docker_container_states, docker_container_log_tail, stale_integration_tests, integration_tests_due, runnable_trustedzones, image_trees, stale_image_trees, directory_size, remove_tree, removal_leftovers, integration_env, order_env, dp_terms, tip_per_cu_hour_wei, dp_request_arguments, metadata_key, record_key, resume_admits, dp_request_disposition, bounded_cancel, admits_do_request, do_request_compare, placement_refusal_disposition, settlement_line, order_window, order_relay_ledger_path, ledger_rebuild, result_fields, result_send_decision, SESSION_WALLET_KEY, SESSION_OUTPUT_KEY
 import scone_image
 import pox12
 import capability
 import gas_profile
-from constants import INTEGRATION_TEST_SECONDS, INTEGRATION_TEST_RETRY_MIN_SECONDS, INTEGRATION_TEST_RETRY_MAX_SECONDS, INTEGRATION_TEST_REGISTRY_CHECK_SECONDS, RPC_REPLICA_LAG_BLOCKS, DP_TERMS_POLL_SECONDS, CANCEL_ATTEMPTS
+import gas_ledger
+import broker
+import replay
+from constants import INTEGRATION_TEST_SECONDS, INTEGRATION_TEST_RETRY_MIN_SECONDS, INTEGRATION_TEST_RETRY_MAX_SECONDS, INTEGRATION_TEST_REGISTRY_CHECK_SECONDS, RPC_REPLICA_LAG_BLOCKS, DP_TERMS_POLL_SECONDS, CANCEL_ATTEMPTS, RELAY_BATCH_MIN, ESR_LEDGER_CAP, RESULT_SEND_GRACE_SECONDS, FENCE_STAGE_SECONDS, FENCE_STAGE_TICKS, HANDOVER_REQUEST_TIMEOUT_SECONDS
 from models import *
 from error_messages import errorMessages
 from swift_stream_service import SwiftStreamService
@@ -128,6 +132,19 @@ ORDER_APPROVAL_MAX_SECONDS = 900
 # When this process started: an image tree extracted before it counts as last
 # used then (__remove_stale_image_trees).
 PROCESS_START = time.time()
+# How often the running order's handoverOf window is read at the enclave
+# wait's idle points (the trustedzones' TERMINATION_POLL_SECONDS).
+HANDOVER_POLL_SECONDS = 15
+# Set by the SIGHUP handler while a reserved order runs: the order's agent
+# announces a handover, serves the order to the window, posts the result and
+# exits (broker.signal_action 'drain'). {network: order id} of the reserved
+# orders running, read by the handler; SIGHUP with none exits at once.
+handover_signal = threading.Event()
+reserved_orders_running = {}
+# The networks whose running agent announced a handover (__announce_handover):
+# no DP request is added on them for the rest of the process, through the
+# daily restart's new handles, until the operator stops it (E28).
+drained_networks = set()
 
 
 class EnclaveFailed(Exception):
@@ -454,6 +471,20 @@ class EtnyPoXNode:
         # The (DP request, reason) placement refusals of this node's offer
         # logged, each once.
         self.__placement_refusals_logged = set()
+        # The reservation broker's side (broker.py): its params() read once
+        # per handle; the running order's window state (__handover_tick); a
+        # handover announced for the running order (no next DP request, the
+        # process idle after the result; drained_networks keeps it past this
+        # handle) and whether SIGHUP asked for the exit after it; the spot
+        # placement held while an acceptance stands, logged once. The
+        # HandoverRequested events whose acceptance is due later ({order id:
+        # HandoverRequested}) and the started reservations without an order
+        # since ({id: block}) are loaded from broker_cursor.json below.
+        self.__broker_params_read = None
+        self.__order_handover = None
+        self.__handover_drain = False
+        self.__handover_exit = False
+        self.__placement_held_logged = False
         self.__order_id = 0
         self.__total_nodes_count = 0
         self.__is_first_cycle = defaultdict(lambda: True)
@@ -482,6 +513,9 @@ class EtnyPoXNode:
 
         self.cache_config = CacheConfig(network.name)
         self.__reset_caches_of_another_contract(network)
+        self.__pending_acceptances = broker.acceptances_from_record(self.__scan_cursor('pending_acceptances'))
+        self.__started_reservations = broker.started_reservations_from_record(
+            self.__scan_cursor('started_reservations'))
         # The passed integration tests and their capability records of this
         # network, kept across process starts (capability.RecordStore).
         self.__record_store = capability.RecordStore(self.cache_config.capability_filepath)
@@ -540,6 +574,11 @@ class EtnyPoXNode:
 
         self.merged_orders_cache = MergedOrdersCache(self.cache_config.merged_orders_cache_limit, self.cache_config.merged_orders_cache)
         self.process_order_data = {}
+        # The running order's gas ledger (gas_ledger.OrderGasLedger), opened
+        # by process_order (__open_order_ledger) and charged by the relays.
+        self._order_ledger = None
+        # When a result held by the operator's fee ceiling was last logged.
+        self._result_ceiling_logged = 0
 
 
         self.__uuid = get_or_generate_uuid(config.uuid_filepath)
@@ -560,6 +599,12 @@ class EtnyPoXNode:
                 self.__run_integration_test_if_due(image)
             tests_settled(self.__network).set()
             self.__log_runnable_trustedzones()
+
+        # The broker's start calls (the commitment, the farm) on a 1.2
+        # contract with a reservation broker; a replication-only handle sends
+        # nothing.
+        if not self.__replication_only:
+            self.__broker_start()
 
 
         # Tracks when the pin cleanup last ran, so __maybe_clear_ipfs_cache can
@@ -2210,6 +2255,10 @@ class EtnyPoXNode:
         resources = (self._limited_arg(self.__number_of_cpus), self._limited_arg(self.__free_memory),
                      self._limited_arg(self.__free_storage), self._limited_arg(self.__bandwidth))
         cu = int(record['cu']) if record is not None else 0
+        # While this node's acceptance of a handover stands, its offer is at
+        # most the predecessor's cu (broker.bounded_cu).
+        if cu and self.__broker is not None:
+            cu = broker.bounded_cu(cu, self.__accepted_handover())
         tip = self.__current_tip(cu) if self.__pox_is_12 else 0
         return dp_request_arguments(not self.__pox_is_12, resources, self.__duration, self.__price, cu, tip,
                                     self.__uuid, capability.metadata3(self.__node_geo, record),
@@ -2320,6 +2369,12 @@ class EtnyPoXNode:
         advertised_key = record_key(advertised[1] if advertised else None)
         accepts = bool(self.__network_config.accept_reserved) if self.__accepts_reserved_set else None
         disposition = dp_request_disposition(terms, time.time(), self.__dprequest_record_key, advertised_key, accepts)
+        # A standing acceptance bounds the offer at the predecessor's cu: a
+        # request recorded above it is replaced.
+        accepted = self.__accepted_handover() if self.__broker is not None else None
+        cu_bound = broker.bounded_cu(terms.cu, accepted) if terms.cu else terms.cu
+        if disposition in ('keep', 'refresh') and cu_bound < terms.cu:
+            disposition = 'readd'
         if disposition == 'refresh':
             self.__refresh_dp_request(self.__dprequest, terms)
             return False, terms
@@ -2329,6 +2384,8 @@ class EtnyPoXNode:
             why = 'it has no terms on the 1.2 contract'
         elif self.__dprequest_record_key != advertised_key:
             why = 'the advertised capability record changed'
+        elif cu_bound < terms.cu:
+            why = f"its cu {terms.cu} is above the predecessor's {cu_bound} of the handover this node accepted"
         else:
             why = 'its accept-reserved flag differs from the configuration'
         logger.info(f"DP request {self.__dprequest} is replaced: {why}")
@@ -2359,6 +2416,448 @@ class EtnyPoXNode:
         if terms.recorded and resume_admits(terms, time.time()) == 'refresh':
             self.__refresh_dp_request(self.__dprequest, terms)
 
+    # ------------------------------------------------------------ the broker
+
+    def __broker_params(self):
+        """broker.BrokerParams of the reservation broker's params(), read
+        once per handle; None without a broker."""
+        if self.__broker is None:
+            return None
+        if self.__broker_params_read is None:
+            self.__broker_params_read = broker.params_of(self.__broker.caller().params())
+        return self.__broker_params_read
+
+    def __broker_tx(self, label, fn):
+        """Simulates the bound call `fn` from this node's wallet, sends it
+        in the wallet's nonce sequence (get_transaction_build) and awaits
+        its receipt; the receipt. A simulation that reverts raises with the
+        contract's reason (utils.revert_reason) and costs no gas; a
+        reverted transaction raises too."""
+        try:
+            fn.call({'from': self.__address})
+        except exceptions.ContractLogicError as refusal:
+            raise Exception(revert_reason(refusal) or str(refusal))
+        time.sleep(self.__network_config.rpc_delay / 1000)
+        _hash = self.send_transaction(fn.build_transaction(self.get_transaction_build()))
+        self.logger.info(f"TXID {_hash} pending ({label})... ")
+        receipt = self.__w3.eth.wait_for_transaction_receipt(_hash, timeout=RECEIPT_TIMEOUT_SECONDS)
+        if receipt.status != 1:
+            raise Exception(f"{label} reverted (TXID {_hash})")
+        self.logger.info(f"TXID {_hash} confirmed ({label})")
+        return receipt
+
+    def __broker_start(self):
+        """The broker's start calls on a 1.2 contract with a reservation
+        broker (PHASE-E-PLAN.md E27, E30): the commitment window committed or
+        extended when accept_reserved is set (the flag itself is recorded by
+        add_dp_request before the first request), the farm joined on the
+        configured invitation, the payout address pointed at the farm's
+        reward address. Each failure is logged; the idle tick extends the
+        commitment again."""
+        if self.__broker is None:
+            return
+        for step in (self.__extend_commitment, self.__join_farm_if_invited, self.__set_farm_payout):
+            try:
+                step()
+            except Exception as e:
+                self.logger.warning(f"Broker start: {step.__name__.replace('_EtnyPoXNode__', '')} failed ({e})")
+
+    def __extend_commitment(self):
+        """commitReserved(now + COMMIT_WINDOW_FACTOR x commitMinSeconds) when
+        this node's commitment window reaches less than commitMinSeconds
+        ahead and recommitAfter has passed (broker.commitment_extension),
+        with accept_reserved set; True when a transaction was sent."""
+        if self.__broker is None or not self.__network_config.accept_reserved:
+            return False
+        params = self.__broker_params()
+        commitment = broker.commitment_of(self.__broker.caller().commitmentOf(self.__address))
+        now = int(time.time())
+        until = broker.commitment_extension(commitment, now, params.commit_min_seconds)
+        if until is None:
+            return False
+        self.__broker_tx(f"commitReserved({until})", self.__broker.functions.commitReserved(int(until)))
+        self.logger.info(f"Reserved commitment: window extended to {until} "
+                         f"(was {commitment.until}, commitMinSeconds {params.commit_min_seconds})")
+        return True
+
+    def __join_farm_if_invited(self):
+        """joinFarm once on the configured invitation (<NETWORK>_FARM_INVITE,
+        broker.parse_farm_invite) when farmOf(self) is not the farm yet; a
+        refusal is recorded in farm.json for this invitation and broker and
+        never sent again (the node stays farmless until a fresh invitation);
+        a malformed invitation is logged."""
+        invite = self.__network_config.farm_invite
+        if self.__broker is None or not invite:
+            return
+        parsed = broker.parse_farm_invite(invite)
+        if parsed is None:
+            self.logger.error(f"The farm invitation of {self.__network} is malformed (expected <farm>:<expiresAt>:<signature>); not joined")
+            return
+        farm, expires_at, signature = parsed
+        if str(self.__broker.caller().farmOf(self.__address)).lower() == farm:
+            return
+        path = self.cache_config.farm_refusal_filepath
+        if broker.farm_join_refused(path, invite, self.__broker.address):
+            return
+        try:
+            self.__broker_tx("joinFarm", self.__broker.functions.joinFarm(
+                self.__w3.to_checksum_address(farm), int(expires_at), bytes.fromhex(signature[2:])))
+        except Exception as e:
+            broker.record_farm_join_refused(path, invite, self.__broker.address, str(e))
+            self.logger.error(f"The farm invitation of {self.__network} was refused by the broker ({e}); "
+                              f"the node stays farmless until a fresh invitation is configured")
+            return
+        self.logger.info(f"Joined farm {farm} on {self.__network}")
+
+    def __set_farm_payout(self):
+        """setPayoutAddress(farmRewardOf(farmOf(self))) on the PoX when the
+        node's farm has a reward address and the payout address differs."""
+        if self.__broker is None:
+            return
+        farm = str(self.__broker.caller().farmOf(self.__address))
+        if farm.lower() == broker.ZERO_ADDRESS:
+            return
+        reward = str(self.__broker.caller().farmRewardOf(farm))
+        if reward.lower() == broker.ZERO_ADDRESS:
+            return
+        if str(self.__etny.caller().payoutAddressOf(self.__address)).lower() == reward.lower():
+            return
+        self.__broker_tx(f"setPayoutAddress({reward})", self.__etny.functions.setPayoutAddress(
+            self.__w3.to_checksum_address(reward)))
+        self.logger.info(f"Payout address set to the farm's reward address {reward}")
+
+    def __accepted_handover(self):
+        """The acceptance standing in accepted.json ({orderId, predecessor_cu,
+        reservation}), None for none."""
+        try:
+            with open(self.cache_config.accepted_handover_filepath) as f:
+                record = json.load(f)
+            return record if isinstance(record, dict) and 'orderId' in record else None
+        except (OSError, ValueError):
+            return None
+
+    def __record_accepted_handover(self, order_id, predecessor_cu, reservation):
+        path = self.cache_config.accepted_handover_filepath
+        temporary = f"{path}.tmp"
+        with open(temporary, 'w') as f:
+            json.dump({'orderId': int(order_id), 'predecessor_cu': int(predecessor_cu), 'reservation': int(reservation)}, f)
+        os.replace(temporary, path)
+
+    def __forget_accepted_handover(self):
+        try:
+            os.remove(self.cache_config.accepted_handover_filepath)
+        except OSError:
+            pass
+
+    def __refresh_acceptance(self):
+        """Drops the standing acceptance once the window's successor is
+        placed or the window is gone (broker.acceptance_standing over
+        handoverOf of the announced order); the acceptance that stands."""
+        accepted = self.__accepted_handover()
+        if not accepted or self.__broker is None:
+            return None
+        try:
+            window = broker.handover_of(self.__broker.caller().handoverOf(int(accepted['orderId'])))
+        except Exception as e:
+            self.logger.debug(f"handoverOf({accepted['orderId']}) not read ({e}); the acceptance stands")
+            return accepted
+        if broker.acceptance_standing(accepted, window):
+            return accepted
+        self.logger.info(f"The acceptance of order {accepted['orderId']}'s handover no longer holds this node's offer "
+                         f"({'successor placed' if window.successor_placed else 'window gone'})")
+        self.__forget_accepted_handover()
+        self.__placement_held_logged = False
+        return None
+
+    def __spot_placement_held(self):
+        """Whether the DO-request scan skips the spot placement: while an
+        acceptance stands, the offer is kept for the handover's successor
+        order (logged once per acceptance)."""
+        accepted = self.__refresh_acceptance()
+        if not accepted:
+            return False
+        if not self.__placement_held_logged:
+            self.__placement_held_logged = True
+            self.logger.info(f"The offer is held for the handover of order {accepted['orderId']} this node accepted; "
+                             f"no spot order is placed until its successor is placed")
+        return True
+
+    def __broker_logs(self, event_name, from_block, to_block, chunk=9000):
+        """The broker's `event_name` logs over [from_block, to_block], scanned
+        in chunks as __esr_state_committed_logs scans."""
+        out = []
+        start = max(0, int(from_block))
+        end = int(to_block)
+        event = getattr(self.__broker.events, event_name)()
+        while start <= end:
+            stop = min(start + chunk, end)
+            out.extend(event.get_logs(from_block=start, to_block=stop))
+            start = stop + 1
+        return out
+
+    def __scan_broker_events(self, sent):
+        """The idle tick's scan of the broker's logs from the 'broker_events'
+        cursor to RPC_REPLICA_LAG_BLOCKS below the head (PHASE-E-PLAN.md E31,
+        E33): a HandoverRequested whose acceptance is due now is accepted,
+        one due later kept for a later tick; an Unmatched reservation takes
+        superviseWith with this node's AVAILABLE offer at once; a
+        reservation made ACTIVE (StateChanged) with no OrderPlaced since
+        takes it past the assigned broker's grace. `sent` broker transactions
+        went out this tick already; returns the count after this scan (at
+        most BROKER_TX_PER_TICK in all). The pending acceptances and the
+        started reservations are kept in broker_cursor.json, whose
+        'broker_events' cursor passes their logs, so a process start finds
+        them."""
+        if self.__broker is None or not self.__pox_is_12:
+            return sent
+        logger = self.logger
+        cursor = self.__scan_cursor('broker_events')
+        kept = self.__broker_memory_record()
+        try:
+            head = self.__w3.eth.block_number
+            end = head - RPC_REPLICA_LAG_BLOCKS
+            start = end if cursor is None else int(cursor)
+            if start <= end:
+                requested = self.__broker_logs('HandoverRequested', start, end)
+                unmatched = self.__broker_logs('Unmatched', start, end)
+                changed = self.__broker_logs('StateChanged', start, end)
+                placed = self.__broker_logs('OrderPlaced', start, end)
+            else:
+                requested = unmatched = changed = placed = []
+        except Exception as e:
+            logger.warning(f"The broker's log scan failed ({e}); next tick")
+            return sent
+        if start <= end:
+            self.__set_scan_cursor('broker_events', end + 1)
+        for log in placed:
+            self.__started_reservations.pop(int(log['args']['id']), None)
+        for log in changed:
+            if int(log['args']['state']) == 1:
+                self.__started_reservations[int(log['args']['id'])] = int(log['blockNumber'])
+            else:
+                self.__started_reservations.pop(int(log['args']['id']), None)
+        for log in requested:
+            try:
+                announced_at = int(self.__w3.eth.get_block(log['blockNumber']).timestamp)
+            except Exception as e:
+                logger.debug(f"HandoverRequested block {log['blockNumber']} not read ({e}); the claim runs from now")
+                announced_at = int(time.time())
+            event = broker.handover_requested(log, announced_at)
+            self.__pending_acceptances[event.order_id] = event
+        sent = self.__send_due_acceptances(sent)
+        for log in unmatched:
+            if not broker.transactions_admitted(sent):
+                break
+            reservation = int(log['args']['id'])
+            if self.__supervise_hint(reservation, 'unmatched', broker.NEVER):
+                sent += 1
+        for reservation in list(self.__started_reservations):
+            if not broker.transactions_admitted(sent):
+                break
+            try:
+                next_due = int(self.__broker.caller().nextDue(reservation))
+            except Exception as e:
+                logger.debug(f"nextDue({reservation}) not read ({e})")
+                continue
+            if self.__supervise_hint(reservation, 'started', next_due):
+                sent += 1
+        record = self.__broker_memory_record()
+        if record != kept:
+            self.__set_scan_cursor('pending_acceptances', record[0])
+            self.__set_scan_cursor('started_reservations', record[1])
+        return sent
+
+    def __broker_memory_record(self):
+        """(the pending acceptances' list, the started reservations' mapping)
+        as broker_cursor.json keeps them."""
+        return (broker.acceptances_record(self.__pending_acceptances),
+                broker.started_reservations_record(self.__started_reservations))
+
+    def __send_due_acceptances(self, sent):
+        """acceptHandover for the pending HandoverRequested events whose
+        acceptance is due now (broker.acceptance_due); a refused one is
+        recorded in the cursor file ('refused_acceptances') and never
+        retried; one no longer due is dropped. Returns the transaction count."""
+        if not self.__pending_acceptances:
+            return sent
+        logger = self.logger
+        try:
+            params = self.__broker_params()
+            commitment = broker.commitment_of(self.__broker.caller().commitmentOf(self.__address))
+            my_farm = str(self.__broker.caller().farmOf(self.__address))
+        except Exception as e:
+            logger.debug(f"The commitment or farm was not read for the acceptances ({e}); next tick")
+            return sent
+        refused = set(self.__scan_cursor('refused_acceptances') or [])
+        now = int(time.time())
+        for order_id, event in list(self.__pending_acceptances.items()):
+            if order_id in refused or self.__accepted_handover():
+                self.__pending_acceptances.pop(order_id, None)
+                continue
+            due, detail = broker.acceptance_due(event, now, self.__address, my_farm, params, commitment,
+                                                self.__network_config.farm_accept)
+            if due == 'never':
+                logger.debug(f"The handover of order {order_id} (reservation {event.id}) is not this node's to accept: {detail}")
+                self.__pending_acceptances.pop(order_id, None)
+                continue
+            if due == 'after':
+                continue
+            if not broker.transactions_admitted(sent):
+                return sent
+            self.__pending_acceptances.pop(order_id, None)
+            sent += 1
+            try:
+                self.__broker_tx(f"acceptHandover({order_id})", self.__broker.functions.acceptHandover(int(order_id)))
+            except Exception as e:
+                logger.info(f"The handover of order {order_id} (reservation {event.id}) was not accepted ({e}); not retried")
+                self.__set_scan_cursor('refused_acceptances', sorted(refused | {order_id}))
+                continue
+            predecessor_cu = 0
+            try:
+                predecessor = Order(self.__etny.caller()._getOrder(int(order_id)))
+                predecessor_cu = dp_terms(self.__etny.caller().dpTerms(int(predecessor.dp_req))).cu
+            except Exception as e:
+                logger.debug(f"The predecessor's cu of order {order_id} was not read ({e}); the offer is not bounded")
+            self.__record_accepted_handover(order_id, predecessor_cu, event.id)
+            logger.info(f"Accepted the handover of order {order_id} (reservation {event.id}, announced by {event.dproc}); "
+                        f"the offer is held for its successor at most cu {predecessor_cu or 'unbounded'}")
+        return sent
+
+    def __supervise_hint(self, reservation, kind, next_due):
+        """superviseWith(reservation, own DP request) when
+        broker.supervise_decision says so for `kind` ('unmatched',
+        'started'): the standing request must be AVAILABLE and the
+        pre-flight call must answer acted; True when sent. A started
+        reservation whose hint was sent or dropped is forgotten."""
+        logger = self.logger
+        if not self.__dprequest:
+            return False
+        try:
+            request = DPRequest(self.__etny.caller()._getDPRequest(self.__dprequest))
+        except Exception as e:
+            logger.debug(f"DP request {self.__dprequest} not read for the supervise hint ({e})")
+            return False
+        if request.status != RequestStatus.AVAILABLE:
+            return False
+        params = self.__broker_params()
+        fn = self.__broker.functions.superviseWith(int(reservation), int(self.__dprequest))
+        decision = broker.supervise_decision(kind, next_due, params.broker_grace_seconds, int(time.time()), False, None)
+        if decision != 'send':
+            return False
+        try:
+            acted = bool(fn.call({'from': self.__address}))
+        except Exception as e:
+            logger.debug(f"superviseWith({reservation}) pre-flight failed ({e}); dropped")
+            self.__started_reservations.pop(reservation, None)
+            return False
+        if broker.supervise_decision(kind, next_due, params.broker_grace_seconds, int(time.time()), False, acted) != 'send':
+            self.__started_reservations.pop(reservation, None)
+            return False
+        self.__started_reservations.pop(reservation, None)
+        try:
+            self.__broker_tx(f"superviseWith({reservation}, {self.__dprequest})", fn)
+            logger.info(f"Reservation {reservation} ({kind}): superviseWith sent with this node's offer {self.__dprequest}")
+        except Exception as e:
+            logger.info(f"Reservation {reservation}: superviseWith failed ({e})")
+        return True
+
+    def __broker_tick(self):
+        """The idle tick's broker work on a 1.2 contract with a reservation
+        broker: the commitment's extension, the log scan with its
+        acceptances and hints (at most BROKER_TX_PER_TICK transactions in
+        all), the standing acceptance refreshed and a --handover request
+        answered while no order runs."""
+        if self.__broker is None:
+            return
+        sent = 0
+        try:
+            if self.__extend_commitment():
+                sent += 1
+        except Exception as e:
+            self.logger.warning(f"The reserved commitment was not extended ({e}); next tick")
+        try:
+            self.__scan_broker_events(sent)
+        except Exception as e:
+            self.logger.warning(f"The broker's event scan failed ({e}); next tick")
+        self.__answer_idle_handover_request()
+
+    def __answer_idle_handover_request(self):
+        """A --handover request standing while no order runs is answered
+        refused; a SIGHUP pending with no order running exits the process,
+        today's effect of the signal."""
+        if handover_signal.is_set() and not reserved_orders_running:
+            self.logger.info("SIGHUP with no reserved order running; exiting")
+            os._exit(0)
+        path = str(self.cache_config.handover_request_filepath)
+        if broker.read_handover_request(path) is None:
+            return
+        broker.write_handover_answer(path, {'refused': 'no order is running on this network'})
+        self.logger.info("A --handover request was refused: no order is running")
+
+    def __broker_placed_order(self):
+        """The order orderOfDPRequest names for this node's standing request
+        (PHASE-E-PLAN.md E32, broker.offer_disposition): a reserved OPEN order
+        the broker placed is approved at once and run under the task slot
+        ('approve'); a PROCESSING one is run ('run'); a CANCELED one on an
+        AVAILABLE request is the offer waiting for the next placement, its
+        orders-cache entry dropped ('offer'). True when an order was run."""
+        if not self.__pox_is_12 or self.__broker is None or not self.__dprequest:
+            return False
+        logger = self.logger
+        try:
+            found, order_id = self.__etny.caller().orderOfDPRequest(int(self.__dprequest))
+            if not found:
+                return False
+            order_id = int(order_id)
+            order = Order(self.__etny.caller()._getOrder(order_id))
+            reserved = bool(self.__etny.caller().orderReport(order_id)[0])
+            dp_status = DPRequest(self.__etny.caller()._getDPRequest(self.__dprequest)).status
+        except Exception as e:
+            logger.debug(f"orderOfDPRequest({self.__dprequest}) not read ({e}); next tick")
+            return False
+        disposition = broker.offer_disposition(found, order.status, reserved, dp_status)
+        if disposition == 'offer':
+            if self.orders_cache.rem(str(self.__dprequest)) is not None:
+                logger.info(f"Order {order_id} on DP request {self.__dprequest} was cancelled; the offer waits for "
+                            f"the next placement")
+            return False
+        if disposition not in ('approve', 'run'):
+            return False
+        return self.__approve_and_run(order_id, order, disposition == 'approve')
+
+    def __approve_and_run(self, order_id, order, approve):
+        """Approves (_approveOrder, simulated then sent) a reserved order the
+        broker placed on this node's offer and runs it under the task slot;
+        the placement is recorded from orderPlacedAt. True when the order
+        was run (whatever its outcome), False when the approval failed."""
+        logger = self.logger
+        if approve:
+            try:
+                self.__broker_tx(f"_approveOrder({order_id})", self.__etny.functions._approveOrder(int(order_id)))
+                logger.info(f"Order {order_id} (reserved, DO request {order.do_req}, DP request {order.dp_req}) approved")
+            except Exception as e:
+                logger.error(f"Order {order_id} (reserved) was not approved ({e}); next tick")
+                return False
+        placed_at = self.__order_placed_at_on_chain(order_id)
+        if placed_at:
+            try:
+                record_order_placement(ORDERS_DIR, order_id, placed_at)
+            except Exception as e:
+                logger.warning(f"Order {order_id}: its placement time was not recorded ({e})")
+        self.__order_id = order_id
+        acquire_task_slot(self.__network)
+        try:
+            self.merged_orders_cache.add(do_req_id=int(order.do_req), dp_req_id=int(order.dp_req), order_id=order_id)
+            self.process_order(order_id)
+            logger.info(f"Order {order_id} (DO request {order.do_req}, DP request {order.dp_req}) completed.")
+        except Exception as e:
+            logger.error(f"Unable to process order {order_id}: {e}")
+            self.__enclave_environment_down()
+            self.merged_orders_cache.rem(order_id=order_id)
+        finally:
+            release_task_slot(self.__network)
+        return True
+
     def __scan_cursor(self, name):
         """The next block the idle tick's `name` log scan reads
         (broker_cursor.json), None when none is recorded."""
@@ -2368,8 +2867,10 @@ class EtnyPoXNode:
         except (OSError, ValueError):
             return None
 
-    def __set_scan_cursor(self, name, block):
-        """Records `block` as the next block of the `name` scan, the file
+    def __set_scan_cursor(self, name, value):
+        """Records `value` (JSON: the next block of a scan, the order ids of
+        the refused acceptances, the pending acceptances' list, the started
+        reservations' mapping) under `name` in broker_cursor.json, the file
         replaced whole."""
         path = self.cache_config.broker_cursor_filepath
         try:
@@ -2377,7 +2878,7 @@ class EtnyPoXNode:
                 cursors = json.load(f)
         except (OSError, ValueError):
             cursors = {}
-        cursors[name] = int(block)
+        cursors[name] = value
         temporary = f"{path}.tmp"
         with open(temporary, 'w') as f:
             json.dump(cursors, f)
@@ -2609,6 +3110,18 @@ class EtnyPoXNode:
             logger.info(f"HODL your {self.__network_config.token_name} for long-term growth. Payout after validation.")
 
     def process_order(self, order_id, metadata=None):
+        """Runs order `order_id` (__run_order); a run that raises releases the
+        order's gas ledger and handover state (__release_order_handover), so
+        a reserved order whose run failed holds neither the SIGHUP handler
+        nor the idle tick's exit."""
+        try:
+            self.__run_order(order_id, metadata)
+        except BaseException:
+            self._order_ledger = None
+            self.__release_order_handover()
+            raise
+
+    def __run_order(self, order_id, metadata=None):
         logger = self.logger
 
 
@@ -2751,13 +3264,21 @@ class EtnyPoXNode:
 
             # The waits are sized from the block that placed the order, so a
             # run resumed after a restart gets what is left of the window, not
-            # the duration over again. An order placed by an agent that did not
-            # record its placement gets the duration from now.
-            placed_at = order_placed_at(ORDERS_DIR, order_id)
-            window = (remaining_order_seconds(placed_at, do_req.duration) if placed_at is not None
-                      else do_req.duration * 3600 + ORDER_GRACE_SECONDS)
-            # The order's result is worth sending until then (add_result_to_order).
-            order_deadline = time.time() + window
+            # the duration over again: the placement the PoX recorded (1.2's
+            # orderPlacedAt), else the agent's record. An order placed by an
+            # agent that did not record its placement gets the duration from
+            # now. The gas waits are bounded by the order's end, the enclave
+            # waits and the result send by its deadline (utils.order_window).
+            placed_at = self.__order_placed_at_on_chain(order_id) or order_placed_at(ORDERS_DIR, order_id)
+            order_end, order_deadline = order_window(placed_at, do_req.duration, time.time())
+            window = order_deadline - time.time()
+
+            # The order's gas ledger: its terms and the pricing's per-relay
+            # gas on a recorded 1.2 order, the network budget otherwise; and
+            # its handover state (reserved or not, the window polled at the
+            # enclave wait's idle points).
+            self.__open_order_ledger(order_id, order_end)
+            self.__begin_order_handover(order_id)
 
             # The waits end early when an enclave container will not finish
             # the task (EnclaveFailed: a CAS refusal, an exit, a container
@@ -2791,12 +3312,15 @@ class EtnyPoXNode:
                 status_enclave = self.wait_for_enclave_v2(bucket_name, 'result.txt', window, order_id=order_id)
                 elapsed_wait1 = time.time() - start_wait
 
-                # Second wait
+                # Second wait. Both trustedzones write transaction.txt before
+                # result.txt, so the object is found at once after a normal
+                # run; a trustedzone still landing its rows and commits (its
+                # timeouts suspended through a gas wait) is given the rest of
+                # the order's window, and at least 300 s, while its container
+                # lives (EnclaveFailed ends the wait).
                 start_wait = time.time()
-                # The trustedzone waits up to 5 blocks per 64 started commits
-                # (20 blocks for 256) for its commits to land before it writes
-                # transaction.txt; this wait has headroom over that.
-                status_enclave = self.wait_for_enclave_v2(bucket_name, 'transaction.txt', 300, order_id=order_id)
+                status_enclave = self.wait_for_enclave_v2(bucket_name, 'transaction.txt',
+                                                          max(300, order_deadline - time.time()), order_id=order_id)
                 elapsed_wait2 = time.time() - start_wait
             except EnclaveFailed as e:
                 failure = str(e)
@@ -2817,22 +3341,22 @@ class EtnyPoXNode:
                 except Exception as e:
                     logger.debug(f'[esr] final state-pin sweep skipped: {e}')
 
-            # Relay any ESR state commits the enclave signed for this order. The
-            # enclave never pays gas: it stages signed commitFor authorizations
-            # (esr.commit.<key16>.<relayNonce>.json) and the node submits + pays
-            # them, capped per order so a malicious payload cannot drain the
-            # operator. (Also runs in-loop during the enclave wait; this is the
-            # final sweep.)
-            self.__relay_esr_commits(bucket_name, order_id)
-
             # Final session sweep: deliver any raced inputs, pin the remaining
             # outputs and broadcast their signed rows (late notices included)
             # before the result transaction goes out, so the notices precede
-            # the completion.
+            # the completion. The rows go before the commits: a session
+            # step's commits are relayed once its row's receipt is in.
             try:
                 self.__serve_session(bucket_name, order_id)
             except Exception as e:
                 logger.debug(f'[session] final sweep skipped: {e}')
+
+            # Relay any ESR state commits the enclave signed for this order. The
+            # enclave never pays gas: it stages signed commitFor authorizations
+            # (esr.commit.*.json, session.commit.*.json) and the node submits
+            # and pays them within the order's gas ledger. (Also runs in-loop
+            # during the enclave wait; this is the final sweep.)
+            self.__relay_esr_commits(bucket_name, order_id)
 
             # Pin the signed authorization ledger: the validator fetches it by
             # the CID the trustedzone attested into the result, and invalidates
@@ -2875,14 +3399,17 @@ class EtnyPoXNode:
                                 bucket_name, 'esr.authorizations.json')
                             if ok and ledger_raw:
                                 lb = ledger_raw.encode('utf-8') if isinstance(ledger_raw, str) else ledger_raw
-                                local_cid = self.__cidv1_raw(lb)
+                                local_cid = Storage.cidv1_raw(lb)
                                 if esr_cid and local_cid != esr_cid:
-                                    logger.error(
-                                        f'[esr] order {order_id}: staged ledger '
-                                        f'({local_cid}) does not match the attested '
-                                        f'CID ({esr_cid}) -- refusing to pin '
-                                        f'mismatched bytes')
-                                else:
+                                    # The securelock rewrites the file after
+                                    # every step while the trustedzone's
+                                    # ledger is the records of the rows it
+                                    # staged: a step cut by the handover
+                                    # window leaves the file ahead of the
+                                    # ledger, which the staged rows' .commits
+                                    # names rebuild.
+                                    lb = self.__rebuild_esr_ledger(bucket_name, order_id, esr_cid, local_cid)
+                                if lb is not None:
                                     cidl = self.storage.pin_bytes_deferred(
                                         lb, name=f'esr-ledger-{order_id}.json')
                                     logger.info(f'[esr] pinned authorizations ledger '
@@ -2914,20 +3441,24 @@ class EtnyPoXNode:
                 logger.debug('Building result for v3')
                 result = self.build_result_format_v3(result_hash, transaction_data)
                 logger.debug(f'Result is: {result}')
-                self.add_result_to_order(order_id, result, until=order_deadline, after_send=self.__order_result_sent)
-                logger.info("ZK proof added. Task integrity submitted for validation.")
-                self.calculate_reward()
-
-                task_code = 0 
-
+                # The enclave's result string inside the signed transaction:
+                # its task code, and on v5 the relayed commits and their gas
+                # (fields 12 and 14), which _addResultToOrderV2 carries
+                # verbatim on a recorded 1.2 order.
+                task_code = 0
+                attested = None
                 try:
-                    result = parse_transaction_bytes_ut(self.__contract_abi, transaction_data)
-                    arr = result["result"].split(":")
-                    task_code = arr[1];
+                    attested = result_fields(parse_transaction_bytes_ut(self.__contract_abi, transaction_data)["result"])
+                    task_code = attested.task_code
                 except Exception as ex:
-                    logger.info("Unable to determine the result_code (return code) from transactiond data")
+                    logger.info(f"Unable to determine the result_code (return code) from transaction data ({ex})")
+                sent = self.add_result_to_order(order_id, result, until=order_deadline, after_send=self.__order_result_sent,
+                                                order_end=order_end, attested=attested)
+                if sent:
+                    logger.info("ZK proof added. Task integrity submitted for validation.")
+                    self.calculate_reward()
 
-                if int(task_code) == ResultStatus.EXECVE:
+                if sent and int(task_code) == ResultStatus.EXECVE:
                     logger.info(f"Process EXECVE is still running")
 
                     total_duration = do_req.duration * 3600
@@ -2946,10 +3477,649 @@ class EtnyPoXNode:
                 # its readers take the second field.
                 message = f"Task execution failed, {failure}" if failure else "Task execution timed out"
                 result = self.build_result_format_v3("[WARN]", message)
-                self.add_result_to_order(order_id, result, until=order_deadline, after_send=self.__order_result_sent)
+                self.add_result_to_order(order_id, result, until=order_deadline, after_send=self.__order_result_sent,
+                                         order_end=order_end)
 
             self.dpreq_cache.add(self.__dprequest)
             self.__enclave_environment_down()
+            self._order_ledger = None
+            self.__end_order_handover()
+
+    # --------------------------------------------- the running order's window
+
+    def __begin_order_handover(self, order_id):
+        """Opens the running order's handover state (PHASE-E-PLAN.md E28,
+        E34, E35): whether the order is reserved (the broker's
+        orderReservation) and its reservation; the window handoverOf answers
+        and the role it gives this order, polled at the enclave wait's idle
+        points (__handover_tick); as the successor, the predecessor's rows
+        spooled, the replays and the fence's state staged at the switch.
+        A reserved order is registered for the SIGHUP handler."""
+        state = {'order_id': int(order_id), 'reserved': False, 'reservation': None, 'window': None, 'role': None,
+                 'head': 0, 'last_poll': 0.0, 'signal_handled': False, 'predecessor': None, 'same_image': None,
+                 # The predecessor's inputs: spooled, refused (a digest
+                 # mismatch), pending ({seq: InputRow} read from its rows and
+                 # not fetched yet), the fetching thread, the rows read.
+                 'spooled': set(), 'spool_refused': set(), 'spool_pending': {}, 'spool_thread': None,
+                 'spool_rows_seen': 0, 'replays_staged': False,
+                 # The fence: the (enclave, key) pairs seen moved after the
+                 # bound with the CID resolved for each (None for a key with
+                 # no commit at or before the bound), and the head the
+                 # (bound, head] range was read to.
+                 'fence_ticks': 0, 'fence_done': False, 'fence_staged': set(), 'fence_pairs': {},
+                 'fence_scanned_to': None,
+                 # supervise sent, and the earliest time of its next try.
+                 'supervised': False, 'supervise_after': 0}
+        if self.__broker is not None and self.__pox_is_12:
+            try:
+                found, reservation = self.__broker.caller().orderReservation(int(order_id))
+                state['reserved'], state['reservation'] = bool(found), int(reservation)
+            except Exception as e:
+                self.logger.warning(f"Order {order_id}: orderReservation not read ({e}); taken as a spot order")
+        if state['reserved']:
+            reserved_orders_running[self.__network] = int(order_id)
+            self.logger.info(f"Order {order_id} is reserved (reservation {state['reservation']}); its handover window "
+                             f"is read every {HANDOVER_POLL_SECONDS} s")
+        self.__order_handover = state
+
+    def __release_order_handover(self):
+        """Closes the running order's handover state: the order is no longer
+        among the reserved orders running."""
+        reserved_orders_running.pop(self.__network, None)
+        self.__order_handover = None
+
+    def __end_order_handover(self):
+        """Closes the running order's handover state after its result; a
+        SIGHUP drain that asked for the exit ends the process here, the
+        result posted and the enclaves down."""
+        self.__release_order_handover()
+        if self.__handover_exit:
+            self.logger.info("The handed-over order is done and its enclaves are down; exiting as SIGHUP asked")
+            os._exit(0)
+
+    def __in_own_window(self):
+        """Whether the running order is the predecessor of a recorded window
+        the head has reached: no gas wait holds its relays or result, which
+        go at the live price."""
+        st = self.__order_handover
+        return bool(st and st['role'] == broker.ROLE_PREDECESSOR and st['head'] >= st['window'].from_block)
+
+    def __handover_tick(self, bucket_name, order_id):
+        """The enclave wait's handover work at an idle point: the window
+        polled every HANDOVER_POLL_SECONDS on a reserved order, a --handover
+        request or SIGHUP served, and the successor's spool, replays and
+        fence."""
+        st = self.__order_handover
+        if st is None or st['order_id'] != int(order_id):
+            return
+        if st['reserved'] and time.time() - st['last_poll'] >= HANDOVER_POLL_SECONDS:
+            st['last_poll'] = time.time()
+            self.__poll_handover_window(order_id)
+        self.__serve_handover_requests(order_id)
+        if st['role'] == broker.ROLE_SUCCESSOR:
+            try:
+                self.__successor_tick(bucket_name, order_id)
+            except Exception as e:
+                self.logger.warning(f"Order {order_id}: the successor's tick failed ({e}); next tick")
+
+    def __poll_handover_window(self, order_id):
+        """Reads handoverOf(order_id) and the head into the handover state;
+        a changed window or role is logged."""
+        st = self.__order_handover
+        try:
+            head = int(self.__w3.eth.block_number)
+            window = broker.handover_of(self.__broker.caller().handoverOf(int(order_id)))
+        except Exception as e:
+            self.logger.debug(f"Order {order_id}: handoverOf not read ({e})")
+            return
+        role = broker.window_role(window, order_id)
+        changed = role != st['role'] or (role is not None and (
+            st['window'] is None or (window.from_block, window.to_block) != (st['window'].from_block, st['window'].to_block)))
+        if changed:
+            if role is None:
+                self.logger.info(f"Order {order_id}: no handover window recorded")
+            else:
+                self.logger.info(f"Order {order_id}: handover window: {role} of order {window.predecessor}, blocks "
+                                 f"{window.from_block} to {window.to_block}")
+        st['window'] = window if role is not None else None
+        st['role'] = role
+        st['head'] = head
+
+    def __serve_handover_requests(self, order_id):
+        """A --handover request in the marker file is answered with the
+        announcement or its refusal; SIGHUP announces with the exit asked,
+        and exits at once when the order is not reserved or the
+        announcement is refused (broker.signal_action)."""
+        st = self.__order_handover
+        path = str(self.cache_config.handover_request_filepath)
+        request = broker.read_handover_request(path)
+        if request is not None:
+            answer = self.__announce_handover(order_id, request['appoint'], exit_asked=False)
+            broker.write_handover_answer(path, answer)
+        # The signal is set only while a reserved order runs; the thread of
+        # that order drains and exits, an unreserved order of another
+        # network runs on.
+        if handover_signal.is_set() and st['reserved'] and not st['signal_handled']:
+            st['signal_handled'] = True
+            if self.__handover_drain:
+                self.__handover_exit = True
+                self.logger.info("SIGHUP: a handover is announced already; the process exits after the result")
+                return
+            answer = self.__announce_handover(order_id, '', exit_asked=True)
+            if broker.signal_action(st['reserved'], 'refused' in answer) == 'exit':
+                self.logger.info(f"SIGHUP: order {order_id} is not handed over ({answer.get('refused')}); exiting")
+                os._exit(0)
+
+    def __announce_handover(self, order_id, appoint, exit_asked):
+        """requestHandover for the running order (PHASE-E-PLAN.md E28, E29):
+        refused (broker.handover_refusal) when the order is not reserved, a
+        window is recorded, the cooldown holds or the token balance is below
+        the gas deposit; the window (broker.handover_window) from the
+        broker's params, the template's handoverTimeOfDay, orderEndSlot, the
+        reservation's end and the order's PoX end; the deposit approved to
+        the broker, the request simulated and sent. On success the agent
+        drains: no next DP request, idle after the result, the exit when
+        `exit_asked`. Returns the answer written to the marker file."""
+        logger = self.logger
+        st = self.__order_handover
+        if self.__handover_drain:
+            return {'refused': 'a handover is announced already'}
+        try:
+            if self.__broker is None or not st['reserved']:
+                return {'refused': 'the order is not reserved'}
+            params = self.__broker_params()
+            now = int(time.time())
+            self.__poll_handover_window(order_id)
+            commitment = broker.commitment_of(self.__broker.caller().commitmentOf(self.__address))
+            balance = int(self.__token.caller().balanceOf(self.__address)) if self.__token is not None else 0
+            refusal = broker.handover_refusal(True, st['window'], commitment, now, balance, params.handover_gas_deposit_wei)
+            if refusal:
+                logger.info(f"Order {order_id}: handover not announced: {refusal}")
+                return {'refused': refusal}
+            successor = broker.appointee(appoint)
+            if successor is None:
+                return {'refused': f'the appointee {appoint!r} is not an address'}
+            head = self.__w3.eth.get_block('latest')
+            time_of_day = broker.template_handover_time_of_day(self.__broker.caller().templateOf(st['reservation']))
+            end_slot = int(self.__broker.caller().orderEndSlot(int(order_id)))
+            res_end = broker.reservation_end(self.__broker.caller().reservationOf(st['reservation']))
+            placed_at = self.__order_placed_at_on_chain(order_id)
+            order = Order(self.__etny.caller()._getOrder(int(order_id)))
+            duration = DORequest(self.__etny.caller()._getDORequest(order.do_req)).duration
+            window, reason = broker.handover_window(now, head.number, head.timestamp, params, time_of_day, end_slot,
+                                                    res_end, placed_at, duration)
+            if window is None:
+                logger.info(f"Order {order_id}: handover not announced: {reason}; the order serves to its end window")
+                return {'refused': reason}
+            deposit = params.handover_gas_deposit_wei
+            if int(self.__token.caller().allowance(self.__address, self.__broker.address)) < deposit:
+                self.__broker_tx(f"approve({self.__broker.address}, {deposit})",
+                                 self.__token.functions.approve(self.__broker.address, int(deposit)))
+            receipt = self.__broker_tx(
+                f"requestHandover({order_id}, {window.from_block}, {window.to_block}, {successor})",
+                self.__broker.functions.requestHandover(int(order_id), int(window.from_block), int(window.to_block),
+                                                        self.__w3.to_checksum_address(successor)))
+        except Exception as e:
+            logger.error(f"Order {order_id}: the handover announcement failed ({e})")
+            return {'refused': str(e)}
+        self.__handover_drain = True
+        drained_networks.add(self.__network)
+        self.__handover_exit = self.__handover_exit or exit_asked
+        tx = receipt.transactionHash.hex()
+        logger.info(f"Order {order_id}: handover announced for blocks {window.from_block} to {window.to_block} (slot "
+                    f"{window.slot}, appointee {successor}, TXID {tx}); no next DP request follows the result")
+        self.__poll_handover_window(order_id)
+        return {'announced': True, 'tx': tx, 'fromBlock': window.from_block, 'toBlock': window.to_block,
+                'slot': window.slot}
+
+    def __successor_tick(self, bucket_name, order_id):
+        """The successor's work at an idle point (PHASE-E-PLAN.md E34, E35):
+        the predecessor's request read once (its trustedzone name against
+        this order's), its input ciphertexts spooled as they are served, and
+        at the switch (replay.switch_bound once the pinned block reaches the
+        bound) the replays staged, the fence's state objects staged and the
+        supervise sent past toBlock."""
+        st = self.__order_handover
+        window = st['window']
+        if st['predecessor'] is None:
+            predecessor = Order(self.__etny.caller()._getOrder(window.predecessor))
+            metadata = self.__etny.caller()._getDORequestMetadata(predecessor.do_req)
+            own = Order(self.__etny.caller()._getOrder(int(order_id)))
+            own_metadata = self.__etny.caller()._getDORequestMetadata(own.do_req)
+            st['predecessor'] = {'order': int(window.predecessor), 'do_req': int(predecessor.do_req),
+                                 'dp_req': int(predecessor.dp_req), 'trustedzone': replay.trustedzone_name(metadata[1])}
+            st['same_image'] = replay.trustedzone_name(own_metadata[1]) == st['predecessor']['trustedzone']
+            self.logger.info(f"Order {order_id}: successor of order {window.predecessor} (DO request {predecessor.do_req}, "
+                             f"trustedzone {st['predecessor']['trustedzone'] or 'unknown'}"
+                             f"{'' if st['same_image'] else ', another image: its inputs are not replayed'})")
+        if st['same_image']:
+            self.__spool_predecessor_inputs(order_id)
+        if st['replays_staged'] and st['fence_done'] and st['supervised']:
+            return
+        result_at = self.__etny.caller().orderResultAt(st['predecessor']['order'])
+        own_placed_at = self.__order_placed_at_on_chain(order_id)
+        switch = replay.switch_bound(window, st['head'], result_at, own_placed_at)
+        if switch is None:
+            return
+        pinned = replay.pinned_block(st['head'])
+        if switch.replay_bound is not None and not st['replays_staged'] and pinned >= switch.replay_bound:
+            self.__stage_replays(bucket_name, order_id, switch.replay_bound, pinned)
+        if switch.kind in (replay.FENCE_TO_BLOCK, replay.FENCE_RESULT_BLOCK) and not st['fence_done'] and pinned >= switch.bound:
+            self.__stage_fence_blobs(bucket_name, order_id, switch.bound)
+        elif switch.kind == replay.FENCE_NONE:
+            st['fence_done'] = True
+        if switch.kind == replay.FENCE_TO_BLOCK and not st['supervised']:
+            self.__supervise_past_window(order_id)
+        elif switch.kind != replay.FENCE_TO_BLOCK:
+            st['supervised'] = True
+
+    def __spool_predecessor_inputs(self, order_id):
+        """Reads the predecessor's etny-si rows as they appear and fetches
+        their ciphertexts by CID off the tick (__spool_pending_inputs, one
+        thread at a time), each checked against its digest and kept under
+        orders/<id>/replay/<seq> (replay.spooled_input_path) for the switch;
+        a row not fetchable yet stays pending for the next thread, one
+        contradicting its digest never."""
+        st = self.__order_handover
+        predecessor = st['predecessor']
+        try:
+            count = int(self.__etny.caller()._getMetadataCountForRequest(predecessor['do_req']))
+        except Exception as e:
+            self.logger.debug(f"Order {order_id}: the predecessor's row count was not read ({e})")
+            return
+        while st['spool_rows_seen'] < count:
+            i = st['spool_rows_seen']
+            try:
+                key, value = self.__etny.caller()._getMetadataValueForRequest(predecessor['do_req'], i)
+            except Exception as e:
+                self.logger.debug(f"Order {order_id}: the predecessor's row {i} was not read ({e})")
+                return
+            st['spool_rows_seen'] = i + 1
+            if key != replay.SESSION_INPUT_KEY:
+                continue
+            row = replay.parse_input_row(value)
+            if (row is None or row.order_id != predecessor['order'] or row.seq in st['spooled']
+                    or row.seq in st['spool_refused'] or row.seq in st['spool_pending']):
+                continue
+            if os.path.isfile(replay.spooled_input_path(ORDERS_DIR, order_id, row.seq)):
+                st['spooled'].add(row.seq)
+                continue
+            st['spool_pending'][row.seq] = row
+        thread = st['spool_thread']
+        if st['spool_pending'] and (thread is None or not thread.is_alive()):
+            st['spool_thread'] = threading.Thread(target=self.__spool_pending_inputs, args=(order_id,),
+                                                  name=f"spool-{order_id}", daemon=True)
+            st['spool_thread'].start()
+
+    def __spool_pending_inputs(self, order_id):
+        """Fetches the pending predecessor inputs of the order's handover
+        state, in seq order, each within config.session_input_fetch_seconds:
+        a fetched ciphertext is written to its spool path and the seq moves
+        to spooled, one contradicting its digest to refused, one not
+        fetchable yet stays pending."""
+        st = self.__order_handover
+        if st is None or st['order_id'] != int(order_id):
+            return
+        for seq in sorted(st['spool_pending']):
+            row = st['spool_pending'].get(seq)
+            if row is None:
+                continue
+            blob = self.__fetch_predecessor_input(order_id, row)
+            if blob is None:
+                continue
+            if blob is False:
+                st['spool_refused'].add(seq)
+                st['spool_pending'].pop(seq, None)
+                continue
+            path = replay.spooled_input_path(ORDERS_DIR, order_id, seq)
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, 'wb') as f:
+                f.write(blob)
+            st['spooled'].add(seq)
+            st['spool_pending'].pop(seq, None)
+            self.logger.info(f"Order {order_id}: spooled the predecessor's input {seq} for its replay")
+
+    def __fetch_predecessor_input(self, order_id, row):
+        """The ciphertext of the predecessor's input `row` fetched by its
+        CID within config.session_input_fetch_seconds: the bytes, None when
+        not fetchable yet, False when they contradict the row's digest."""
+        why = pinned_within(self.storage, row.cid, time.monotonic() + config.session_input_fetch_seconds)
+        if why:
+            self.logger.info(f"Order {order_id}: the predecessor's input {row.seq} ({row.cid}) is not fetchable yet: {why}")
+            return None
+        try:
+            self.storage.download(row.cid)
+            with open(os.path.join(self.storage.target, row.cid), 'rb') as fh:
+                blob = fh.read()
+        except Exception as e:
+            self.logger.info(f"Order {order_id}: the predecessor's input {row.seq} ({row.cid}) is not readable yet: {e}")
+            return None
+        if not replay.digest_matches(blob, row.sha256):
+            self.logger.error(f"Order {order_id}: the predecessor's input {row.seq} does not match its on-chain digest; "
+                              f"never staged")
+            return False
+        return blob
+
+    def __output_rows_added(self, order_id, from_block, to_block, chunk=9000):
+        """OutputRowAdded logs naming `order_id` over [from_block, to_block]."""
+        out = []
+        start = max(0, int(from_block))
+        end = int(to_block)
+        while start <= end:
+            stop = min(start + chunk, end)
+            out.extend(self.__etny.events.OutputRowAdded().get_logs(
+                argument_filters={'orderId': int(order_id)}, from_block=start, to_block=stop))
+            start = stop + 1
+        return out
+
+    def __stage_replays(self, bucket_name, order_id, bound, at_block):
+        """Stages the predecessor's unanswered inputs as session.replay.<seq>
+        at the switch (replay.replay_set): the OutputRowAdded logs after
+        `bound` up to `at_block`, the predecessor's rows read pinned at
+        `at_block`, the certificates the image registry holds for its
+        trustedzone name (replay.registry_certificates) and the task wallet
+        its etny-sw row attests. The rows are read here; the ciphertexts go
+        into the bucket off the tick (__stage_replay_blobs): a spooled one is
+        staged, one not spooled is fetched once more and left unstaged when
+        that fails. A predecessor of another trustedzone image stages
+        nothing."""
+        st = self.__order_handover
+        predecessor = st['predecessor']
+        logger = self.logger
+        if not st['same_image']:
+            logger.info(f"Order {order_id}: the predecessor ran another trustedzone image; no replay is staged")
+            st['replays_staged'] = True
+            return
+        logs = self.__output_rows_added(predecessor['order'], bound + 1, at_block)
+        caller = self.__etny.caller(block_identifier=int(at_block))
+        input_values = []
+        for i in range(int(caller._getMetadataCountForRequest(predecessor['do_req']))):
+            key, value = caller._getMetadataValueForRequest(predecessor['do_req'], i)
+            if key == replay.SESSION_INPUT_KEY:
+                input_values.append(value)
+        output_rows, wallet_values = [], []
+        for i in range(int(caller._getMetadataCountForDPRequest(predecessor['dp_req']))):
+            key, value = caller._getMetadataValueForDPRequest(predecessor['dp_req'], i)
+            if key == replay.SESSION_OUTPUT_KEY:
+                output_rows.append((i, value))
+            elif key == replay.SESSION_WALLET_KEY:
+                wallet_values.append(value)
+        registry = self.__image_registry.caller()
+        certs = replay.registry_certificates(registry.trustedZoneVersions, registry.getTrustedZoneImageCertPublicKey,
+                                             predecessor['trustedzone'])
+        wallet = replay.attested_wallet(wallet_values, predecessor['order'], certs)
+        rows = replay.replay_set(predecessor['order'], input_values, output_rows, wallet, replay.first_late_row(logs))
+        logger.info(f"Order {order_id}: predecessor {predecessor['order']} at block {at_block}: {len(input_values)} input "
+                    f"row(s), {len(output_rows)} output row(s), wallet {wallet or 'unattested'}, {len(rows)} to replay")
+        st['replays_staged'] = True
+        if rows:
+            threading.Thread(target=self.__stage_replay_blobs, args=(bucket_name, order_id, rows),
+                             name=f"replay-stage-{order_id}", daemon=True).start()
+
+    def __stage_replay_blobs(self, bucket_name, order_id, rows):
+        """Writes the replay set's ciphertexts into the bucket as
+        session.replay.<seq>: a spooled one from its file, one not spooled
+        fetched now (__fetch_predecessor_input) and left unstaged when that
+        fails."""
+        staged = 0
+        for row in rows:
+            path = replay.spooled_input_path(ORDERS_DIR, order_id, row.seq)
+            if os.path.isfile(path):
+                with open(path, 'rb') as f:
+                    blob = f.read()
+            else:
+                blob = self.__fetch_predecessor_input(order_id, row)
+                if not blob:
+                    self.logger.warning(f"Order {order_id}: the predecessor's input {row.seq} is not staged for its "
+                                        f"replay; the trustedzone answers it SESSION_REPLAY_UNAVAILABLE")
+                    continue
+            self.swift_stream_service.put_file_content(bucket_name, f"{replay.REPLAY_OBJECT_PREFIX}{row.seq}", '',
+                                                       io.BytesIO(blob))
+            staged += 1
+        self.logger.info(f"Order {order_id}: {staged} of {len(rows)} replay input(s) staged")
+
+    def __state_committed_before(self, bound, logs_after):
+        """replay.fence_state_cids of the pairs `logs_after` name, over the
+        StateCommitted logs at or before `bound` scanned backwards in chunks
+        until every pair has its CID or config.esr_scan_lookback_blocks are
+        read."""
+        moved = {replay.log_pair(log) for log in logs_after}
+        collected = []
+        to = int(bound)
+        floor = max(0, int(bound) - config.esr_scan_lookback_blocks)
+        cids = {}
+        while to >= floor:
+            start = max(floor, to - 9000 + 1)
+            collected.extend(self.__esr_state_committed_logs(start, to))
+            cids = replay.fence_state_cids(logs_after, collected, bound)
+            if moved <= set(cids):
+                break
+            to = start - 1
+        return cids
+
+    def __stage_fence_blobs(self, bucket_name, order_id, bound):
+        """Stages the state objects the securelock's fence reads
+        (PHASE-E-PLAN.md E35): for every (enclave, key) a StateCommitted log
+        names after `bound`, the CID of its last commit at or before it
+        (replay.fence_state_cids), written as state.<cid>.enc from the pins
+        here or fetched from the network (utils.staging_plan). Repeated at
+        each tick until a state.fence.*.cid object appears in the bucket or
+        FENCE_STAGE_TICKS pass; each tick reads the logs since the last one
+        and resolves the pairs they name for the first time, once each (a
+        key with no commit at or before the bound resolves to nothing)."""
+        st = self.__order_handover
+        if self.__esr is None:
+            st['fence_done'] = True
+            return
+        st['fence_ticks'] += 1
+        try:
+            names = self.swift_stream_service.list_object_names(bucket_name) or []
+        except Exception as e:
+            self.logger.debug(f"Order {order_id}: bucket not listed for the fence ({e})")
+            names = []
+        if replay.fence_objects_present(names) or st['fence_ticks'] > FENCE_STAGE_TICKS:
+            self.logger.info(f"Order {order_id}: the fence's state staging is done "
+                             f"({'the securelock published a fenced key' if replay.fence_objects_present(names) else f'{FENCE_STAGE_TICKS} ticks passed'}); "
+                             f"{len(st['fence_staged'])} object(s) staged")
+            st['fence_done'] = True
+            return
+        scanned_to = int(bound) if st['fence_scanned_to'] is None else st['fence_scanned_to']
+        if st['head'] <= scanned_to:
+            return
+        logs_after = self.__esr_state_committed_logs(scanned_to + 1, st['head'])
+        st['fence_scanned_to'] = st['head']
+        new_logs = [log for log in logs_after if replay.log_pair(log) not in st['fence_pairs']]
+        if not new_logs:
+            return
+        found = self.__state_committed_before(bound, new_logs)
+        for log in new_logs:
+            st['fence_pairs'][replay.log_pair(log)] = found.get(replay.log_pair(log))
+        cids = {cid for cid in found.values()} - st['fence_staged']
+        if not cids:
+            return
+        local, remote = staging_plan(cids, self.storage.is_pinned, self.__esr_fetch_deferrals)
+        for cid in local:
+            self.__stage_esr_object(bucket_name, cid)
+        if remote:
+            threading.Thread(target=self.__stage_esr_objects_from_network, args=(bucket_name, remote),
+                             name=f"fence-stage-{bucket_name}", daemon=True).start()
+        st['fence_staged'] |= cids
+        self.logger.info(f"Order {order_id}: fence at block {bound}: {len(cids)} historical state object(s) staged "
+                         f"({len(local)} pinned here, {len(remote)} fetched, within {FENCE_STAGE_SECONDS} s)")
+
+    def __supervise_past_window(self, order_id):
+        """supervise(reservation) once toBlock passed without the
+        predecessor's result inside the window and the assigned broker's
+        grace is out (broker.supervise_decision 'window'), the pre-flight
+        answering acted; sent once. A pre-flight that fails or answers acted
+        false is tried again HANDOVER_POLL_SECONDS later, while the window
+        stays passed without a result."""
+        st = self.__order_handover
+        now = int(time.time())
+        if now < st['supervise_after']:
+            return
+        params = self.__broker_params()
+        reservation = st['reservation']
+        next_due = int(self.__broker.caller().nextDue(reservation))
+        if broker.supervise_decision('window', next_due, params.broker_grace_seconds, now, False, None) != 'send':
+            return
+        fn = self.__broker.functions.supervise(int(reservation))
+        try:
+            acted = bool(fn.call({'from': self.__address}))
+        except Exception as e:
+            self.logger.debug(f"Order {order_id}: supervise({reservation}) pre-flight failed ({e}); tried again in "
+                              f"{HANDOVER_POLL_SECONDS} s")
+            st['supervise_after'] = now + HANDOVER_POLL_SECONDS
+            return
+        if broker.supervise_decision('window', next_due, params.broker_grace_seconds, now, False, acted) != 'send':
+            st['supervise_after'] = now + HANDOVER_POLL_SECONDS
+            return
+        st['supervised'] = True
+        try:
+            self.__broker_tx(f"supervise({reservation})", fn)
+            self.logger.info(f"Order {order_id}: supervise sent for reservation {reservation}: the window passed without "
+                             f"the predecessor's result")
+        except Exception as e:
+            self.logger.info(f"Order {order_id}: supervise({reservation}) failed ({e})")
+
+    def __order_placed_at_on_chain(self, order_id):
+        """The placement time the 1.2 PoX recorded for `order_id`
+        (orderPlacedAt); 0 on a legacy PoX, for an order it did not record
+        and when the read fails."""
+        if not self.__pox_is_12:
+            return 0
+        try:
+            return int(self.__etny.caller().orderPlacedAt(int(order_id)))
+        except Exception as e:
+            self.logger.debug(f"Order {order_id}: orderPlacedAt not read ({e})")
+            return 0
+
+    def __read_order_terms(self, order_id):
+        """gas_ledger.order_terms of orderTerms(order_id) on a 1.2 PoX; None
+        on legacy, for an order without terms and when the read fails."""
+        if not self.__pox_is_12:
+            return None
+        try:
+            return gas_ledger.order_terms(self.__etny.caller().orderTerms(int(order_id)))
+        except Exception as e:
+            self.logger.warning(f"Order {order_id}: orderTerms not read ({e})")
+            return None
+
+    def __open_order_ledger(self, order_id, order_end):
+        """Opens the gas ledger of `order_id` (gas_ledger.OrderGasLedger,
+        persisted in orders/<id>/relay.json and reloaded by a resumed order):
+        the order's terms and the pricing's params() on a recorded 1.2 order,
+        the network's relay budget otherwise; `order_end` bounds its gas
+        waits. The budget is logged once."""
+        params = None
+        terms = self.__read_order_terms(order_id)
+        if terms is not None and self.__pricing is not None:
+            try:
+                params = gas_ledger.pricing_params(self.__pricing.caller().params())
+            except Exception as e:
+                self.logger.warning(f"Order {order_id}: pricing params not read ({e}); the relay budget applies")
+        ledger = gas_ledger.OrderGasLedger(order_id, terms, params, self.__network_config.esr_relay_gas_budget_wei,
+                                           path=order_relay_ledger_path(ORDERS_DIR, order_id), order_end=order_end)
+        self._order_ledger = ledger
+        self.logger.info(ledger.budget_line())
+        return ledger
+
+    def __order_ledger(self, order_id):
+        """The running order's ledger, opened for `order_id` when none is."""
+        if self._order_ledger is None or self._order_ledger.order_id != int(order_id):
+            self.__open_order_ledger(order_id, None)
+        return self._order_ledger
+
+    def __ledger_refresh_terms(self, ledger):
+        """Re-reads a recorded order's terms into its ledger, where a
+        ChainFeeIncreased raise lands: when a relay was refused, and every
+        HANDOVER_POLL_SECONDS while a gas wait holds (__gas_wait_active), the
+        cadence the trustedzone re-reads orderTerms at."""
+        terms = self.__read_order_terms(ledger.order_id)
+        if terms is not None:
+            ledger.set_terms(terms, time.time())
+
+    def __gas_wait_active(self, ledger):
+        """Whether the order's relays and result wait for gas
+        (gas_ledger.gas_wait_active over the latest block): a recorded 1.2
+        order on an EIP-1559 chain whose base fee plus the pricing's priority
+        fee is above the order's cap, before the order's end. A wait that
+        holds re-reads the terms when they are HANDOVER_POLL_SECONDS old and
+        judges the block against the cap they carry, so a raised cap ends
+        the wait as it ends the trustedzone's."""
+        if not ledger.recorded or not getattr(self.__network_config, 'eip1559', False):
+            return False
+        try:
+            base_fee = self.__w3.eth.get_block('latest').get('baseFeePerGas')
+        except Exception as e:
+            self.logger.debug(f"order {ledger.order_id}: the latest block was not read for the gas wait ({e})")
+            return False
+        now = time.time()
+        active = gas_ledger.gas_wait_active(base_fee, ledger.params.priority_fee_wei, ledger.cap_wei,
+                                            now, ledger.order_end, in_window=self.__in_own_window())
+        if active and ledger.terms_stale(now, HANDOVER_POLL_SECONDS):
+            self.__ledger_refresh_terms(ledger)
+            active = gas_ledger.gas_wait_active(base_fee, ledger.params.priority_fee_wei, ledger.cap_wei,
+                                                now, ledger.order_end, in_window=self.__in_own_window())
+        return active
+
+    def __gas_wait_holds(self, ledger, label):
+        """True, logged once per stretch, while the order's gas wait holds
+        for the relay `label`."""
+        if not self.__gas_wait_active(ledger):
+            if ledger.gas_wait_logged:
+                self.logger.info(f"order {ledger.order_id}: gas wait over; relaying again")
+                ledger.gas_wait_logged = False
+            return False
+        if not ledger.gas_wait_logged:
+            ledger.gas_wait_logged = True
+            self.logger.info(f"order {ledger.order_id}: gas wait: the base fee plus the priority fee is above the "
+                             f"order's cap of {ledger.cap_wei} wei/gas; {label} is held until it falls or the order ends")
+        return True
+
+    def __relay_fee(self, ledger):
+        """(price per gas, fee fields) of a row or commit of the order: the
+        cap-bounded EIP-1559 fields (gas_ledger.capped_fee_fields) on a
+        recorded 1.2 order before its end, today's fields (__esr_fee)
+        otherwise and inside the own handover window, where the closing
+        rows, commits and result go at the live price whatever the cap."""
+        if (ledger.recorded and ledger.cap_wei and getattr(self.__network_config, 'eip1559', False)
+                and not self.__in_own_window()
+                and (ledger.order_end is None or time.time() < ledger.order_end)):
+            return gas_ledger.capped_fee_fields(
+                ledger.cap_wei, ledger.params.priority_fee_wei,
+                self.__w3.to_wei(self.__network_config.max_fee_per_gas, self.__network_config.gas_price_measure))
+        return self.__esr_fee()
+
+    def __rebuild_esr_ledger(self, bucket_name, order_id, esr_cid, staged_cid):
+        """The ESR ledger of a session whose staged esr.authorizations.json
+        (`staged_cid`) is not the attested one (`esr_cid`): the records of
+        the session.commit files the staged rows' .commits objects name, in
+        row order (utils.ledger_rebuild), as bytes when their CIDv1 is the
+        attested one; None, logged, otherwise. An esr.commit file is never
+        part of it."""
+        ledger = self.__order_ledger(order_id)
+        contents = []
+        for seq in sorted(ledger.rows_landed):
+            for name in ledger.commits_by_row.get(seq, []):
+                if not name.startswith('session.commit.'):
+                    continue
+                ok, raw = self.swift_stream_service.get_file_content(bucket_name, name)
+                if not ok or not raw:
+                    self.logger.error(f"[esr] order {order_id}: staged ledger ({staged_cid}) does not match the attested "
+                                      f"CID ({esr_cid}) and {name} is not staged; nothing is pinned")
+                    return None
+                contents.append(raw.decode('utf-8') if isinstance(raw, bytes) else str(raw))
+        rebuilt = ledger_rebuild(contents).encode('utf-8')
+        rebuilt_cid = Storage.cidv1_raw(rebuilt)
+        if rebuilt_cid != esr_cid:
+            self.logger.error(f"[esr] order {order_id}: staged ledger ({staged_cid}) does not match the attested CID "
+                              f"({esr_cid}), nor does the ledger rebuilt from the {len(contents)} staged record(s) "
+                              f"({rebuilt_cid}); refusing to pin mismatched bytes")
+            return None
+        self.logger.info(f"[esr] order {order_id}: the ledger rebuilt from the staged rows' {len(contents)} record(s) "
+                         f"is the attested one; the staged file was ahead of it")
+        return rebuilt
 
     def __placement_time_from_chain(self, order_id, duration_hours):
         """The timestamp of the block in which this node placed `order_id`:
@@ -2985,11 +4155,15 @@ class EtnyPoXNode:
         receipt is awaited: the next DP request is sent with the nonce after
         the result's, so the two are mined together (__send_dp_request), and
         the order's enclave containers are removed (__enclave_environment_down).
-        A DP request not sent here is sent by add_dp_request."""
-        try:
-            self.__send_dp_request(int(transaction['nonce']) + 1)
-        except Exception as e:
-            self.logger.info(f"The next DP request was not sent with the result ({e}); it is sent after it")
+        A DP request not sent here is sent by add_dp_request; none is sent
+        after a handover announced for the order (the agent drains)."""
+        if self.__handover_drain:
+            self.logger.info("No next DP request: a handover was announced for this order")
+        else:
+            try:
+                self.__send_dp_request(int(transaction['nonce']) + 1)
+            except Exception as e:
+                self.logger.info(f"The next DP request was not sent with the result ({e}); it is sent after it")
         self.__enclave_environment_down()
 
     def __start_enclave_environment(self, enclave_image_hash):
@@ -3140,6 +4314,23 @@ class EtnyPoXNode:
             if time.time() - last_terms_poll >= DP_TERMS_POLL_SECONDS:
                 last_terms_poll = time.time()
                 self.__refresh_standing_dp_request()
+            # The session transport (the wallet row of every order, a
+            # session's inputs and output rows) runs every 5 s and does not
+            # depend on ESR being deployed on this network. It runs before
+            # the commit relay: a session step's commits are relayed once
+            # its row's receipt is in.
+            if order_id is not None and (time.time() - last_session_poll) >= 5:
+                last_session_poll = time.time()
+                try:
+                    self.__serve_session(bucket_name, order_id)
+                except Exception as e:
+                    logger.debug(f'[session] in-loop serve skipped: {e}')
+                # The handover window of a reserved order, a --handover
+                # request or SIGHUP, and the successor's replays and fence.
+                try:
+                    self.__handover_tick(bucket_name, order_id)
+                except Exception as e:
+                    logger.debug(f'[handover] in-loop tick skipped: {e}')
             # While waiting on the enclave, serve any ESR state it has dropped
             # for pinning. The enclave blocks on the CID coming back, so this
             # runs during the wait, not after it, and polls the bucket every
@@ -3157,14 +4348,6 @@ class EtnyPoXNode:
                         self.__relay_esr_commits(bucket_name, order_id)
                     except Exception as e:
                         logger.debug(f'[esr-relay] in-loop relay skipped: {e}')
-            # Interactive-session transport runs on its own cadence and does
-            # NOT depend on ESR being deployed on this network.
-            if order_id is not None and (time.time() - last_session_poll) >= 5:
-                last_session_poll = time.time()
-                try:
-                    self.__serve_session(bucket_name, order_id)
-                except Exception as e:
-                    logger.debug(f'[session] in-loop serve skipped: {e}')
             time.sleep(1)
         logger.info('Enclave execution timed out')
         return False
@@ -3184,18 +4367,6 @@ class EtnyPoXNode:
             if reason:
                 return reason
         return None
-
-    @staticmethod
-    def __cidv1_raw(content_bytes):
-        """CIDv1/raw/sha2-256 for `content_bytes` -- the CID Storage.add_bytes_raw
-        stores content of up to one block (utils.BLOCK_SIZE) under.
-
-        Layout: multibase 'b' + base32( 0x01 0x55 0x12 0x20 || sha256(content) )
-                                        CIDv1 raw  sha256  32 bytes
-        """
-        digest = hashlib.sha256(content_bytes).digest()
-        raw = bytes([0x01, 0x55, 0x12, 0x20]) + digest
-        return 'b' + base64.b32encode(raw).decode('ascii').lower().rstrip('=')
 
     def stage_esr_state_for_read(self, bucket_name):
         """Deliver the current ESR state objects into the bucket so the enclave
@@ -3376,30 +4547,58 @@ class EtnyPoXNode:
     def build_result_format_v3(self, result_hash, transaction_hex):
         return f'v3:{transaction_hex}:{result_hash}'
 
-    def add_result_to_order(self, order_id, result, until=None, after_send=None):
-        """Sends the order's result (_addResultToOrder) from this node's
-        wallet. While `until` (the order's deadline, seconds since the epoch)
-        has not passed, a send the RPC refuses for the wallet's balance
-        (utils.insufficient_funds) waits for the wallet to cover the
-        transaction (__await_funding) and is made again: the enclave's work
-        is done and the client waits for the result until then, so a wallet
-        funded meanwhile completes the order. Any other failure, and a
-        refusal past `until`, is retried 20 times 5 s apart, then raised.
-        `after_send` is called with the transaction once it is in the pool,
-        before its receipt is awaited."""
+    def add_result_to_order(self, order_id, result, until=None, after_send=None, order_end=None, attested=None):
+        """Sends the order's result from this node's wallet: on a 1.2 PoX
+        that recorded the order (orderReport.recorded), with an enclave-signed
+        result whose fields `attested` (utils.result_fields) are known,
+        _addResultToOrderV2(orderId, result, esrCommits, esrGasWei) with the
+        enclave's fields 12 and 14 verbatim; otherwise (legacy orders, the
+        agent's own failure results) _addResultToOrder. True once the result
+        is confirmed, False when it is abandoned.
+
+        Before each build the send waits (__result_send_plan): while the
+        order's gas wait holds before `order_end`, and at the live price
+        while the chain's base fee is above the operator's ceiling, until
+        RESULT_SEND_GRACE_SECONDS past `until` (the order's deadline, seconds
+        since the epoch; now when None), after which the result is abandoned
+        and logged, never raised. While `until` has not passed, a send the
+        RPC refuses for the wallet's balance (utils.insufficient_funds) waits
+        for the wallet to cover the transaction (__await_funding) and is made
+        again: the enclave's work is done and the client waits for the result
+        until then, so a wallet funded meanwhile completes the order. Any
+        other failure, and a refusal past `until`, is retried 20 times 5 s
+        apart, then raised. `after_send` is called with the transaction once
+        it is in the pool, before its receipt is awaited."""
         logger = self.logger
 
         logger.info(f'Packaging results for blockchain submission.')
 
         max_retries = 20
         retries = 0
+        deadline = until if until is not None else time.time()
+        ledger = self._order_ledger if self._order_ledger is not None and self._order_ledger.order_id == int(order_id) else None
+        v2 = attested is not None and self.__order_recorded(order_id)
+        if v2:
+            logger.info(f"Order {order_id}: the result carries {attested.esr_commits} landed commit(s) at "
+                        f"{attested.esr_gas_wei} wei of gas (_addResultToOrderV2)")
 
         while True:
             unicorn_txn = None
             try:
-                unicorn_txn = self.__etny.functions._addResultToOrder(
-                    order_id, result
-                ).build_transaction(self.get_transaction_build())
+                decision, fee_fields = self.__result_send_plan(order_id, ledger, order_end, deadline)
+                if decision == 'wait':
+                    time.sleep(RESULT_FUNDING_RETRY_SECONDS)
+                    continue
+                if decision == 'abandon':
+                    logger.error(f"Order {order_id}: its result was held by the gas price "
+                                 f"{RESULT_SEND_GRACE_SECONDS} s past the order's deadline; abandoned")
+                    return False
+                if v2:
+                    call = self.__etny.functions._addResultToOrderV2(order_id, result, int(attested.esr_commits),
+                                                                     int(attested.esr_gas_wei))
+                else:
+                    call = self.__etny.functions._addResultToOrder(order_id, result)
+                unicorn_txn = call.build_transaction(self.get_transaction_build(fee_fields=fee_fields))
 
                 _hash = self.send_transaction(unicorn_txn)
                 logger.info(f"TXID {_hash} pending... ")
@@ -3410,7 +4609,7 @@ class EtnyPoXNode:
                 if receipt.status == 1:
                     logger.info(f"TXID {_hash} confirmed!")
                     self.dpreq_cache.add(self.__dprequest)
-                    break
+                    return True
             except Exception as ex:
                 if until is not None and unicorn_txn is not None and insufficient_funds(ex) \
                         and self.__await_funding(order_id, unicorn_txn, until):
@@ -3421,6 +4620,54 @@ class EtnyPoXNode:
                     logger.error("Maximum retries reached. Aborting.")
                     raise
                 time.sleep(5)
+
+    def __order_recorded(self, order_id):
+        """Whether the 1.2 PoX recorded `order_id` (orderReport.recorded):
+        False on legacy and when the read fails, which sends the legacy
+        call."""
+        if not self.__pox_is_12:
+            return False
+        try:
+            return bool(self.__etny.caller().orderReport(int(order_id))[1])
+        except Exception as e:
+            self.logger.warning(f"Order {order_id}: orderReport not read ({e}); the result goes through _addResultToOrder")
+            return False
+
+    def __result_send_plan(self, order_id, ledger, order_end, deadline):
+        """(decision, fee fields) of the next result build
+        (utils.result_send_decision over the latest block): on a recorded 1.2
+        order before `order_end` the cap-bounded fields (__relay_fee) once the
+        gas wait is over; otherwise today's fields, waiting while the base
+        fee is above the operator's ceiling (the raise of
+        get_transaction_build) and abandoning past the grace. A legacy-price
+        network never waits."""
+        if not getattr(self.__network_config, 'eip1559', False):
+            return 'send', None
+        now = time.time()
+        in_window = self.__in_own_window()
+        capped = (ledger is not None and ledger.recorded and ledger.cap_wei and not in_window
+                  and (order_end is None or now < order_end))
+        gas_wait = bool(capped) and self.__gas_wait_holds(ledger, 'the result')
+        ceiling_exceeded = False
+        base_fee = None
+        if not capped:
+            try:
+                base_fee = int(self.__w3.eth.get_block('latest').baseFeePerGas)
+            except Exception as e:
+                self.logger.debug(f"Order {order_id}: the latest block was not read for the result send ({e})")
+            else:
+                measure = self.__network_config.gas_price_measure
+                ceiling_exceeded = (int(base_fee * 1.1) + self.__w3.to_wei(self.__network_config.max_priority_fee_per_gas, measure)
+                                    > self.__w3.to_wei(self.__network_config.max_fee_per_gas, measure))
+        decision = result_send_decision(now, order_end, deadline, gas_wait, in_window, ceiling_exceeded)
+        if decision == 'wait' and ceiling_exceeded and now - self._result_ceiling_logged >= WALLET_GAS_LOG_SECONDS:
+            self._result_ceiling_logged = now
+            self.logger.info(f"Order {order_id}: the base fee ({base_fee} wei) is above the operator's ceiling; the "
+                             f"result is sent once it falls, until {int(deadline + RESULT_SEND_GRACE_SECONDS - now)} s "
+                             f"from now")
+        if decision == 'send' and capped:
+            return 'send', self.__relay_fee(ledger)[1]
+        return decision, None
 
     def __await_funding(self, order_id, transaction, until):
         """Waits, RESULT_FUNDING_RETRY_SECONDS at a time, until this node's
@@ -3770,9 +5017,24 @@ class EtnyPoXNode:
                 logger.debug(f"DP request {self.__dprequest} completed successfully!")
                 self.dpreq_cache.add(self.__dprequest)
             if order.status == OrderStatus.OPEN:
+                # A reserved order the broker placed is approved at once and
+                # run (broker.offer_disposition 'approve'); a spot order is
+                # kept for the client's approval.
+                if self.__broker_placed_order():
+                    return
                 record_pending_approval(ORDERS_DIR, order_id, self.__dprequest, order.do_req)
                 logger.info(f"Order {order_id} is not approved yet; kept for its approval")
-            return
+            if order.status == OrderStatus.CANCELLED:
+                # The broker rejected an order this node did not approve in
+                # time (or a client cancelled one): the request is AVAILABLE
+                # again and the offer waits for the next placement, so the
+                # orders cache no longer maps the request to that order and
+                # the request is served below.
+                self.orders_cache.rem(str(self.__dprequest))
+                logger.info(f"Order {order_id} on DP request {self.__dprequest} was cancelled; the offer waits for "
+                            f"the next placement")
+            else:
+                return
 
         logger.debug(f"Processing DP request {self.__dprequest}")
         time.sleep(self.__network_config.rpc_delay/1000)
@@ -3856,6 +5118,17 @@ class EtnyPoXNode:
                     break
 
                 if self.__take_up_approved_order():
+                    continue
+
+                # The broker's order on this node's offer, approved and run
+                # at once; then the broker's tick (the commitment, the log
+                # scan, a --handover request while idle); and no spot
+                # placement while this node's acceptance of a handover holds
+                # its offer for the successor order.
+                if self.__broker_placed_order():
+                    continue
+                self.__broker_tick()
+                if self.__spot_placement_held():
                     continue
 
                 if not self.__wallet_covers_transactions():
@@ -4560,7 +5833,13 @@ class EtnyPoXNode:
         return (int(self.__etny.functions.NETWORK_FEE_PERCENT().call()),
                 int(self.__etny.functions.VALIDATOR_FEE_PERCENT().call()))
 
-    def get_transaction_build(self, existing_nonce=None):
+    def get_transaction_build(self, existing_nonce=None, fee_fields=None):
+        """The transaction fields of this wallet's next transaction. On an
+        EIP-1559 network the fee is the latest base fee plus a tenth and the
+        configured priority fee, and a base fee that takes it over the
+        operator's max_fee_per_gas raises; `fee_fields` (maxFeePerGas and
+        maxPriorityFeePerGas, the cap-bounded fields of a recorded 1.2
+        order's result) replace that fee and its raise."""
         logger = self.logger
 
         # A started row in flight holds this wallet's next nonce until it is
@@ -4569,12 +5848,17 @@ class EtnyPoXNode:
         self.__nonce = existing_nonce if existing_nonce else self.__w3.eth.get_transaction_count(self.__address)
 
         if self.__network_config.eip1559 == True:
-            latest_block = self.__w3.eth.get_block("latest")
-            max_fee_per_gas = int(latest_block.baseFeePerGas * 1.1) + self.__w3.to_wei(self.__network_config.max_priority_fee_per_gas, self.__network_config.gas_price_measure) # 10% increase in previous block gas price + priority fee
+            if fee_fields is not None:
+                max_fee_per_gas = int(fee_fields['maxFeePerGas'])
+                priority_fee = int(fee_fields['maxPriorityFeePerGas'])
+            else:
+                latest_block = self.__w3.eth.get_block("latest")
+                max_fee_per_gas = int(latest_block.baseFeePerGas * 1.1) + self.__w3.to_wei(self.__network_config.max_priority_fee_per_gas, self.__network_config.gas_price_measure) # 10% increase in previous block gas price + priority fee
+                priority_fee = self.__w3.to_wei(self.__network_config.max_priority_fee_per_gas, self.__network_config.gas_price_measure)
 
-            if max_fee_per_gas > self.__w3.to_wei(self.__network_config.max_fee_per_gas, self.__network_config.gas_price_measure):
-                raise Exception("Network base fee is too high!")
-                
+                if max_fee_per_gas > self.__w3.to_wei(self.__network_config.max_fee_per_gas, self.__network_config.gas_price_measure):
+                    raise Exception("Network base fee is too high!")
+
             # The type is a hex string: build_transaction passes the field to
             # eth_estimateGas as given, and Tenderly's Sepolia gateway answers
             # a numeric 2 with -32602 "invalid params"; eth_account signs
@@ -4585,9 +5869,9 @@ class EtnyPoXNode:
                 "chainId": self.__network_config.chain_id,
                 "from": self.__acct.address,
                 'maxFeePerGas': max_fee_per_gas,
-                'maxPriorityFeePerGas': self.__w3.to_wei(self.__network_config.max_priority_fee_per_gas, self.__network_config.gas_price_measure),
+                'maxPriorityFeePerGas': priority_fee,
             }
-            
+
             gas_price_value = max_fee_per_gas
             
         else:
@@ -4627,9 +5911,13 @@ class EtnyPoXNode:
         return gp, {'gasPrice': gp}
 
     def __serve_session(self, bucket_name, order_id):
-        """Transport for interactive sessions: deliver etny-si inputs from
-        IPFS into the enclave bucket, and broadcast the enclave's signed
-        etny-so output proofs as DP-request metadata rows.
+        """The DP-request rows of the order's enclaves and, on an interactive
+        session, its transport: the trustedzone's task wallet attestation
+        (session.wallet.proof) is broadcast as the etny-sw row once on every
+        order, after the started row and before any output row; on a session
+        (DO metadata[3] 'v3s') the etny-si inputs are delivered from IPFS
+        into the enclave bucket and the enclave's signed etny-so output
+        proofs broadcast as rows.
 
         The node is a PURE RELAY here: inputs are authenticated by the chain
         (only the data owner's wallet can write the rows) and verified
@@ -4651,17 +5939,19 @@ class EtnyPoXNode:
                 'rows_seen': 0,
                 'delivered': set(),
                 'proof_next': 0,
-                'spent': 0,
                 'wallet_sent': False,
             }
             if is_session:
                 logger.info(f"[session] order {order_id}: interactive session detected "
                             f"(request {order.do_req}, dp request {order.dp_req})")
         st = self._session_state
+        ledger = self.__order_ledger(order_id)
+        if not st['wallet_sent'] and not self.__session_relay_wallet(bucket_name, order_id, st, ledger):
+            return
         if not st['active']:
             return
         self.__session_deliver_inputs(bucket_name, order_id, st)
-        self.__session_relay_outputs(bucket_name, order_id, st)
+        self.__session_relay_outputs(bucket_name, order_id, st, ledger)
 
     def __session_deliver_inputs(self, bucket_name, order_id, st):
         """Fetch newly committed input CIDs and drop the ciphertext into the
@@ -4727,26 +6017,45 @@ class EtnyPoXNode:
             st['delivered'].add(seq)
             logger.info(f"[session] order {order_id}: delivered input {seq}")
 
-    def __session_broadcast_row(self, order_id, st, key, value, budget, label):
-        """Broadcast one DP-request metadata row (`key`, `value`) of the
-        session from this node's wallet, within the per-order gas budget;
-        True when it is on chain, False to try again next tick."""
-        fn = self.__etny.functions._addMetadataToDPRequest(st['dp_req'], key, value)
-        gas_price, fee_fields = self.__esr_fee()
+    def __session_broadcast_rows(self, order_id, st, rows, ledger, label, held_by_reserve=True):
+        """Broadcasts the DP-request metadata rows `rows` ([(key, value)]) of
+        the order from this node's wallet in one transaction
+        (_addMetadataToDPRequest for one row, _addMetadataToDPRequestBatch
+        for several on 1.2), outside the order's gas wait and within its gas
+        ledger: the rows' cost (gas_ledger.OrderGasLedger.rows_cost) must
+        leave the counter, with the result's reserve, within the budget
+        unless `held_by_reserve` is False (the etny-sw row, held by the gas
+        wait alone); a refusal re-reads the order's terms for a raise. 'sent'
+        once the receipt is in with status 1, which charges the rows; 'held'
+        while the gas wait, the budget or the wallet's balance holds the rows
+        (tried again next tick, the same for one row as for the batch);
+        'failed' on an estimate failure, a send failure and a reverted
+        transaction (a batch's rows then go one by one)."""
+        if len(rows) == 1:
+            fn = self.__etny.functions._addMetadataToDPRequest(st['dp_req'], rows[0][0], rows[0][1])
+        else:
+            fn = self.__etny.functions._addMetadataToDPRequestBatch(
+                st['dp_req'], [key for key, _ in rows], [value for _, value in rows])
+        if self.__gas_wait_holds(ledger, label):
+            return 'held'
+        gas_price, fee_fields = self.__relay_fee(ledger)
         try:
             gas_units = fn.estimate_gas({'from': self.__address})
         except Exception as e:
             logger.error(f"[session] order {order_id}: {label}: estimate_gas failed ({e}); retrying next tick")
-            return False
-        cost = gas_units * gas_price
-        if st['spent'] + cost > budget:
+            return 'failed'
+        cost = ledger.rows_cost(len(rows), gas_units, gas_price)
+        if held_by_reserve and not ledger.admits(cost):
+            self.__ledger_refresh_terms(ledger)
+        if held_by_reserve and not ledger.admits(cost):
             # Said once per row; the row is tried again every tick, at the
             # gas price of that tick.
             if st.get('budget_refused') != label:
                 st['budget_refused'] = label
-                logger.error(f"[session] order {order_id}: {label} would exceed the per-order gas budget "
-                             f"({st['spent'] + cost} > {budget} wei); not broadcast while it does")
-            return False
+                logger.error(f"[session] order {order_id}: {label} would take the order's relayed gas to "
+                             f"{ledger.total(cost)} with the result's reserve, over its budget of {ledger.budget_wei()} "
+                             f"wei; not broadcast while it does")
+            return 'held'
         try:
             opts = {
                 'from': self.__address,
@@ -4756,14 +6065,11 @@ class EtnyPoXNode:
             }
             opts.update(fee_fields)
             txn = fn.build_transaction(opts)
-            self.__w3.eth.wait_for_transaction_receipt(
+            receipt = self.__w3.eth.wait_for_transaction_receipt(
                 self.__w3.eth.send_raw_transaction(
                     self.__w3.eth.account.sign_transaction(
                         txn, private_key=self.__acct.key).raw_transaction),
                 timeout=180)
-            st['spent'] += cost
-            logger.info(f"[session] order {order_id}: broadcast {label} (gas {gas_units})")
-            return True
         except Exception as e:
             if insufficient_funds(e):
                 # The wallet's shortfall holds every row of the session; it is
@@ -4774,15 +6080,24 @@ class EtnyPoXNode:
                                  f"({e}); tried again every tick until it is funded")
                 else:
                     logger.debug(f"[session] order {order_id}: broadcasting {label} failed ({e})")
-                return False
+                return 'held'
             logger.error(f"[session] order {order_id}: broadcasting {label} failed ({e})")
-            return False
+            return 'failed'
+        if int(receipt.status) != 1:
+            logger.error(f"[session] order {order_id}: the transaction of {label} reverted; sending it again next tick")
+            return 'failed'
+        ledger.charge(cost)
+        logger.info(f"[session] order {order_id}: broadcast {label} (gas {gas_units}, relayed gas "
+                    f"{ledger.total()} of {ledger.budget_wei()} wei with the result's reserve)")
+        return 'sent'
 
-    def __session_relay_wallet(self, bucket_name, order_id, st, budget):
+    def __session_relay_wallet(self, bucket_name, order_id, st, ledger):
         """Broadcast the enclave's task wallet attestation (session.wallet.proof,
-        the 'etny-sw' row) once, before any output row. True when it is on
-        chain, was malformed, or the enclave staged none (a trustedzone from
-        before the attestation); False to try again next tick."""
+        the 'etny-sw' row) once, on every order, before any output row;
+        charged to the ledger and held by the gas wait alone, never by the
+        result's reserve. True when it is on chain, was malformed, or the
+        enclave staged none (a trustedzone from before the attestation);
+        False to try again next tick."""
         ok, value = self.swift_stream_service.get_file_content(bucket_name, 'session.wallet.proof')
         if not ok or not value:
             return True
@@ -4790,183 +6105,240 @@ class EtnyPoXNode:
             logger.error(f"[session] order {order_id}: malformed task wallet attestation; not broadcast")
             st['wallet_sent'] = True
             return True
-        if not self.__session_broadcast_row(order_id, st, 'etny-sw', str(value).strip(), budget,
-                                            'the task wallet attestation'):
+        if self.__session_broadcast_rows(order_id, st, [(SESSION_WALLET_KEY, str(value).strip())], ledger,
+                                         'the task wallet attestation', held_by_reserve=False) != 'sent':
             return False
         st['wallet_sent'] = True
         return True
 
-    def __session_relay_outputs(self, bucket_name, order_id, st):
-        """Pin each staged output ciphertext (verified against the CID the
-        enclave attested inside its signed proof) and broadcast the proof as
-        a DP-request metadata row from this node's wallet. Strictly in proof
-        order; shares the ESR relay's per-order gas budget discipline."""
-        budget = int(self.__network_config.esr_relay_gas_budget_wei)
-        if not st['wallet_sent'] and not self.__session_relay_wallet(bucket_name, order_id, st, budget):
-            return
+    def __session_staged_outputs(self, bucket_name, order_id, st):
+        """The output rows staged and not yet on chain, in proof order:
+        [(seq, proof, status, names)] with the names of the row's
+        session.output.<seq>.commits object ([] when the trustedzone wrote
+        none: a notice row). Each output ciphertext is pinned (verified
+        against the CID the enclave attested inside its signed proof); the
+        list stops at a proof whose ciphertext is not staged yet. A malformed
+        proof is skipped for good."""
+        staged = []
+        seq = st['proof_next']
         while True:
-            proof_name = f"session.output.{st['proof_next']}.proof"
+            proof_name = f"session.output.{seq}.proof"
             ok, proof = self.swift_stream_service.get_file_content(bucket_name, proof_name)
             if not ok or not proof:
-                return
+                return staged
             proof = proof.strip()
             parts = proof.split(':')
             # v1:<seq>:<orderId>:<ack>:<status>:<code>:<cid>:<sha256>:<sig>
             if len(parts) != 9 or parts[0] != 'v1':
                 logger.error(f"[session] order {order_id}: malformed proof {proof_name}; skipping")
-                st['proof_next'] += 1
+                if not staged:
+                    st['proof_next'] = seq + 1
+                seq += 1
                 continue
             status_field, cid = parts[4], parts[6]
             if cid:
-                okb, blob = self.swift_stream_service.get_file_content_bytes(
-                    bucket_name, f"session.output.{st['proof_next']}.bin")
+                okb, blob = self.swift_stream_service.get_file_content_bytes(bucket_name, f"session.output.{seq}.bin")
                 if not okb or blob is None:
-                    return  # ciphertext not staged yet; retry next tick
-                if self.__cidv1_raw(blob) != cid:
-                    logger.error(f"[session] order {order_id}: output {st['proof_next']} bytes "
+                    return staged  # ciphertext not staged yet; retry next tick
+                if Storage.cidv1_raw(blob) != cid:
+                    logger.error(f"[session] order {order_id}: output {seq} bytes "
                                  f"do not match the attested CID; refusing to pin")
                 else:
-                    self.storage.pin_bytes_deferred(
-                        blob, name=f"session-output-{order_id}-{st['proof_next']}")
-            if not self.__session_broadcast_row(order_id, st, 'etny-so', proof, budget,
-                                                f"output row {st['proof_next']} ({status_field})"):
+                    self.storage.pin_bytes_deferred(blob, name=f"session-output-{order_id}-{seq}")
+            names = []
+            okc, commits = self.swift_stream_service.get_file_content(bucket_name, f"session.output.{seq}.commits")
+            if okc and commits:
+                try:
+                    names = [str(name) for name in json.loads(commits)]
+                except (ValueError, TypeError) as e:
+                    logger.error(f"[session] order {order_id}: session.output.{seq}.commits is malformed ({e}); "
+                                 f"the row names no commit")
+            staged.append((seq, proof, status_field, names))
+            seq += 1
+
+    def __session_relay_outputs(self, bucket_name, order_id, st, ledger):
+        """Broadcasts the staged output proofs (__session_staged_outputs) as
+        etny-so rows from this node's wallet, strictly in proof order: two or
+        more pending rows go as one _addMetadataToDPRequestBatch on 1.2, a
+        batch that fails falls back to single rows in the same tick (a batch
+        the gas wait or the budget holds waits as a whole), and a row that
+        does not land stops the relay until the next tick. A landed row is
+        recorded in the ledger with the session.commit names it unlocks for
+        the commit relay."""
+        staged = self.__session_staged_outputs(bucket_name, order_id, st)
+        if not staged:
+            return
+        if self.__pox_is_12 and len(staged) >= RELAY_BATCH_MIN:
+            label = f"output rows {staged[0][0]} to {staged[-1][0]}"
+            outcome = self.__session_broadcast_rows(order_id, st, [(SESSION_OUTPUT_KEY, proof) for _, proof, _, _ in staged],
+                                                    ledger, label)
+            if outcome == 'held':
                 return
-            st['proof_next'] += 1
+            if outcome == 'sent':
+                for seq, _, _, names in staged:
+                    ledger.row_landed(seq, names)
+                st['proof_next'] = staged[-1][0] + 1
+                return
+            logger.info(f"[session] order {order_id}: {label} did not go as one batch; sending them one by one")
+        for seq, proof, status_field, names in staged:
+            if self.__session_broadcast_rows(order_id, st, [(SESSION_OUTPUT_KEY, proof)], ledger,
+                                             f"output row {seq} ({status_field})") != 'sent':
+                return
+            ledger.row_landed(seq, names)
+            st['proof_next'] = seq + 1
 
     def __relay_esr_commits(self, bucket_name, order_id):
-        """Relay the ESR state commits the enclave signed for this order.
-
-        The enclave signs each commit (commitFor) and stages it as
-        esr.commit.<key16>.<relayNonce>.json; the NODE submits it and PAYS.
-        Relay nonces are PER (enclave, key): each key's commits relay strictly
-        in order, different keys are independent. To stop a malicious payload
-        from draining the operator, the node keeps a running per-order gas
-        total and REFUSES to relay a commit that would push it over the
-        network's esr_relay_gas_budget_wei (<NETWORK>_ESR_RELAY_GAS_BUDGET_WEI,
-        or ESR_RELAY_GAS_BUDGET_WEI). A refusal is not fatal here -- the
-        trustedzone independently re-prices the whole ledger and terminates the
-        order, so the node just protects its wallet and moves on.
-
-        IDEMPOTENT and called REPEATEDLY: the enclave stages commits during
-        execution and the trustedzone waits (up to 5 blocks) for them to land
-        before signing the result, so this runs from inside the enclave-wait
-        loop as files appear, plus once more as a final sweep. Already-relayed
-        files are tracked per order and skipped.
-        """
+        """Relays the ESR state commits the enclaves signed for this order,
+        those gas_ledger.relay_plan lists over the bucket: esr.commit.*.json
+        (a plain task's, the fence's) as they appear, a session step's
+        session.commit.<n>.<key16>.<relayNonce>.json once its etny-so row's
+        receipt is in and session.output.<seq>.commits names it, one no
+        object names never. The enclave signs each commit (commitFor) and
+        never pays gas: this node submits them from its wallet, the commits
+        of one enclave as one commitForBatch when RELAY_BATCH_MIN or more are
+        due at a tick (gas_ledger.batch_plan), outside the order's gas wait
+        and within its ledger (__send_commits). A batch that reverts falls
+        back to single commits, the entry it names and that key's later files
+        skipped (gas_ledger.batch_fallback); a single commit that fails
+        skips its key's later files: relay nonces are per (enclave, key), so
+        the other keys go on. Idempotent and called repeatedly: in the
+        enclave-wait tick after the session transport, as files appear, and
+        once more as the final sweep; the ledger keeps what was relayed."""
         if self.__esr is None:
             return  # ESR not deployed on this network
-        if not hasattr(self, '_esr_relayed_files') or self._esr_relay_order != order_id:
-            self._esr_relayed_files = set()
-            self._esr_relay_spent = 0
-            self._esr_relay_order = order_id
+        ledger = self.__order_ledger(order_id)
         try:
             names = self.swift_stream_service.list_object_names(bucket_name) or []
         except Exception as e:
             logger.debug(f"[esr-relay] could not list bucket {bucket_name}: {e}")
             return
-
-        def _order_key(n):
-            # esr.commit.<key16>.<rn>.json -> (key16, rn); a file named
-            # esr.commit.<rn>.json -> ('', rn). The order within a key counts.
-            parts = n.split('.')
-            try:
-                if len(parts) == 5:
-                    return (parts[2], int(parts[3]))
-                return ('', int(parts[2]))
-            except (ValueError, IndexError):
-                return ('~', 0)
-
-        commit_files = sorted(
-            (n for n in names if n.startswith('esr.commit.') and n.endswith('.json')
-             and n not in self._esr_relayed_files),
-            key=_order_key)
-        # At most 256 commits are relayed for one order: the trustedzone fails
-        # the task (code 38) beyond that.
-        already = len(self._esr_relayed_files)
-        if already + len(commit_files) > 256:
-            keep = max(0, 256 - already)
-            logger.error(f"[esr-relay] order {order_id}: {already + len(commit_files)} staged "
-                         f"commits exceed the per-run cap of 256; relaying only {keep} more")
-            commit_files = commit_files[:keep]
-        if not commit_files:
+        plan = ledger.plan(names)
+        if ledger.beyond_cap and not ledger.cap_logged:
+            ledger.cap_logged = True
+            logger.error(f"[esr-relay] order {order_id}: {ledger.beyond_cap} staged commit(s) are beyond the order's "
+                         f"cap of {ESR_LEDGER_CAP} relayed commits and are not relayed; the trustedzone's ledger "
+                         f"holds the same cap")
+        if not plan:
             return
-
-        budget = int(self.__network_config.esr_relay_gas_budget_wei)
-        gas_price, fee_fields = self.__esr_fee()
-        spent = self._esr_relay_spent
-        relayed = 0
-        for name in commit_files:
+        if self.__gas_wait_holds(ledger, 'the commit relay'):
+            return
+        records = {}
+        for name in plan:
             ok, raw = self.swift_stream_service.get_file_content(bucket_name, name)
             if not ok or not raw:
                 continue
             try:
-                a = json.loads(raw)
-                enclave = self.__w3.to_checksum_address(a['enclave'])
-                key_hash = bytes.fromhex(a['keyHash'][2:])
-                cid = a['cid']
-                ev = int(a['expectedVersion'])
-                rn = int(a['relayNonce'])
-                # PUBLIC idempotency nonce. 0 = omitted: the registry assigns
-                # the next value in sequence itself; non-zero is client-pinned
-                # and must be exactly stored + 1. Required field -- every
-                # authorization carries it. It is part of the digest the
-                # enclave signed, so commitFor reverts when it is altered or
-                # stripped here.
-                idem = int(a['nonce'])
-                sig = bytes.fromhex(a['signature'][2:])
+                records[name] = gas_ledger.parse_authorization(raw)
             except Exception as e:
                 logger.error(f"[esr-relay] {name} malformed ({e}) -- skipping")
-                continue
+                ledger.skip([name])
+        relayable = [name for name in plan if name in records]
+        if not relayable:
+            return
+        gas_price, fee_fields = self.__relay_fee(ledger)
+        key_of = lambda name: gas_ledger.commit_file_key(name)[0]
+        for enclave, group, batched in gas_ledger.batch_plan(relayable, lambda name: records[name][0]):
+            if batched:
+                outcome = self.__send_commits(order_id, ledger, enclave, group, records, gas_price, fee_fields)
+                if outcome == 'refused':
+                    return
+                if outcome == 'sent':
+                    continue
+                group, skipped = gas_ledger.batch_fallback(group, outcome[1], key_of)
+                if skipped:
+                    ledger.skip(skipped)
+                    logger.error(f"[esr-relay] order {order_id}: the batch of {enclave} reverted at {skipped[0]}; "
+                                 f"it and its key's {len(skipped) - 1} later commit(s) are not relayed")
+                logger.info(f"[esr-relay] order {order_id}: relaying the batch's other {len(group)} commit(s) of "
+                            f"{enclave} one by one")
+            for name in group:
+                if name in ledger.relayed:
+                    continue
+                outcome = self.__send_commits(order_id, ledger, enclave, [name], records, gas_price, fee_fields)
+                if outcome == 'refused':
+                    return
+                if outcome in ('sent', 'retry'):
+                    continue
+                # A failure (VersionMismatch among them) is not abuse: this
+                # key's remaining commits, whose relay nonces are now gapped,
+                # are skipped and the other keys go on.
+                later = [other for other in relayable if other != name and key_of(other) == key_of(name)
+                         and other not in ledger.relayed and records[other][0] == enclave]
+                ledger.skip([name, *later])
 
-            fn = self.__esr.functions.commitFor(enclave, key_hash, cid, ev, rn, idem, sig)
+    def __send_commits(self, order_id, ledger, enclave, names, records, gas_price, fee_fields):
+        """Sends the commits `names` of `enclave` (gas_ledger.parse_authorization
+        records) in one transaction: commitFor for one, commitForBatch for
+        several. Each is priced in the ledger at its own estimated gas
+        (gas_ledger.COMMIT_GAS_FALLBACK when the estimate fails, as for a
+        later relay nonce of a key whose earlier commit has not landed) and
+        the capped live price; the transaction's receipt replaces the
+        estimates with gasUsed x effectiveGasPrice. 'refused' when the ledger
+        does not admit the cost after the terms are re-read (the relay waits
+        for a raise), 'retry' when a single commit's estimate fails (an RPC
+        replica behind the key's last landing; tried again next tick), 'sent'
+        once the receipt is in with status 1, ('failed', index) otherwise,
+        the index the one a reverted batch names (None for none). A
+        transaction whose receipt has status 0 charges nothing and marks
+        nothing relayed: its names are the caller's to send alone or skip,
+        and the gas it burnt is the node's, as the trustedzone counts no
+        receipt that landed no commit."""
+        checksum = self.__w3.to_checksum_address(enclave)
+        calls = [self.__esr.functions.commitFor(checksum, *records[name][1:]) for name in names]
+        costs = []
+        for call in calls:
             try:
-                gas_units = fn.estimate_gas({'from': self.__address})
-            except Exception as e:
-                logger.error(f"[esr-relay] {name} estimate_gas failed ({e}) -- skipping")
-                continue
-            cost = gas_units * gas_price
-            if spent + cost > budget:
-                logger.error(
-                    f"[esr-relay] order {order_id}: commit nonce {rn} would exceed the "
-                    f"per-order gas budget ({spent + cost} > {budget} wei); refusing to pay. "
-                    f"The trustedzone will terminate the order (ESR_GAS_LIMIT_EXCEEDED).")
-                break  # stop; nonces are ordered, later ones can't be relayed anyway
-
-            try:
-                opts = {
-                    'from': self.__address,
-                    'nonce': self.__w3.eth.get_transaction_count(self.__address),
-                    'chainId': self.__network_config.chain_id,
-                    'gas': gas_units + 30000,
-                }
-                opts.update(fee_fields)
-                txn = fn.build_transaction(opts)
-                self.__w3.eth.wait_for_transaction_receipt(
-                    self.__w3.eth.send_raw_transaction(
-                        self.__w3.eth.account.sign_transaction(
-                            txn, private_key=self.__acct.key).raw_transaction),
-                    timeout=180)
-                spent += cost
-                self._esr_relay_spent = spent
-                relayed += 1
-                self._esr_relayed_files.add(name)
-                logger.info(f"[esr-relay] order {order_id}: relayed ESR commit {name} "
-                            f"(gas {gas_units}, spent {spent}/{budget} wei)")
-            except Exception as e:
-                logger.error(f"[esr-relay] order {order_id}: relaying {name} failed ({e})")
-                # A genuine failure (e.g. VersionMismatch) is not abuse; skip
-                # THIS KEY's remaining commits (its relay nonces are now
-                # gapped) but keep relaying other keys -- per-key nonces make
-                # them independent.
-                failed_key = _order_key(name)[0]
-                self._esr_relayed_files.add(name)
-                for later in commit_files:
-                    if later != name and _order_key(later)[0] == failed_key:
-                        self._esr_relayed_files.add(later)
-                continue
-        if relayed:
-            logger.info(f"[esr-relay] order {order_id}: relayed {relayed} ESR commit(s), "
-                        f"paid for {spent} wei of gas total this order")
+                units = int(call.estimate_gas({'from': self.__address}))
+            except Exception:
+                units = gas_ledger.COMMIT_GAS_FALLBACK
+            costs.append(ledger.commit_cost(units, gas_price))
+        if len(names) == 1:
+            fn = calls[0]
+        else:
+            fn = self.__esr.functions.commitForBatch(checksum, [records[name][1:] for name in names])
+        try:
+            gas_units = int(fn.estimate_gas({'from': self.__address}))
+        except Exception as e:
+            logger.error(f"[esr-relay] order {order_id}: estimate_gas of {', '.join(names)} failed ({e})")
+            if len(names) == 1:
+                return 'retry'
+            return ('failed', gas_ledger.batch_failure_index(e))
+        cost = sum(costs)
+        if not ledger.admits(cost):
+            self.__ledger_refresh_terms(ledger)
+        if not ledger.admits(cost):
+            logger.error(f"[esr-relay] order {order_id}: relaying {', '.join(names)} would take the order's relayed gas "
+                         f"to {ledger.total(cost)} with the result's reserve, over its budget of {ledger.budget_wei()} "
+                         f"wei; held until the fee is raised. The trustedzone judges the same sum "
+                         f"(ESR_GAS_LIMIT_EXCEEDED).")
+            return 'refused'
+        try:
+            opts = {
+                'from': self.__address,
+                'nonce': self.__w3.eth.get_transaction_count(self.__address),
+                'chainId': self.__network_config.chain_id,
+                'gas': gas_units + 30000,
+            }
+            opts.update(fee_fields)
+            txn = fn.build_transaction(opts)
+            receipt = self.__w3.eth.wait_for_transaction_receipt(
+                self.__w3.eth.send_raw_transaction(
+                    self.__w3.eth.account.sign_transaction(
+                        txn, private_key=self.__acct.key).raw_transaction),
+                timeout=180)
+        except Exception as e:
+            logger.error(f"[esr-relay] order {order_id}: relaying {', '.join(names)} failed ({e})")
+            return ('failed', gas_ledger.batch_failure_index(e))
+        if int(receipt.status) != 1:
+            logger.error(f"[esr-relay] order {order_id}: the transaction of {', '.join(names)} reverted")
+            return ('failed', None)
+        ledger.charge_commits(names, costs)
+        actual = int(receipt['gasUsed']) * int(receipt.get('effectiveGasPrice') or gas_price)
+        ledger.settle(names, actual)
+        logger.info(f"[esr-relay] order {order_id}: relayed {len(names)} ESR commit(s) {', '.join(names)} "
+                    f"(gas {receipt['gasUsed']}, {actual} wei; relayed gas {ledger.total()} of "
+                    f"{ledger.budget_wei()} wei with the result's reserve)")
+        return 'sent'
 
     def send_transaction(self, unicorn_txn):
         """Signs and sends `unicorn_txn` from this node's wallet; its hash. A
@@ -4986,7 +6358,23 @@ class EtnyPoXNode:
         return _hash
 
     def resume_processing(self):
+        drain_logged = False
         while True and not stop_event.is_set():
+
+            # After a handover announced on this network the agent adds no
+            # request: it idles until the operator stops it. The exit SIGHUP
+            # asked for happens here when the order's thread did not reach it
+            # (its run raised), once no reserved order runs.
+            if self.__handover_drain:
+                if self.__handover_exit and not reserved_orders_running:
+                    logger.info("The handed-over order is done; exiting as SIGHUP asked")
+                    os._exit(0)
+                if not drain_logged:
+                    drain_logged = True
+                    logger.info("The handed-over order is done; no new DP request is added until the agent is restarted")
+                answer_drained_handover_request(self.__network)
+                time.sleep(60)
+                continue
 
             balance = self.__w3.eth.get_balance(self.__address)
 
@@ -5492,6 +6880,14 @@ class SGXDriver:
         except Exception as e:
             pass
 
+def answer_drained_handover_request(network_name):
+    """A --handover request in the marker file of a network whose agent
+    drains (a handover announced already) is answered refused."""
+    path = broker.handover_request_path(CacheConfig(network_name).base_path)
+    if broker.read_handover_request(path) is not None:
+        broker.write_handover_answer(path, {'refused': 'a handover is announced already'})
+
+
 def process_network(network):
     """
     Processes a single network configuration.
@@ -5505,6 +6901,16 @@ def process_network(network):
 
     if stop_event.is_set():
         config.logger.warning(f"[{network.name}] Stopping network processing due to interrupt.")
+        return
+
+    if network.name in drained_networks:
+        # A handover was announced on this network earlier in the process
+        # (the daily restart rebuilds the handles): no handle, no integration
+        # test, no DP request; idle until the operator stops the process.
+        logger.info(f"[{network.name}] A handover was announced on this network; idle until the agent is stopped")
+        while not stop_event.is_set():
+            answer_drained_handover_request(network.name)
+            time.sleep(5)
         return
 
     app = None
@@ -5783,10 +7189,61 @@ def run_scheduler(interval, network_configs, task_manager):
         initiate_restart(network_configs, task_manager)
 
 
+def handover_command(argv):
+    """The `--handover --network <name> [--appoint <node>]` command: writes
+    the request into node/<network>/handover.json, which the agent running
+    that network reads at the next idle point of its order, and prints the
+    answer it writes back within HANDOVER_REQUEST_TIMEOUT_SECONDS. Exits 0
+    on an announcement, 1 on a refusal, 2 without an answer."""
+    arguments = broker.handover_command_arguments(argv)
+    network = arguments.network.lower()
+    if network not in config.available_networks():
+        print(f"unknown network {arguments.network!r}; one of: {', '.join(sorted(config.available_networks()))}")
+        return 2
+    path = broker.handover_request_path(CacheConfig(network).base_path)
+    broker.write_handover_request(path, arguments.appoint, time.time())
+    print(f"handover requested for the order running on {network}"
+          f"{' with appointee ' + arguments.appoint if arguments.appoint else ''}; waiting for the agent's answer")
+    answer = broker.await_handover_answer(path)
+    if answer is None:
+        print(f"no answer from the agent within {HANDOVER_REQUEST_TIMEOUT_SECONDS} s (is it running on {network}?)")
+        return 2
+    if answer.get('announced'):
+        print(f"handover announced: blocks {answer.get('fromBlock')} to {answer.get('toBlock')} "
+              f"(slot {answer.get('slot')}), TXID {answer.get('tx')}")
+        return 0
+    print(f"handover refused: {answer.get('refused')}")
+    return 1
+
+
+def install_sighup_handler():
+    """SIGHUP (the unit's KillSignal): with a reserved order running the
+    order's agent announces a handover, serves to the window, posts the
+    result and exits (handover_signal); with none the process exits at
+    once, the signal's effect before. Platforms without SIGHUP install
+    nothing."""
+    sighup = getattr(signal, 'SIGHUP', None)
+    if sighup is None:
+        return
+
+    def on_sighup(signum, frame):
+        if not reserved_orders_running:
+            logger.info("SIGHUP received with no reserved order running; exiting")
+            os._exit(0)
+        logger.info(f"SIGHUP received: the reserved order(s) {sorted(reserved_orders_running.values())} are handed over "
+                    f"before the exit")
+        handover_signal.set()
+
+    signal.signal(sighup, on_sighup)
+
+
 if __name__ == '__main__':
 
+    if '--handover' in sys.argv[1:]:
+        sys.exit(handover_command(sys.argv[1:]))
+
     network_names = list(config.NETWORKS.keys())
-    
+
     parser = config.parse_arguments(network_names)
     args, unknown_args = parser.parse_known_args()
 
@@ -5822,6 +7279,8 @@ if __name__ == '__main__':
         # Remove the enclave containers a previous run left, before any
         # network thread starts an order's enclaves.
         terminate_stale_enclave_containers()
+
+        install_sighup_handler()
 
         # Create a TaskManager to hold executor/futures
         task_manager = TaskManager()

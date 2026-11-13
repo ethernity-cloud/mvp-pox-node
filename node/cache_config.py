@@ -32,6 +32,14 @@ class CacheConfig:
         # The gas this node's DP requests, placements and started rows used
         # (gas_profile.GasProfile), priced into its tip.
         self.gas_profile_filepath = base_path / 'gas_profile.json'
+        # The --handover command's request and the running agent's answer
+        # (broker.handover_request_path).
+        self.handover_request_filepath = base_path / 'handover.json'
+        # The handover this node accepted and the predecessor's cu, until the
+        # successor is placed ({orderId, predecessor_cu, reservation}).
+        self.accepted_handover_filepath = base_path / 'accepted.json'
+        # The farm invitation a broker refused (broker.farm_refusal_path).
+        self.farm_refusal_filepath = base_path / 'farm.json'
 
         # Define all cache limits
         self.network_cache_limit = 1

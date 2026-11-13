@@ -45,7 +45,7 @@ import gzip
 
 import threading
 
-from constants import CANCEL_ATTEMPTS, DP_REFRESH_MARGIN_SECONDS, MAX_TIP, TIP_HOURS
+from constants import CANCEL_ATTEMPTS, DP_REFRESH_MARGIN_SECONDS, MAX_TIP, RESULT_SEND_GRACE_SECONDS, TIP_HOURS
 
 upgrade_lock = threading.Lock()
 global_version_lock = threading.Lock()
@@ -998,6 +998,100 @@ def order_placed_at(orders_dir, order_id):
             return int(f.read().strip())
     except (OSError, ValueError):
         return None
+
+
+def order_window(placed_at, duration_hours, now):
+    """(order_end, order_deadline) of an order placed at `placed_at` (the
+    PoX's orderPlacedAt on 1.2, else the agent's placement record; 0 or None
+    for unknown) for `duration_hours`: order_end the placement plus the
+    duration and the deadline ORDER_GRACE_SECONDS later; without a placement,
+    order_end is None and the deadline the duration and grace from `now`.
+    The gas waits are bounded by order_end, the enclave waits and the result
+    send by the deadline."""
+    if placed_at:
+        order_end = int(placed_at) + duration_hours * 3600
+        return order_end, order_end + ORDER_GRACE_SECONDS
+    return None, now + duration_hours * 3600 + ORDER_GRACE_SECONDS
+
+
+def order_relay_ledger_path(orders_dir, order_id):
+    """Where an order's gas ledger (gas_ledger.OrderGasLedger) persists."""
+    return os.path.join(orders_dir, str(order_id), 'relay.json')
+
+
+# The DP-request rows the agent relays for an order's enclaves: the task
+# wallet attestation (session.wallet.proof) as 'etny-sw' on every order, the
+# session's output proofs as 'etny-so' on sessions only; and the DO-request
+# rows of a session's inputs, 'etny-si', which it delivers and replays.
+SESSION_WALLET_KEY = 'etny-sw'
+SESSION_OUTPUT_KEY = 'etny-so'
+SESSION_INPUT_KEY = 'etny-si'
+
+
+def ledger_rebuild(contents):
+    """The ESR ledger JSON the securelock writes to esr.authorizations.json
+    from the staged authorization records `contents` (each one record's
+    JSON text, in staging order): the compact JSON array of them."""
+    return '[' + ','.join(contents) + ']'
+
+
+# The result string's versions and the fields the agent reads: the task
+# code (1), the ESR root (4) and ledger CID (6), and on v5 the relayed commit
+# count (12) and their gas (14), which _addResultToOrderV2 takes.
+RESULT_V5_FIELDS = 15
+ESR_COMMITS_PREFIX = 'etny-esr-commits='
+ESR_GAS_PREFIX = 'etny-esr-gas='
+ESR_COMMITS_MAX = 65535
+ESR_GAS_MAX_DIGITS = 78
+ResultFields = namedtuple('ResultFields', 'version task_code esr_root ledger_cid esr_commits esr_gas_wei')
+
+
+def _strict_decimal(text, prefix, max_digits, max_value=None):
+    if not text.startswith(prefix):
+        raise ValueError(f"field does not start with {prefix}")
+    digits = text[len(prefix):]
+    if not digits.isdigit() or not digits.isascii() or len(digits) > max_digits:
+        raise ValueError(f"{prefix} does not carry a decimal of at most {max_digits} digits")
+    value = int(digits)
+    if max_value is not None and value > max_value:
+        raise ValueError(f"{prefix} is above {max_value}")
+    return value
+
+
+def result_fields(result_string):
+    """The fields of the trustedzone's result string (spec/result-v5.json):
+    a v5 string of fifteen fields yields its esrCommits (etny-esr-commits=,
+    a decimal at most 65535) and esrGas (etny-esr-gas=, a decimal of at most
+    78 digits) parsed strictly; a v3 or v4 string yields 0 and 0 for them.
+    Raises ValueError for any other string."""
+    parts = str(result_string or '').strip().split(':')
+    version = parts[0]
+    if version == 'v5':
+        if len(parts) != RESULT_V5_FIELDS:
+            raise ValueError(f"a v5 result has {RESULT_V5_FIELDS} fields, not {len(parts)}")
+        return ResultFields('v5', parts[1], parts[4], parts[6],
+                            _strict_decimal(parts[12], ESR_COMMITS_PREFIX, len(str(ESR_COMMITS_MAX)), ESR_COMMITS_MAX),
+                            _strict_decimal(parts[14], ESR_GAS_PREFIX, ESR_GAS_MAX_DIGITS))
+    if version in ('v3', 'v4') and len(parts) >= 2:
+        return ResultFields(version, parts[1], parts[4] if len(parts) > 4 else '',
+                            parts[6] if len(parts) > 6 else '', 0, 0)
+    raise ValueError(f"not a v3, v4 or v5 result string: {str(result_string)[:32]!r}")
+
+
+def result_send_decision(now, order_end, deadline, gas_wait, in_window, ceiling_exceeded):
+    """What the result send does before a build: 'wait' while the order's
+    gas wait holds before its end (`order_end`, None for unknown) and, at
+    the live price, while the chain's base fee is above the operator's
+    ceiling until RESULT_SEND_GRACE_SECONDS past the deadline, 'abandon'
+    past that, 'send' otherwise; inside the own handover window always
+    'send'."""
+    if in_window:
+        return 'send'
+    if gas_wait and (order_end is None or now < order_end):
+        return 'wait'
+    if ceiling_exceeded:
+        return 'wait' if now < deadline + RESULT_SEND_GRACE_SECONDS else 'abandon'
+    return 'send'
 
 
 def pending_approval_path(orders_dir, order_id):

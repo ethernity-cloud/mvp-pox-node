@@ -6,6 +6,10 @@ After=network.target
 ExecStart=/home/vagrant/etny/node/etny-node-start.sh
 Restart=on-failure
 KillSignal=SIGHUP
+# On SIGHUP the agent running a reserved order announces its handover window
+# (at least the broker's notice ahead), serves the order to the window,
+# posts the result and exits; a stop waits that long before SIGKILL.
+TimeoutStopSec=21600
 
 [Install]
 WantedBy=default.target

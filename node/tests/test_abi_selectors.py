@@ -43,6 +43,7 @@ CALLS = {
         "_addResultToOrder(uint256,string)",
         "_addResultToOrderV2(uint256,string,uint16,uint256)",
         "orderOfDPRequest(uint256)",
+        "orderResultAt(uint256)",
         "_approveOrder(uint256)",
         "_getOrder(uint256)",
         "_placeOrder(uint256,uint256)",

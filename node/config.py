@@ -709,6 +709,27 @@ def parse_arguments(network_names: list) -> argparse.ArgumentParser:
         default=str(ipfs_timeout_default),
         required=False
     )
+    # The handover command (etny-node.py --handover --network <name>
+    # [--appoint <node>]): asks the agent running that network to announce a
+    # handover of the reserved order it runs, through node/<network>/
+    # handover.json, and prints its answer. Parsed by broker.
+    # handover_command_arguments before this parser runs; listed here for
+    # --help.
+    parser.add_argument(
+        "--handover",
+        help="Ask the running agent to announce a handover of the reserved order it runs on --network, and print "
+             "its answer; the agent then serves the order to the announced window, posts the result and adds no "
+             "next DP request",
+        action="store_true",
+        required=False
+    )
+    parser.add_argument(
+        "--appoint",
+        help="With --handover: the committed node appointed as the successor (needed when the node is of no farm)",
+        type=str,
+        default="",
+        required=False
+    )
     add_network_override_arguments(parser, network_names)
 
     return parser

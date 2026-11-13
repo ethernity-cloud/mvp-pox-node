@@ -8,6 +8,11 @@ import os
 import re
 import threading
 
+from cryptography import x509
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import ec
+from cryptography.hazmat.primitives.asymmetric.utils import Prehashed
 from eth_keys import keys
 from eth_keys.exceptions import BadSignature
 from eth_utils import keccak
@@ -391,3 +396,56 @@ def metadata3(geo, record):
         return geo
     return (f"{geo};cuval={record['validator']};cun={record['nonce']};cut0={record['t0']};cut1={record['t1']}"
             f";cub0={record['block0']};cub1={record['block1']};cusig0={record['sig0']};cusig1={record['sig1']}")
+
+
+def p384_public_key(cert_text):
+    """The P-384 public key of a certificate as the image registry holds it:
+    a PEM certificate or PEM public key, or the DER of either as hex with or
+    without 0x. None for anything else, a key on another curve included."""
+    text = str(cert_text or '').strip()
+    if not text:
+        return None
+    loaders = []
+    if '-----BEGIN' in text:
+        data = text.encode('utf-8')
+        if 'CERTIFICATE' in text:
+            loaders.append(lambda d: x509.load_pem_x509_certificate(d, default_backend()).public_key())
+        else:
+            loaders.append(lambda d: serialization.load_pem_public_key(d, default_backend()))
+    else:
+        try:
+            data = bytes.fromhex(text[2:] if text.lower().startswith('0x') else text)
+        except ValueError:
+            return None
+        loaders.append(lambda d: x509.load_der_x509_certificate(d, default_backend()).public_key())
+        loaders.append(lambda d: serialization.load_der_public_key(d, default_backend()))
+    for load in loaders:
+        try:
+            key = load(data)
+        except Exception:
+            continue
+        if isinstance(key, ec.EllipticCurvePublicKey) and isinstance(key.curve, ec.SECP384R1):
+            return key
+    return None
+
+
+def verify_p384(cert_text, message, der_hex):
+    """Whether `der_hex` (an ECDSA P-384 signature, DER, hex with or without
+    0x) verifies over SHA-256 of `message` (text or bytes) under the key of
+    `cert_text` (p384_public_key): the trustedzones' signData / sign_data
+    scheme the etny-sw row and the fence are signed with."""
+    key = p384_public_key(cert_text)
+    if key is None:
+        return False
+    try:
+        signature = bytes.fromhex(der_hex[2:] if str(der_hex).lower().startswith('0x') else der_hex)
+    except (ValueError, TypeError):
+        return False
+    data = message.encode('utf-8') if isinstance(message, str) else bytes(message)
+    digest = hashes.Hash(hashes.SHA256(), default_backend())
+    digest.update(data)
+    try:
+        key.verify(signature, digest.finalize(), ec.ECDSA(Prehashed(hashes.SHA256())))
+    except Exception:
+        return False
+    return True
