@@ -21,6 +21,27 @@ class DPRequest(Request):
         super().__init__(req)
 
 
+class DORequestV2:
+    """A 1.2 reader's _getDORequestV2 answer: the resources as the legacy
+    getter's, then the recorded terms (zero on a legacy request)."""
+    def __init__(self, req):
+        self.downer = req[0]
+        self.cpu = req[1]
+        self.memory = req[2]
+        self.storage = req[3]
+        self.bandwidth = req[4]
+        self.duration = req[5]
+        self.instances = req[6]
+        self.max_price = int(req[7])
+        self.reserved_price = int(req[8])
+        self.max_cu = int(req[9])
+        self.relays_per_hour = req[10]
+        self.gas_level = int(req[11])
+        self.chain_fee = int(req[12])
+        self.escrow = int(req[13])
+        self.status = req[14]
+
+
 class RequestStatus:
     AVAILABLE = 0
     BOOKED = 1

@@ -1,0 +1,7 @@
+{
+  "polygon_amoy": {"dpRequest": 1158938, "placement": 681380, "startedRow": 110101},
+  "polygon_amoy_unsafe": {"dpRequest": 1158938, "placement": 681380, "startedRow": 110101},
+  "bloxberg_mainnet": {"dpRequest": 0, "placement": 0, "startedRow": 0},
+  "bloxberg_testnet": {"dpRequest": 0, "placement": 0, "startedRow": 0},
+  "bloxberg_testnet_unsafe": {"dpRequest": 0, "placement": 0, "startedRow": 0}
+}

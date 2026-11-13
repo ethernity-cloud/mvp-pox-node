@@ -5,9 +5,12 @@ their places."""
 from fractions import Fraction
 
 # The trustedzone's integration test: the wait for its result object, which
-# spans the attestation, the two time statements and the benchmark (its own
-# bound of 300 s).
+# spans the attestation, the two time statements and the benchmark.
 INTEGRATION_TEST_SECONDS = 900
+# The longest benchmark run (t1 - t0) a capability record may carry: the
+# validators cancel a request above it (ethernity-cas capability.rs
+# BENCHMARK_MAX_SECONDS, reason RunTooLong).
+BENCHMARK_MAX_SECONDS = 300
 # A failed integration test is tried again after a backoff doubling from the
 # minimum to the maximum.
 INTEGRATION_TEST_RETRY_MIN_SECONDS = 600
@@ -26,6 +29,9 @@ CU_MAX_THOUSANDTHS = 64000
 
 # A 1.2 DP request is refreshed when its expiry is this close.
 DP_REFRESH_MARGIN_SECONDS = 3600
+# How often the enclave wait reads the standing DP request's terms for the
+# refresh (the idle tick reads them every pass).
+DP_TERMS_POLL_SECONDS = 60
 # How many sends, a block apart, a cancel of an AVAILABLE request is given.
 CANCEL_ATTEMPTS = 5
 # The order length the node's own gas is priced into its tip over.

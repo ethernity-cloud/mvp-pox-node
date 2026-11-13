@@ -227,6 +227,8 @@ pricing_abi_filepath = base_path / 'pricing.abi'
 broker_abi_filepath = base_path / 'broker.abi'
 resolver_abi_filepath = base_path / 'resolver.abi'
 erc20_abi_filepath = base_path / 'erc20.abi'
+# The first sample of each network's gas profile (gas_profile.load_seed).
+gas_profile_seed_filepath = base_path / 'gas_profile_seed.json'
 uuid_filepath = Path(expanduser("~")) / "opt/etny/node/UUID"
 
 # --- Enclave State Registry (ESR) ------------------------------------------

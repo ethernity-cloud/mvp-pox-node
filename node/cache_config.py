@@ -23,6 +23,15 @@ class CacheConfig:
         # points (last scanned block, last scanned order) and the last pinned
         # version per (enclave, key), so replication resumes there on restart.
         self.esr_progress_filepath = base_path / 'esr_progress.json'
+        # The passed integration tests and their capability records
+        # (capability.RecordStore).
+        self.capability_filepath = base_path / 'capability.json'
+        # The block cursors of the idle tick's log scans (DPRequestCancelled
+        # and the broker's events), {scan name: next block to scan}.
+        self.broker_cursor_filepath = base_path / 'broker_cursor.json'
+        # The gas this node's DP requests, placements and started rows used
+        # (gas_profile.GasProfile), priced into its tip.
+        self.gas_profile_filepath = base_path / 'gas_profile.json'
 
         # Define all cache limits
         self.network_cache_limit = 1

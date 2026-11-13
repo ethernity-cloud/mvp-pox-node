@@ -21,10 +21,12 @@ from web3 import middleware
 from web3.gas_strategies.time_based import fast_gas_price_strategy
 from web3.gas_strategies.rpc import rpc_gas_price_strategy
 
-from utils import get_or_generate_uuid, run_subprocess, run_subprocess_status, environment_failure, record_enclave_image_tree, compose_images, compose_services, await_enclave_runtime, tree_image_tag,revert_reason, wallet_covers, insufficient_funds, transaction_known, placement_block_of, WALLET_GAS_TRANSACTIONS, retry, holds_within, pinned_within, FetchDeferrals, staging_plan, remaining_order_seconds, record_order_placement, order_placed_at, pending_approvals, record_pending_approval, forget_pending_approval, ORDER_STARTED_KEY, DP_STARTED_ROW_CAPABILITY, order_started_row, ORDER_GRACE_SECONDS, session_wallet_attestation, Storage, Cache, ListCache, ListCacheWithTimestamp, MergedOrdersCache, subprocess, get_node_geo, HardwareInfoProvider, parse_transaction_bytes_ut, looks_like_cid, canonical_cid, PEER_MULTIADDR, next_registered_image, enclave_failure, enclave_may_have_failed, docker_container_states, docker_container_log_tail, stale_integration_tests, image_trees, stale_image_trees, directory_size, remove_tree, removal_leftovers
+from utils import get_or_generate_uuid, run_subprocess, run_subprocess_status, environment_failure, record_enclave_image_tree, compose_images, compose_services, await_enclave_runtime, tree_image_tag,revert_reason, wallet_covers, insufficient_funds, transaction_known, placement_block_of, WALLET_GAS_TRANSACTIONS, retry, holds_within, pinned_within, FetchDeferrals, staging_plan, remaining_order_seconds, record_order_placement, order_placed_at, pending_approvals, record_pending_approval, forget_pending_approval, ORDER_STARTED_KEY, order_started_row, ORDER_GRACE_SECONDS, session_wallet_attestation, Storage, Cache, ListCache, ListCacheWithTimestamp, MergedOrdersCache, subprocess, get_node_geo, HardwareInfoProvider, parse_transaction_bytes_ut, looks_like_cid, canonical_cid, PEER_MULTIADDR, next_registered_image, enclave_failure, enclave_may_have_failed, docker_container_states, docker_container_log_tail, stale_integration_tests, integration_tests_due, runnable_trustedzones, image_trees, stale_image_trees, directory_size, remove_tree, removal_leftovers, integration_env, order_env, dp_terms, tip_per_cu_hour_wei, dp_request_arguments, metadata_key, record_key, resume_admits, dp_request_disposition, bounded_cancel, admits_do_request, do_request_compare, placement_refusal_disposition, settlement_line
 import scone_image
 import pox12
-from constants import INTEGRATION_TEST_SECONDS, INTEGRATION_TEST_RETRY_MIN_SECONDS, INTEGRATION_TEST_RETRY_MAX_SECONDS, INTEGRATION_TEST_REGISTRY_CHECK_SECONDS
+import capability
+import gas_profile
+from constants import INTEGRATION_TEST_SECONDS, INTEGRATION_TEST_RETRY_MIN_SECONDS, INTEGRATION_TEST_RETRY_MAX_SECONDS, INTEGRATION_TEST_REGISTRY_CHECK_SECONDS, RPC_REPLICA_LAG_BLOCKS, DP_TERMS_POLL_SECONDS, CANCEL_ATTEMPTS
 from models import *
 from error_messages import errorMessages
 from swift_stream_service import SwiftStreamService
@@ -57,12 +59,17 @@ task_cond = threading.Condition(task_lock)
 #                             passed}.
 #   integration_test_retry    {image name: (failures, time.monotonic() at which
 #                             it may run again)} for the images that failed.
+#   integration_test_remeasure {image name} whose passed test runs again for a
+#                             new capability record (capability.remeasure_due);
+#                             the pass and its record stand until the new test
+#                             passes.
 #   integration_tests_settled {network name: Event}, set once each of that
 #                             network's test images has run once; read through
 #                             tests_settled().
 integration_test_lock = threading.RLock()
 integration_test_passed = {}
 integration_test_retry = {}
+integration_test_remeasure = set()
 integration_tests_settled = {}
 # Where an order's files live, under the network's working directory: its
 # placement record (utils.record_order_placement) and its order folder.
@@ -435,6 +442,18 @@ class EtnyPoXNode:
         # The CAS selected for this network's tasks and when (__resolve_cas_for_task).
         self.__cas_selection = None
         self.__dprequest = 0
+        # The block the current DP request was confirmed in, where the idle
+        # tick's DPRequestCancelled scan starts without a persisted cursor.
+        self.__cancel_scan_from = None
+        # The capability record the current DP request carries on a 1.2
+        # contract (utils.record_key of its metadata4), None for none.
+        self.__dprequest_record_key = None
+        # Whether this process recorded its accept_reserved flag on the 1.2
+        # contract (__set_accepts_reserved_once).
+        self.__accepts_reserved_set = False
+        # The (DP request, reason) placement refusals of this node's offer
+        # logged, each once.
+        self.__placement_refusals_logged = set()
         self.__order_id = 0
         self.__total_nodes_count = 0
         self.__is_first_cycle = defaultdict(lambda: True)
@@ -463,6 +482,14 @@ class EtnyPoXNode:
 
         self.cache_config = CacheConfig(network.name)
         self.__reset_caches_of_another_contract(network)
+        # The passed integration tests and their capability records of this
+        # network, kept across process starts (capability.RecordStore).
+        self.__record_store = capability.RecordStore(self.cache_config.capability_filepath)
+        # The gas this node's own transactions use, priced into its tip
+        # (gas_profile.GasProfile), seeded for the network at its first start.
+        self.__gas_profile = gas_profile.GasProfile.load(
+            self.cache_config.gas_profile_filepath,
+            gas_profile.load_seed(config.gas_profile_seed_filepath, network.name))
         self.network_cache = Cache(self.cache_config.network_cache_limit, self.cache_config.network_cache_filepath)
         self.ipfs_version_cache = Cache(self.cache_config.ipfs_version_cache_limit, self.cache_config.ipfs_version_filepath)
 
@@ -528,6 +555,7 @@ class EtnyPoXNode:
         elif config.skip_integration_test:
             logger.warning('Agent skipped SGX integration test, SGX capabilitties overwritten by configuration')
         else:
+            self.__load_passed_integration_tests()
             for image in self.__integration_images:
                 self.__run_integration_test_if_due(image)
             tests_settled(self.__network).set()
@@ -2110,8 +2138,21 @@ class EtnyPoXNode:
                     time.sleep(self.__network_config.rpc_delay/1000)
                     req = DPRequest(self.__etny.caller()._getDPRequest(req_id))
                     if req.status == RequestStatus.AVAILABLE:
+                        if self.__pox_is_12:
+                            # The request's terms (utils.resume_admits): one
+                            # added through a legacy call has none and is
+                            # replaced; one about to expire is refreshed first.
+                            terms = dp_terms(self.__etny.caller().dpTerms(req_id))
+                            action = resume_admits(terms, time.time())
+                            if action == 'cancel':
+                                logger.info(f"DP Request {req_id} has no terms on the 1.2 contract; cancelled, a new one follows")
+                                self.cancel_dp_request(req_id)
+                                self.dpreq_cache.add(req_id)
+                                continue
+                            if action == 'refresh':
+                                self.__refresh_dp_request(req_id, terms)
                         logger.info(f"DP Request {req_id} resumed. Unlocking the value of decentralization. ")
-                        self.__dprequest = req_id
+                        self.__adopt_dp_request(req_id, None)
                         self.process_dp_request()
                     else:
                         logger.debug(f"DP Request {req_id} should be in cache already with status {req.status}")
@@ -2124,34 +2165,287 @@ class EtnyPoXNode:
     def _limited_arg(self, item, allowed_max=255):
         return allowed_max if item > allowed_max else item
 
+    def __advertised_record(self):
+        """(image, record) of the capability record this node's DP request
+        carries (capability.RecordStore.advertised: the newest among the
+        runnable trustedzones' admitted records), None without one and on a
+        legacy contract, whose requests carry no capability keys."""
+        if not self.__pox_is_12:
+            return None
+        return self.__record_store.advertised(self.__runnable_trustedzones(), time.time())
+
+    def __quote(self):
+        """The reader's quote() on a 1.2 contract with a reader:
+        (pricePerCuHourWei, tokenPerPol, avgGasPriceWei, smoothedUtilization,
+        capacityCu, loadCu, epochIndex, params); None without a reader."""
+        if self.__reader is None:
+            return None
+        return self.__reader.caller().quote()
+
+    def __current_tip(self, cu):
+        """The tip of this node's 1.2 DP request for `cu` thousandths
+        (utils.tip_per_cu_hour_wei): the configured tip plus its own gas
+        (the gas profile's three figures) at the quote's avgGasPriceWei and
+        tokenPerPol; the configured tip alone without a reader."""
+        quote = self.__quote()
+        if quote is None:
+            return tip_per_cu_hour_wei(self.__network_config.tip_per_cu_hour_wei, {}, 0, 0, cu)
+        return tip_per_cu_hour_wei(self.__network_config.tip_per_cu_hour_wei, self.__gas_profile.figures(),
+                                   quote[2], quote[1], cu)
+
     def __dp_request_params(self):
-        """The arguments of this node's _addDPRequest: its hardware resources,
-        read now, bandwidth, duration, price, uuid, protocol version,
-        geography and capabilities (__dp_metadata4)."""
+        """(function name, arguments) of this node's DP request
+        (utils.dp_request_arguments): its hardware resources, read now,
+        bandwidth, duration, then the legacy price or the advertised record's
+        cu (0 without one) and the tip (__current_tip), uuid, protocol
+        version, geography with the record's time statements
+        (capability.metadata3) and capabilities (__dp_metadata4)."""
         if self.__price is None:
             self.__price = 1
         self.__number_of_cpus = int(HardwareInfoProvider.get_number_of_cpus())
         self.__free_memory = int(HardwareInfoProvider.get_free_memory())
         self.__free_storage = int(HardwareInfoProvider.get_free_storage())
-        return [
-            self._limited_arg(self.__number_of_cpus),
-            self._limited_arg(self.__free_memory),
-            self._limited_arg(self.__free_storage),
-            self._limited_arg(self.__bandwidth),
-            self.__duration,
-            self.__price,
-            self.__uuid,
-            "v3",
-            self.__node_geo,
-            self.__dp_metadata4()
-        ]
+        advertised = self.__advertised_record()
+        record = advertised[1] if advertised else None
+        resources = (self._limited_arg(self.__number_of_cpus), self._limited_arg(self.__free_memory),
+                     self._limited_arg(self.__free_storage), self._limited_arg(self.__bandwidth))
+        cu = int(record['cu']) if record is not None else 0
+        tip = self.__current_tip(cu) if self.__pox_is_12 else 0
+        return dp_request_arguments(not self.__pox_is_12, resources, self.__duration, self.__price, cu, tip,
+                                    self.__uuid, capability.metadata3(self.__node_geo, record),
+                                    self.__dp_metadata4(advertised))
+
+    def __dp_request_function(self):
+        """The bound contract call adding this node's DP request
+        (__dp_request_params)."""
+        name, arguments = self.__dp_request_params()
+        return getattr(self.__etny.functions, name)(*arguments), arguments
+
+    def __adopt_dp_request(self, req_id, block):
+        """Makes `req_id` this node's current DP request. The DPRequestCancelled
+        scan starts at `block` (None: the head at its first run). On a 1.2
+        contract the capability record the request carries is read from its
+        metadata4 (utils.metadata_key 'cusig') for the idle tick's comparison
+        with the advertised record; a metadata read the RPC does not answer in
+        ten tries leaves the key None, and the tick replaces the request when
+        a record is advertised."""
+        self.__dprequest = req_id
+        self.__cancel_scan_from = block
+        self.__dprequest_record_key = None
+        if self.__pox_is_12:
+            answered, metadata = retry(self.__etny.caller()._getDPRequestMetadata, req_id, attempts=10, delay=3)
+            if answered:
+                self.__dprequest_record_key = metadata_key(metadata[4], 'cusig')
+            else:
+                self.logger.warning(f"DP request {req_id}: its metadata was not read; its capability record is unknown")
 
     def __dp_request_from_receipt(self, receipt):
-        """Makes the DP request a confirmed _addDPRequest receipt created this
-        node's current one."""
+        """Makes the DP request a confirmed add receipt created this node's
+        current one, and records the receipt's gas in the profile."""
         processed_logs = self.__etny.events._addDPRequestEV().process_receipt(receipt)
-        self.__dprequest = processed_logs[0].args._rowNumber
+        self.__record_gas('dpRequest', receipt)
+        self.__adopt_dp_request(processed_logs[0].args._rowNumber, receipt.blockNumber)
         self.logger.info(f"DP Request {self.__dprequest} initialized. Unlocking the value of decentralization.")
+
+    def __record_gas(self, kind, receipt):
+        """Folds a status-1 receipt of this node's `kind` transaction
+        (gas_profile.KINDS) into the gas profile; a profile write that fails
+        is logged and the receipt dropped."""
+        try:
+            self.__gas_profile.record(kind, receipt)
+        except Exception as e:
+            self.logger.debug(f"The gas profile did not record the {kind} receipt ({e})")
+
+    def __set_accepts_reserved_once(self):
+        """Records this node's accept_reserved setting on a 1.2 contract with a
+        reservation broker (setAcceptsReserved, read into each DP request it
+        adds), once per process start: the contract has no getter for it. The
+        call is simulated, sent and awaited; a failure propagates and the
+        setting is tried again before the next request."""
+        if not self.__pox_is_12 or self.__broker is None or self.__accepts_reserved_set:
+            return
+        accepts = bool(self.__network_config.accept_reserved)
+        fn = self.__etny.functions.setAcceptsReserved(accepts)
+        fn.call({'from': self.__address})
+        _hash = self.send_transaction(fn.build_transaction(self.get_transaction_build()))
+        receipt = self.__w3.eth.wait_for_transaction_receipt(_hash, timeout=RECEIPT_TIMEOUT_SECONDS)
+        if receipt.status != 1:
+            raise Exception(f"setAcceptsReserved({accepts}) reverted (TXID {_hash})")
+        self.__accepts_reserved_set = True
+        self.logger.info(f"This node's DP requests {'accept' if accepts else 'do not accept'} reserved orders (TXID {_hash})")
+
+    def __refresh_dp_request(self, req_id, terms):
+        """Refreshes DP request `req_id` (refreshDPRequest: its expiry moves to
+        now + the pricing's dpRequestTtl) with the current tip for the cu of
+        `terms` (utils.DPTerms), awaits the receipt and logs the new expiry and
+        tip; True when the refresh landed. A failure is logged, and the next
+        tick tries again."""
+        logger = self.logger
+        try:
+            tip = self.__current_tip(terms.cu)
+            time.sleep(self.__network_config.rpc_delay / 1000)
+            fn = self.__etny.functions.refreshDPRequest(int(req_id), int(tip))
+            _hash = self.send_transaction(fn.build_transaction(self.get_transaction_build()))
+            logger.info(f"TXID {_hash} pending (refresh of DP request {req_id})... ")
+            receipt = self.__w3.eth.wait_for_transaction_receipt(_hash, timeout=RECEIPT_TIMEOUT_SECONDS)
+            if receipt.status != 1:
+                logger.warning(f"DP request {req_id}: the refresh reverted (TXID {_hash}); tried again next tick")
+                return False
+            refreshed = dp_terms(self.__etny.caller().dpTerms(int(req_id)))
+        except Exception as e:
+            logger.warning(f"DP request {req_id}: the refresh failed ({e}); tried again next tick")
+            return False
+        logger.info(f"DP request {req_id} refreshed: expires at {refreshed.expires_at}, tip {refreshed.tip}")
+        return True
+
+    def __dp_request_terms_tick(self):
+        """The idle tick's read of the standing DP request's terms on a 1.2
+        contract (utils.dp_request_disposition). A request without terms, one
+        carrying another capability record than the advertised one, or one
+        recording the other accept_reserved flag than this process set, is
+        cancelled (cancel_dp_request) and a new one sent (__send_dp_request,
+        whose receipt add_dp_request adopts); the loop then ends, so the
+        return is (True, terms). A request whose refresh is due is refreshed
+        (__refresh_dp_request). Returns (False, terms) otherwise, terms None
+        on a legacy contract or when the read failed."""
+        if not self.__pox_is_12 or not self.__dprequest:
+            return False, None
+        logger = self.logger
+        try:
+            terms = dp_terms(self.__etny.caller().dpTerms(self.__dprequest))
+        except Exception as e:
+            logger.warning(f"DP request {self.__dprequest}: its terms were not read ({e}); next tick")
+            return False, None
+        advertised = self.__advertised_record()
+        advertised_key = record_key(advertised[1] if advertised else None)
+        accepts = bool(self.__network_config.accept_reserved) if self.__accepts_reserved_set else None
+        disposition = dp_request_disposition(terms, time.time(), self.__dprequest_record_key, advertised_key, accepts)
+        if disposition == 'refresh':
+            self.__refresh_dp_request(self.__dprequest, terms)
+            return False, terms
+        if disposition != 'readd':
+            return False, terms
+        if not terms.recorded:
+            why = 'it has no terms on the 1.2 contract'
+        elif self.__dprequest_record_key != advertised_key:
+            why = 'the advertised capability record changed'
+        else:
+            why = 'its accept-reserved flag differs from the configuration'
+        logger.info(f"DP request {self.__dprequest} is replaced: {why}")
+        self.cancel_dp_request(self.__dprequest)
+        self.dpreq_cache.add(self.__dprequest)
+        try:
+            self.__set_accepts_reserved_once()
+            self.__send_dp_request(None)
+        except Exception as e:
+            logger.warning(f"The new DP request was not sent ({e}); it is sent after this one")
+        return True, terms
+
+    def __refresh_standing_dp_request(self):
+        """The enclave wait's refresh check (every DP_TERMS_POLL_SECONDS): on a
+        1.2 contract, while this node's current DP request is AVAILABLE and
+        its refresh is due, it is refreshed; nothing is read for a request an
+        order holds. A read that fails is logged at debug."""
+        if not self.__pox_is_12 or not self.__dprequest:
+            return
+        try:
+            request = DPRequest(self.__etny.caller()._getDPRequest(self.__dprequest))
+            if request.status != RequestStatus.AVAILABLE:
+                return
+            terms = dp_terms(self.__etny.caller().dpTerms(self.__dprequest))
+        except Exception as e:
+            self.logger.debug(f"DP request {self.__dprequest}: its terms were not read during the enclave wait ({e})")
+            return
+        if terms.recorded and resume_admits(terms, time.time()) == 'refresh':
+            self.__refresh_dp_request(self.__dprequest, terms)
+
+    def __scan_cursor(self, name):
+        """The next block the idle tick's `name` log scan reads
+        (broker_cursor.json), None when none is recorded."""
+        try:
+            with open(self.cache_config.broker_cursor_filepath) as f:
+                return json.load(f).get(name)
+        except (OSError, ValueError):
+            return None
+
+    def __set_scan_cursor(self, name, block):
+        """Records `block` as the next block of the `name` scan, the file
+        replaced whole."""
+        path = self.cache_config.broker_cursor_filepath
+        try:
+            with open(path) as f:
+                cursors = json.load(f)
+        except (OSError, ValueError):
+            cursors = {}
+        cursors[name] = int(block)
+        temporary = f"{path}.tmp"
+        with open(temporary, 'w') as f:
+            json.dump(cursors, f)
+        os.replace(temporary, path)
+
+    def __dp_request_cancelled_logs(self, req, from_block, to_block, chunk=9000):
+        """DPRequestCancelled logs naming request `req` over [from_block,
+        to_block], scanned in chunks as __esr_state_committed_logs scans."""
+        out = []
+        start = max(0, int(from_block))
+        end = int(to_block)
+        while start <= end:
+            stop = min(start + chunk, end)
+            out.extend(self.__etny.events.DPRequestCancelled().get_logs(
+                argument_filters={'id': int(req)}, from_block=start, to_block=stop))
+            start = stop + 1
+        return out
+
+    def __dp_request_cancelled_by_validators(self):
+        """Whether the validators cancelled this node's DP request
+        (cancelDPRequestByValidators, a 1.2 contract's). The scan runs from
+        the 'dp_request_cancelled' cursor and the request's confirmation
+        block, whichever is later (the head without either), to
+        RPC_REPLICA_LAG_BLOCKS below the head, and the cursor moves there.
+        On a cancel the reason is logged by name; one that faults the record
+        (capability.cancel_disposition 'retest') drops the advertised
+        record with its trustedzone's passed test, so the test runs again
+        before the next request; the strike reason leaves both. A scan the
+        RPC does not answer returns False and keeps its cursor."""
+        if not self.__pox_is_12 or not self.__dprequest:
+            return False
+        logger = self.logger
+        start = self.__cancel_scan_from
+        cursor = self.__scan_cursor('dp_request_cancelled')
+        if cursor is not None:
+            start = cursor if start is None else max(start, cursor)
+        try:
+            head = self.__w3.eth.block_number
+            end = head - RPC_REPLICA_LAG_BLOCKS
+            if start is None:
+                start = end
+            if start > end:
+                return False
+            logs = self.__dp_request_cancelled_logs(self.__dprequest, start, end)
+        except Exception as e:
+            logger.warning(f"The DPRequestCancelled scan of DP request {self.__dprequest} failed ({e}); next tick")
+            return False
+        self.__set_scan_cursor('dp_request_cancelled', end + 1)
+        self.__cancel_scan_from = end + 1
+        if not logs:
+            return False
+        reason = int(logs[-1].args.reason)
+        name = capability.cancel_reason_name(reason)
+        advertised = self.__advertised_record()
+        if capability.cancel_disposition(reason) == 'retest' and advertised:
+            image = advertised[0]
+            logger.warning(f"DP request {self.__dprequest} was cancelled by the validators: {name} ({reason}); "
+                           f"the capability record of {image} is dropped and its integration test runs again")
+            with integration_test_lock:
+                self.__record_store.drop(image)
+                integration_test_passed.pop(image, None)
+                integration_test_remeasure.discard(image)
+                integration_test_retry[image] = (0, 0.0)
+        else:
+            logger.warning(f"DP request {self.__dprequest} was cancelled by the validators: {name} ({reason}); "
+                           f"a new request follows")
+        self.dpreq_cache.add(self.__dprequest)
+        return True
 
     def __send_dp_request(self, nonce):
         """Sends this node's next DP request with `nonce` and returns without
@@ -2160,8 +2454,8 @@ class EtnyPoXNode:
         takes its next request as soon as the order is closed."""
         logger = self.logger
         logger.info("Preparing transaction for new DP request")
-        unicorn_txn = self.__etny.functions._addDPRequest(*self.__dp_request_params()).build_transaction(
-            self.get_transaction_build(existing_nonce=nonce))
+        fn, _arguments = self.__dp_request_function()
+        unicorn_txn = fn.build_transaction(self.get_transaction_build(existing_nonce=nonce))
         self.__dp_request_pending = self.send_transaction(unicorn_txn)
         logger.info(f"TXID {self.__dp_request_pending} pending... ")
 
@@ -2170,6 +2464,11 @@ class EtnyPoXNode:
         sent with the last order's result, once its receipt confirms it, else
         a new one sent and awaited here."""
         logger = self.logger
+
+        try:
+            self.__set_accepts_reserved_once()
+        except Exception as e:
+            logger.warning(f"The accept-reserved setting was not recorded ({e}); tried again before the next request")
 
         pending = self.__dp_request_pending
         if pending is not None:
@@ -2192,13 +2491,13 @@ class EtnyPoXNode:
             try:
                 logger.info("Preparing transaction for new DP request")
                 time.sleep(self.__network_config.rpc_delay/1000)
-                params = self.__dp_request_params()
-                unicorn_txn = self.__etny.functions._addDPRequest(*params).build_transaction(self.get_transaction_build())
+                fn, params = self.__dp_request_function()
+                unicorn_txn = fn.build_transaction(self.get_transaction_build())
                 _hash = self.send_transaction(unicorn_txn)
                 logger.info(f"TXID {_hash} pending... ")
                 receipt = self.__w3.eth.wait_for_transaction_receipt(_hash, timeout=RECEIPT_TIMEOUT_SECONDS)
                 if receipt.status != 1:
-                    raise Exception(f"TXID {_hash} reverted with parameters {params[:6]}")
+                    raise Exception(f"TXID {_hash} reverted with parameters {params[:7]}")
                 logger.info(f"TXID {_hash} confirmed!")
                 self.__dp_request_from_receipt(receipt)
                 break
@@ -2212,27 +2511,58 @@ class EtnyPoXNode:
 
 
     def cancel_dp_request(self, req):
+        """Cancels this node's DP request `req` (utils.bounded_cancel). A
+        request no longer AVAILABLE is left as it is: the contract refuses its
+        cancel for good. Otherwise at most CANCEL_ATTEMPTS sends a block
+        apart, each simulated before it is sent; a request still standing
+        after them is logged and cached as abandoned. A status read the RPC
+        does not answer counts the request as AVAILABLE. Returns the outcome:
+        'cancelled', 'not-available' or 'abandoned'."""
         logger = self.logger
-
         logger.info(f"Cancelling DP request {req}")
+        cancel = self.__etny.functions._cancelDPRequest(int(req))
 
-        while True:
+        def available():
             try:
-                logger.info("Preparing transaction for DO request cancellation")
-                time.sleep(self.__network_config.rpc_delay/1000)
-                unicorn_txn = self.__etny.functions._cancelDPRequest(req).build_transaction(self.get_transaction_build())
-                _hash = self.send_transaction(unicorn_txn)
+                return DPRequest(self.__etny.caller()._getDPRequest(int(req))).status == RequestStatus.AVAILABLE
+            except Exception as e:
+                logger.warning(f"DP request {req}: its status was not read ({e}); the cancel goes on")
+                return True
+
+        def simulate():
+            try:
+                cancel.call({'from': self.__address})
+                return True
+            except Exception as e:
+                logger.warning(f"DP request {req}: the cancel simulation failed ({revert_reason(e) or e})")
+                return False
+
+        def send():
+            try:
+                time.sleep(self.__network_config.rpc_delay / 1000)
+                _hash = self.send_transaction(cancel.build_transaction(self.get_transaction_build()))
                 logger.info(f"TXID {_hash} pending... ")
                 receipt = self.__w3.eth.wait_for_transaction_receipt(_hash, timeout=RECEIPT_TIMEOUT_SECONDS)
                 if receipt.status == 1:
                     logger.info(f"TXID {_hash} confirmed!")
-                    break
-            except Exception as ex:
-                logger.warning(f"Unable to cancel  DP request - {req}: Error: {ex}")
-                logger.warning(f"Retrying")
+                    return True
+                logger.warning(f"DP request {req}: the cancel reverted (TXID {_hash})")
+            except Exception as e:
+                logger.warning(f"Unable to cancel DP request {req}: {e}")
+            return False
 
-        logger.info(f"DP request {req} cancelled successfully!")
-        time.sleep(5)
+        def wait():
+            time.sleep(self.__network_config.block_time)
+
+        outcome = bounded_cancel(available, simulate, send, wait)
+        if outcome == 'cancelled':
+            logger.info(f"DP request {req} cancelled successfully!")
+        elif outcome == 'not-available':
+            logger.info(f"DP request {req} is not AVAILABLE; nothing to cancel")
+        else:
+            logger.warning(f"DP request {req} was not cancelled in {CANCEL_ATTEMPTS} attempts; abandoned")
+            self.dpreq_cache.add(req)
+        return outcome
 
     def ipfs_timeout_cancel(self, order_id):
         result = 'Error: cannot download files from IPFS'
@@ -2262,6 +2592,18 @@ class EtnyPoXNode:
         logger.info("***")
         logger.info(f"Reward: {reward} {self.__network_config.token_name}. You’ve earned it. ")
         logger.info("***")
+
+        # A recorded 1.2 order's settlement (the reader's settlementOf): the
+        # hours billed, the work, the fees, the chain gas repaid and the
+        # client's refund.
+        if self.__reader is not None:
+            try:
+                line = settlement_line(order_id, self.__reader.caller().settlementOf(int(order_id)))
+            except Exception as e:
+                logger.info(f"Order {order_id}: its settlement was not read ({e})")
+            else:
+                if line is not None:
+                    logger.info(line)
 
         if self.__network_config.network_type == "MAINNET":
             logger.info(f"HODL your {self.__network_config.token_name} for long-term growth. Payout after validation.")
@@ -2770,6 +3112,10 @@ class EtnyPoXNode:
         # The first container poll comes one interval after compose up, once
         # the containers have left 'created'.
         last_container_poll = time.time()
+        # The standing DP request's refresh check runs every
+        # DP_TERMS_POLL_SECONDS, the first one interval in: the idle tick read
+        # the terms before this wait.
+        last_terms_poll = time.time()
         while time.time() < deadline:
             exists, msg = self.swift_stream_service.is_object_in_bucket(bucket_name, object_name)
             if exists:
@@ -2789,6 +3135,11 @@ class EtnyPoXNode:
                         return True
                     logger.error(f'Enclave failed while waiting for {object_name} in {bucket_name}: {reason}')
                     raise EnclaveFailed(reason)
+            # A DP request standing AVAILABLE through this wait (an integration
+            # test's) is refreshed when its refresh falls due.
+            if time.time() - last_terms_poll >= DP_TERMS_POLL_SECONDS:
+                last_terms_poll = time.time()
+                self.__refresh_standing_dp_request()
             # While waiting on the enclave, serve any ESR state it has dropped
             # for pinning. The enclave blocks on the CID coming back, so this
             # runs during the wait, not after it, and polls the bucket every
@@ -3141,7 +3492,7 @@ class EtnyPoXNode:
         self.set_retry_policy_on_fail_for_compose()
 
         self.update_enclave_docker_compose(self.order_docker_compose_file, order_id)
-        env_content = self.get_enclave_env_dictionary(order_id, challenge)
+        env_content = self.get_enclave_env_dictionary(order_id, challenge, False)
         self.generate_enclave_env_file(f'{self.order_folder}/.env', env_content)
 
     def build_prerequisites_v3(self, bucket_name, order_id, payload_file, input_file, docker_compose_file, challenge):
@@ -3186,7 +3537,12 @@ class EtnyPoXNode:
         self.set_retry_policy_on_fail_for_compose()
         self.update_enclave_docker_compose(self.order_docker_compose_file, order_id)
 
-        env_content = self.get_enclave_env_dictionary(order_id, challenge)
+        # The first order after a new capability record runs its probe plan
+        # forced (ETNY_PROBE_FIRST=1); the flag is spent once the .env is
+        # uploaded, whatever the order's end.
+        advertised = self.__advertised_record()
+        probe_first = bool(advertised) and self.__record_store.probe_first_pending(advertised[0])
+        env_content = self.get_enclave_env_dictionary(order_id, challenge, probe_first)
         self.generate_enclave_env_file(f'{self.order_folder}/.env', env_content)
 
         (status, msg) = self.swift_stream_service.upload_file(bucket_name,
@@ -3194,6 +3550,10 @@ class EtnyPoXNode:
                                                               f'{self.order_folder}/.env')
         if not status:
             logger.error(msg)
+        elif probe_first:
+            self.__record_store.consume_probe_first(advertised[0])
+            logger.info(f"Order {order_id}: the first order after the capability record of {advertised[0]}; "
+                        f"its probe plan is forced")
 
     def set_retry_policy_on_fail_for_compose(self):
         with open(self.order_docker_compose_file, "r") as f:
@@ -3216,16 +3576,10 @@ class EtnyPoXNode:
                 f.write(f'{key}={value}\n')
         f.close()
 
-    def get_enclave_env_dictionary(self, order_id, challenge):
-        env_vars = {
-            "ETNY_CHAIN_ID": self.__network_config.chain_id,
-            "ETNY_SMART_CONTRACT_ADDRESS": self.__network_config.contract_address,
-            "ETNY_WEB3_PROVIDER": self.__network_config.rpc_url,
-            "ETNY_CLIENT_CHALLENGE": challenge,
-            "ETNY_ORDER_ID": order_id,
-            "ETNY_NGROK_AUTHTOKEN": "DEFAULT"
-        }
-        return env_vars
+    def get_enclave_env_dictionary(self, order_id, challenge, probe_first):
+        """The order's .env (utils.order_env), ETNY_NODE_ADDRESS this node's
+        wallet."""
+        return order_env(self.__network_config, order_id, challenge, self.__address, probe_first)
 
     def update_enclave_docker_compose(self, docker_compose_file, order):
         with open(docker_compose_file, 'r') as f:
@@ -3443,6 +3797,13 @@ class EtnyPoXNode:
         _doreq = {}
         doreq = {}
         metadata = {}
+        # On a 1.2 contract with a reader: each DO request's recorded terms
+        # (models.DORequestV2) and, for a legacy one, its publishers' fees,
+        # read once; the quote is read every pass.
+        do_v2 = {}
+        publisher_fees = {}
+        quote = None
+        terms = None
 
         runnable = self.__runnable_trustedzones()
         if not runnable:
@@ -3478,14 +3839,40 @@ class EtnyPoXNode:
 
                 self.__maybe_retry_integration_tests()
 
+                # A request the validators cancelled takes no order: the loop
+                # ends and resume_processing re-tests where the reason asks
+                # for it, then adds the next request.
+                if self.__dp_request_cancelled_by_validators():
+                    next_dp_request = True
+                    break
+
+                # The standing request's terms on a 1.2 contract: refreshed
+                # when due; replaced, the loop ending for the new request,
+                # when it has no terms, carries another capability record or
+                # the other accept-reserved flag.
+                ended, terms = self.__dp_request_terms_tick()
+                if ended:
+                    next_dp_request = True
+                    break
+
                 if self.__take_up_approved_order():
                     continue
 
                 if not self.__wallet_covers_transactions():
                     continue
 
+                # With a reader the DO requests are judged against the
+                # standing request's terms (utils.do_request_compare); a pass
+                # whose terms were not read judges none.
+                compare = do_request_compare(self.__reader is not None, terms)
+                if compare == 'skip':
+                    continue
+
                 time.sleep(self.__network_config.rpc_delay/1000)
                 count = self.__etny.caller()._getDORequestsCount()
+                # The pass's quote, which the DO requests are judged against
+                # (utils.admits_do_request) with the standing request's terms.
+                quote = self.__quote() if compare == 'terms' else None
                 checked = 0
             except Exception as e:
                 logger.warning(f"Warning while trying to get DORequestCount, Message: {e}")
@@ -3545,11 +3932,42 @@ class EtnyPoXNode:
                     logger.debug("Fetch succeeded; proceeding with DO request processing.")
 
                 if not (doreq[i].cpu <= req.cpu and doreq[i].memory <= req.memory and
-                        doreq[i].storage <= req.storage and doreq[i].bandwidth <= req.bandwidth and doreq[i].price >= req.price):
+                        doreq[i].storage <= req.storage and doreq[i].bandwidth <= req.bandwidth):
                     self.doreq_cache.add(i)
                     logger.debug("Not enough resources to process this DO request, skipping to next request")
-                    logger.debug(f"resource:requested/available| cpu:{doreq[i].cpu}/{req.cpu} memory:{doreq[i].memory}/{req.memory} storage:{doreq[i].storage}/{req.storage} bandwidth:{doreq[i].bandwidth}/{req.bandwidth} price:{doreq[i].price}/{req.price}");
+                    logger.debug(f"resource:requested/available| cpu:{doreq[i].cpu}/{req.cpu} memory:{doreq[i].memory}/{req.memory} storage:{doreq[i].storage}/{req.storage} bandwidth:{doreq[i].bandwidth}/{req.bandwidth}");
                     continue
+
+                if quote is None:
+                    # The legacy compare: the request's uint8 price at least
+                    # this node's.
+                    if doreq[i].price < req.price:
+                        self.doreq_cache.add(i)
+                        logger.debug(f"DO request {i}: price {doreq[i].price} below this node's {req.price}; skipping to next request")
+                        continue
+                else:
+                    # The 1.2 compare (utils.admits_do_request): the request's
+                    # recorded terms against the quote's price plus this
+                    # node's tip and its cu; a reserved request and one whose
+                    # maxCu this node exceeds are cached, a price refusal is
+                    # not (the quote moves every epoch).
+                    try:
+                        if i not in do_v2:
+                            do_v2[i] = DORequestV2(self.__reader.caller()._getDORequestV2(i))
+                            if do_v2[i].max_price == 0 and do_v2[i].reserved_price == 0:
+                                publisher_fees[i] = tuple(self.__reader.caller().publisherFees(metadata[i][1]))
+                            else:
+                                publisher_fees[i] = (0, 0)
+                    except Exception as e:
+                        logger.debug(f"DO request {i}: its terms were not read ({e}); next pass")
+                        continue
+                    refusal = admits_do_request(do_v2[i], doreq[i].price, quote[0], terms.tip, terms.cu,
+                                                self.__fee_percents, publisher_fees[i])
+                    if refusal is not None:
+                        if refusal.kind in ('reserved', 'cu'):
+                            self.doreq_cache.add(i)
+                        logger.debug(f"DO request {i}: {refusal.text}; skipping to next request")
+                        continue
 
 
                 # An unpinned request carries no node: the contract stores that
@@ -3738,6 +4156,7 @@ class EtnyPoXNode:
             try:
                 receipt = self.__w3.eth.wait_for_transaction_receipt(tx_hash, timeout=120)
                 if receipt.status == 1:
+                    self.__record_gas('startedRow', receipt)
                     self.__record_order_started(order_id, value)
                     return
                 self.logger.info(f"Order {order_id}: the started row reverted; sending it again")
@@ -3763,6 +4182,7 @@ class EtnyPoXNode:
                                                                      timeout=120)
                 if receipt.status != 1:
                     raise Exception('the transaction reverted')
+                self.__record_gas('startedRow', receipt)
                 self.__record_order_started(order_id, value)
                 return
             except Exception as e:
@@ -3950,9 +4370,23 @@ class EtnyPoXNode:
                     logger.info(f"DO request {doreq_id}: the placement simulation reverted without a reason "
                                 f"{simulation_reverts} times; left for a later pass")
                     raise exceptions.ContractLogicError(f"DO request {doreq_id} placement simulation reverted without a reason")
-                logger.info(f"DO request {doreq_id} cannot be placed with DP request "
-                            f"{self.__dprequest}: the protocol contract refuses it ({reason}), skipping processing")
-                self.doreq_cache.add(doreq_id)
+                # A refusal naming this node's own DP request
+                # (utils.placement_refusal_disposition) is not held against
+                # the DO request: its terms are mended by the idle tick's
+                # terms read, or its offer cannot serve this request, logged
+                # once per request and reason.
+                disposition = placement_refusal_disposition(reason)
+                if disposition == 'cache':
+                    logger.info(f"DO request {doreq_id} cannot be placed with DP request "
+                                f"{self.__dprequest}: the protocol contract refuses it ({reason}), skipping processing")
+                    self.doreq_cache.add(doreq_id)
+                elif disposition == 'terms':
+                    logger.info(f"DO request {doreq_id}: the placement was refused for this node's DP request "
+                                f"{self.__dprequest} ({reason}); the request is mended at the next tick and the DO request kept")
+                elif (self.__dprequest, reason) not in self.__placement_refusals_logged:
+                    self.__placement_refusals_logged.add((self.__dprequest, reason))
+                    logger.info(f"DO request {doreq_id}: this node's DP request {self.__dprequest} cannot serve it "
+                                f"({reason}); the DO request is kept for another offer")
                 raise exceptions.ContractLogicError(f"DO request {doreq_id} refused by the contract")
             # The transaction is built inside the retry loop so every attempt
             # takes a fresh nonce: a reverted transaction consumes its nonce,
@@ -3965,6 +4399,7 @@ class EtnyPoXNode:
 
             if receipt.status == 1:
               logger.info(f"TXID {_hash} confirmed!")
+              self.__record_gas('placement', receipt)
               break
             else:
               logger.info(f"TXID {_hash} is reverted")
@@ -4081,6 +4516,9 @@ class EtnyPoXNode:
         address = self.__etny.address
         self.__pox_is_12 = False
         self.__reader = self.__pricing = self.__broker = self.__token = None
+        # (NETWORK_FEE_PERCENT, VALIDATOR_FEE_PERCENT) of a 1.2 contract, the
+        # legacy DO requests' fee-inclusive compare.
+        self.__fee_percents = None
         step = 'pricingVersion probe'
         answered, is_12 = retry(pox12.pox_generation, self.__etny.functions.pricingVersion().call, attempts=10, delay=3)
         if answered and is_12:
@@ -4092,11 +4530,15 @@ class EtnyPoXNode:
             step = 'readerAddress, pricingAddress, reservationBrokerAddress and token reads'
             answered, handles = retry(pox12.chain_handles, self.__etny, self.__w3, abis, attempts=10, delay=3)
             if answered:
+                step = 'NETWORK_FEE_PERCENT and VALIDATOR_FEE_PERCENT reads'
+                answered, percents = retry(self.__read_fee_percents, attempts=10, delay=3)
+            if answered:
                 self.__pox_is_12 = True
                 self.__reader = handles['reader']
                 self.__pricing = handles['pricing']
                 self.__broker = handles['broker']
                 self.__token = handles['token']
+                self.__fee_percents = percents
         if not answered:
             if not self.__replication_only:
                 raise Exception(f"Protocol contract {address}: the {step} failed on the RPC")
@@ -4106,11 +4548,17 @@ class EtnyPoXNode:
                      (('reader', self.__reader), ('pricing', self.__pricing),
                       ('broker', self.__broker), ('token', self.__token)) if handle is not None}
             logger.info(f"Protocol contract {address}: pox=1.2 "
-                        + ' '.join(f"{name}={value}" for name, value in named.items()))
+                        + ' '.join(f"{name}={value}" for name, value in named.items())
+                        + f" fees=network {self.__fee_percents[0]}% validator {self.__fee_percents[1]}%")
             if self.__reader is None:
                 logger.info(f"Protocol contract {address}: no reader; the DO requests are compared as on a legacy contract")
         else:
             logger.info(f"Protocol contract {address}: pox=legacy")
+
+    def __read_fee_percents(self):
+        """(NETWORK_FEE_PERCENT, VALIDATOR_FEE_PERCENT) of the 1.2 contract."""
+        return (int(self.__etny.functions.NETWORK_FEE_PERCENT().call()),
+                int(self.__etny.functions.VALIDATOR_FEE_PERCENT().call()))
 
     def get_transaction_build(self, existing_nonce=None):
         logger = self.logger
@@ -4546,6 +4994,10 @@ class EtnyPoXNode:
                 logger.error("Not enough gas to run on this network, exiting")
                 break
 
+            # A test due now (one dropped by a validators' cancel, a stale or
+            # failed one past its backoff) runs before the request, so the
+            # request carries the record it produces.
+            self.__maybe_retry_integration_tests()
             self.add_dp_request()
             self.process_dp_request()
 
@@ -4554,14 +5006,10 @@ class EtnyPoXNode:
         return 'isgx' in driver_list and 'sgx_enclave' in driver_list
 
     def get_env_for_integration_test(self):
-        env_vars = {
-            "ETNY_CHAIN_ID": self.__network_config.chain_id,
-            "ETNY_SMART_CONTRACT_ADDRESS": self.__network_config.contract_address,
-            "ETNY_WEB3_PROVIDER": self.__network_config.rpc_url,
-            "ETNY_RUN_INTEGRATION_TEST": 1,
-            "ETNY_ORDER_ID": 0
-        }
-        return env_vars
+        """The integration test's .env (utils.integration_env): the
+        trustedzone writes the capability record for ETNY_NODE_ADDRESS, this
+        node's wallet."""
+        return integration_env(self.__network_config, self.__address)
 
     def build_prerequisites_integration_test(self, bucket_name, order_id, docker_compose_file):
         logger = self.logger
@@ -4604,10 +5052,12 @@ class EtnyPoXNode:
 
     def __run_integration_test(self, image):
         """Run trustedzone `image`'s integration test on the registry's latest
-        image of that name; the IPFS hash of that image when its enclave
-        produced the test result, None when none did or the registry holds no
-        image of that name. The caller holds integration_test_lock and the
-        task slot."""
+        image of that name; (the IPFS hash of that image, the text of
+        capability.etny, the text of capability.time.etny), the two texts
+        None when the enclave wrote no such object, when its enclave produced
+        the test result, None when none did or the registry holds no image of
+        that name. The caller holds integration_test_lock and the task
+        slot."""
         logger = self.logger
 
         logger.info(f'Running integration test of {image} ({self.__trustedzones[image]}).')
@@ -4669,18 +5119,27 @@ class EtnyPoXNode:
             return None
 
         logger.info(f"Integration test of {image} passed on {self.__network} (image {enclave_image_hash})")
+        # The capability record's objects, written before context_test.etny
+        # and read before the bucket is wiped; a trustedzone without a
+        # validator set writes no capability.time.etny.
+        texts = []
+        for name in (capability.CAPABILITY_OBJECT, capability.CAPABILITY_TIME_OBJECT):
+            found, text = self.swift_stream_service.get_file_content(self.integration_bucket_name, name)
+            texts.append(text if found else None)
         self.__clean_up_integration_test()
-        return enclave_image_hash
+        return enclave_image_hash, texts[0], texts[1]
 
     def __run_integration_test_if_due(self, image):
-        """Run `image`'s integration test unless it passed already or its retry
-        is not yet due, and record the outcome: the hash of the image a passed
-        test ran on, or the next attempt after a backoff that doubles from
-        INTEGRATION_TEST_RETRY_MIN_SECONDS up to
-        INTEGRATION_TEST_RETRY_MAX_SECONDS. The caller holds the task slot."""
+        """Run `image`'s integration test unless it passed already with no
+        re-measure pending (integration_test_remeasure) or its retry is not
+        yet due, and record the outcome: the hash of the image a passed test
+        ran on, replacing the standing pass and record, or the next attempt
+        after a backoff that doubles from INTEGRATION_TEST_RETRY_MIN_SECONDS
+        up to INTEGRATION_TEST_RETRY_MAX_SECONDS, a standing pass left as it
+        is. The caller holds the task slot."""
         logger = self.logger
         with integration_test_lock:
-            if image in integration_test_passed:
+            if image in integration_test_passed and image not in integration_test_remeasure:
                 return
             failures, due_at = integration_test_retry.get(image, (0, 0.0))
             if time.monotonic() < due_at:
@@ -4691,7 +5150,11 @@ class EtnyPoXNode:
                 logger.warning(f"Integration test of {image} failed: {e}")
                 tested = None
             if tested:
-                integration_test_passed[image] = tested
+                image_hash, capability_etny, capability_time_etny = tested
+                record = self.__admit_capability_record(image, capability_etny, capability_time_etny)
+                self.__record_store.put(image, image_hash, time.time(), record)
+                integration_test_passed[image] = image_hash
+                integration_test_remeasure.discard(image)
                 integration_test_retry.pop(image, None)
                 return
             failures += 1
@@ -4701,21 +5164,90 @@ class EtnyPoXNode:
             logger.warning(f"Integration test of {image} failed {failures} time(s); "
                            f"next attempt in {backoff // 60} min")
 
+    def __validator_registry_address(self):
+        """This network's ValidatorRegistry (config.validator_registry_addresses),
+        '' for none."""
+        return (config.validator_registry_addresses.get((self.__network_config.name or "").upper()) or "").strip()
+
+    def __is_seated(self, address):
+        """Whether `address` is a validator of this network's registry
+        (isValidator), read up to ten times three seconds apart; a read the
+        RPC never answers raises."""
+        import cas_resolver
+        registry = self.__w3.eth.contract(
+            address=self.__w3.to_checksum_address(self.__validator_registry_address()),
+            abi=cas_resolver.VALIDATOR_REGISTRY_ABI)
+        answered, seated = retry(registry.caller().isValidator, self.__w3.to_checksum_address(address),
+                                 attempts=10, delay=3)
+        if not answered:
+            raise Exception(f"isValidator({address}) failed on the RPC")
+        return bool(seated)
+
+    def __admit_capability_record(self, image, capability_etny, capability_time_etny):
+        """The capability record of `image`'s passed integration test when it
+        is admitted (capability.capability_record_from: the record names
+        this wallet and this network's chain id and PoX contract, a seated
+        validator signed both time statements, the image requires dcap, the
+        network has a validator set, the run length, cu and t1 are within the
+        bounds), None otherwise, the reason logged. A registry read that
+        fails refuses the record and keeps the test's pass."""
+        logger = self.logger
+        registry = self.__validator_registry_address()
+        try:
+            record, reason = capability.capability_record_from(
+                capability_etny, capability_time_etny, self.__address, self.__trustedzones[image], bool(registry),
+                time.time(), self.__network_config.chain_id, self.__network_config.contract_address, registry,
+                self.__is_seated)
+        except Exception as e:
+            record, reason = None, f"the validator seat could not be read ({e})"
+        if record is None:
+            logger.info(f"Integration test of {image}: no capability record admitted: {reason}")
+            return None
+        logger.info(f"Integration test of {image}: record admitted (cu {record['cu']}, cuv {record['cuv']}, "
+                    f"validator {record['validator']}, t1 {record['t1']}, blocks {record['block0']}..{record['block1']})")
+        return record
+
+    def __load_passed_integration_tests(self):
+        """Loads the passed tests of this network's images from the record
+        store into integration_test_passed, one due for its re-measure
+        (capability.remeasure_due) into integration_test_remeasure as well
+        (it runs again now, the pass standing), and drops the records that
+        reached CU_TTL_SECONDS; then marks the loaded tests the image
+        registry's latest made stale."""
+        now = time.time()
+        with integration_test_lock:
+            for image in self.__integration_images:
+                entry = self.__record_store.get(image)
+                if entry is None:
+                    continue
+                if entry.get('record') is not None and capability.record_expired(entry['record']['t1'], now):
+                    self.logger.info(f"The capability record of {image} reached CU_TTL_SECONDS; dropped")
+                    self.__record_store.drop_record(image)
+                integration_test_passed[image] = entry['image_hash']
+                self.logger.info(f"Integration test of {image} passed at {entry['passed_at']} on {entry['image_hash']}"
+                                 f"{' with a capability record' if entry.get('record') else ''}; loaded")
+                if capability.remeasure_due(entry['passed_at'], now) and image not in integration_test_remeasure:
+                    self.logger.info(f"Integration test of {image}: its re-measure is due: it runs again")
+                    integration_test_remeasure.add(image)
+                    integration_test_retry[image] = (0, 0.0)
+        self.__mark_stale_integration_tests(self.__integration_images)
+
     def __maybe_retry_integration_tests(self):
-        """Run this network's integration tests that are out of date: one whose
-        tested image is no longer the registry's latest of its name (read at
-        most every INTEGRATION_TEST_REGISTRY_CHECK_SECONDS), one that failed
-        and whose backoff has elapsed. A test takes the task slot, as an order
-        does."""
+        """Run this network's integration tests that are out of date
+        (utils.integration_tests_due): one whose tested image is no longer
+        the registry's latest of its name (read at most every
+        INTEGRATION_TEST_REGISTRY_CHECK_SECONDS), one whose re-measure is
+        pending, one that failed and whose backoff has elapsed. A test takes
+        the task slot, as an order does."""
         if self.__replication_only or config.skip_integration_test:
             return
         now = time.monotonic()
         if now - self.__last_registry_check_at >= INTEGRATION_TEST_REGISTRY_CHECK_SECONDS:
             self.__last_registry_check_at = now
             self.__mark_stale_integration_tests(self.__integration_images)
-        due = [image for image in self.__integration_images
-               if image not in integration_test_passed
-               and integration_test_retry.get(image, (0, 0.0))[1] <= now]
+        with integration_test_lock:
+            due = integration_tests_due(self.__integration_images, integration_test_passed, integration_test_remeasure,
+                                        integration_test_retry, now)
         # Another network may have taken the slot during the registry reads;
         # the loop does not wait on its order here, the next pass tests.
         if not due or get_task_running_on():
@@ -4765,10 +5297,15 @@ class EtnyPoXNode:
     def __mark_stale_integration_tests(self, images):
         """Drop the passed integration tests among `images` whose tested image
         is no longer the registry's latest of its name (utils.
-        stale_integration_tests), so the test runs again on the latest; a name
-        the registry no longer holds counts as stale. A read the registry does
-        not answer leaves that name's test standing. Returns the names
-        dropped."""
+        stale_integration_tests), with their records, so the test runs again
+        on the latest; a name the registry no longer holds counts as stale. A
+        read the registry does not answer leaves that name's test standing.
+        A passed test due for its re-measure (capability.remeasure_due) is
+        marked to run again (integration_test_remeasure) and stands with its
+        record until the new test passes or the record reaches
+        CU_TTL_SECONDS, when the record alone is dropped. Returns the names
+        whose test runs again."""
+        now = time.time()
         with integration_test_lock:
             passed = {image: integration_test_passed[image] for image in images if image in integration_test_passed}
         latest = {}
@@ -4786,23 +5323,34 @@ class EtnyPoXNode:
             with integration_test_lock:
                 if integration_test_passed.get(image) == passed[image]:
                     del integration_test_passed[image]
+                    integration_test_remeasure.discard(image)
                     integration_test_retry[image] = (0, 0.0)
-        return stale
+                    self.__record_store.drop(image)
+        due = (self.__record_store.remeasure_due(now) & passed.keys()) - stale
+        for image in due:
+            with integration_test_lock:
+                if image in integration_test_remeasure or integration_test_passed.get(image) != passed[image]:
+                    continue
+                integration_test_remeasure.add(image)
+                integration_test_retry[image] = (0, 0.0)
+            self.logger.info(f"Integration test of {image} passed {int(now - self.__record_store.get(image)['passed_at'])} s "
+                             f"ago; its re-measure is due: it runs again")
+        for image in self.__record_store.expired(now) & set(images):
+            self.logger.info(f"The capability record of {image} reached CU_TTL_SECONDS; dropped")
+            self.__record_store.drop_record(image)
+        return stale | due
 
     def __runnable_trustedzones(self):
-        """The trustedzones of this network this node runs: one with an
-        integration test of its own once that test passed, any other once a
-        passed integration test covers its platform requirement; every one
-        under SKIP_INTEGRATION_TEST, none on a replication-only handle."""
+        """The trustedzones of this network this node runs
+        (utils.runnable_trustedzones): one with an integration test of its
+        own once that test passed, any other once a passed integration test
+        covers its platform requirement; every one under
+        SKIP_INTEGRATION_TEST, none on a replication-only handle."""
         if self.__replication_only:
             return set()
         if config.skip_integration_test:
             return set(self.__trustedzones)
-        tested = set(self.__integration_images)
-        passed = tested & integration_test_passed.keys()
-        met = {self.__trustedzones[image] for image in passed}
-        return {name for name, requirement in self.__trustedzones.items()
-                if (name in passed if name in tested else requirement in met)}
+        return runnable_trustedzones(self.__trustedzones, self.__integration_images, integration_test_passed)
 
     def __log_runnable_trustedzones(self):
         runnable = self.__runnable_trustedzones()
@@ -4836,18 +5384,19 @@ class EtnyPoXNode:
                     f"integration test passed on this platform")
         return None
 
-    def __dp_metadata4(self):
-        """A DP request's metadata4, "trustedzones=<names>;ipfs=<peer id>;startrow=v1":
-        the trustedzones of this network this node runs, comma-separated, the
-        peer id of its IPFS node, empty when Kubo does not answer, and that
-        this agent adds the started row to the DP request when it starts an
-        order (utils.DP_STARTED_ROW_CAPABILITY)."""
+    def __dp_metadata4(self, advertised):
+        """A DP request's metadata4 (capability.metadata4): the trustedzones
+        of this network this node runs, the record's first, the peer id of
+        its IPFS node, empty when Kubo does not answer, the started-row
+        capability and, with `advertised` = (image, record), the record's
+        six cu keys."""
         try:
             peer_id = self.storage.peer_id()
         except Exception as e:
             self.logger.warning(f"IPFS peer id unavailable for the DP request: {e}")
             peer_id = ""
-        return f"trustedzones={','.join(sorted(self.__runnable_trustedzones()))};ipfs={peer_id};{DP_STARTED_ROW_CAPABILITY}"
+        image, record = advertised if advertised else (None, None)
+        return capability.metadata4(self.__runnable_trustedzones(), image, peer_id, record)
 
     def __can_run_auto_update(self, file_path, interval):
         current_timestamp = int(time.time())

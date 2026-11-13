@@ -38,12 +38,15 @@ from bs4 import BeautifulSoup
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from requests.adapters import HTTPAdapter
 from collections import OrderedDict
-from collections import deque
+from collections import deque, namedtuple
 import psutil
 import tarfile
 import gzip
 
 import threading
+
+from constants import CANCEL_ATTEMPTS, DP_REFRESH_MARGIN_SECONDS, MAX_TIP, TIP_HOURS
+
 upgrade_lock = threading.Lock()
 global_version_lock = threading.Lock()
 # Serializes `systemctl restart ipfs` across network threads. The list holds
@@ -315,6 +318,27 @@ def stale_integration_tests(passed, latest):
     registry holds no image of that name} for the names that were read; a name
     absent from `latest` keeps its test."""
     return {name for name, tested in passed.items() if name in latest and latest[name] != tested}
+
+
+def integration_tests_due(images, passed, remeasure, retry, now):
+    """The `images` whose integration test runs now: one without a pass in
+    `passed` ({name: tested hash}) or with its re-measure pending in
+    `remeasure` (the names whose passed test runs again for a new capability
+    record), once its retry time in `retry` ({name: (failures, due_at)}, due
+    at once when absent) has come at `now`."""
+    return [image for image in images
+            if (image not in passed or image in remeasure) and retry.get(image, (0, 0.0))[1] <= now]
+
+
+def runnable_trustedzones(trustedzones, tested, passed):
+    """The names of `trustedzones` ({name: platform requirement}) a node
+    runs: one among the `tested` integration images once its own test is in
+    `passed` ({name: tested hash}), any other once a passed test's image
+    meets its requirement."""
+    tested = set(tested)
+    met = {trustedzones[image] for image in tested if image in passed}
+    return {name for name, requirement in trustedzones.items()
+            if (name in passed if name in tested else requirement in met)}
 
 
 # The Docker registry layout of an enclave image tree, which the node mounts at
@@ -707,6 +731,238 @@ def session_wallet_attestation(value, order_id):
     except ValueError:
         return None
     return wallet, sig
+
+
+# The .env the agent uploads for the trustedzones (PHASE-E-PLAN.md E5). The
+# trustedzones admit ETNY_MODE, ETNY_ORDER_ID, ETNY_CLIENT_CHALLENGE,
+# ETNY_RUN_INTEGRATION_TEST, ETNY_NODE_ADDRESS and ETNY_PROBE_FIRST and log
+# every other key as ignored; the chain, contract and provider keys stay for
+# the images that predate the allowlist.
+
+def integration_env(network_config, node_address):
+    """The integration test's .env: ETNY_NODE_ADDRESS is the wallet the DP
+    requests are added with (the capability record's node); never
+    ETNY_PROBE_FIRST."""
+    return {
+        "ETNY_CHAIN_ID": network_config.chain_id,
+        "ETNY_SMART_CONTRACT_ADDRESS": network_config.contract_address,
+        "ETNY_WEB3_PROVIDER": network_config.rpc_url,
+        "ETNY_RUN_INTEGRATION_TEST": 1,
+        "ETNY_ORDER_ID": 0,
+        "ETNY_NODE_ADDRESS": node_address,
+    }
+
+
+def order_env(network_config, order_id, challenge, node_address, probe_first):
+    """An order's .env: ETNY_NODE_ADDRESS as the integration test's and, with
+    `probe_first`, ETNY_PROBE_FIRST=1 (the order's probe plan forced, the
+    first order after a new capability record)."""
+    env = {
+        "ETNY_CHAIN_ID": network_config.chain_id,
+        "ETNY_SMART_CONTRACT_ADDRESS": network_config.contract_address,
+        "ETNY_WEB3_PROVIDER": network_config.rpc_url,
+        "ETNY_CLIENT_CHALLENGE": challenge,
+        "ETNY_ORDER_ID": order_id,
+        "ETNY_NODE_ADDRESS": node_address,
+    }
+    if probe_first:
+        env["ETNY_PROBE_FIRST"] = "1"
+    return env
+
+
+# The protocol version a DP request's metadata2 names.
+DP_REQUEST_PROTOCOL = 'v3'
+# One compute unit in the contracts' thousandths; a DP request with cu 0 is
+# recorded at one CU.
+ONE_CU = 1000
+# A 1.2 DP request's terms, as dpTerms(id) answers them.
+DPTerms = namedtuple('DPTerms', 'cu tip accepts_reserved expires_at recorded')
+# The reader's settlementOf(orderId) answer.
+Settlement = namedtuple('Settlement', 'hours_billed work_wei fees_wei chain_paid_wei refund_wei outcome')
+# Why a DO request is not taken (admits_do_request): the kind, one of
+# 'reserved', 'price', 'cu' and 'legacy-price', and the text logged.
+Refusal = namedtuple('Refusal', 'kind text')
+
+
+def dp_terms(raw):
+    """DPTerms from a dpTerms(id) answer (cu, tipPerCuHourWei,
+    acceptsReservedOrders, expiresAt, recorded)."""
+    return DPTerms(int(raw[0]), int(raw[1]), bool(raw[2]), int(raw[3]), bool(raw[4]))
+
+
+def tip_per_cu_hour_wei(configured_tip, profile_gas, avg_gas_price_wei, token_per_pol, cu, hours=TIP_HOURS):
+    """A 1.2 DP request's tip in token wei per CU-hour: the operator's
+    `configured_tip` plus the node's own gas, the sum of `profile_gas`
+    ({kind: gas} of the gas profile) at `avg_gas_price_wei` converted at
+    `token_per_pol` (token wei per 1e18 gas-token wei), spread over `cu`
+    thousandths (0: one CU) for `hours` and rounded up; at most MAX_TIP."""
+    gas = sum(int(value) for value in profile_gas.values())
+    cu = int(cu) or ONE_CU
+    numerator = gas * int(avg_gas_price_wei) * int(token_per_pol) * ONE_CU
+    denominator = 10**18 * cu * int(hours)
+    own = (numerator + denominator - 1) // denominator
+    return min(int(configured_tip) + own, MAX_TIP)
+
+
+def dp_request_arguments(legacy, resources, duration, price, cu, tip, uuid, metadata3, metadata4):
+    """(function name, arguments) of the node's DP request: _addDPRequest with
+    the uint8 `price` on a legacy contract, addDPRequestV2 with `cu` (the
+    advertised record's thousandths, 0 without one) and `tip` on a 1.2 one.
+    `resources` is (cpu, memory, storage, bandwidth), `uuid` the node's
+    metadata1 and DP_REQUEST_PROTOCOL its metadata2."""
+    cpu, memory, storage, bandwidth = resources
+    if legacy:
+        return '_addDPRequest', [cpu, memory, storage, bandwidth, duration, price, uuid, DP_REQUEST_PROTOCOL,
+                                 metadata3, metadata4]
+    return 'addDPRequestV2', [cpu, memory, storage, bandwidth, duration, int(cu), int(tip), uuid,
+                              DP_REQUEST_PROTOCOL, metadata3, metadata4]
+
+
+def metadata_key(metadata, key):
+    """The value of `key` among the ;-separated key=value pairs of a DP
+    request's metadata3 / metadata4, None when absent."""
+    for part in (metadata or '').split(';'):
+        name, separator, value = part.partition('=')
+        if separator and name == key:
+            return value
+    return None
+
+
+def record_key(record):
+    """What identifies a capability record on the chain: its cusig value, the
+    DER signature hex lower-cased without 0x; None for no record."""
+    if record is None:
+        return None
+    hex_value = record['sig_der_hex']
+    if hex_value.lower().startswith('0x'):
+        hex_value = hex_value[2:]
+    return hex_value.lower()
+
+
+def refresh_due(expires_at, now):
+    """Whether a DP request expiring at `expires_at` is refreshed now: within
+    DP_REFRESH_MARGIN_SECONDS of its expiry, or past it."""
+    return expires_at - now <= DP_REFRESH_MARGIN_SECONDS
+
+
+def resume_admits(terms, now):
+    """What the resume does with an AVAILABLE DP request of a 1.2 contract:
+    'cancel' one without terms (added through a legacy call), 'refresh' one
+    whose refresh is due, 'resume' any other."""
+    if not terms.recorded:
+        return 'cancel'
+    if refresh_due(terms.expires_at, now):
+        return 'refresh'
+    return 'resume'
+
+
+def dp_request_disposition(terms, now, request_record_key, advertised_record_key, accepts_reserved=None):
+    """What the idle tick does with the standing DP request: 'readd' (cancel
+    and send a new one) when it has no terms, carries another capability
+    record than the advertised one (record_key of each), or, with
+    `accepts_reserved` given, records the other flag; 'refresh' when its
+    refresh is due; 'keep' otherwise."""
+    if not terms.recorded:
+        return 'readd'
+    if request_record_key != advertised_record_key:
+        return 'readd'
+    if accepts_reserved is not None and terms.accepts_reserved != bool(accepts_reserved):
+        return 'readd'
+    if refresh_due(terms.expires_at, now):
+        return 'refresh'
+    return 'keep'
+
+
+def bounded_cancel(available, simulate, send, wait, attempts=CANCEL_ATTEMPTS):
+    """Drives the cancel of a DP request. `available()` reads whether it is
+    AVAILABLE: one that is not answers 'not-available' at once, since the
+    contract refuses its cancel for good. Otherwise at most `attempts`
+    attempts, each `simulate()` then, when that passes, `send()`, whose True
+    (a status-1 receipt) answers 'cancelled'; an attempt that does not land
+    re-reads the status (not AVAILABLE: 'not-available') and `wait()`s a
+    block before the next. After the last attempt 'abandoned'."""
+    if not available():
+        return 'not-available'
+    for attempt in range(1, attempts + 1):
+        if simulate() and send():
+            return 'cancelled'
+        if not available():
+            return 'not-available'
+        if attempt < attempts:
+            wait()
+    return 'abandoned'
+
+
+def admits_do_request(do_v2, legacy_price_tokens, price_per_cu_hour_wei, tip, cu, fee_percents, publisher_fees):
+    """Why this node's 1.2 offer does not take DO request `do_v2`
+    (models.DORequestV2), a Refusal, or None when it does. A reserved request
+    (a reserved price recorded) is left to the broker, which places on the
+    offer. A recorded spot request takes the bid, the pricing's price plus
+    the node's tip, at most its maxPricePerCuHourWei and the node's `cu` at
+    most its maxCu (0: any). A legacy request (no terms) takes the bid with
+    the fees: bid x (100 + network + validator + trustedzone + securelock
+    percents) at most 100 x its uint8 price (`legacy_price_tokens`) in token
+    wei. `fee_percents` is (NETWORK_FEE_PERCENT, VALIDATOR_FEE_PERCENT),
+    `publisher_fees` the request's (trustedZoneFee, secureLockFee)."""
+    if do_v2.reserved_price != 0:
+        return Refusal('reserved', 'reserved request, placed by the broker')
+    bid = int(price_per_cu_hour_wei) + int(tip)
+    if do_v2.max_price != 0:
+        if bid > do_v2.max_price:
+            return Refusal('price', f"bid {bid} wei per CU-hour above the request's maximum {do_v2.max_price}")
+        if do_v2.max_cu != 0 and int(cu) > do_v2.max_cu:
+            return Refusal('cu', f"cu {cu} above the request's maxCu {do_v2.max_cu}")
+        return None
+    network_fee, validator_fee = fee_percents
+    trustedzone_fee, securelock_fee = publisher_fees
+    max_price_wei = int(legacy_price_tokens) * 10**18
+    percents = 100 + int(network_fee) + int(validator_fee) + int(trustedzone_fee) + int(securelock_fee)
+    if bid * percents > max_price_wei * 100:
+        return Refusal('legacy-price', f"bid {bid} wei per CU-hour with {percents - 100}% fees above the legacy "
+                                       f"request's price {max_price_wei} wei")
+    return None
+
+
+def do_request_compare(has_reader, terms):
+    """How an idle pass judges the DO requests: 'terms' on a handle with a
+    reader whose standing request's terms were read (admits_do_request
+    against the pass's quote), 'skip' on one whose terms were not read (the
+    pass judges no request), 'legacy' without a reader (the uint8 price
+    compare)."""
+    if not has_reader:
+        return 'legacy'
+    return 'terms' if terms is not None else 'skip'
+
+
+# The contract's placement refusals that fault this node's own DP request, not
+# the DO request: the first two are mended by the idle tick's terms read (a
+# refresh or a new request), the last two name a request the offer cannot
+# serve.
+PLACEMENT_REFUSALS_TERMS = ('dp request has no terms', 'dp request expired')
+PLACEMENT_REFUSALS_OFFER = ('offer does not accept reserved orders', 'node above maxCu')
+
+
+def placement_refusal_disposition(reason):
+    """'terms' or 'offer' for a placement refusal naming this node's own DP
+    request (never cached against the DO request), 'cache' for any other."""
+    text = (reason or '').strip().lower()
+    if any(text.startswith(refusal.lower()) for refusal in PLACEMENT_REFUSALS_TERMS):
+        return 'terms'
+    if any(text.startswith(refusal.lower()) for refusal in PLACEMENT_REFUSALS_OFFER):
+        return 'offer'
+    return 'cache'
+
+
+def settlement_line(order_id, raw):
+    """The log line of a recorded 1.2 order's settlementOf answer (hoursBilled,
+    workWei, feesWei, chainPaidWei, refundWei, outcome); None when the order
+    is not recorded (every field zero)."""
+    settlement = Settlement(*(int(value) for value in raw))
+    if not any(settlement):
+        return None
+    return (f"Order {order_id} settlement: {settlement.hours_billed} hours billed, work {settlement.work_wei} wei, "
+            f"fees {settlement.fees_wei} wei, chain paid {settlement.chain_paid_wei} wei, "
+            f"refund {settlement.refund_wei} wei, outcome {settlement.outcome}")
 
 
 # An order's window ends ORDER_GRACE_SECONDS after the duration its DO request
