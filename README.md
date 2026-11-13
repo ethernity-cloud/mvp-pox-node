@@ -200,6 +200,9 @@ optional; `node/.env.example` documents them all):
   invitation is logged once and the node stays farmless until a fresh one.
 - `<NETWORK>_FARM_ACCEPT` (true): whether the node accepts the handovers its
   farm's members announce.
+- `<NETWORK>_LOGS_CHUNK_BLOCKS` (9000; 3000 on `litvm_liteforge` and
+  `litvm_liteforge_unsafe`): the blocks one `eth_getLogs` call reads, at most
+  what the network's RPC serves in one call.
 
 The broker items run only on a network whose contract names a broker (none is
 deployed yet). There, `etny-node.py --handover --network <name>

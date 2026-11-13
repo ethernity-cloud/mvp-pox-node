@@ -593,6 +593,24 @@ def placement_block_of(logs, order_id):
     return None
 
 
+def block_ranges(from_block, to_block, chunk):
+    """The inclusive block ranges (start, stop) that cover [from_block,
+    to_block] in ascending order, each of at most `chunk` blocks: the ranges
+    the agent's scans request from the RPC one eth_getLogs at a time
+    (config.NetworkConfig.logs_chunk_blocks; the LiteForge RPC refuses a
+    range of more than 3000 blocks). A from_block below 0 starts at 0, a
+    to_block below from_block yields no range, a chunk below 1 is refused."""
+    chunk = int(chunk)
+    if chunk < 1:
+        raise ValueError(f"block_ranges: chunk {chunk} is below 1 block")
+    start = max(0, int(from_block))
+    end = int(to_block)
+    while start <= end:
+        stop = min(start + chunk - 1, end)
+        yield start, stop
+        start = stop + 1
+
+
 def transaction_known(error):
     """Whether `error` is a transaction pool's answer that it holds the
     transaction already: OpenEthereum's "Transaction with the same hash was

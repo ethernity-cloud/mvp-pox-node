@@ -1,3 +1,14 @@
+v3.8.1
+the LitVM LiteForge RPC is Zeeve's https://rpc.testnet.liteforge.zeeve.net/
+  (node/.env, networks.ini, the installer's vars): the LiteForge testnet moved
+  from Caldera to Zeeve on 2026-11-12 with its chain id, state and contracts,
+  and the Caldera endpoints answer 404
+every eth_getLogs scan reads at most <NETWORK>_LOGS_CHUNK_BLOCKS blocks per
+  call (9000 unless set; 3000 on litvm_liteforge and litvm_liteforge_unsafe,
+  whose RPC refuses a wider range): the ESR, broker, cancellation, output-row,
+  session-registry, image-registry and placement-time scans share
+  utils.block_ranges
+
 v3.8.0
 the agent runs on the 1.2 PoX (pox-smart-contract-litvm) beside the legacy
   contracts: at start it probes each network's contract for pricingVersion()

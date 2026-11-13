@@ -25,7 +25,13 @@ def entries():
 
 def test_the_changelog_opens_with_the_release():
     top, _ = entries()[0]
-    assert top == "3.8.0"
+    assert top == "3.8.1"
+
+
+def test_the_381_entry_names_the_litvm_rpc_and_the_log_chunk():
+    text = dict(entries())["3.8.1"]
+    for item in ("https://rpc.testnet.liteforge.zeeve.net/", "_LOGS_CHUNK_BLOCKS", "3000", "litvm_liteforge_unsafe"):
+        assert item in text, item
 
 
 def test_the_version_file_carries_the_changelogs_top_entry():

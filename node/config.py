@@ -58,6 +58,21 @@ kubo_version_default =  os.environ.get('KUBO_VERSION')
 # of the networks without one. At Amoy's gas price a metadata row costs about
 # 0.012 POL, so its .env sets 1 POL.
 esr_relay_gas_budget_wei_default = int(os.environ.get('ESR_RELAY_GAS_BUDGET_WEI', 10**17))
+# eth_getLogs: the widest block range one scan of the agent requests from a
+# network's RPC (utils.block_ranges, an inclusive range of at most this many
+# blocks). <NETWORK>_LOGS_CHUNK_BLOCKS sets a network's; without the variable
+# a network takes its network_field_defaults entry, else 9000. The LiteForge
+# RPC (rpc.testnet.liteforge.zeeve.net) refuses a range of more than 3000
+# blocks ("eth_getLogs range exceeds 3000 blocks; split the range"), so the
+# LitVM pair's is 3000.
+logs_chunk_blocks_default = 9000
+# The values of a network's defaulted NetworkConfig fields when their
+# variables are unset, {<PREFIX>: {field: value}}; parse_networks applies
+# them.
+network_field_defaults = {
+    "LITVM_LITEFORGE": {"logs_chunk_blocks": 3000},
+    "LITVM_LITEFORGE_UNSAFE": {"logs_chunk_blocks": 3000},
+}
 
 @dataclass(frozen=True)
 class NetworkConfig:
@@ -92,6 +107,9 @@ class NetworkConfig:
     enclave_fee: int
     # Set from <NETWORK>_ESR_RELAY_GAS_BUDGET_WEI when the variable exists.
     esr_relay_gas_budget_wei: int = esr_relay_gas_budget_wei_default
+    # The widest eth_getLogs block range of one scan on this network
+    # (<NETWORK>_LOGS_CHUNK_BLOCKS, else network_field_defaults, else 9000).
+    logs_chunk_blocks: int = logs_chunk_blocks_default
     # The operator's tip in token weis per CU-hour, added to the gas tip of a
     # 1.2 DP request (<NETWORK>_TIP_PER_CU_HOUR_WEI).
     tip_per_cu_hour_wei: int = 0
@@ -533,9 +551,13 @@ def parse_networks(arguments: argparse.Namespace, parser: argparse.ArgumentParse
                 # Fetch the value from environment variables
                 value = os.environ.get(env_var)
                 if value is None:
-                    # A field with a default keeps it when the variable is not set.
+                    # A field with a default keeps it when the variable is not
+                    # set, the network's own from network_field_defaults when
+                    # that holds one.
                     if field.default is MISSING:
                         missing_vars.append(env_var)
+                    elif field.name in network_field_defaults.get(prefix, {}):
+                        config_kwargs[field.name] = network_field_defaults[prefix][field.name]
                 else:
                     # Convert the type if necessary
                     if field.type == bool:
@@ -563,6 +585,9 @@ def parse_networks(arguments: argparse.Namespace, parser: argparse.ArgumentParse
 
         # Create a NetworkConfig instance
         network_config = NetworkConfig(**config_kwargs)
+        if network_config.logs_chunk_blocks < 1:
+            raise EnvironmentError(
+                f"{prefix}_LOGS_CHUNK_BLOCKS must be at least 1 block, not {network_config.logs_chunk_blocks}")
         trustedzones = trustedzone_requirements(network_config.trustedzone_images)
         for image in integration_test_images(network_config):
             if image not in trustedzones:

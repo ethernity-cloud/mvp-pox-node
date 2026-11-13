@@ -32,5 +32,5 @@ networks:
   - name: "LitVM LiteForge Testnet"
     shortname: "LITVM_LITEFORGE"
     description: "Gas token zkLTC"
-    rpc_url: "https://liteforge.rpc.caldera.xyz/infra-partner-http"
+    rpc_url: "https://rpc.testnet.liteforge.zeeve.net/"
     minimum_gas_at_start: 10000000000000000

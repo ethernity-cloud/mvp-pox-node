@@ -22,7 +22,7 @@ from web3 import middleware
 from web3.gas_strategies.time_based import fast_gas_price_strategy
 from web3.gas_strategies.rpc import rpc_gas_price_strategy
 
-from utils import get_or_generate_uuid, run_subprocess, run_subprocess_status, environment_failure, record_enclave_image_tree, compose_images, compose_services, await_enclave_runtime, tree_image_tag,revert_reason, wallet_covers, insufficient_funds, transaction_known, placement_block_of, WALLET_GAS_TRANSACTIONS, retry, holds_within, pinned_within, FetchDeferrals, staging_plan, remaining_order_seconds, record_order_placement, order_placed_at, pending_approvals, record_pending_approval, forget_pending_approval, ORDER_STARTED_KEY, order_started_row, ORDER_GRACE_SECONDS, session_wallet_attestation, Storage, Cache, ListCache, ListCacheWithTimestamp, MergedOrdersCache, subprocess, get_node_geo, HardwareInfoProvider, parse_transaction_bytes_ut, looks_like_cid, canonical_cid, PEER_MULTIADDR, next_registered_image, enclave_failure, enclave_may_have_failed, docker_container_states, docker_container_log_tail, stale_integration_tests, integration_tests_due, runnable_trustedzones, image_trees, stale_image_trees, directory_size, remove_tree, removal_leftovers, integration_env, order_env, dp_terms, tip_per_cu_hour_wei, dp_request_arguments, metadata_key, record_key, resume_admits, dp_request_disposition, bounded_cancel, do_request_verdict, refusal_cached, do_request_compare, placement_refusal_disposition, settlement_line, order_window, order_relay_ledger_path, ledger_rebuild, result_fields, result_send_decision, SESSION_WALLET_KEY, SESSION_OUTPUT_KEY
+from utils import get_or_generate_uuid, run_subprocess, run_subprocess_status, environment_failure, record_enclave_image_tree, compose_images, compose_services, await_enclave_runtime, tree_image_tag,revert_reason, wallet_covers, insufficient_funds, transaction_known, placement_block_of, block_ranges, WALLET_GAS_TRANSACTIONS, retry, holds_within, pinned_within, FetchDeferrals, staging_plan, remaining_order_seconds, record_order_placement, order_placed_at, pending_approvals, record_pending_approval, forget_pending_approval, ORDER_STARTED_KEY, order_started_row, ORDER_GRACE_SECONDS, session_wallet_attestation, Storage, Cache, ListCache, ListCacheWithTimestamp, MergedOrdersCache, subprocess, get_node_geo, HardwareInfoProvider, parse_transaction_bytes_ut, looks_like_cid, canonical_cid, PEER_MULTIADDR, next_registered_image, enclave_failure, enclave_may_have_failed, docker_container_states, docker_container_log_tail, stale_integration_tests, integration_tests_due, runnable_trustedzones, image_trees, stale_image_trees, directory_size, remove_tree, removal_leftovers, integration_env, order_env, dp_terms, tip_per_cu_hour_wei, dp_request_arguments, metadata_key, record_key, resume_admits, dp_request_disposition, bounded_cancel, do_request_verdict, refusal_cached, do_request_compare, placement_refusal_disposition, settlement_line, order_window, order_relay_ledger_path, ledger_rebuild, result_fields, result_send_decision, SESSION_WALLET_KEY, SESSION_OUTPUT_KEY
 import scone_image
 import pox12
 import capability
@@ -761,21 +761,15 @@ class EtnyPoXNode:
             return []
         return records
 
-    def __esr_state_committed_logs(self, from_block, to_block, chunk=9000):
-        """StateCommitted logs for [from_block, to_block], scanned in chunks.
-
-        Some RPCs (e.g. LitVM) time out or cap the block range on a single
-        get_logs over a large window. Chunking keeps each call small and lets a
-        big lookback complete without a -32002 timeout.
-        """
+    def __esr_state_committed_logs(self, from_block, to_block):
+        """StateCommitted logs for [from_block, to_block], read one range of
+        the network's logs_chunk_blocks at a time (utils.block_ranges): an
+        RPC bounds the range of one eth_getLogs (the LiteForge RPC at 3000
+        blocks) and times out on a wide one (-32002)."""
         out = []
-        start = max(0, int(from_block))
-        end = int(to_block)
-        while start <= end:
-            stop = min(start + chunk, end)
+        for start, stop in block_ranges(from_block, to_block, self.__network_config.logs_chunk_blocks):
             out.extend(self.__esr.events.StateCommitted().get_logs(
                 from_block=start, to_block=stop))
-            start = stop + 1
         return out
 
     # Pin bookkeeping shared by the result, DO input, ESR session row and CAS
@@ -1353,7 +1347,7 @@ class EtnyPoXNode:
                 text="SessionRegistered(bytes32,string,uint32,address,uint8)").hex()
             if not topic0.startswith('0x'):
                 topic0 = '0x' + topic0
-            chunk = 9000
+            chunk = self.__network_config.logs_chunk_blocks
             frm = start
             while frm <= head:
                 to = min(frm + chunk - 1, head)
@@ -1450,7 +1444,7 @@ class EtnyPoXNode:
             if start <= 0:
                 window = int(getattr(config, 'image_registry_scan_blocks', 200000))
                 start = max(0, head - window)
-            chunk = 9000
+            chunk = self.__network_config.logs_chunk_blocks
             frm = start
             # Each log is decoded on its own: a registration whose strings do not decode (V2 takes any bytes) is
             # skipped, rather than failing every later scan of its block range.
@@ -2650,17 +2644,14 @@ class EtnyPoXNode:
                              f"no spot order is placed until its successor is placed")
         return True
 
-    def __broker_logs(self, event_name, from_block, to_block, chunk=9000):
-        """The broker's `event_name` logs over [from_block, to_block], scanned
-        in chunks as __esr_state_committed_logs scans."""
+    def __broker_logs(self, event_name, from_block, to_block):
+        """The broker's `event_name` logs over [from_block, to_block], read in
+        ranges of the network's logs_chunk_blocks as
+        __esr_state_committed_logs reads."""
         out = []
-        start = max(0, int(from_block))
-        end = int(to_block)
         event = getattr(self.__broker.events, event_name)()
-        while start <= end:
-            stop = min(start + chunk, end)
+        for start, stop in block_ranges(from_block, to_block, self.__network_config.logs_chunk_blocks):
             out.extend(event.get_logs(from_block=start, to_block=stop))
-            start = stop + 1
         return out
 
     def __scan_broker_events(self, sent):
@@ -2952,17 +2943,14 @@ class EtnyPoXNode:
             json.dump(cursors, f)
         os.replace(temporary, path)
 
-    def __dp_request_cancelled_logs(self, req, from_block, to_block, chunk=9000):
+    def __dp_request_cancelled_logs(self, req, from_block, to_block):
         """DPRequestCancelled logs naming request `req` over [from_block,
-        to_block], scanned in chunks as __esr_state_committed_logs scans."""
+        to_block], read in ranges of the network's logs_chunk_blocks as
+        __esr_state_committed_logs reads."""
         out = []
-        start = max(0, int(from_block))
-        end = int(to_block)
-        while start <= end:
-            stop = min(start + chunk, end)
+        for start, stop in block_ranges(from_block, to_block, self.__network_config.logs_chunk_blocks):
             out.extend(self.__etny.events.DPRequestCancelled().get_logs(
                 argument_filters={'id': int(req)}, from_block=start, to_block=stop))
-            start = stop + 1
         return out
 
     def __dp_request_cancelled_by_validators(self):
@@ -3868,16 +3856,13 @@ class EtnyPoXNode:
             return False
         return blob
 
-    def __output_rows_added(self, order_id, from_block, to_block, chunk=9000):
-        """OutputRowAdded logs naming `order_id` over [from_block, to_block]."""
+    def __output_rows_added(self, order_id, from_block, to_block):
+        """OutputRowAdded logs naming `order_id` over [from_block, to_block],
+        read in ranges of the network's logs_chunk_blocks."""
         out = []
-        start = max(0, int(from_block))
-        end = int(to_block)
-        while start <= end:
-            stop = min(start + chunk, end)
+        for start, stop in block_ranges(from_block, to_block, self.__network_config.logs_chunk_blocks):
             out.extend(self.__etny.events.OutputRowAdded().get_logs(
                 argument_filters={'orderId': int(order_id)}, from_block=start, to_block=stop))
-            start = stop + 1
         return out
 
     def __stage_replays(self, bucket_name, order_id, bound, at_block):
@@ -3948,16 +3933,16 @@ class EtnyPoXNode:
 
     def __state_committed_before(self, bound, logs_after):
         """replay.fence_state_cids of the pairs `logs_after` name, over the
-        StateCommitted logs at or before `bound` scanned backwards in chunks
-        until every pair has its CID or config.esr_scan_lookback_blocks are
-        read."""
+        StateCommitted logs at or before `bound` scanned backwards in ranges
+        of the network's logs_chunk_blocks until every pair has its CID or
+        config.esr_scan_lookback_blocks are read."""
         moved = {replay.log_pair(log) for log in logs_after}
         collected = []
         to = int(bound)
         floor = max(0, int(bound) - config.esr_scan_lookback_blocks)
         cids = {}
         while to >= floor:
-            start = max(floor, to - 9000 + 1)
+            start = max(floor, to - self.__network_config.logs_chunk_blocks + 1)
             collected.extend(self.__esr_state_committed_logs(start, to))
             cids = replay.fence_state_cids(logs_after, collected, bound)
             if moved <= set(cids):
@@ -4193,14 +4178,16 @@ class EtnyPoXNode:
         """The timestamp of the block in which this node placed `order_id`:
         the _placeOrderEV it emitted for the order (utils.placement_block_of),
         looked for over the blocks of the order's window and grace plus
-        PLACEMENT_LOOKBACK_MARGIN_BLOCKS. None when no such event is there,
-        the placement being older than the window. Raises when the chain
-        cannot be read."""
+        PLACEMENT_LOOKBACK_MARGIN_BLOCKS, read in ranges of the network's
+        logs_chunk_blocks. None when no such event is there, the placement
+        being older than the window. Raises when the chain cannot be read."""
         latest = int(self.__w3.eth.block_number)
         span = int((duration_hours * 3600 + ORDER_GRACE_SECONDS) / int(self.__network_config.block_time))
-        logs = self.__etny.events._placeOrderEV().get_logs(
-            from_block=max(0, latest - span - PLACEMENT_LOOKBACK_MARGIN_BLOCKS), to_block=latest,
-            argument_filters={'_from': self.__address})
+        logs = []
+        for start, stop in block_ranges(latest - span - PLACEMENT_LOOKBACK_MARGIN_BLOCKS, latest,
+                                        self.__network_config.logs_chunk_blocks):
+            logs.extend(self.__etny.events._placeOrderEV().get_logs(
+                from_block=start, to_block=stop, argument_filters={'_from': self.__address}))
         block = placement_block_of(logs, order_id)
         if block is None:
             return None
