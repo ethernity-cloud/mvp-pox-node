@@ -8,8 +8,9 @@ Helpers of the Ethernity CLOUD node agent (EtnyPoXNode).
   adds, pins, announces and garbage-collects, and spools result pins that
   have not landed yet. Version upgrades and the shared version cache are
   serialized across the network threads with module-level locks.
-- Cache, ListCache, ListCacheWithTimestamp, MergedOrdersCache: file-backed
-  caches with an item limit, rewritten whole on each change.
+- Cache, ListCache, ListCacheWithTimestamp, MergedOrdersCache,
+  ResourceRefusals: file-backed caches with an item limit, rewritten whole on
+  each change.
 - HardwareInfoProvider: CPU count, free memory and free storage.
 - Functions on CIDs, enclave container states, order records, compose files
   and image trees, used by the agent.
@@ -804,6 +805,29 @@ Refusal = namedtuple('Refusal', 'kind text')
 # for: the legacy compare's, a reserved request's and a maxCu refusal. A
 # price refusal is not cached: the quote moves every epoch.
 CACHED_REFUSALS = ('legacy', 'reserved', 'cu')
+
+# The gas limit of a DP request __send_dp_request sends, in percent over its
+# estimate. The estimate is made at the head block and the request is mined
+# in a later one: behind an order's result, whose settlement empties the
+# pricing bucket the request's cu re-enters (a fresh write of 22,100 gas
+# where the estimate saw 5,000); after a cancel, at a header whose accrual
+# writes cost more than the estimate's. Amoy, 2026-11-13: estimates of
+# 1,212,000 against needs of 1,224,205 to 1,230,278 behind results, and
+# 1,226,341 against 1,230,378 after a cancel.
+DP_REQUEST_GAS_HEADROOM_PERCENT = 25
+
+
+def gas_with_headroom(estimate, percent=DP_REQUEST_GAS_HEADROOM_PERCENT):
+    """The gas limit `estimate` takes with `percent` of headroom, rounded
+    up."""
+    return (int(estimate) * (100 + int(percent)) + 99) // 100
+
+
+def resource_refusal_holds(needs, offer):
+    """Whether a DO request needing `needs` (cpu, memory, storage, bandwidth)
+    is refused by this node's `offer` of the same four: it is while any need
+    exceeds the offer."""
+    return any(int(need) > int(have) for need, have in zip(needs, offer))
 
 
 def dp_terms(raw):
@@ -3031,6 +3055,33 @@ class ListCache(Cache):
     def __contains__(self, item):
         """Check if an item exists in the cache."""
         return item in self.mem
+
+
+class ResourceRefusals(Cache):
+    """The DO requests the pre-filter refused for their resources, each with
+    the four it needs ({id: [cpu, memory, storage, bandwidth]}), kept across
+    restarts. A refusal holds while this node's offer is below a need
+    (resource_refusal_holds); one the offer serves is dropped and the request
+    judged again."""
+    def __init__(self, items_limit, filepath):
+        super().__init__(items_limit, filepath, store_type=dict)
+
+    def add(self, request_id, needs):
+        with self._lock:
+            self.mem[str(request_id)] = [int(value) for value in needs]
+            self._update_file()
+
+    def held(self, offer):
+        """The ids still refused by `offer`; those it serves are dropped."""
+        with self._lock:
+            served = [key for key, needs in self.mem.items() if not resource_refusal_holds(needs, offer)]
+            for key in served:
+                del self.mem[key]
+            if served:
+                self._update_file()
+            return [int(key) for key in self.mem]
+
+
 class ListCacheWithTimestamp:
     """
     A cache that stores unique items with associated timestamps using OrderedDict.

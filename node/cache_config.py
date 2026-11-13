@@ -17,6 +17,10 @@ class CacheConfig:
         self.ipfs_cache_filepath = base_path / 'ipfs_cache.txt'
         self.dpreq_filepath = base_path / 'dpreq_cache.txt'
         self.doreq_filepath = base_path / 'doreq_cache.txt'
+        # The DO requests refused for their resources, with the four each
+        # needs (utils.ResourceRefusals), judged again once the offer serves
+        # them.
+        self.doreq_resources_filepath = base_path / 'doreq_resources.json'
         self.merged_orders_cache = base_path / 'merged_orders_cache.json'
         self.process_orders_cache_filepath = base_path / 'process_order_data.json'
         # ESR/protocol replication progress, per network: the scan resume
@@ -40,6 +44,12 @@ class CacheConfig:
         self.accepted_handover_filepath = base_path / 'accepted.json'
         # The farm invitation a broker refused (broker.farm_refusal_path).
         self.farm_refusal_filepath = base_path / 'farm.json'
+
+        # The request and order caches built against a network's protocol
+        # contract, removed when the contract changes.
+        self.contract_caches = (self.orders_cache_filepath, self.dpreq_filepath, self.doreq_filepath,
+                                self.doreq_resources_filepath, self.merged_orders_cache,
+                                self.process_orders_cache_filepath)
 
         # Define all cache limits
         self.network_cache_limit = 1

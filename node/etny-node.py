@@ -22,7 +22,7 @@ from web3 import middleware
 from web3.gas_strategies.time_based import fast_gas_price_strategy
 from web3.gas_strategies.rpc import rpc_gas_price_strategy
 
-from utils import get_or_generate_uuid, run_subprocess, run_subprocess_status, environment_failure, record_enclave_image_tree, compose_images, compose_services, await_enclave_runtime, tree_image_tag,revert_reason, wallet_covers, insufficient_funds, transaction_known, placement_block_of, block_ranges, WALLET_GAS_TRANSACTIONS, retry, holds_within, pinned_within, FetchDeferrals, staging_plan, remaining_order_seconds, record_order_placement, order_placed_at, pending_approvals, record_pending_approval, forget_pending_approval, ORDER_STARTED_KEY, order_started_row, ORDER_GRACE_SECONDS, session_wallet_attestation, Storage, Cache, ListCache, ListCacheWithTimestamp, MergedOrdersCache, subprocess, get_node_geo, HardwareInfoProvider, parse_transaction_bytes_ut, looks_like_cid, canonical_cid, PEER_MULTIADDR, next_registered_image, enclave_failure, enclave_may_have_failed, docker_container_states, docker_container_log_tail, stale_integration_tests, integration_tests_due, runnable_trustedzones, image_trees, stale_image_trees, directory_size, remove_tree, removal_leftovers, integration_env, order_env, dp_terms, tip_per_cu_hour_wei, dp_request_arguments, metadata_key, record_key, resume_admits, dp_request_disposition, bounded_cancel, do_request_verdict, refusal_cached, do_request_compare, placement_refusal_disposition, settlement_line, order_window, order_relay_ledger_path, ledger_rebuild, result_fields, result_send_decision, SESSION_WALLET_KEY, SESSION_OUTPUT_KEY
+from utils import get_or_generate_uuid, run_subprocess, run_subprocess_status, environment_failure, record_enclave_image_tree, compose_images, compose_services, await_enclave_runtime, tree_image_tag,revert_reason, wallet_covers, insufficient_funds, transaction_known, placement_block_of, block_ranges, WALLET_GAS_TRANSACTIONS, retry, holds_within, pinned_within, FetchDeferrals, staging_plan, remaining_order_seconds, record_order_placement, order_placed_at, pending_approvals, record_pending_approval, forget_pending_approval, ORDER_STARTED_KEY, order_started_row, ORDER_GRACE_SECONDS, session_wallet_attestation, Storage, Cache, ListCache, ListCacheWithTimestamp, MergedOrdersCache, subprocess, get_node_geo, HardwareInfoProvider, parse_transaction_bytes_ut, looks_like_cid, canonical_cid, PEER_MULTIADDR, next_registered_image, enclave_failure, enclave_may_have_failed, docker_container_states, docker_container_log_tail, stale_integration_tests, integration_tests_due, runnable_trustedzones, image_trees, stale_image_trees, directory_size, remove_tree, removal_leftovers, integration_env, order_env, dp_terms, tip_per_cu_hour_wei, dp_request_arguments, metadata_key, record_key, resume_admits, dp_request_disposition, bounded_cancel, do_request_verdict, refusal_cached, do_request_compare, resource_refusal_holds, ResourceRefusals, gas_with_headroom, placement_refusal_disposition, settlement_line, order_window, order_relay_ledger_path, ledger_rebuild, result_fields, result_send_decision, SESSION_WALLET_KEY, SESSION_OUTPUT_KEY
 import scone_image
 import pox12
 import capability
@@ -561,6 +561,8 @@ class EtnyPoXNode:
         self.orders_cache = Cache(self.cache_config.orders_cache_limit, self.cache_config.orders_cache_filepath)
         self.dpreq_cache = ListCache(self.cache_config.dpreq_cache_limit, self.cache_config.dpreq_filepath)
         self.doreq_cache = ListCache(self.cache_config.doreq_cache_limit, self.cache_config.doreq_filepath)
+        self.resource_refusals = ResourceRefusals(self.cache_config.doreq_cache_limit,
+                                                  self.cache_config.doreq_resources_filepath)
         self.ipfs_cache = ListCacheWithTimestamp(self.cache_config.ipfs_cache_limit, self.cache_config.ipfs_cache_filepath)
         # Resumable replication progress (per network): last scanned block/order
         # and last pinned version per (enclave,key). Loaded from disk so a
@@ -3013,6 +3015,13 @@ class EtnyPoXNode:
         logger.info("Preparing transaction for new DP request")
         fn, _arguments = self.__dp_request_function()
         unicorn_txn = fn.build_transaction(self.get_transaction_build(existing_nonce=nonce))
+        # The EIP-1559 build's limit is an estimate at the head block; the
+        # request is mined in a later one, behind the result when sent with
+        # the nonce after it, where the call costs more
+        # (utils.DP_REQUEST_GAS_HEADROOM_PERCENT). The legacy build carries
+        # the configured gas_limit.
+        if self.__network_config.eip1559:
+            unicorn_txn['gas'] = gas_with_headroom(unicorn_txn['gas'])
         self.__dp_request_pending = self.send_transaction(unicorn_txn)
         logger.info(f"TXID {self.__dp_request_pending} pending... ")
 
@@ -5209,7 +5218,11 @@ class EtnyPoXNode:
             if count == 0:
                 continue;
 
-            cached_do_requests = self.doreq_cache.get_values
+            # The requests refused for their resources stay out while this
+            # offer is below their needs; one the offer serves is judged
+            # again this pass.
+            offer = (req.cpu, req.memory, req.storage, req.bandwidth)
+            cached_do_requests = self.doreq_cache.get_values + self.resource_refusals.held(offer)
 
             req_to_process = list(set(range(checked, count)) - set(cached_do_requests))
 
@@ -5259,9 +5272,9 @@ class EtnyPoXNode:
 
                     logger.debug("Fetch succeeded; proceeding with DO request processing.")
 
-                if not (doreq[i].cpu <= req.cpu and doreq[i].memory <= req.memory and
-                        doreq[i].storage <= req.storage and doreq[i].bandwidth <= req.bandwidth):
-                    self.doreq_cache.add(i)
+                needs = (doreq[i].cpu, doreq[i].memory, doreq[i].storage, doreq[i].bandwidth)
+                if resource_refusal_holds(needs, offer):
+                    self.resource_refusals.add(i, needs)
                     logger.debug("Not enough resources to process this DO request, skipping to next request")
                     logger.debug(f"resource:requested/available| cpu:{doreq[i].cpu}/{req.cpu} memory:{doreq[i].memory}/{req.memory} storage:{doreq[i].storage}/{req.storage} bandwidth:{doreq[i].bandwidth}/{req.bandwidth}");
                     continue
@@ -5814,9 +5827,7 @@ class EtnyPoXNode:
         current = str(network.contract_address).strip().lower()
         previous = marker.read_text().strip().lower() if marker.exists() else ''
         if previous and previous != current:
-            for path in (self.cache_config.orders_cache_filepath, self.cache_config.dpreq_filepath,
-                         self.cache_config.doreq_filepath, self.cache_config.merged_orders_cache,
-                         self.cache_config.process_orders_cache_filepath):
+            for path in self.cache_config.contract_caches:
                 if os.path.exists(path):
                     os.remove(path)
             logger.info(f"Protocol contract changed from {previous} to {current}: the request and order caches start again")

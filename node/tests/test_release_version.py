@@ -25,7 +25,14 @@ def entries():
 
 def test_the_changelog_opens_with_the_release():
     top, _ = entries()[0]
-    assert top == "3.8.1"
+    assert top == "3.8.2"
+
+
+def test_the_382_entry_names_the_headroom_and_the_resource_refusals_file():
+    text = dict(entries())["3.8.2"]
+    for item in ("DP_REQUEST_GAS_HEADROOM_PERCENT", "25", "1,212,000", "1,230,278", "1,226,341", "1,230,378",
+                 "doreq_resources.json", "doreq_cache.txt"):
+        assert item in text, item
 
 
 def test_the_381_entry_names_the_litvm_rpc_and_the_log_chunk():

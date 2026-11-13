@@ -1,3 +1,20 @@
+v3.8.2
+the DP request sent behind an order's result, and the one sent after a
+  cancel, carry DP_REQUEST_GAS_HEADROOM_PERCENT (25) over their gas estimate
+  on an EIP-1559 network: the estimate is made at the head block and the
+  request is mined in a later one, where the pricing's accrual writes and,
+  after a result, the bucket the node's cu re-enters cost more (on Amoy
+  estimates of 1,212,000 against needs of 1,224,205 to 1,230,278 behind
+  results, and 1,226,341 against 1,230,378 after a cancel), so the request
+  reverted out of gas and a second one followed after a receipt wait
+a DO request refused for its resources is held in
+  node/<network>/doreq_resources.json with the four it needs and judged again
+  once this node's offer serves it; before, the refusal went into
+  doreq_cache.txt for good and an offer posted later with more free storage
+  never took the request. A request refused before 3.8.2 stays in
+  doreq_cache.txt; the file is removed with the other request caches when the
+  network's contract changes
+
 v3.8.1
 the LitVM LiteForge RPC is Zeeve's https://rpc.testnet.liteforge.zeeve.net/
   (node/.env, networks.ini, the installer's vars): the LiteForge testnet moved
