@@ -1,12 +1,9 @@
 v3.8.4
 the passed integration test reads the tree's compose by its absolute path
   when it keeps the tested LAS, and a compose it cannot read leaves the LAS
-  unkept with a warning instead of failing the pass: the process's working
+  unkept with a warning instead of failing the pass; the process's working
   directory is shared by the network threads, which move it to their own
-  node/<network>/, so a node serving several networks read another network's
-  compose, or none, at the pass (etnyvm1, 2026-11-14: etny-pynithy-testnet
-  "failed: [Errno 2] No such file or directory: ./orders/integration_test/
-  docker-compose.yml", etny-nodenithy-testnet kept an empty LAS record)
+  node/<network>/
 
 v3.8.3
 an order's enclaves run with the LAS of a trustedzone tree that passed this
@@ -20,27 +17,21 @@ an order's enclaves run with the LAS of a trustedzone tree that passed this
   tested LAS of one with the same platform requirement; a recorded pass
   loaded at start without a kept LAS runs its test again; an order whose
   trustedzone has no tested LAS held by docker runs its tree's own. The LAS
-  is in no enclave's measurement. Trees built before the templates' IPv4 bind
-  (etny-nodenithy 2026-09-08, etny-pynithy 2026-09-09) or published by an SDK
-  older than 2026-09-28 start the LAS without "-a 0.0.0.0", so on a host
-  booted with ipv6.disable=1 it binds the IPv6 wildcard, exits with
-  "Unable to allocate socket" and restarts, and the trustedzone fails on
-  "Resolution of LAS address las:18766 failed"
+  is in no enclave's measurement. A LAS started without "-a 0.0.0.0" (trees
+  built before the templates' IPv4 bind of 2026-09-08/09 or published by an
+  SDK older than 2026-09-28) binds the IPv6 wildcard and exits with
+  "Unable to allocate socket" on a host booted with ipv6.disable=1
 
 v3.8.2
 the DP request sent behind an order's result, and the one sent after a
   cancel, carry DP_REQUEST_GAS_HEADROOM_PERCENT (25) over their gas estimate
   on an EIP-1559 network: the estimate is made at the head block and the
   request is mined in a later one, where the pricing's accrual writes and,
-  after a result, the bucket the node's cu re-enters cost more (on Amoy
-  estimates of 1,212,000 against needs of 1,224,205 to 1,230,278 behind
-  results, and 1,226,341 against 1,230,378 after a cancel), so the request
-  reverted out of gas and a second one followed after a receipt wait
+  after a result, the bucket the node's cu re-enters cost up to 1.5 % more
+  (Amoy)
 a DO request refused for its resources is held in
   node/<network>/doreq_resources.json with the four it needs and judged again
-  once this node's offer serves it; before, the refusal went into
-  doreq_cache.txt for good and an offer posted later with more free storage
-  never took the request. A request refused before 3.8.2 stays in
+  once this node's offer serves it; a request refused before 3.8.2 stays in
   doreq_cache.txt; the file is removed with the other request caches when the
   network's contract changes
 

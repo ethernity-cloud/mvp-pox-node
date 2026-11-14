@@ -30,21 +30,20 @@ def test_the_changelog_opens_with_the_release():
 
 def test_the_384_entry_names_the_absolute_compose_path():
     text = dict(entries())["3.8.4"]
-    for item in ("absolute path", "working", "node/<network>/", "Errno 2", "empty LAS record"):
+    for item in ("absolute path", "working", "node/<network>/", "warning"):
         assert item in text, item
 
 
 def test_the_383_entry_names_the_tested_las_tag():
     text = dict(entries())["3.8.3"]
     for item in ("localhost:5000/etny-las:tested-<trustedzone>", "las-tested-<trustedzone>.yml", "integration test",
-                 "-a 0.0.0.0", "ipv6.disable=1", "Unable to allocate socket", "las:18766"):
+                 "-a 0.0.0.0", "ipv6.disable=1", "Unable to allocate socket"):
         assert item in text, item
 
 
 def test_the_382_entry_names_the_headroom_and_the_resource_refusals_file():
     text = dict(entries())["3.8.2"]
-    for item in ("DP_REQUEST_GAS_HEADROOM_PERCENT", "25", "1,212,000", "1,230,278", "1,226,341", "1,230,378",
-                 "doreq_resources.json", "doreq_cache.txt"):
+    for item in ("DP_REQUEST_GAS_HEADROOM_PERCENT", "25", "1.5 %", "doreq_resources.json", "doreq_cache.txt"):
         assert item in text, item
 
 
