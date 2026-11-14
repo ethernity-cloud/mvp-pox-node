@@ -1,3 +1,12 @@
+v3.8.8
+bloxberg_testnet and bloxberg_testnet_unsafe bind the PoX 1.2 implementation
+  0x7E7C6eB435E3687CfDfe18C09C0340eb70567d7b (pox-smart-contract-litvm, on its
+  own EthernityCloudStorage; the legacy proxy 0x02882F03... keeps the orders
+  placed through it), the ValidatorRegistry R3
+  0xc346BfFC83f318FbbC34987cEF85716a3f7dCcB0 and its ValidatorIpfsEndpoints
+  0x935c2AD8C402DB922131a48D9d92ceeD02e74720 (ethernity-cas CAS-SETUP.md, "The
+  cut of 2026-11-14 on bloxberg testnet")
+
 v3.8.7
 every las service the node starts runs the LAS bound to IPv4: a command that
   names /usr/local/bin/las without a -a option gets "-a 0.0.0.0" after it, in

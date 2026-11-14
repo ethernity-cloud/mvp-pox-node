@@ -25,7 +25,15 @@ def entries():
 
 def test_the_changelog_opens_with_the_release():
     top, _ = entries()[0]
-    assert top == "3.8.7"
+    assert top == "3.8.8"
+
+
+def test_the_388_entry_names_the_bloxberg_testnet_contracts():
+    text = dict(entries())["3.8.8"]
+    for item in ("0x7E7C6eB435E3687CfDfe18C09C0340eb70567d7b",
+                 "0xc346BfFC83f318FbbC34987cEF85716a3f7dCcB0",
+                 "0x935c2AD8C402DB922131a48D9d92ceeD02e74720", "bloxberg_testnet_unsafe"):
+        assert item in text, item
 
 
 def test_the_387_entry_names_the_ipv4_bind():
