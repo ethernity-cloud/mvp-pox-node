@@ -1,7 +1,7 @@
 v3.8.6
-the installer leaves IPv6 enabled: ubuntu/etny-node-provision-docker.sh and
-  -python.sh remove the three net.ipv6.conf.*.disable_ipv6 = 1 lines earlier
-  installers added to /etc/sysctl.conf and set the three settings to 0
+the installer keeps IPv6 disabled on the node (net.ipv6.conf.all,
+  .default and .lo disable_ipv6 = 1 in /etc/sysctl.conf, as before); every
+  LAS the node starts binds IPv4 (3.8.5)
 
 v3.8.5
 a las service that sets no entrypoint and command, in an order's compose

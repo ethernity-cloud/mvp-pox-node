@@ -30,7 +30,7 @@ def test_the_changelog_opens_with_the_release():
 
 def test_the_386_entry_names_the_installers_ipv6_settings():
     text = dict(entries())["3.8.6"]
-    for item in ("IPv6 enabled", "etny-node-provision-docker.sh", "disable_ipv6 = 1", "/etc/sysctl.conf"):
+    for item in ("IPv6 disabled", "disable_ipv6 = 1", "/etc/sysctl.conf", "binds IPv4"):
         assert item in text, item
 
 
