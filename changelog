@@ -1,11 +1,14 @@
+v3.8.6
+the installer leaves IPv6 enabled: ubuntu/etny-node-provision-docker.sh and
+  -python.sh remove the three net.ipv6.conf.*.disable_ipv6 = 1 lines earlier
+  installers added to /etc/sysctl.conf and set the three settings to 0
+
 v3.8.5
 a las service that sets no entrypoint and command, in an order's compose
   without a tested LAS to take them from and in an integration test's compose,
   takes the enclave templates' entrypoint "/las_entrypoint.sh" and command
   "/usr/local/bin/las -a 0.0.0.0" (logged "The las service of this tree sets
-  no start; it takes the templates' entrypoint and the IPv4 bind"); the
-  installer disables IPv6 on every node, where a LAS without the IPv4 bind
-  exits with "Unable to allocate socket"
+  no start; it takes the templates' entrypoint and the IPv4 bind")
 
 v3.8.4
 the passed integration test reads the tree's compose by its absolute path
@@ -26,17 +29,13 @@ an order's enclaves run with the LAS of a trustedzone tree that passed this
   tested LAS of one with the same platform requirement; a recorded pass
   loaded at start without a kept LAS runs its test again; an order whose
   trustedzone has no tested LAS held by docker runs its tree's own. The LAS
-  is in no enclave's measurement. A LAS started without "-a 0.0.0.0" (trees
-  built before the templates' IPv4 bind of 2026-09-08/09 or published by an
-  SDK older than 2026-09-28) binds the IPv6 wildcard and exits with
-  "Unable to allocate socket" on a host booted with ipv6.disable=1
+  is in no enclave's measurement
 
 v3.8.2
 the DP request sent behind an order's result, and the one sent after a
   cancel, carry DP_REQUEST_GAS_HEADROOM_PERCENT (25) over their gas estimate
   on an EIP-1559 network: the estimate is made at the head block and the
-  request is mined in a later one, where the pricing's accrual writes and,
-  after a result, the bucket the node's cu re-enters cost up to 1.5 % more
+  request is mined in a later one, where the call needs up to 1.5 % more
   (Amoy)
 a DO request refused for its resources is held in
   node/<network>/doreq_resources.json with the four it needs and judged again
@@ -46,9 +45,7 @@ a DO request refused for its resources is held in
 
 v3.8.1
 the LitVM LiteForge RPC is Zeeve's https://rpc.testnet.liteforge.zeeve.net/
-  (node/.env, networks.ini, the installer's vars): the LiteForge testnet moved
-  from Caldera to Zeeve on 2026-11-12 with its chain id, state and contracts,
-  and the Caldera endpoints answer 404
+  (node/.env, networks.ini, the installer's vars)
 every eth_getLogs scan reads at most <NETWORK>_LOGS_CHUNK_BLOCKS blocks per
   call (9000 unless set; 3000 on litvm_liteforge and litvm_liteforge_unsafe,
   whose RPC refuses a wider range): the ESR, broker, cancellation, output-row,

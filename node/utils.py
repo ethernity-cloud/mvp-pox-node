@@ -576,9 +576,7 @@ def compose_service_block(compose_file, service):
 
 
 # The keys of a compose service that start the LAS: its entrypoint and
-# command. A LAS started without `-a 0.0.0.0` binds the IPv6 wildcard and
-# exits with "Unable to allocate socket" on a host booted with
-# ipv6.disable=1.
+# command.
 LAS_START_KEYS = ('entrypoint', 'command')
 
 
@@ -627,8 +625,7 @@ def _reindented(lines, indent):
 
 
 # The LAS start of the enclave compose templates (etny-nodenithy and
-# etny-pynithy v3/run/docker-compose.yml): the image's entrypoint script and
-# the LAS bound to IPv4.
+# etny-pynithy v3/run/docker-compose.yml).
 LAS_TEMPLATE_START = ['    entrypoint: "/las_entrypoint.sh"\n', '    command: "/usr/local/bin/las -a 0.0.0.0"\n']
 
 
@@ -977,13 +974,8 @@ Refusal = namedtuple('Refusal', 'kind text')
 CACHED_REFUSALS = ('legacy', 'reserved', 'cu')
 
 # The gas limit of a DP request __send_dp_request sends, in percent over its
-# estimate. The estimate is made at the head block and the request is mined
-# in a later one: behind an order's result, whose settlement empties the
-# pricing bucket the request's cu re-enters (a fresh write of 22,100 gas
-# where the estimate saw 5,000); after a cancel, at a header whose accrual
-# writes cost more than the estimate's. Amoy, 2026-11-13: estimates of
-# 1,212,000 against needs of 1,224,205 to 1,230,278 behind results, and
-# 1,226,341 against 1,230,378 after a cancel.
+# estimate: the estimate is made at the head block and the request is mined
+# in a later one, where the call needs up to 1.5 % more (Amoy, 2026-11-13).
 DP_REQUEST_GAS_HEADROOM_PERCENT = 25
 
 

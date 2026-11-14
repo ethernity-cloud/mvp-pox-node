@@ -1,9 +1,9 @@
 #!/bin/bash
 set -e
 
-grep net.ipv6.conf.all.disable_ipv6 /etc/sysctl.conf || (echo "net.ipv6.conf.all.disable_ipv6 = 1" | sudo tee -a /etc/sysctl.conf)
-grep net.ipv6.conf.default.disable_ipv6 /etc/sysctl.conf || (echo "net.ipv6.conf.default.disable_ipv6 = 1" | sudo tee -a /etc/sysctl.conf)
-grep net.ipv6.conf.lo.disable_ipv6 /etc/sysctl.conf || (echo "net.ipv6.conf.lo.disable_ipv6 = 1" | sudo tee -a /etc/sysctl.conf)
+# IPv6 stays enabled: the lines earlier installers added are removed.
+sudo sed -i '/^net\.ipv6\.conf\.\(all\|default\|lo\)\.disable_ipv6 = 1$/d' /etc/sysctl.conf
+sudo sysctl -w net.ipv6.conf.all.disable_ipv6=0 net.ipv6.conf.default.disable_ipv6=0 net.ipv6.conf.lo.disable_ipv6=0
 
 sysctl -p /etc/sysctl.conf
 

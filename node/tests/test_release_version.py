@@ -25,12 +25,18 @@ def entries():
 
 def test_the_changelog_opens_with_the_release():
     top, _ = entries()[0]
-    assert top == "3.8.5"
+    assert top == "3.8.6"
+
+
+def test_the_386_entry_names_the_installers_ipv6_settings():
+    text = dict(entries())["3.8.6"]
+    for item in ("IPv6 enabled", "etny-node-provision-docker.sh", "disable_ipv6 = 1", "/etc/sysctl.conf"):
+        assert item in text, item
 
 
 def test_the_385_entry_names_the_templates_las_start():
     text = dict(entries())["3.8.5"]
-    for item in ('"/las_entrypoint.sh"', '"/usr/local/bin/las -a 0.0.0.0"', "integration test", "disables IPv6"):
+    for item in ('"/las_entrypoint.sh"', '"/usr/local/bin/las -a 0.0.0.0"', "integration test"):
         assert item in text, item
 
 
@@ -43,7 +49,7 @@ def test_the_384_entry_names_the_absolute_compose_path():
 def test_the_383_entry_names_the_tested_las_tag():
     text = dict(entries())["3.8.3"]
     for item in ("localhost:5000/etny-las:tested-<trustedzone>", "las-tested-<trustedzone>.yml", "integration test",
-                 "-a 0.0.0.0", "ipv6.disable=1", "Unable to allocate socket"):
+                 "platform requirement"):
         assert item in text, item
 
 
