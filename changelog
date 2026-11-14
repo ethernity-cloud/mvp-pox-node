@@ -1,3 +1,10 @@
+v3.8.7
+every las service the node starts runs the LAS bound to IPv4: a command that
+  names /usr/local/bin/las without a -a option gets "-a 0.0.0.0" after it, in
+  the start taken from a tested tree, in a compose's own start and in the
+  templates' (logged "The las service of this tree starts the LAS bound to
+  IPv4")
+
 v3.8.6
 the installer keeps IPv6 disabled on the node (net.ipv6.conf.all,
   .default and .lo disable_ipv6 = 1 in /etc/sysctl.conf, as before); every

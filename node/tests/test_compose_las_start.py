@@ -4,7 +4,7 @@ the las service of the trustedzone tree that passed this node's integration
 test, and the names whose tested LAS an order may run (etny-node.py
 __run_integration_test, __start_enclave_environment)."""
 from utils import (LAS_TEMPLATE_START, candidate_las_names, compose_service_block, compose_with_las_start,
-                   las_start_lines, las_start_to_apply)
+                   las_start_lines, las_start_to_apply, with_ipv4_bind)
 
 # The las service of a nodenithy trustedzone tree (bloxberg testnet tree
 # Qmd2B8..., as the compose reads on a node): two-space services, four-space
@@ -196,14 +196,51 @@ def test_a_compose_without_a_las_or_without_start_lines_is_unchanged():
     assert compose_with_las_start(OLD_ORDER_COMPOSE, []) == OLD_ORDER_COMPOSE
 
 
-def test_the_start_applied_is_the_tested_trees_else_the_templates_for_a_service_without_one(tmp_path):
+# The las service of the bloxberg mainnet pynithy tree QmW1aAD9... (the
+# compose QmRSa8...): four-space services, a command without the IPv4 bind.
+MAINNET_COMPOSE = """version: '3'
+services:
+    las:
+        container_name: las
+        privileged: true
+        image: localhost:5000/etny-las
+        entrypoint: "/las_entrypoint.sh"
+        command: "bash -c '/las_entrypoint.sh && /usr/local/bin/las | tee /var/log/las.log'"
+        restart: unless-stopped
+    etny-trustedzone:
+        image: localhost:5000/etny-trustedzone
+"""
+
+
+def test_a_command_without_the_bind_gets_it_and_one_with_it_is_kept():
+    unbound = ['    command: "bash -c \'/las_entrypoint.sh && /usr/local/bin/las | tee /var/log/las.log\'"\n']
+    assert with_ipv4_bind(unbound) == [
+        '    command: "bash -c \'/las_entrypoint.sh && /usr/local/bin/las -a 0.0.0.0 | tee /var/log/las.log\'"\n']
+    assert with_ipv4_bind(TESTED_START) == TESTED_START
+    assert with_ipv4_bind(LAS_TEMPLATE_START) == LAS_TEMPLATE_START
+    listed = ["    command:\n", "    - bash\n", "    - -c\n", "    - /las_entrypoint.sh && /usr/local/bin/las | tee x\n"]
+    assert with_ipv4_bind(listed)[3] == "    - /las_entrypoint.sh && /usr/local/bin/las -a 0.0.0.0 | tee x\n"
+    assert with_ipv4_bind(['    entrypoint: "/las_entrypoint.sh"\n']) == ['    entrypoint: "/las_entrypoint.sh"\n']
+
+
+def test_the_start_applied_is_the_tested_trees_else_the_own_else_the_templates_bound_to_ipv4(tmp_path):
     old = compose_service_block(compose_file(tmp_path, OLD_ORDER_COMPOSE), "las")
     sdk = compose_service_block(compose_file(tmp_path, SDK_ORDER_COMPOSE), "las")
+    mainnet = compose_service_block(compose_file(tmp_path, MAINNET_COMPOSE), "las")
     assert las_start_to_apply(old, TESTED_START) == TESTED_START
     assert las_start_to_apply(sdk, TESTED_START) == TESTED_START
     assert las_start_to_apply(old, []) == LAS_TEMPLATE_START
     assert las_start_to_apply(None, []) == LAS_TEMPLATE_START
     assert las_start_to_apply(sdk, []) == []
+    assert las_start_to_apply(mainnet, []) == [
+        '        entrypoint: "/las_entrypoint.sh"\n',
+        '        command: "bash -c \'/las_entrypoint.sh && /usr/local/bin/las -a 0.0.0.0 | tee /var/log/las.log\'"\n']
+    assert las_start_to_apply(mainnet, las_start_lines(mainnet)) == las_start_to_apply(mainnet, [])
+    text = compose_with_las_start(MAINNET_COMPOSE, las_start_to_apply(mainnet, []))
+    assert ('        image: localhost:5000/etny-las\n'
+            '        entrypoint: "/las_entrypoint.sh"\n'
+            '        command: "bash -c \'/las_entrypoint.sh && /usr/local/bin/las -a 0.0.0.0 | tee /var/log/las.log\'"\n'
+            '        restart: unless-stopped\n') in text
     text = compose_with_las_start(OLD_ORDER_COMPOSE, las_start_to_apply(old, []))
     assert ('    image: localhost:5000/etny-las\n'
             '    entrypoint: "/las_entrypoint.sh"\n'

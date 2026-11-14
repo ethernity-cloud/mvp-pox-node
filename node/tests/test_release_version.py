@@ -25,7 +25,13 @@ def entries():
 
 def test_the_changelog_opens_with_the_release():
     top, _ = entries()[0]
-    assert top == "3.8.6"
+    assert top == "3.8.7"
+
+
+def test_the_387_entry_names_the_ipv4_bind():
+    text = dict(entries())["3.8.7"]
+    for item in ("/usr/local/bin/las", '"-a 0.0.0.0"', "tested tree", "templates"):
+        assert item in text, item
 
 
 def test_the_386_entry_names_the_installers_ipv6_settings():

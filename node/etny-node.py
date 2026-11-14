@@ -4263,9 +4263,9 @@ class EtnyPoXNode:
         compose's las service takes that block's entrypoint and command and
         the LAS image name is pointed at the tested image. The tree's own LAS
         runs otherwise, and for the integration test, which passes no names;
-        a las service that sets no entrypoint and command takes the
-        templates' (utils.LAS_TEMPLATE_START, the LAS bound to IPv4). The LAS
-        is in no enclave's measurement. Raises EnclaveFailed when the
+        every las service starts the LAS bound to IPv4, a service without an
+        entrypoint and command taking the templates' (utils.las_start_to_apply,
+        LAS_TEMPLATE_START). The LAS is in no enclave's measurement. Raises EnclaveFailed when the
         registry, the pull or the compose fails, with the failing command's
         error."""
         logger = self.logger
@@ -4289,8 +4289,7 @@ class EtnyPoXNode:
                 logger.info(f"The LAS of {tested[0]}'s tested tree runs this order's enclaves ({tested[1]}"
                             f"{', started as that tree starts it' if tested_start else ''})")
             elif start:
-                logger.info("The las service of this tree sets no start; it takes the templates' entrypoint and "
-                            "the IPv4 bind")
+                logger.info("The las service of this tree starts the LAS bound to IPv4 (utils.las_start_to_apply)")
         tagged = self.__enclave_images_tagged(images, enclave_image_hash)
         if tagged:
             logger.info(f'Enclave images of {enclave_image_hash} are loaded; the compose runs on them')

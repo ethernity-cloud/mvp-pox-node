@@ -629,16 +629,27 @@ def _reindented(lines, indent):
 LAS_TEMPLATE_START = ['    entrypoint: "/las_entrypoint.sh"\n', '    command: "/usr/local/bin/las -a 0.0.0.0"\n']
 
 
+# The LAS binary a compose command runs and the option binding it to IPv4.
+LAS_BINARY = '/usr/local/bin/las'
+LAS_IPV4_BIND = '-a 0.0.0.0'
+
+
+def with_ipv4_bind(start_lines):
+    """`start_lines` (las_start_lines) with LAS_IPV4_BIND after every
+    LAS_BINARY not followed by a `-a` option."""
+    return [re.sub(rf'{re.escape(LAS_BINARY)}(?!\s+-a\b)', f'{LAS_BINARY} {LAS_IPV4_BIND}', line)
+            for line in start_lines]
+
+
 def las_start_to_apply(own_block, tested_start):
-    """The LAS start lines an order's or a test's compose takes: those of the
-    tested tree (`tested_start`, las_start_lines) when there are any; else
-    LAS_TEMPLATE_START when the compose's own las service (`own_block`,
-    compose_service_block) sets none; else [] (the compose keeps its own)."""
-    if tested_start:
-        return list(tested_start)
-    if not las_start_lines(own_block or ''):
-        return list(LAS_TEMPLATE_START)
-    return []
+    """The LAS start lines an order's or a test's compose takes, bound to IPv4
+    (with_ipv4_bind): those of the tested tree (`tested_start`,
+    las_start_lines) when there are any, else the compose's own las service's
+    (`own_block`, compose_service_block), else LAS_TEMPLATE_START; [] when
+    the compose's own lines are already those."""
+    own = las_start_lines(own_block or '')
+    start = with_ipv4_bind(list(tested_start) if tested_start else (own or list(LAS_TEMPLATE_START)))
+    return [] if start == own else start
 
 
 def las_start_lines(block):
