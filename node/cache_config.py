@@ -59,3 +59,9 @@ class CacheConfig:
         self.dpreq_cache_limit = 10_000_000
         self.doreq_cache_limit = 10_000_000
         self.merged_orders_cache_limit = 10_000_000
+
+    def tested_las_filepath(self, trustedzone):
+        """The las service block of the trustedzone tree that passed this
+        node's integration test for trustedzone `trustedzone` (etny-node.py
+        __run_integration_test), empty for a tree without a LAS."""
+        return self.base_path / f'las-tested-{trustedzone}.yml'

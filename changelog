@@ -1,3 +1,22 @@
+v3.8.3
+an order's enclaves run with the LAS of a trustedzone tree that passed this
+  node's integration test instead of the LAS bundled in the dApp's own tree:
+  the pass keeps the tree's las service block in
+  node/<network>/las-tested-<trustedzone>.yml and its image under the docker
+  tag localhost:5000/etny-las:tested-<trustedzone>, the order's compose takes
+  that block's entrypoint and command and its LAS image name is pointed at
+  the tested image (logged "The LAS of <trustedzone>'s tested tree runs this
+  order's enclaves"); a trustedzone without a test of its own takes the
+  tested LAS of one with the same platform requirement; a recorded pass
+  loaded at start without a kept LAS runs its test again; an order whose
+  trustedzone has no tested LAS held by docker runs its tree's own. The LAS
+  is in no enclave's measurement. Trees built before the templates' IPv4 bind
+  (etny-nodenithy 2026-09-08, etny-pynithy 2026-09-09) or published by an SDK
+  older than 2026-09-28 start the LAS without "-a 0.0.0.0", so on a host
+  booted with ipv6.disable=1 it binds the IPv6 wildcard, exits with
+  "Unable to allocate socket" and restarts, and the trustedzone fails on
+  "Resolution of LAS address las:18766 failed"
+
 v3.8.2
 the DP request sent behind an order's result, and the one sent after a
   cancel, carry DP_REQUEST_GAS_HEADROOM_PERCENT (25) over their gas estimate

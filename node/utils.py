@@ -515,6 +515,160 @@ def tree_image_tag(image, tree):
     return f"{image.rsplit(':', 1)[0]}:{tree}"
 
 
+# The repository name every image tree gives its LAS (the build scripts tag
+# the squashed las image `etny-las`).
+LAS_IMAGE_NAME = 'etny-las'
+
+
+def las_image(images):
+    """The LAS image among `images` (<repository>:<tag>, as compose_images
+    lists them): the one whose repository's last path segment is
+    LAS_IMAGE_NAME; None when the compose runs no LAS."""
+    for image in images:
+        repository = image.rsplit(':', 1)[0]
+        if repository.rsplit('/', 1)[-1] == LAS_IMAGE_NAME:
+            return image
+    return None
+
+
+def passed_las_tag(image, trustedzone):
+    """The tag docker keeps the LAS image `image` (<repository>:<tag>) of the
+    tree of trustedzone `trustedzone` under once that tree passed this node's
+    integration test: <repository>:tested-<trustedzone>."""
+    return f"{image.rsplit(':', 1)[0]}:tested-{trustedzone}"
+
+
+def candidate_las_names(trustedzone, requirements, passed):
+    """The trustedzone names whose tested LAS an order of `trustedzone` runs,
+    the order's own first, then the others among `passed` ({name: tested
+    tree}) with its platform requirement (`requirements`, {name:
+    requirement}), sorted."""
+    requirement = requirements.get(trustedzone)
+    others = sorted(name for name in passed if name != trustedzone and requirements.get(name) == requirement)
+    return [trustedzone] + others
+
+
+def _indent(line):
+    """The number of leading spaces of `line`."""
+    return len(line) - len(line.lstrip())
+
+
+def compose_service_block(compose_file, service):
+    """The lines of the service `service` of the compose file `compose_file`,
+    from its `<service>:` key, at the services' indentation (two spaces in
+    the nodenithy and SDK composes, four in the pynithy ones), to the line
+    before the next non-blank line indented no deeper than that key, as one
+    string; None when the compose has no such service."""
+    lines = []
+    indent = None
+    with open(compose_file) as fh:
+        for line in fh:
+            if indent is None:
+                found = re.match(rf'^( +){re.escape(service)}:\s*(#.*)?$', line)
+                if found is not None:
+                    indent = len(found.group(1))
+                    lines.append(line)
+                continue
+            if line.strip() and _indent(line) <= indent:
+                break
+            lines.append(line)
+    return ''.join(lines) if indent is not None else None
+
+
+# The keys of a compose service that start the LAS: its entrypoint and
+# command. The command carries `-a 0.0.0.0` since etny-nodenithy ce416d2
+# (2026-09-08), etny-pynithy b63d071 (2026-09-09) and the SDKs' publish of
+# 2026-09-28 (sdk-py 064e4a2, sdk-js 4bea607); without it the LAS binds the
+# IPv6 wildcard and exits with "Unable to allocate socket" on a host booted
+# with ipv6.disable=1.
+LAS_START_KEYS = ('entrypoint', 'command')
+
+
+def _key_groups(lines, indent, keys):
+    """[(first, last)] line index ranges of the keys `keys` at indentation
+    `indent` in `lines`, each with the lines of its value: those indented
+    deeper and the sequence items (`- `) at the key's own indentation."""
+    groups = []
+    i = 0
+    while i < len(lines):
+        found = re.match(rf'^ {{{indent}}}({"|".join(keys)}):', lines[i])
+        if found is None:
+            i += 1
+            continue
+        first = i
+        i += 1
+        while i < len(lines) and lines[i].strip():
+            depth = len(lines[i]) - len(lines[i].lstrip())
+            if depth > indent or (depth == indent and lines[i].lstrip().startswith('- ')):
+                i += 1
+            else:
+                break
+        groups.append((first, i))
+    return groups
+
+
+def _key_indent(block_lines):
+    """The indentation of the keys of a service block (its first non-blank,
+    non-comment line after the service line); two deeper than the service
+    key for a block without one."""
+    for line in block_lines[1:]:
+        if line.strip() and not line.lstrip().startswith('#'):
+            return _indent(line)
+    return _indent(block_lines[0]) + 2 if block_lines else 4
+
+
+def _reindented(lines, indent):
+    """`lines` (a key group, las_start_lines) shifted so their key sits at
+    `indent`, each ending in a newline."""
+    shift = indent - _indent(lines[0])
+    shifted = []
+    for line in lines:
+        line = line if line.endswith('\n') else line + '\n'
+        shifted.append(' ' * shift + line if shift >= 0 else line[min(-shift, _indent(line)):])
+    return shifted
+
+
+def las_start_lines(block):
+    """The lines of the LAS_START_KEYS of the service block `block`
+    (compose_service_block), each with the lines of its value; [] when the
+    block sets none (the LAS then starts as its image does)."""
+    lines = block.splitlines(keepends=True)
+    indent = _key_indent(lines)
+    kept = []
+    for first, last in _key_groups(lines, indent, LAS_START_KEYS):
+        kept.extend(lines[first:last])
+    return kept
+
+
+def compose_with_las_start(text, start_lines):
+    """The compose `text` with its `las` service's LAS_START_KEYS replaced by
+    `start_lines` (las_start_lines of a tested tree's las service), placed
+    after the service's `image` key at the service's key indentation; `text`
+    as it is when it has no `las` service or `start_lines` is empty."""
+    if not start_lines:
+        return text
+    lines = text.splitlines(keepends=True)
+    first = indent = None
+    for i, line in enumerate(lines):
+        found = re.match(r'^( +)las:\s*(#.*)?$', line)
+        if found is not None:
+            first, indent = i, len(found.group(1))
+            break
+    if first is None:
+        return text
+    last = first + 1
+    while last < len(lines) and not (lines[last].strip() and _indent(lines[last]) <= indent):
+        last += 1
+    block = lines[first:last]
+    key_indent = _key_indent(block)
+    for start, end in reversed(_key_groups(block, key_indent, LAS_START_KEYS)):
+        del block[start:end]
+    images = _key_groups(block, key_indent, ('image',))
+    at = images[0][1] if images else 1
+    block[at:at] = _reindented(start_lines, key_indent)
+    return ''.join(lines[:first] + block + lines[last:])
+
+
 def compose_services(compose_file):
     """The service names the compose file `compose_file` defines, in order:
     the keys indented two spaces under its top-level `services:`."""

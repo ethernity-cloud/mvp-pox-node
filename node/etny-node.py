@@ -22,7 +22,7 @@ from web3 import middleware
 from web3.gas_strategies.time_based import fast_gas_price_strategy
 from web3.gas_strategies.rpc import rpc_gas_price_strategy
 
-from utils import get_or_generate_uuid, run_subprocess, run_subprocess_status, environment_failure, record_enclave_image_tree, compose_images, compose_services, await_enclave_runtime, tree_image_tag,revert_reason, wallet_covers, insufficient_funds, transaction_known, placement_block_of, block_ranges, WALLET_GAS_TRANSACTIONS, retry, holds_within, pinned_within, FetchDeferrals, staging_plan, remaining_order_seconds, record_order_placement, order_placed_at, pending_approvals, record_pending_approval, forget_pending_approval, ORDER_STARTED_KEY, order_started_row, ORDER_GRACE_SECONDS, session_wallet_attestation, Storage, Cache, ListCache, ListCacheWithTimestamp, MergedOrdersCache, subprocess, get_node_geo, HardwareInfoProvider, parse_transaction_bytes_ut, looks_like_cid, canonical_cid, PEER_MULTIADDR, next_registered_image, enclave_failure, enclave_may_have_failed, docker_container_states, docker_container_log_tail, stale_integration_tests, integration_tests_due, runnable_trustedzones, image_trees, stale_image_trees, directory_size, remove_tree, removal_leftovers, integration_env, order_env, dp_terms, tip_per_cu_hour_wei, dp_request_arguments, metadata_key, record_key, resume_admits, dp_request_disposition, bounded_cancel, do_request_verdict, refusal_cached, do_request_compare, resource_refusal_holds, ResourceRefusals, gas_with_headroom, placement_refusal_disposition, settlement_line, order_window, order_relay_ledger_path, ledger_rebuild, result_fields, result_send_decision, SESSION_WALLET_KEY, SESSION_OUTPUT_KEY
+from utils import get_or_generate_uuid, run_subprocess, run_subprocess_status, environment_failure, record_enclave_image_tree, compose_images, compose_services, await_enclave_runtime, tree_image_tag, las_image, passed_las_tag, candidate_las_names, compose_service_block, las_start_lines, compose_with_las_start, revert_reason, wallet_covers, insufficient_funds, transaction_known, placement_block_of, block_ranges, WALLET_GAS_TRANSACTIONS, retry, holds_within, pinned_within, FetchDeferrals, staging_plan, remaining_order_seconds, record_order_placement, order_placed_at, pending_approvals, record_pending_approval, forget_pending_approval, ORDER_STARTED_KEY, order_started_row, ORDER_GRACE_SECONDS, session_wallet_attestation, Storage, Cache, ListCache, ListCacheWithTimestamp, MergedOrdersCache, subprocess, get_node_geo, HardwareInfoProvider, parse_transaction_bytes_ut, looks_like_cid, canonical_cid, PEER_MULTIADDR, next_registered_image, enclave_failure, enclave_may_have_failed, docker_container_states, docker_container_log_tail, stale_integration_tests, integration_tests_due, runnable_trustedzones, image_trees, stale_image_trees, directory_size, remove_tree, removal_leftovers, integration_env, order_env, dp_terms, tip_per_cu_hour_wei, dp_request_arguments, metadata_key, record_key, resume_admits, dp_request_disposition, bounded_cancel, do_request_verdict, refusal_cached, do_request_compare, resource_refusal_holds, ResourceRefusals, gas_with_headroom, placement_refusal_disposition, settlement_line, order_window, order_relay_ledger_path, ledger_rebuild, result_fields, result_send_decision, SESSION_WALLET_KEY, SESSION_OUTPUT_KEY
 import scone_image
 import pox12
 import capability
@@ -3356,7 +3356,10 @@ class EtnyPoXNode:
             self._esr_state_served = {}
             try:
                 try:
-                    self.__start_enclave_environment(enclave_image_hash)
+                    with integration_test_lock:
+                        passed = dict(integration_test_passed)
+                    self.__start_enclave_environment(
+                        enclave_image_hash, candidate_las_names(enclave_image_name, self.__trustedzones, passed))
                     # The enclave reads its ESR state as soon as it is up, and
                     # the started row's confirmation below can take a block:
                     # the state objects are staged first (the waits stage
@@ -4230,7 +4233,7 @@ class EtnyPoXNode:
                 self.logger.info(f"The next DP request was not sent with the result ({e}); it is sent after it")
         self.__enclave_environment_down()
 
-    def __start_enclave_environment(self, enclave_image_hash):
+    def __start_enclave_environment(self, enclave_image_hash, trustedzones=()):
         """Starts the enclave environment of the order whose compose is
         self.order_docker_compose_file. The previous order's enclave containers
         are removed. The compose's images (utils.compose_images) come from
@@ -4252,14 +4255,35 @@ class EtnyPoXNode:
         securelock once the trustedzone's enclave is created or after
         config.enclave_start_stagger_seconds (utils.await_enclave_runtime), so
         the two enclaves are not created through the EPC at the same time.
-        Raises EnclaveFailed when the registry, the pull or the compose fails,
-        with the failing command's error."""
+        An order runs the LAS of the first trustedzone of `trustedzones`
+        (names, the order's own first, then those with its platform
+        requirement; utils.candidate_las_names) whose tested LAS docker
+        holds (utils.passed_las_tag, kept with the las service block of the
+        tested tree by __run_integration_test and __tested_las_kept): the
+        compose's las service takes that block's entrypoint and command and
+        the LAS image name is pointed at the tested image. The tree's own LAS
+        runs otherwise, and for the integration test, which passes no names.
+        The LAS is in no enclave's measurement. Raises EnclaveFailed when the
+        registry, the pull or the compose fails, with the failing command's
+        error."""
         logger = self.logger
         base_path = str(self.cache_config.base_path)
         for name in (ENCLAVE_SECURELOCK, ENCLAVE_TRUSTEDZONE, ENCLAVE_LAS):
             run_subprocess(['docker', 'rm', '-f', name], logger)
         os.chdir(base_path)
         images = compose_images(self.order_docker_compose_file)
+        las = las_image(images)
+        tested = self.__tested_las(las, trustedzones) if las is not None else None
+        if tested is not None:
+            name, tag = tested
+            start = las_start_lines(self.__tested_las_block(name))
+            if start:
+                with open(self.order_docker_compose_file) as fh:
+                    text = fh.read()
+                with open(self.order_docker_compose_file, 'w') as fh:
+                    fh.write(compose_with_las_start(text, start))
+            logger.info(f"The LAS of {name}'s tested tree runs this order's enclaves ({tag}"
+                        f"{', started as that tree starts it' if start else ''})")
         tagged = self.__enclave_images_tagged(images, enclave_image_hash)
         if tagged:
             logger.info(f'Enclave images of {enclave_image_hash} are loaded; the compose runs on them')
@@ -4282,6 +4306,8 @@ class EtnyPoXNode:
                 raise EnclaveFailed(environment_failure('the enclave images were not pulled', output))
             for image in images:
                 run_subprocess(['docker', 'tag', image, tree_image_tag(image, enclave_image_hash)], logger)
+        if tested is not None:
+            run_subprocess(['docker', 'tag', tested[1], las], logger)
         run_subprocess(['docker-compose', '-f', self.order_docker_compose_file, 'down'], logger)
         self.__enclave_up = True
         services = compose_services(self.order_docker_compose_file)
@@ -4308,12 +4334,57 @@ class EtnyPoXNode:
         the compose names them) for the image tree `enclave_image_hash`, under
         the tags utils.tree_image_tag gives them. False when docker does not
         answer within seconds."""
-        if not images:
+        return self.__images_held([tree_image_tag(image, enclave_image_hash) for image in images])
+
+    def __tested_las(self, las, trustedzones):
+        """(name, tag) of the first trustedzone of `trustedzones` whose tested
+        LAS (utils.passed_las_tag of `las`, the compose's LAS image) docker
+        holds; None when it holds none."""
+        for name in trustedzones:
+            tag = passed_las_tag(las, name)
+            if self.__images_held([tag]):
+                return name, tag
+        return None
+
+    def __tested_las_block(self, trustedzone):
+        """The las service block saved for trustedzone `trustedzone` by its
+        passed integration test (cache_config.tested_las_filepath); '' when
+        none is saved."""
+        path = self.cache_config.tested_las_filepath(trustedzone)
+        if not os.path.exists(path):
+            return ''
+        with open(path) as fh:
+            return fh.read()
+
+    def __tested_las_kept(self, trustedzone, tree):
+        """Whether the LAS of trustedzone `trustedzone`'s tested tree `tree`
+        is kept for orders: its las service block is saved and, when the
+        tree runs a LAS, docker holds it under utils.passed_las_tag, tagged
+        here from the tree's own tag when docker holds that one."""
+        path = self.cache_config.tested_las_filepath(trustedzone)
+        if not os.path.exists(path):
+            return False
+        las = las_image(compose_images(path))
+        if las is None:
+            return True
+        tested = passed_las_tag(las, trustedzone)
+        if self.__images_held([tested]):
+            return True
+        own = tree_image_tag(las, tree)
+        if not self.__images_held([own]):
+            return False
+        run_subprocess(['docker', 'tag', own, tested], self.logger)
+        return True
+
+    @staticmethod
+    def __images_held(tags):
+        """Whether docker holds an image under every tag of `tags`. False for
+        no tags, and when docker does not answer within seconds."""
+        if not tags:
             return False
         try:
-            inspected = subprocess.run(
-                ['docker', 'image', 'inspect', *(tree_image_tag(image, enclave_image_hash) for image in images)],
-                capture_output=True, text=True, timeout=15)
+            inspected = subprocess.run(['docker', 'image', 'inspect', *tags], capture_output=True, text=True,
+                                       timeout=15)
         except (subprocess.SubprocessError, OSError):
             return False
         return inspected.returncode == 0
@@ -6573,6 +6644,22 @@ class EtnyPoXNode:
             return None
 
         logger.info(f"Integration test of {image} passed on {self.__network} (image {enclave_image_hash})")
+        # The tree's LAS, kept for the orders of this trustedzone
+        # (__start_enclave_environment): its las service block under
+        # cache_config.tested_las_filepath, empty for a tree without a LAS,
+        # and its image under utils.passed_las_tag. A compose naming a LAS
+        # image without a las service keeps neither.
+        block = compose_service_block(self.order_docker_compose_file, ENCLAVE_LAS)
+        las = las_image(compose_images(self.order_docker_compose_file))
+        if las is not None and block is None:
+            logger.warning(f"Integration test of {image}: its compose names the LAS image {las} but no las service; "
+                           f"the tested LAS is not kept")
+        else:
+            with open(self.cache_config.tested_las_filepath(image), 'w') as fh:
+                fh.write(block or '')
+            if las is not None:
+                run_subprocess(['docker', 'tag', tree_image_tag(las, enclave_image_hash), passed_las_tag(las, image)],
+                               logger)
         # The capability record's objects, written before context_test.etny
         # and read before the bucket is wiped; a trustedzone without a
         # validator set writes no capability.time.etny.
@@ -6664,10 +6751,11 @@ class EtnyPoXNode:
     def __load_passed_integration_tests(self):
         """Loads the passed tests of this network's images from the record
         store into integration_test_passed, one due for its re-measure
-        (capability.remeasure_due) into integration_test_remeasure as well
-        (it runs again now, the pass standing), and drops the records that
-        reached CU_TTL_SECONDS; then marks the loaded tests the image
-        registry's latest made stale."""
+        (capability.remeasure_due) or without its tested LAS kept
+        (__tested_las_kept) into integration_test_remeasure as well (it runs
+        again now, the pass standing), and drops the records that reached
+        CU_TTL_SECONDS; then marks the loaded tests the image registry's
+        latest made stale."""
         now = time.time()
         with integration_test_lock:
             for image in self.__integration_images:
@@ -6682,6 +6770,10 @@ class EtnyPoXNode:
                                  f"{' with a capability record' if entry.get('record') else ''}; loaded")
                 if capability.remeasure_due(entry['passed_at'], now) and image not in integration_test_remeasure:
                     self.logger.info(f"Integration test of {image}: its re-measure is due: it runs again")
+                    integration_test_remeasure.add(image)
+                    integration_test_retry[image] = (0, 0.0)
+                elif image not in integration_test_remeasure and not self.__tested_las_kept(image, entry['image_hash']):
+                    self.logger.info(f"Integration test of {image}: its tested LAS is not kept; it runs again")
                     integration_test_remeasure.add(image)
                     integration_test_retry[image] = (0, 0.0)
         self.__mark_stale_integration_tests(self.__integration_images)
