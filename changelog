@@ -1,3 +1,12 @@
+v3.8.5
+a las service that sets no entrypoint and command, in an order's compose
+  without a tested LAS to take them from and in an integration test's compose,
+  takes the enclave templates' entrypoint "/las_entrypoint.sh" and command
+  "/usr/local/bin/las -a 0.0.0.0" (logged "The las service of this tree sets
+  no start; it takes the templates' entrypoint and the IPv4 bind"); the
+  installer disables IPv6 on every node, where a LAS without the IPv4 bind
+  exits with "Unable to allocate socket"
+
 v3.8.4
 the passed integration test reads the tree's compose by its absolute path
   when it keeps the tested LAS, and a compose it cannot read leaves the LAS

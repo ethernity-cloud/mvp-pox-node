@@ -626,6 +626,24 @@ def _reindented(lines, indent):
     return shifted
 
 
+# The LAS start of the enclave compose templates (etny-nodenithy and
+# etny-pynithy v3/run/docker-compose.yml): the image's entrypoint script and
+# the LAS bound to IPv4.
+LAS_TEMPLATE_START = ['    entrypoint: "/las_entrypoint.sh"\n', '    command: "/usr/local/bin/las -a 0.0.0.0"\n']
+
+
+def las_start_to_apply(own_block, tested_start):
+    """The LAS start lines an order's or a test's compose takes: those of the
+    tested tree (`tested_start`, las_start_lines) when there are any; else
+    LAS_TEMPLATE_START when the compose's own las service (`own_block`,
+    compose_service_block) sets none; else [] (the compose keeps its own)."""
+    if tested_start:
+        return list(tested_start)
+    if not las_start_lines(own_block or ''):
+        return list(LAS_TEMPLATE_START)
+    return []
+
+
 def las_start_lines(block):
     """The lines of the LAS_START_KEYS of the service block `block`
     (compose_service_block), each with the lines of its value; [] when the

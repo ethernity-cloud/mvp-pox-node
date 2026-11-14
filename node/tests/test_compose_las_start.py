@@ -3,7 +3,8 @@ candidate_las_names: an order's compose takes the entrypoint and command of
 the las service of the trustedzone tree that passed this node's integration
 test, and the names whose tested LAS an order may run (etny-node.py
 __run_integration_test, __start_enclave_environment)."""
-from utils import candidate_las_names, compose_service_block, compose_with_las_start, las_start_lines
+from utils import (LAS_TEMPLATE_START, candidate_las_names, compose_service_block, compose_with_las_start,
+                   las_start_lines, las_start_to_apply)
 
 # The las service of a nodenithy trustedzone tree (bloxberg testnet tree
 # Qmd2B8..., as the compose reads on a node): two-space services, four-space
@@ -193,6 +194,21 @@ def test_a_compose_without_a_las_or_without_start_lines_is_unchanged():
     no_las = "services:\n  etny-trustedzone:\n    image: localhost:5000/etny-trustedzone\n"
     assert compose_with_las_start(no_las, TESTED_START) == no_las
     assert compose_with_las_start(OLD_ORDER_COMPOSE, []) == OLD_ORDER_COMPOSE
+
+
+def test_the_start_applied_is_the_tested_trees_else_the_templates_for_a_service_without_one(tmp_path):
+    old = compose_service_block(compose_file(tmp_path, OLD_ORDER_COMPOSE), "las")
+    sdk = compose_service_block(compose_file(tmp_path, SDK_ORDER_COMPOSE), "las")
+    assert las_start_to_apply(old, TESTED_START) == TESTED_START
+    assert las_start_to_apply(sdk, TESTED_START) == TESTED_START
+    assert las_start_to_apply(old, []) == LAS_TEMPLATE_START
+    assert las_start_to_apply(None, []) == LAS_TEMPLATE_START
+    assert las_start_to_apply(sdk, []) == []
+    text = compose_with_las_start(OLD_ORDER_COMPOSE, las_start_to_apply(old, []))
+    assert ('    image: localhost:5000/etny-las\n'
+            '    entrypoint: "/las_entrypoint.sh"\n'
+            '    command: "/usr/local/bin/las -a 0.0.0.0"\n'
+            '    restart: unless-stopped\n') in text
 
 
 def test_the_candidates_are_the_own_name_then_the_passed_of_its_requirement():

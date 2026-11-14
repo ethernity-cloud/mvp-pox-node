@@ -22,7 +22,7 @@ from web3 import middleware
 from web3.gas_strategies.time_based import fast_gas_price_strategy
 from web3.gas_strategies.rpc import rpc_gas_price_strategy
 
-from utils import get_or_generate_uuid, run_subprocess, run_subprocess_status, environment_failure, record_enclave_image_tree, compose_images, compose_services, await_enclave_runtime, tree_image_tag, las_image, passed_las_tag, candidate_las_names, compose_service_block, las_start_lines, compose_with_las_start, revert_reason, wallet_covers, insufficient_funds, transaction_known, placement_block_of, block_ranges, WALLET_GAS_TRANSACTIONS, retry, holds_within, pinned_within, FetchDeferrals, staging_plan, remaining_order_seconds, record_order_placement, order_placed_at, pending_approvals, record_pending_approval, forget_pending_approval, ORDER_STARTED_KEY, order_started_row, ORDER_GRACE_SECONDS, session_wallet_attestation, Storage, Cache, ListCache, ListCacheWithTimestamp, MergedOrdersCache, subprocess, get_node_geo, HardwareInfoProvider, parse_transaction_bytes_ut, looks_like_cid, canonical_cid, PEER_MULTIADDR, next_registered_image, enclave_failure, enclave_may_have_failed, docker_container_states, docker_container_log_tail, stale_integration_tests, integration_tests_due, runnable_trustedzones, image_trees, stale_image_trees, directory_size, remove_tree, removal_leftovers, integration_env, order_env, dp_terms, tip_per_cu_hour_wei, dp_request_arguments, metadata_key, record_key, resume_admits, dp_request_disposition, bounded_cancel, do_request_verdict, refusal_cached, do_request_compare, resource_refusal_holds, ResourceRefusals, gas_with_headroom, placement_refusal_disposition, settlement_line, order_window, order_relay_ledger_path, ledger_rebuild, result_fields, result_send_decision, SESSION_WALLET_KEY, SESSION_OUTPUT_KEY
+from utils import get_or_generate_uuid, run_subprocess, run_subprocess_status, environment_failure, record_enclave_image_tree, compose_images, compose_services, await_enclave_runtime, tree_image_tag, las_image, passed_las_tag, candidate_las_names, compose_service_block, las_start_lines, las_start_to_apply, compose_with_las_start, revert_reason, wallet_covers, insufficient_funds, transaction_known, placement_block_of, block_ranges, WALLET_GAS_TRANSACTIONS, retry, holds_within, pinned_within, FetchDeferrals, staging_plan, remaining_order_seconds, record_order_placement, order_placed_at, pending_approvals, record_pending_approval, forget_pending_approval, ORDER_STARTED_KEY, order_started_row, ORDER_GRACE_SECONDS, session_wallet_attestation, Storage, Cache, ListCache, ListCacheWithTimestamp, MergedOrdersCache, subprocess, get_node_geo, HardwareInfoProvider, parse_transaction_bytes_ut, looks_like_cid, canonical_cid, PEER_MULTIADDR, next_registered_image, enclave_failure, enclave_may_have_failed, docker_container_states, docker_container_log_tail, stale_integration_tests, integration_tests_due, runnable_trustedzones, image_trees, stale_image_trees, directory_size, remove_tree, removal_leftovers, integration_env, order_env, dp_terms, tip_per_cu_hour_wei, dp_request_arguments, metadata_key, record_key, resume_admits, dp_request_disposition, bounded_cancel, do_request_verdict, refusal_cached, do_request_compare, resource_refusal_holds, ResourceRefusals, gas_with_headroom, placement_refusal_disposition, settlement_line, order_window, order_relay_ledger_path, ledger_rebuild, result_fields, result_send_decision, SESSION_WALLET_KEY, SESSION_OUTPUT_KEY
 import scone_image
 import pox12
 import capability
@@ -4262,8 +4262,10 @@ class EtnyPoXNode:
         tested tree by __run_integration_test and __tested_las_kept): the
         compose's las service takes that block's entrypoint and command and
         the LAS image name is pointed at the tested image. The tree's own LAS
-        runs otherwise, and for the integration test, which passes no names.
-        The LAS is in no enclave's measurement. Raises EnclaveFailed when the
+        runs otherwise, and for the integration test, which passes no names;
+        a las service that sets no entrypoint and command takes the
+        templates' (utils.LAS_TEMPLATE_START, the LAS bound to IPv4). The LAS
+        is in no enclave's measurement. Raises EnclaveFailed when the
         registry, the pull or the compose fails, with the failing command's
         error."""
         logger = self.logger
@@ -4274,16 +4276,21 @@ class EtnyPoXNode:
         images = compose_images(self.order_docker_compose_file)
         las = las_image(images)
         tested = self.__tested_las(las, trustedzones) if las is not None else None
-        if tested is not None:
-            name, tag = tested
-            start = las_start_lines(self.__tested_las_block(name))
+        if las is not None:
+            tested_start = las_start_lines(self.__tested_las_block(tested[0])) if tested is not None else []
+            start = las_start_to_apply(compose_service_block(self.order_docker_compose_file, ENCLAVE_LAS),
+                                       tested_start)
             if start:
                 with open(self.order_docker_compose_file) as fh:
                     text = fh.read()
                 with open(self.order_docker_compose_file, 'w') as fh:
                     fh.write(compose_with_las_start(text, start))
-            logger.info(f"The LAS of {name}'s tested tree runs this order's enclaves ({tag}"
-                        f"{', started as that tree starts it' if start else ''})")
+            if tested is not None:
+                logger.info(f"The LAS of {tested[0]}'s tested tree runs this order's enclaves ({tested[1]}"
+                            f"{', started as that tree starts it' if tested_start else ''})")
+            elif start:
+                logger.info("The las service of this tree sets no start; it takes the templates' entrypoint and "
+                            "the IPv4 bind")
         tagged = self.__enclave_images_tagged(images, enclave_image_hash)
         if tagged:
             logger.info(f'Enclave images of {enclave_image_hash} are loaded; the compose runs on them')

@@ -25,7 +25,13 @@ def entries():
 
 def test_the_changelog_opens_with_the_release():
     top, _ = entries()[0]
-    assert top == "3.8.4"
+    assert top == "3.8.5"
+
+
+def test_the_385_entry_names_the_templates_las_start():
+    text = dict(entries())["3.8.5"]
+    for item in ('"/las_entrypoint.sh"', '"/usr/local/bin/las -a 0.0.0.0"', "integration test", "disables IPv6"):
+        assert item in text, item
 
 
 def test_the_384_entry_names_the_absolute_compose_path():
