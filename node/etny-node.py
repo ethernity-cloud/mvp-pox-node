@@ -6648,18 +6648,24 @@ class EtnyPoXNode:
         # (__start_enclave_environment): its las service block under
         # cache_config.tested_las_filepath, empty for a tree without a LAS,
         # and its image under utils.passed_las_tag. A compose naming a LAS
-        # image without a las service keeps neither.
-        block = compose_service_block(self.order_docker_compose_file, ENCLAVE_LAS)
-        las = las_image(compose_images(self.order_docker_compose_file))
-        if las is not None and block is None:
-            logger.warning(f"Integration test of {image}: its compose names the LAS image {las} but no las service; "
-                           f"the tested LAS is not kept")
-        else:
-            with open(self.cache_config.tested_las_filepath(image), 'w') as fh:
-                fh.write(block or '')
-            if las is not None:
-                run_subprocess(['docker', 'tag', tree_image_tag(las, enclave_image_hash), passed_las_tag(las, image)],
-                               logger)
+        # image without a las service keeps neither. The compose is read by
+        # its absolute path: the process's working directory is shared by the
+        # network threads, which move it to their own base_path.
+        compose = os.path.join(str(self.cache_config.base_path), self.order_docker_compose_file)
+        try:
+            block = compose_service_block(compose, ENCLAVE_LAS)
+            las = las_image(compose_images(compose))
+            if las is not None and block is None:
+                logger.warning(f"Integration test of {image}: its compose names the LAS image {las} but no las "
+                               f"service; the tested LAS is not kept")
+            else:
+                with open(self.cache_config.tested_las_filepath(image), 'w') as fh:
+                    fh.write(block or '')
+                if las is not None:
+                    run_subprocess(['docker', 'tag', tree_image_tag(las, enclave_image_hash),
+                                    passed_las_tag(las, image)], logger)
+        except OSError as e:
+            logger.warning(f"Integration test of {image}: its tested LAS is not kept ({e})")
         # The capability record's objects, written before context_test.etny
         # and read before the bucket is wiped; a trustedzone without a
         # validator set writes no capability.time.etny.

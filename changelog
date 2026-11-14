@@ -1,3 +1,13 @@
+v3.8.4
+the passed integration test reads the tree's compose by its absolute path
+  when it keeps the tested LAS, and a compose it cannot read leaves the LAS
+  unkept with a warning instead of failing the pass: the process's working
+  directory is shared by the network threads, which move it to their own
+  node/<network>/, so a node serving several networks read another network's
+  compose, or none, at the pass (etnyvm1, 2026-11-14: etny-pynithy-testnet
+  "failed: [Errno 2] No such file or directory: ./orders/integration_test/
+  docker-compose.yml", etny-nodenithy-testnet kept an empty LAS record)
+
 v3.8.3
 an order's enclaves run with the LAS of a trustedzone tree that passed this
   node's integration test instead of the LAS bundled in the dApp's own tree:

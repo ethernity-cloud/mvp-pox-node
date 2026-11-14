@@ -25,7 +25,13 @@ def entries():
 
 def test_the_changelog_opens_with_the_release():
     top, _ = entries()[0]
-    assert top == "3.8.3"
+    assert top == "3.8.4"
+
+
+def test_the_384_entry_names_the_absolute_compose_path():
+    text = dict(entries())["3.8.4"]
+    for item in ("absolute path", "working", "node/<network>/", "Errno 2", "empty LAS record"):
+        assert item in text, item
 
 
 def test_the_383_entry_names_the_tested_las_tag():
