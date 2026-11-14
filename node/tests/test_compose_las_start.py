@@ -5,9 +5,9 @@ test, and the names whose tested LAS an order may run (etny-node.py
 __run_integration_test, __start_enclave_environment)."""
 from utils import candidate_las_names, compose_service_block, compose_with_las_start, las_start_lines
 
-# The las service of a nodenithy trustedzone tree with the IPv4 bind of
-# 2026-09-08 (bloxberg testnet tree Qmd2B8..., as the compose reads on a
-# node): two-space services, four-space keys.
+# The las service of a nodenithy trustedzone tree (bloxberg testnet tree
+# Qmd2B8..., as the compose reads on a node): two-space services, four-space
+# keys, the start keys set.
 TESTED_BLOCK = """  las:
     container_name: las
     privileged: true
@@ -45,8 +45,8 @@ networks:
         external: true
 """
 
-# A dApp tree published before the bind (bloxberg mainnet order 1939): the
-# LAS starts as its image does.
+# A dApp tree whose las service sets no start keys (bloxberg mainnet order
+# 1939): the LAS starts as its image does.
 OLD_ORDER_COMPOSE = """version: '3'
 services:
   etny-securelock:
@@ -71,8 +71,8 @@ services:
     image: localhost:5000/etny-trustedzone
 """
 
-# A dApp tree sdk-py publishes since 2026-09-28 (yaml.safe_dump: sequences at
-# the key's indentation, the start keys plain scalars after the healthcheck).
+# A dApp tree sdk-py publishes (yaml.safe_dump: sequences at the key's
+# indentation, the start keys plain scalars after the healthcheck).
 SDK_ORDER_COMPOSE = """services:
   las:
     container_name: las

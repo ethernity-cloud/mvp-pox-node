@@ -576,11 +576,9 @@ def compose_service_block(compose_file, service):
 
 
 # The keys of a compose service that start the LAS: its entrypoint and
-# command. The command carries `-a 0.0.0.0` since etny-nodenithy ce416d2
-# (2026-09-08), etny-pynithy b63d071 (2026-09-09) and the SDKs' publish of
-# 2026-09-28 (sdk-py 064e4a2, sdk-js 4bea607); without it the LAS binds the
-# IPv6 wildcard and exits with "Unable to allocate socket" on a host booted
-# with ipv6.disable=1.
+# command. A LAS started without `-a 0.0.0.0` binds the IPv6 wildcard and
+# exits with "Unable to allocate socket" on a host booted with
+# ipv6.disable=1.
 LAS_START_KEYS = ('entrypoint', 'command')
 
 
