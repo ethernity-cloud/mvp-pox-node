@@ -25,7 +25,13 @@ def entries():
 
 def test_the_changelog_opens_with_the_release():
     top, _ = entries()[0]
-    assert top == "3.8.10"
+    assert top == "3.8.11"
+
+
+def test_the_3811_entry_names_the_scone_queues():
+    text = dict(entries())["3.8.11"]
+    for item in ("ETNY_SCONE_QUEUES", "utils.scone_queues", "SCONE_QUEUES", "64 TCS", "cuv 3"):
+        assert item in text, item
 
 
 def test_the_3810_entry_names_the_settlement_reward():

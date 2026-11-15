@@ -1,3 +1,14 @@
+v3.8.11
+the agent exports ETNY_SCONE_QUEUES, twice the node's CPUs within 4 and 64
+  (utils.scone_queues), into its own environment at start, and the enclave
+  composes of the trustedzone and the securelock substitute it into
+  SCONE_QUEUES (the enclave threads each image runs its application threads
+  on; the images are signed with 64 TCS and ship four queues as the floor);
+  the trustedzone's benchmark runs the same count of workers (inside the
+  enclave SCONE reports the queues as the CPUs), so a node's cu is measured
+  on all its cores (benchmark.json cuv 3: workersPerCpu 1, workersMax 64,
+  the probe at the full 50,000 rounds)
+
 v3.8.10
 the reward banner after a result names, on a recorded 1.2 order, the node's
   payout from the settlement (the reader's settlementOf: work plus the chain

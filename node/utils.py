@@ -1071,6 +1071,23 @@ def has_standing_dp_request(dp_request_id):
     return dp_request_id is not None
 
 
+# The enclave images are signed with 64 TCS (scone-signer --tcs=64) and ship
+# /etc/sgx-musl.conf with four queues, the floor SCONE accepts.
+SCONE_QUEUES_MIN = 4
+SCONE_QUEUES_MAX = 64
+
+
+def scone_queues(cpus):
+    """The SCONE queue count (enclave threads) of the trustedzone and the
+    securelock on a node with `cpus` CPUs: twice the CPUs, at least
+    SCONE_QUEUES_MIN and at most SCONE_QUEUES_MAX. The agent exports it as
+    ETNY_SCONE_QUEUES, which the enclave composes substitute into
+    SCONE_QUEUES; inside the enclave the SCONE runtime reports that count as
+    the CPUs, so the trustedzone's benchmark runs the same count of workers
+    (benchmark.json workersPerCpu 1, workersMax 64)."""
+    return max(SCONE_QUEUES_MIN, min(SCONE_QUEUES_MAX, 2 * int(cpus)))
+
+
 def resume_admits(terms, now):
     """What the resume does with an AVAILABLE DP request of a 1.2 contract:
     'cancel' one without terms (added through a legacy call), 'refresh' one
