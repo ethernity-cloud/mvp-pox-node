@@ -1064,6 +1064,13 @@ def refresh_due(expires_at, now):
     return expires_at - now <= DP_REFRESH_MARGIN_SECONDS
 
 
+def has_standing_dp_request(dp_request_id):
+    """Whether the agent holds a standing DP request: its chain id is stored,
+    None before one is adopted. Request ids count from 0, so the first
+    request on a storage is a standing request too."""
+    return dp_request_id is not None
+
+
 def resume_admits(terms, now):
     """What the resume does with an AVAILABLE DP request of a 1.2 contract:
     'cancel' one without terms (added through a legacy call), 'refresh' one

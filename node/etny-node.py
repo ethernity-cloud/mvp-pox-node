@@ -22,7 +22,7 @@ from web3 import middleware
 from web3.gas_strategies.time_based import fast_gas_price_strategy
 from web3.gas_strategies.rpc import rpc_gas_price_strategy
 
-from utils import get_or_generate_uuid, run_subprocess, run_subprocess_status, environment_failure, record_enclave_image_tree, compose_images, compose_services, await_enclave_runtime, tree_image_tag, las_image, passed_las_tag, candidate_las_names, compose_service_block, las_start_lines, las_start_to_apply, compose_with_las_start, revert_reason, wallet_covers, insufficient_funds, transaction_known, placement_block_of, block_ranges, WALLET_GAS_TRANSACTIONS, retry, holds_within, pinned_within, FetchDeferrals, staging_plan, remaining_order_seconds, record_order_placement, order_placed_at, pending_approvals, record_pending_approval, forget_pending_approval, ORDER_STARTED_KEY, order_started_row, ORDER_GRACE_SECONDS, session_wallet_attestation, Storage, Cache, ListCache, ListCacheWithTimestamp, MergedOrdersCache, subprocess, get_node_geo, HardwareInfoProvider, parse_transaction_bytes_ut, looks_like_cid, canonical_cid, PEER_MULTIADDR, next_registered_image, enclave_failure, enclave_may_have_failed, docker_container_states, docker_container_log_tail, stale_integration_tests, integration_tests_due, runnable_trustedzones, image_trees, stale_image_trees, directory_size, remove_tree, removal_leftovers, integration_env, order_env, dp_terms, tip_per_cu_hour_wei, dp_request_arguments, metadata_key, record_key, resume_admits, dp_request_disposition, bounded_cancel, do_request_verdict, refusal_cached, do_request_compare, resource_refusal_holds, ResourceRefusals, gas_with_headroom, placement_refusal_disposition, settlement_line, order_window, order_relay_ledger_path, ledger_rebuild, result_fields, result_send_decision, SESSION_WALLET_KEY, SESSION_OUTPUT_KEY
+from utils import get_or_generate_uuid, run_subprocess, run_subprocess_status, environment_failure, record_enclave_image_tree, compose_images, compose_services, await_enclave_runtime, tree_image_tag, las_image, passed_las_tag, candidate_las_names, compose_service_block, las_start_lines, las_start_to_apply, compose_with_las_start, revert_reason, wallet_covers, insufficient_funds, transaction_known, placement_block_of, block_ranges, WALLET_GAS_TRANSACTIONS, retry, holds_within, pinned_within, FetchDeferrals, staging_plan, remaining_order_seconds, record_order_placement, order_placed_at, pending_approvals, record_pending_approval, forget_pending_approval, ORDER_STARTED_KEY, order_started_row, ORDER_GRACE_SECONDS, session_wallet_attestation, Storage, Cache, ListCache, ListCacheWithTimestamp, MergedOrdersCache, subprocess, get_node_geo, HardwareInfoProvider, parse_transaction_bytes_ut, looks_like_cid, canonical_cid, PEER_MULTIADDR, next_registered_image, enclave_failure, enclave_may_have_failed, docker_container_states, docker_container_log_tail, stale_integration_tests, integration_tests_due, runnable_trustedzones, image_trees, stale_image_trees, directory_size, remove_tree, removal_leftovers, integration_env, order_env, dp_terms, tip_per_cu_hour_wei, dp_request_arguments, metadata_key, record_key, resume_admits, has_standing_dp_request, dp_request_disposition, bounded_cancel, do_request_verdict, refusal_cached, do_request_compare, resource_refusal_holds, ResourceRefusals, gas_with_headroom, placement_refusal_disposition, settlement_line, order_window, order_relay_ledger_path, ledger_rebuild, result_fields, result_send_decision, SESSION_WALLET_KEY, SESSION_OUTPUT_KEY
 import scone_image
 import pox12
 import capability
@@ -458,7 +458,9 @@ class EtnyPoXNode:
         self.__enclave_up = False
         # The CAS selected for this network's tasks and when (__resolve_cas_for_task).
         self.__cas_selection = None
-        self.__dprequest = 0
+        # The standing DP request's chain id, or None before one is adopted;
+        # the first request on a storage has id 0 (utils.has_standing_dp_request).
+        self.__dprequest = None
         # The block the current DP request was confirmed in, where the idle
         # tick's DPRequestCancelled scan starts without a persisted cursor.
         self.__cancel_scan_from = None
@@ -2421,7 +2423,7 @@ class EtnyPoXNode:
         return is (True, terms). A request whose refresh is due is refreshed
         (__refresh_dp_request). Returns (False, terms) otherwise, terms None
         on a legacy contract or when the read failed."""
-        if not self.__pox_is_12 or not self.__dprequest:
+        if not self.__pox_is_12 or not has_standing_dp_request(self.__dprequest):
             return False, None
         logger = self.logger
         try:
@@ -2467,7 +2469,7 @@ class EtnyPoXNode:
         1.2 contract, while this node's current DP request is AVAILABLE and
         its refresh is due, it is refreshed; nothing is read for a request an
         order holds. A read that fails is logged at debug."""
-        if not self.__pox_is_12 or not self.__dprequest:
+        if not self.__pox_is_12 or not has_standing_dp_request(self.__dprequest):
             return
         try:
             request = DPRequest(self.__etny.caller()._getDPRequest(self.__dprequest))
@@ -2791,7 +2793,7 @@ class EtnyPoXNode:
         pre-flight call must answer acted; True when sent. A started
         reservation whose hint was sent or dropped is forgotten."""
         logger = self.logger
-        if not self.__dprequest:
+        if not has_standing_dp_request(self.__dprequest):
             return False
         try:
             request = DPRequest(self.__etny.caller()._getDPRequest(self.__dprequest))
@@ -2862,7 +2864,7 @@ class EtnyPoXNode:
         ('approve'); a PROCESSING one is run ('run'); a CANCELED one on an
         AVAILABLE request is the offer waiting for the next placement, its
         orders-cache entry dropped ('offer'). True when an order was run."""
-        if not self.__pox_is_12 or self.__broker is None or not self.__dprequest:
+        if not self.__pox_is_12 or self.__broker is None or not has_standing_dp_request(self.__dprequest):
             return False
         logger = self.logger
         try:
@@ -2966,7 +2968,7 @@ class EtnyPoXNode:
         record with its trustedzone's passed test, so the test runs again
         before the next request; the strike reason leaves both. A scan the
         RPC does not answer returns False and keeps its cursor."""
-        if not self.__pox_is_12 or not self.__dprequest:
+        if not self.__pox_is_12 or not has_standing_dp_request(self.__dprequest):
             return False
         logger = self.logger
         start = self.__cancel_scan_from

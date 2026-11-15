@@ -25,7 +25,13 @@ def entries():
 
 def test_the_changelog_opens_with_the_release():
     top, _ = entries()[0]
-    assert top == "3.8.8"
+    assert top == "3.8.9"
+
+
+def test_the_389_entry_names_the_standing_request_gate():
+    text = dict(entries())["3.8.9"]
+    for item in ("has_standing_dp_request", "DP request 0", "DPRequestCancelled"):
+        assert item in text
 
 
 def test_the_388_entry_names_the_bloxberg_testnet_contracts():

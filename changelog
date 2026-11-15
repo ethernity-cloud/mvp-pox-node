@@ -1,3 +1,12 @@
+v3.8.9
+the idle tick's standing-request gates (the terms tick, the enclave wait's
+  refresh, the supervise hint, the broker's placed order, the DPRequestCancelled
+  scan) test the stored request id with utils.has_standing_dp_request, None
+  before a request is adopted, instead of its truth value: DP request 0, the
+  first request on a storage, was skipped by all five, so that node judged no
+  DO request, never refreshed its request and missed the validators' cancel
+  (rig node 6 on bloxberg testnet, 2026-11-14 to 15)
+
 v3.8.8
 bloxberg_testnet and bloxberg_testnet_unsafe bind the PoX 1.2 implementation
   0x7E7C6eB435E3687CfDfe18C09C0340eb70567d7b (pox-smart-contract-litvm, on its
