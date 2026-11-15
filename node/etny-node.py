@@ -22,7 +22,7 @@ from web3 import middleware
 from web3.gas_strategies.time_based import fast_gas_price_strategy
 from web3.gas_strategies.rpc import rpc_gas_price_strategy
 
-from utils import get_or_generate_uuid, run_subprocess, run_subprocess_status, environment_failure, record_enclave_image_tree, compose_images, compose_services, await_enclave_runtime, tree_image_tag, las_image, passed_las_tag, candidate_las_names, compose_service_block, las_start_lines, las_start_to_apply, compose_with_las_start, revert_reason, wallet_covers, insufficient_funds, transaction_known, placement_block_of, block_ranges, WALLET_GAS_TRANSACTIONS, retry, holds_within, pinned_within, FetchDeferrals, staging_plan, remaining_order_seconds, record_order_placement, order_placed_at, pending_approvals, record_pending_approval, forget_pending_approval, ORDER_STARTED_KEY, order_started_row, ORDER_GRACE_SECONDS, session_wallet_attestation, Storage, Cache, ListCache, ListCacheWithTimestamp, MergedOrdersCache, subprocess, get_node_geo, HardwareInfoProvider, parse_transaction_bytes_ut, looks_like_cid, canonical_cid, PEER_MULTIADDR, next_registered_image, enclave_failure, enclave_may_have_failed, docker_container_states, docker_container_log_tail, stale_integration_tests, integration_tests_due, runnable_trustedzones, image_trees, stale_image_trees, directory_size, remove_tree, removal_leftovers, integration_env, order_env, dp_terms, tip_per_cu_hour_wei, dp_request_arguments, metadata_key, record_key, resume_admits, has_standing_dp_request, dp_request_disposition, bounded_cancel, do_request_verdict, refusal_cached, do_request_compare, resource_refusal_holds, ResourceRefusals, gas_with_headroom, placement_refusal_disposition, settlement_line, order_window, order_relay_ledger_path, ledger_rebuild, result_fields, result_send_decision, SESSION_WALLET_KEY, SESSION_OUTPUT_KEY
+from utils import get_or_generate_uuid, run_subprocess, run_subprocess_status, environment_failure, record_enclave_image_tree, compose_images, compose_services, await_enclave_runtime, tree_image_tag, las_image, passed_las_tag, candidate_las_names, compose_service_block, las_start_lines, las_start_to_apply, compose_with_las_start, revert_reason, wallet_covers, insufficient_funds, transaction_known, placement_block_of, block_ranges, WALLET_GAS_TRANSACTIONS, retry, holds_within, pinned_within, FetchDeferrals, staging_plan, remaining_order_seconds, record_order_placement, order_placed_at, pending_approvals, record_pending_approval, forget_pending_approval, ORDER_STARTED_KEY, order_started_row, ORDER_GRACE_SECONDS, session_wallet_attestation, Storage, Cache, ListCache, ListCacheWithTimestamp, MergedOrdersCache, subprocess, get_node_geo, HardwareInfoProvider, parse_transaction_bytes_ut, looks_like_cid, canonical_cid, PEER_MULTIADDR, next_registered_image, enclave_failure, enclave_may_have_failed, docker_container_states, docker_container_log_tail, stale_integration_tests, integration_tests_due, runnable_trustedzones, image_trees, stale_image_trees, directory_size, remove_tree, removal_leftovers, integration_env, order_env, dp_terms, tip_per_cu_hour_wei, dp_request_arguments, metadata_key, record_key, resume_admits, has_standing_dp_request, dp_request_disposition, bounded_cancel, do_request_verdict, refusal_cached, do_request_compare, resource_refusal_holds, ResourceRefusals, gas_with_headroom, placement_refusal_disposition, settlement_line, settlement_reward_wei, order_window, order_relay_ledger_path, ledger_rebuild, result_fields, result_send_decision, SESSION_WALLET_KEY, SESSION_OUTPUT_KEY
 import scone_image
 import pox12
 import capability
@@ -3138,24 +3138,42 @@ class EtnyPoXNode:
 
 
     def calculate_reward(self):
+        """Logs the node's payout for the order just closed: on a recorded 1.2
+        order the settlement's work plus the chain gas repaid (the reader's
+        settlementOf, what validate transfers to the node), with the
+        settlement line; on a legacy order the DO request's price less the
+        network and enclave fees of the network's reward type."""
         logger = self.logger
 
         [order_id, order] = self._getOrder()
 
-        do_req = DORequest(self.__etny.caller()._getDORequest(order.do_req))
-        if self.__network_config.reward_type == 1:
-            total_amount = do_req.price * do_req.duration
-            network_fee = total_amount * self.__network_config.network_fee / 100
-            enclave_fee = total_amount * self.__network_config.enclave_fee / 100
-            operator_fee = total_amount - network_fee - enclave_fee
-            reward = round(operator_fee, 2)
-        elif self.__network_config.reward_type == 2:
-            total_amount = do_req.price * do_req.duration
-            base_amount = (total_amount * 100) / ( 100 + self.__network_config.network_fee + self.__network_config.enclave_fee )
-            network_fee = base_amount * self.__network_config.network_fee / 100
-            enclave_fee = base_amount * self.__network_config.enclave_fee / 100
-            operator_fee = total_amount - network_fee - enclave_fee
-            reward = round(operator_fee, 2)
+        settlement = None
+        line = None
+        if self.__reader is not None:
+            try:
+                settlement = self.__reader.caller().settlementOf(int(order_id))
+            except Exception as e:
+                logger.info(f"Order {order_id}: its settlement was not read ({e})")
+            else:
+                line = settlement_line(order_id, settlement)
+        reward_wei = settlement_reward_wei(settlement) if settlement is not None else None
+        if reward_wei is not None:
+            reward = f"{reward_wei / 10 ** 18:.4f}"
+        else:
+            do_req = DORequest(self.__etny.caller()._getDORequest(order.do_req))
+            if self.__network_config.reward_type == 1:
+                total_amount = do_req.price * do_req.duration
+                network_fee = total_amount * self.__network_config.network_fee / 100
+                enclave_fee = total_amount * self.__network_config.enclave_fee / 100
+                operator_fee = total_amount - network_fee - enclave_fee
+                reward = round(operator_fee, 2)
+            elif self.__network_config.reward_type == 2:
+                total_amount = do_req.price * do_req.duration
+                base_amount = (total_amount * 100) / ( 100 + self.__network_config.network_fee + self.__network_config.enclave_fee )
+                network_fee = base_amount * self.__network_config.network_fee / 100
+                enclave_fee = base_amount * self.__network_config.enclave_fee / 100
+                operator_fee = total_amount - network_fee - enclave_fee
+                reward = round(operator_fee, 2)
 
         logger.info("***")
         logger.info(f"Reward: {reward} {self.__network_config.token_name}. You’ve earned it. ")
@@ -3164,14 +3182,8 @@ class EtnyPoXNode:
         # A recorded 1.2 order's settlement (the reader's settlementOf): the
         # hours billed, the work, the fees, the chain gas repaid and the
         # client's refund.
-        if self.__reader is not None:
-            try:
-                line = settlement_line(order_id, self.__reader.caller().settlementOf(int(order_id)))
-            except Exception as e:
-                logger.info(f"Order {order_id}: its settlement was not read ({e})")
-            else:
-                if line is not None:
-                    logger.info(line)
+        if line is not None:
+            logger.info(line)
 
         if self.__network_config.network_type == "MAINNET":
             logger.info(f"HODL your {self.__network_config.token_name} for long-term growth. Payout after validation.")

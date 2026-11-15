@@ -1215,6 +1215,16 @@ def settlement_line(order_id, raw):
             f"refund {settlement.refund_wei} wei, outcome {settlement.outcome}")
 
 
+def settlement_reward_wei(raw):
+    """The node's payout of a recorded 1.2 order from its settlementOf answer:
+    the work plus the chain gas repaid, what validate transfers to the node's
+    payout address; None when the order is not recorded (every field zero)."""
+    settlement = Settlement(*(int(value) for value in raw))
+    if not any(settlement):
+        return None
+    return settlement.work_wei + settlement.chain_paid_wei
+
+
 # An order's window ends ORDER_GRACE_SECONDS after the duration its DO request
 # paid for, counted from the block that placed the order, whatever restarts
 # the agent in between.

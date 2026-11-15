@@ -7,7 +7,7 @@ import pytest
 
 from models import DORequestV2
 from utils import (PLACEMENT_REFUSALS_OFFER, PLACEMENT_REFUSALS_TERMS, Refusal, admits_do_request,
-                   placement_refusal_disposition, settlement_line)
+                   placement_refusal_disposition, settlement_line, settlement_reward_wei)
 
 DOWNER = "0x" + "11" * 20
 FEE_PERCENTS = (5, 2)
@@ -110,3 +110,10 @@ def test_the_settlement_line():
                     "chain paid 12000000000000000 wei, refund 1000000000000000 wei, outcome 0")
     assert settlement_line(8, (0, 0, 0, 0, 5, 2)) == ("Order 8 settlement: 0 hours billed, work 0 wei, fees 0 wei, "
                                                       "chain paid 0 wei, refund 5 wei, outcome 2")
+
+
+def test_the_settlement_reward_is_the_work_plus_the_chain_gas_repaid():
+    assert settlement_reward_wei((0, 0, 0, 0, 0, 0)) is None
+    assert settlement_reward_wei((1, 200234192130222933, 34039812662137898, 0, 2765725995207639169, 0)) == 200234192130222933
+    assert settlement_reward_wei((3, 9 * 10**17, 9 * 10**16, 12 * 10**15, 10**15, 0)) == 912 * 10**15
+    assert settlement_reward_wei((0, 0, 0, 0, 3 * 10**18, 2)) == 0

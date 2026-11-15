@@ -25,7 +25,13 @@ def entries():
 
 def test_the_changelog_opens_with_the_release():
     top, _ = entries()[0]
-    assert top == "3.8.9"
+    assert top == "3.8.10"
+
+
+def test_the_3810_entry_names_the_settlement_reward():
+    text = dict(entries())["3.8.10"]
+    for item in ("settlement_reward_wei", "settlementOf", "legacy"):
+        assert item in text
 
 
 def test_the_389_entry_names_the_standing_request_gate():

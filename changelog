@@ -1,3 +1,11 @@
+v3.8.10
+the reward banner after a result names, on a recorded 1.2 order, the node's
+  payout from the settlement (the reader's settlementOf: work plus the chain
+  gas repaid, utils.settlement_reward_wei, four decimals) instead of the DO
+  request's price less the legacy fees, which a 1.2 order no longer pays
+  (bloxberg testnet order 23: "Reward: 2.55 tETNY" beside a settlement of
+  0.2002 tETNY of work); a legacy order keeps its figure
+
 v3.8.9
 the idle tick's standing-request gates (the terms tick, the enclave wait's
   refresh, the supervise hint, the broker's placed order, the DPRequestCancelled
