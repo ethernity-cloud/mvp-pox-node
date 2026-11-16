@@ -31,6 +31,14 @@ first. A request that is not yet visible on chain is retried for
 
 The server is plain `http.server` on a loopback port; haproxy routes
 `/payload` of `ipfs.ethernity.cloud` to it.
+
+A runner in a web page uploads under the browser's cross-origin rules
+(CORS): the browser sends an OPTIONS preflight before a POST that carries a
+Content-Type other than a form's or a custom header (OWNER_SIGNATURE_HEADER),
+and lets the page read an answer only when it carries
+Access-Control-Allow-Origin. The intake answers the preflight with 204 and
+CORS_HEADERS, and every reply, refusals included, with
+Access-Control-Allow-Origin: *, so the page reads the status and the body.
 """
 
 import json
@@ -70,6 +78,19 @@ OWNER_SIGNATURE_HEADER = 'X-Etny-Owner-Signature'
 # How many payloads of one request are taken on its owner's signature: a
 # session's inputs (256 at most) and a task's artefacts, with room.
 OWNER_SIGNED_PAYLOADS_PER_REQUEST = 300
+
+# The intake's answer to a browser's CORS preflight (OPTIONS): any origin, the
+# POST a runner sends and the preflight itself, the headers that POST carries
+# (the runner sends Content-Type: application/octet-stream and
+# OWNER_SIGNATURE_HEADER; http.client adds Content-Length), cached by the
+# browser for a day. Every reply carries the first header, which is what lets
+# the page read the reply.
+CORS_HEADERS = (
+    ('Access-Control-Allow-Origin', '*'),
+    ('Access-Control-Allow-Methods', 'POST, OPTIONS'),
+    ('Access-Control-Allow-Headers', f'Content-Type, Content-Length, {OWNER_SIGNATURE_HEADER}'),
+    ('Access-Control-Max-Age', '86400'),
+)
 
 
 def owner_signature_message(network, do_req):
@@ -212,11 +233,24 @@ class PayloadIntake:
                     self.send_response(code)
                     self.send_header('Content-Type', 'application/json')
                     self.send_header('Content-Length', str(len(data)))
+                    self.send_header(*CORS_HEADERS[0])
                     self.end_headers()
                     self.wfile.write(data)
                 except (ConnectionResetError, BrokenPipeError):
                     # haproxy's health check closes as soon as it has the
                     # status line; nothing to report.
+                    pass
+
+            def do_OPTIONS(self):
+                # A browser's CORS preflight; the request path is not checked,
+                # the POST that follows answers for it.
+                try:
+                    self.send_response(204)
+                    for name, value in CORS_HEADERS:
+                        self.send_header(name, value)
+                    self.send_header('Content-Length', '0')
+                    self.end_headers()
+                except (ConnectionResetError, BrokenPipeError):
                     pass
 
             def do_GET(self):

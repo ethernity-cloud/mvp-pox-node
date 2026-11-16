@@ -1,3 +1,14 @@
+v3.8.12
+the payload intake (ipfs_intake.py, the bootnode's ipfs.ethernity.cloud
+  /payload) serves a runner in a web page under the browser's cross-origin
+  rules (CORS): it answers the OPTIONS preflight with 204 and
+  Access-Control-Allow-Origin: *, Access-Control-Allow-Methods: POST, OPTIONS,
+  Access-Control-Allow-Headers: Content-Type, Content-Length,
+  X-Etny-Owner-Signature and Access-Control-Max-Age: 86400, and every reply,
+  refusals included, carries Access-Control-Allow-Origin: *, so the page reads
+  the status and the body (until now the preflight was answered 501 and the
+  browser blocked the upload)
+
 v3.8.11
 the agent exports ETNY_SCONE_QUEUES, twice the node's CPUs within 4 and 64
   (utils.scone_queues), into its own environment at start, and the enclave

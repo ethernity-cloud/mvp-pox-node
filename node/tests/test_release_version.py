@@ -25,7 +25,14 @@ def entries():
 
 def test_the_changelog_opens_with_the_release():
     top, _ = entries()[0]
-    assert top == "3.8.11"
+    assert top == "3.8.12"
+
+
+def test_the_3812_entry_names_the_intakes_cors_answers():
+    text = dict(entries())["3.8.12"]
+    for item in ("ipfs_intake.py", "CORS", "OPTIONS", "Access-Control-Allow-Origin: *",
+                 "X-Etny-Owner-Signature", "refusals included"):
+        assert item in text, item
 
 
 def test_the_3811_entry_names_the_scone_queues():
