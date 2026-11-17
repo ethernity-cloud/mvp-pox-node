@@ -17,7 +17,7 @@ from eth_keys import keys
 from eth_keys.exceptions import BadSignature
 from eth_utils import keccak
 
-from constants import BENCHMARK_MAX_SECONDS, CU_MAX_THOUSANDTHS, CU_REMEASURE_MARGIN_SECONDS, CU_TTL_SECONDS
+from constants import BENCHMARK_MAX_SECONDS, CU_MAX_GFLOPS, CU_REMEASURE_MARGIN_SECONDS, CU_TTL_SECONDS, CU_VERSION_MIN
 from utils import DP_STARTED_ROW_CAPABILITY
 
 RECORD_TAG = 'etny-cu'
@@ -43,18 +43,19 @@ DER_HEX_RE = re.compile(r'^[0-9a-f]+$')
 
 # The reason codes of PoX.cancelDPRequestByValidators (ethernity-cas
 # capability.rs Reason), and whether the agent re-tests before it re-adds:
-# the record's own faults (1..6) call for a new record, the strike rule (7)
-# for a new request alone.
+# the record's own faults (1..6 and 8) call for a new record, the strike rule
+# (7) for a new request alone.
 CANCEL_REASONS = {
     1: 'RecordSignatureInvalid',
     2: 'RecordNodeMismatch',
     3: 'TimestampNotSeated',
     4: 'RunTooLong',
     5: 'RecordExpired',
-    6: 'CuAboveMax',
+    6: 'GflopsAboveMax',
     7: 'DeliveredBelowAttested',
+    8: 'CuVersionBelowMinimum',
 }
-RETEST_REASONS = frozenset(range(1, 7))
+RETEST_REASONS = frozenset({1, 2, 3, 4, 5, 6, 8})
 
 
 def cancel_reason_name(code):
@@ -63,9 +64,9 @@ def cancel_reason_name(code):
 
 
 def cancel_disposition(code):
-    """'retest' when the reason faults the record (1..6: the test runs again
-    before the next request), 'readd' otherwise (7, and any code outside the
-    table: the request alone is replaced)."""
+    """'retest' when the reason faults the record (1..6 and 8: the test runs
+    again before the next request), 'readd' otherwise (7, and any code outside
+    the table: the request alone is replaced)."""
     return 'retest' if int(code) in RETEST_REASONS else 'readd'
 
 
@@ -190,13 +191,15 @@ def capability_record_from(capability_etny, capability_time_etny, node_address, 
     and both signature fields are non-empty, capability.time.etny exists
     with two statements whose node, nonce, validator and t match the line's,
     each signature recovers over `chain_id` and `registry` to the validator,
-    `is_seated(validator)` holds, t1 is within CU_TTL_SECONDS of `now`, cu
-    is at most CU_MAX_THOUSANDTHS, `requirement` is dcap and
-    `has_validator_set` holds.
+    `is_seated(validator)` holds, t1 is within CU_TTL_SECONDS of `now`,
+    gflops is at most CU_MAX_GFLOPS, cuv is at least CU_VERSION_MIN,
+    `requirement` is dcap and `has_validator_set` holds.
 
-    The record: the line's fields (network, node, cu, cuv, validator, nonce,
-    t0, t1, sig0, sig1, heap, workers), line, sig_der_hex, platform_line,
-    block0 and block1 from the statements, and the two raw texts."""
+    The record: the line's fields (network, node, gflops, cuv, validator,
+    nonce, t0, t1, sig0, sig1, heap, workers), line, sig_der_hex,
+    platform_line, block0 and block1 from the statements, and the two raw
+    texts. gflops (field 4) is the node's attested GFLOPS; one CU is 100
+    GFLOPS."""
     if requirement != ADMITTED_REQUIREMENT:
         return None, f'the image requires {requirement}, not {ADMITTED_REQUIREMENT}'
     if not has_validator_set:
@@ -207,7 +210,7 @@ def capability_record_from(capability_etny, capability_time_etny, node_address, 
         parsed = parse_capability_etny(capability_etny)
         fields = parsed['fields']
         network, node, validator, nonce, sig0, sig1 = fields[2], fields[3], fields[6], fields[7], fields[10], fields[11]
-        cu = _int_field(fields, 4, 'cu')
+        gflops = _int_field(fields, 4, 'gflops')
         cuv = _int_field(fields, 5, 'cuv')
         t0 = _int_field(fields, 8, 't0')
         t1 = _int_field(fields, 9, 't1')
@@ -242,13 +245,15 @@ def capability_record_from(capability_etny, capability_time_etny, node_address, 
         return None, f'validator {validator} is not seated'
     if abs(int(now) - t1) > CU_TTL_SECONDS:
         return None, f't1 {t1} is outside CU_TTL_SECONDS of now'
-    if cu > CU_MAX_THOUSANDTHS:
-        return None, f'cu {cu} is above CU_MAX_THOUSANDTHS {CU_MAX_THOUSANDTHS}'
+    if gflops > CU_MAX_GFLOPS:
+        return None, f'gflops {gflops} is above CU_MAX_GFLOPS {CU_MAX_GFLOPS}'
+    if cuv < CU_VERSION_MIN:
+        return None, f'cuv {cuv} is below CU_VERSION_MIN {CU_VERSION_MIN}'
     record = {
         'line': parsed['line'],
         'network': network,
         'node': node,
-        'cu': cu,
+        'gflops': gflops,
         'cuv': cuv,
         'validator': validator,
         'nonce': nonce,
@@ -268,11 +273,19 @@ def capability_record_from(capability_etny, capability_time_etny, node_address, 
     return record, None
 
 
+def record_current(record):
+    """Whether a stored record is one the agent advertises: it carries gflops
+    and its cuv is at least CU_VERSION_MIN."""
+    return 'gflops' in record and int(record.get('cuv') or 0) >= CU_VERSION_MIN
+
+
 class RecordStore:
     """node/<network>/capability.json: {image name: {image_hash, passed_at,
     record, probe_first_pending}} for the passed integration tests of the
-    network, `record` the dict of capability_record_from or None. Every
-    change is written as a whole snapshot through a temporary file."""
+    network, `record` the dict of capability_record_from or None; an entry
+    whose record load() dropped also carries retest_pending true until the
+    next put. Every change is written as a whole snapshot through a
+    temporary file."""
 
     def __init__(self, filepath):
         self.filepath = str(filepath)
@@ -281,7 +294,9 @@ class RecordStore:
         self.load()
 
     def load(self):
-        """Reads the file; an absent or unreadable file is an empty store."""
+        """Reads the file; an absent or unreadable file is an empty store. A
+        stored record that is not record_current is dropped, its passed test
+        kept with retest_pending set, and the file written."""
         with self._lock:
             try:
                 with open(self.filepath) as f:
@@ -289,6 +304,12 @@ class RecordStore:
             except (OSError, ValueError):
                 loaded = {}
             self.entries = loaded if isinstance(loaded, dict) else {}
+            dropped = [image for image, entry in self.entries.items()
+                       if entry.get('record') is not None and not record_current(entry['record'])]
+            for image in dropped:
+                self.entries[image].update(record=None, probe_first_pending=False, retest_pending=True)
+            if dropped:
+                self._write()
             return self.entries
 
     def _write(self):
@@ -333,6 +354,12 @@ class RecordStore:
         entry = self.entries.get(image)
         return bool(entry and entry.get('probe_first_pending'))
 
+    def retest_pending(self, image):
+        """Whether load() dropped `image`'s record and no put has followed:
+        its integration test runs again, the pass standing."""
+        entry = self.entries.get(image)
+        return bool(entry and entry.get('retest_pending'))
+
     def consume_probe_first(self, image):
         """Clears the flag; whether it was set."""
         with self._lock:
@@ -370,11 +397,11 @@ class RecordStore:
 
 def metadata4(trustedzones_runnable, record_image, peer_id, record):
     """A DP request's metadata4: trustedzones=<names>;ipfs=<peer id>;startrow=v1
-    and, with `record`, the six cu keys (cu, cuv, cuat = t1, cusig = the DER
-    hex without 0x, cuheap, cuworkers). `record_image` is listed first (the
-    validators verify cusig under the first name's certificates) and the
-    other runnable names sorted after it; without a record the names are
-    sorted."""
+    and, with `record`, the six cu keys (cugflops = the record's gflops, cuv,
+    cuat = t1, cusig = the DER hex without 0x, cuheap, cuworkers).
+    `record_image` is listed first (the validators verify cusig under the
+    first name's certificates) and the other runnable names sorted after it;
+    without a record the names are sorted."""
     names = sorted(trustedzones_runnable)
     if record is not None and record_image in names:
         names.remove(record_image)
@@ -383,7 +410,7 @@ def metadata4(trustedzones_runnable, record_image, peer_id, record):
     if record is None:
         return value
     sig = record['sig_der_hex'][2:] if record['sig_der_hex'].lower().startswith('0x') else record['sig_der_hex']
-    return (f"{value};cu={record['cu']};cuv={record['cuv']};cuat={record['t1']};cusig={sig.lower()}"
+    return (f"{value};cugflops={record['gflops']};cuv={record['cuv']};cuat={record['t1']};cusig={sig.lower()}"
             f";cuheap={record['heap']};cuworkers={record['workers']}")
 
 

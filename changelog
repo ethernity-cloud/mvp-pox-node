@@ -1,3 +1,31 @@
+v3.8.13
+the capability record's compute figure is gflops, whole GFLOPS of the
+  benchmark kernel under cuv 4 (one CU is 100 GFLOPS, utils.GFLOPS_PER_CU):
+  the agent admits its own record at cuv CU_VERSION_MIN (4) and above with
+  gflops at most CU_MAX_GFLOPS (6400, CU_MAX 64 x 100), the gflops bound
+  checked first as the validators check it; a stored record (in
+  node/<network>/capability.json) below CU_VERSION_MIN or without gflops is
+  dropped when the store loads, the test's pass kept with retest_pending set
+  in the file until the next pass (RecordStore.retest_pending), and its
+  integration test runs again, after a restart as well; an admitted record is
+  logged as "record admitted (gflops N (x.xx CU), cuv M, ..."
+addDPRequestV2 carries the record's gflops (0 without a record, recorded by
+  the contract at 100), metadata4 carries cugflops=<gflops>, and the tip per
+  CU-hour spreads the node's own gas over gflops / 100 CU
+  (utils.tip_per_cu_hour_wei); the pre-filter refuses a V2 DO request whose
+  maxGflops is below the node's gflops (Refusal kind gflops, cached), and the
+  placement refusal "node above maxGflops" names the offer
+the validators' cancel reasons 6 GflopsAboveMax and 8 CuVersionBelowMinimum
+  (capability.CANCEL_REASONS) re-test the record before the re-add
+  (RETEST_REASONS 1..6 and 8); 7 DeliveredBelowAttested re-adds
+the bundled ABI files node/docker/pox.abi, node/reader.abi, node/pricing.abi
+  and node/broker.abi are the pox-smart-contract-litvm exports with the GFLOPS
+  names (gflops, maxGflops, minGflops, gflopsMax, gflopsMaxDefault,
+  capacityGflops, loadGflops, reservedGflops, reservedCapacityGflops); the
+  agent reads them as DORequestV2.max_gflops, DPTerms.gflops and
+  OrderTerms.gflops, and accepted.json holds predecessor_gflops
+  (broker.bounded_gflops)
+
 v3.8.12
 the payload intake (ipfs_intake.py, the bootnode's ipfs.ethernity.cloud
   /payload) serves a runner in a web page under the browser's cross-origin

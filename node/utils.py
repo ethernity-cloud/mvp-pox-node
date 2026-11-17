@@ -969,20 +969,23 @@ def order_env(network_config, order_id, challenge, node_address, probe_first):
 
 # The protocol version a DP request's metadata2 names.
 DP_REQUEST_PROTOCOL = 'v3'
-# One compute unit in the contracts' thousandths; a DP request with cu 0 is
-# recorded at one CU.
-ONE_CU = 1000
-# A 1.2 DP request's terms, as dpTerms(id) answers them.
-DPTerms = namedtuple('DPTerms', 'cu tip accepts_reserved expires_at recorded')
+# GFLOPS per CU, the contracts' GFLOPS_PER_CU; a DP request with gflops 0 is
+# recorded at 100 (one CU).
+GFLOPS_PER_CU = 100
+# A 1.2 DP request's terms, as dpTerms(id) answers them; gflops is the GFLOPS
+# the offer was added with (dp_request_arguments' gflops, 100 for one added
+# with 0).
+DPTerms = namedtuple('DPTerms', 'gflops tip accepts_reserved expires_at recorded')
 # The reader's settlementOf(orderId) answer.
 Settlement = namedtuple('Settlement', 'hours_billed work_wei fees_wei chain_paid_wei refund_wei outcome')
 # Why a DO request is not taken (do_request_verdict): the kind, one of
-# 'legacy', 'reserved', 'price', 'cu' and 'legacy-price', and the text logged.
+# 'legacy', 'reserved', 'price', 'gflops' and 'legacy-price', and the text
+# logged.
 Refusal = namedtuple('Refusal', 'kind text')
 # The refusals the pre-filter caches against the DO request, which they hold
-# for: the legacy compare's, a reserved request's and a maxCu refusal. A
+# for: the legacy compare's, a reserved request's and a maxGflops refusal. A
 # price refusal is not cached: the quote moves every epoch.
-CACHED_REFUSALS = ('legacy', 'reserved', 'cu')
+CACHED_REFUSALS = ('legacy', 'reserved', 'gflops')
 
 # The gas limit of a DP request __send_dp_request sends, in percent over its
 # estimate: the estimate is made at the head block and the request is mined
@@ -1004,36 +1007,38 @@ def resource_refusal_holds(needs, offer):
 
 
 def dp_terms(raw):
-    """DPTerms from a dpTerms(id) answer (cu, tipPerCuHourWei,
+    """DPTerms from a dpTerms(id) answer (gflops, tipPerCuHourWei,
     acceptsReservedOrders, expiresAt, recorded)."""
     return DPTerms(int(raw[0]), int(raw[1]), bool(raw[2]), int(raw[3]), bool(raw[4]))
 
 
-def tip_per_cu_hour_wei(configured_tip, profile_gas, avg_gas_price_wei, token_per_pol, cu, hours=TIP_HOURS):
+def tip_per_cu_hour_wei(configured_tip, profile_gas, avg_gas_price_wei, token_per_pol, gflops, hours=TIP_HOURS):
     """A 1.2 DP request's tip in token wei per CU-hour: the operator's
     `configured_tip` plus the node's own gas, the sum of `profile_gas`
     ({kind: gas} of the gas profile) at `avg_gas_price_wei` converted at
-    `token_per_pol` (token wei per 1e18 gas-token wei), spread over `cu`
-    thousandths (0: one CU) for `hours` and rounded up; at most MAX_TIP."""
+    `token_per_pol` (token wei per 1e18 gas-token wei), spread over
+    `gflops` / GFLOPS_PER_CU CU (`gflops` the node's GFLOPS, 0: one CU) for
+    `hours` and rounded up; at most MAX_TIP."""
     gas = sum(int(value) for value in profile_gas.values())
-    cu = int(cu) or ONE_CU
-    numerator = gas * int(avg_gas_price_wei) * int(token_per_pol) * ONE_CU
-    denominator = 10**18 * cu * int(hours)
+    gflops = int(gflops) or GFLOPS_PER_CU
+    numerator = gas * int(avg_gas_price_wei) * int(token_per_pol) * GFLOPS_PER_CU
+    denominator = 10**18 * gflops * int(hours)
     own = (numerator + denominator - 1) // denominator
     return min(int(configured_tip) + own, MAX_TIP)
 
 
-def dp_request_arguments(legacy, resources, duration, price, cu, tip, uuid, metadata3, metadata4):
+def dp_request_arguments(legacy, resources, duration, price, gflops, tip, uuid, metadata3, metadata4):
     """(function name, arguments) of the node's DP request: _addDPRequest with
-    the uint8 `price` on a legacy contract, addDPRequestV2 with `cu` (the
-    advertised record's thousandths, 0 without one) and `tip` on a 1.2 one.
+    the uint8 `price` on a legacy contract, addDPRequestV2 with `gflops` (the
+    advertised record's GFLOPS, 0 without one; the contract stores 0 as 100)
+    and `tip` on a 1.2 one.
     `resources` is (cpu, memory, storage, bandwidth), `uuid` the node's
     metadata1 and DP_REQUEST_PROTOCOL its metadata2."""
     cpu, memory, storage, bandwidth = resources
     if legacy:
         return '_addDPRequest', [cpu, memory, storage, bandwidth, duration, price, uuid, DP_REQUEST_PROTOCOL,
                                  metadata3, metadata4]
-    return 'addDPRequestV2', [cpu, memory, storage, bandwidth, duration, int(cu), int(tip), uuid,
+    return 'addDPRequestV2', [cpu, memory, storage, bandwidth, duration, int(gflops), int(tip), uuid,
                               DP_REQUEST_PROTOCOL, metadata3, metadata4]
 
 
@@ -1136,25 +1141,26 @@ def bounded_cancel(available, simulate, send, wait, attempts=CANCEL_ATTEMPTS):
     return 'abandoned'
 
 
-def admits_do_request(do_v2, legacy_price_tokens, price_per_cu_hour_wei, tip, cu, fee_percents, publisher_fees):
+def admits_do_request(do_v2, legacy_price_tokens, price_per_cu_hour_wei, tip, gflops, fee_percents, publisher_fees):
     """Why this node's 1.2 offer does not take DO request `do_v2`
     (models.DORequestV2), a Refusal, or None when it does. A reserved request
     (a reserved price recorded) is left to the broker, which places on the
     offer. A recorded spot request takes the bid, the pricing's price plus
-    the node's tip, at most its maxPricePerCuHourWei and the node's `cu` at
-    most its maxCu (0: any). A legacy request (no terms) takes the bid with
-    the fees: bid x (100 + network + validator + trustedzone + securelock
-    percents) at most 100 x its uint8 price (`legacy_price_tokens`) in token
-    wei. `fee_percents` is (NETWORK_FEE_PERCENT, VALIDATOR_FEE_PERCENT),
-    `publisher_fees` the request's (trustedZoneFee, secureLockFee)."""
+    the node's tip, at most its maxPricePerCuHourWei and the node's `gflops`
+    at most its maxGflops (0: any). A legacy request (no terms) takes the bid
+    with the fees: bid x (100 + network + validator + trustedzone +
+    securelock percents) at most 100 x its uint8 price (`legacy_price_tokens`)
+    in token wei. `fee_percents` is (NETWORK_FEE_PERCENT,
+    VALIDATOR_FEE_PERCENT), `publisher_fees` the request's (trustedZoneFee,
+    secureLockFee)."""
     if do_v2.reserved_price != 0:
         return Refusal('reserved', 'reserved request, placed by the broker')
     bid = int(price_per_cu_hour_wei) + int(tip)
     if do_v2.max_price != 0:
         if bid > do_v2.max_price:
             return Refusal('price', f"bid {bid} wei per CU-hour above the request's maximum {do_v2.max_price}")
-        if do_v2.max_cu != 0 and int(cu) > do_v2.max_cu:
-            return Refusal('cu', f"cu {cu} above the request's maxCu {do_v2.max_cu}")
+        if do_v2.max_gflops != 0 and int(gflops) > do_v2.max_gflops:
+            return Refusal('gflops', f"gflops {gflops} above the request's maxGflops {do_v2.max_gflops}")
         return None
     network_fee, validator_fee = fee_percents
     trustedzone_fee, securelock_fee = publisher_fees
@@ -1166,7 +1172,7 @@ def admits_do_request(do_v2, legacy_price_tokens, price_per_cu_hour_wei, tip, cu
     return None
 
 
-def do_request_verdict(legacy_price_tokens, node_price_tokens, quote_price_wei=None, do_v2=None, tip=0, cu=0,
+def do_request_verdict(legacy_price_tokens, node_price_tokens, quote_price_wei=None, do_v2=None, tip=0, gflops=0,
                        fee_percents=(0, 0), publisher_fees=(0, 0)):
     """Why the pre-filter skips a DO request whose resources fit, a Refusal,
     or None when the request goes on to the placement. Without a quote
@@ -1176,12 +1182,12 @@ def do_request_verdict(legacy_price_tokens, node_price_tokens, quote_price_wei=N
     request priced below one token reads 0 there and is skipped, as every
     agent before 3.8.0 skips it. With the pass's quote, admits_do_request
     judges the request's recorded terms (`do_v2`) against the quote's price
-    plus this node's `tip` and its `cu`."""
+    plus this node's `tip` and its `gflops`."""
     if quote_price_wei is None:
         if int(legacy_price_tokens) < int(node_price_tokens):
             return Refusal('legacy', f"price {legacy_price_tokens} below this node's {node_price_tokens}")
         return None
-    return admits_do_request(do_v2, legacy_price_tokens, quote_price_wei, tip, cu, fee_percents, publisher_fees)
+    return admits_do_request(do_v2, legacy_price_tokens, quote_price_wei, tip, gflops, fee_percents, publisher_fees)
 
 
 def refusal_cached(refusal):
@@ -1206,7 +1212,7 @@ def do_request_compare(has_reader, terms):
 # refresh or a new request), the last two name a request the offer cannot
 # serve.
 PLACEMENT_REFUSALS_TERMS = ('dp request has no terms', 'dp request expired')
-PLACEMENT_REFUSALS_OFFER = ('offer does not accept reserved orders', 'node above maxCu')
+PLACEMENT_REFUSALS_OFFER = ('offer does not accept reserved orders', 'node above maxGflops')
 
 
 def placement_refusal_disposition(reason):

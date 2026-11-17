@@ -37,10 +37,10 @@ BATCH_ERROR_SELECTORS = {
     keccak(text='BatchEntryOutOfGas(uint256)')[:4].hex(),
 }
 
-OrderTerms = namedtuple('OrderTerms', 'price_per_cu_hour_wei cu chain_fee_wei gas_price_cap_wei gas_allocated token_per_pol')
+OrderTerms = namedtuple('OrderTerms', 'price_per_cu_hour_wei gflops chain_fee_wei gas_price_cap_wei gas_allocated token_per_pol')
 PricingParams = namedtuple('PricingParams', 'gas_per_row gas_per_commit gas_per_result priority_fee_wei')
 
-TERMS_FIELDS = ('pricePerCuHourWei', 'cu', 'chainFeeWei', 'gasPriceCapWei', 'gasAllocated', 'tokenPerPol')
+TERMS_FIELDS = ('pricePerCuHourWei', 'gflops', 'chainFeeWei', 'gasPriceCapWei', 'gasAllocated', 'tokenPerPol')
 # The positions of the four fields in IPoxPricing.params()' struct.
 PARAMS_FIELDS = (('gasPerRow', 13), ('gasPerCommit', 14), ('gasPerResult', 15), ('priorityFeeWei', 17))
 

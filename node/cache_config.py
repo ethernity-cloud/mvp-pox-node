@@ -39,8 +39,8 @@ class CacheConfig:
         # The --handover command's request and the running agent's answer
         # (broker.handover_request_path).
         self.handover_request_filepath = base_path / 'handover.json'
-        # The handover this node accepted and the predecessor's cu, until the
-        # successor is placed ({orderId, predecessor_cu, reservation}).
+        # The handover this node accepted and the predecessor's gflops, until
+        # the successor is placed ({orderId, predecessor_gflops, reservation}).
         self.accepted_handover_filepath = base_path / 'accepted.json'
         # The farm invitation a broker refused (broker.farm_refusal_path).
         self.farm_refusal_filepath = base_path / 'farm.json'

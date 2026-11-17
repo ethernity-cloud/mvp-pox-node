@@ -12,7 +12,7 @@ POLL = 15
 
 
 def terms(cap):
-    return OrderTerms(10**15, 1000, 3 * 10**17, cap, 0, WEI_PER_TOKEN)
+    return OrderTerms(10**15, 100, 3 * 10**17, cap, 0, WEI_PER_TOKEN)
 
 
 def wait(ledger, base_fee):

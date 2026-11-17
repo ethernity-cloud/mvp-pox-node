@@ -2,7 +2,7 @@
 orderOfDPRequest names for the node's offer (a reserved OPEN order approved
 at once, a spot OPEN order kept for the client's approval, a CANCELED one
 the offer waiting for the next placement), the supervise decisions, the
-spot placement held while an acceptance stands and the bounded cu."""
+spot placement held while an acceptance stands and the bounded gflops."""
 import broker
 from models import OrderStatus, RequestStatus
 
@@ -59,7 +59,7 @@ def test_a_pre_flight_that_would_act_nothing_drops_the_send():
 
 
 def test_the_spot_placement_is_held_while_an_acceptance_stands_and_released_on_the_placement():
-    accepted = {'orderId': 4101, 'predecessor_cu': 2000}
+    accepted = {'orderId': 4101, 'predecessor_gflops': 200}
     open_window = broker.handover_of((True, 4101, False, 0, 100, 1000))
     placed = broker.handover_of((True, 4101, True, 4102, 100, 1000))
     gone = broker.handover_of((False, 0, False, 0, 0, 0))
@@ -71,8 +71,8 @@ def test_the_spot_placement_is_held_while_an_acceptance_stands_and_released_on_t
     assert broker.acceptance_standing({}, open_window) is False
 
 
-def test_the_offer_is_at_most_the_predecessors_cu_while_an_acceptance_stands():
-    assert broker.bounded_cu(3000, {'orderId': 4101, 'predecessor_cu': 2000}) == 2000
-    assert broker.bounded_cu(1500, {'orderId': 4101, 'predecessor_cu': 2000}) == 1500
-    assert broker.bounded_cu(3000, {'orderId': 4101, 'predecessor_cu': 0}) == 3000
-    assert broker.bounded_cu(3000, None) == 3000
+def test_the_offer_is_at_most_the_predecessors_gflops_while_an_acceptance_stands():
+    assert broker.bounded_gflops(300, {'orderId': 4101, 'predecessor_gflops': 200}) == 200
+    assert broker.bounded_gflops(150, {'orderId': 4101, 'predecessor_gflops': 200}) == 150
+    assert broker.bounded_gflops(300, {'orderId': 4101, 'predecessor_gflops': 0}) == 300
+    assert broker.bounded_gflops(300, None) == 300

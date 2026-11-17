@@ -15,12 +15,13 @@ NOW = 1_762_000_000
 KEY = "3065023100cb37"
 
 
-def terms(expires_in=7200, recorded=True, accepts_reserved=True, cu=2500, tip=10**15):
-    return DPTerms(cu, tip, accepts_reserved, NOW + expires_in, recorded)
+def terms(expires_in=7200, recorded=True, accepts_reserved=True, gflops=250, tip=10**15):
+    return DPTerms(gflops, tip, accepts_reserved, NOW + expires_in, recorded)
 
 
 def test_dp_terms_from_the_contract_answer():
-    assert dp_terms((2500, 10**15, True, NOW + 7200, True)) == terms()
+    assert dp_terms((250, 10**15, True, NOW + 7200, True)) == terms()
+    assert dp_terms((250, 10**15, True, NOW + 7200, True)).gflops == 250
     assert dp_terms((0, 0, False, 0, False)) == DPTerms(0, 0, False, 0, False)
 
 

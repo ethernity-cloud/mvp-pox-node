@@ -147,7 +147,7 @@ ERRORS = {
 }
 
 ORDER_TERMS_OUTPUTS = [
-    "pricePerCuHourWei", "cu", "chainFeeWei", "chainSpentWei", "gasPriceCapWei", "gasAllocated",
+    "pricePerCuHourWei", "gflops", "chainFeeWei", "chainSpentWei", "gasPriceCapWei", "gasAllocated",
     "tokenPerPol", "trustedZoneFee", "secureLockFee", "placedAt", "approvedAt", "startedAt",
     "lastOutputAt", "terminatedAt", "resultAt", "successorStartedAt", "esrCommits", "esrGasWei",
     "reserved", "recorded",

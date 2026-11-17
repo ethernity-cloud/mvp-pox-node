@@ -1,5 +1,5 @@
 """utils.dp_request_arguments (PHASE-E-PLAN.md E2, D.2): addDPRequestV2 on a
-1.2 contract with the record's cu (0 without one), the tip and the fixture's
+1.2 contract with the record's gflops (0 without one), the tip and the fixture's
 two metadata strings; _addDPRequest on a legacy contract unchanged; the
 argument lists match the bundled ABI; utils.metadata_key / record_key tie a
 request's metadata4 to the record it carries."""
@@ -39,10 +39,11 @@ def test_the_v2_arguments_for_a_record():
     rec = record()
     metadata3 = capability.metadata3(GEO, rec)
     metadata4 = capability.metadata4(RUNNABLE, RECORD_IMAGE, PEER_ID, rec)
-    name, arguments = dp_request_arguments(False, RESOURCES, 24, 1, rec["cu"], TIP, UUID, metadata3, metadata4)
+    name, arguments = dp_request_arguments(False, RESOURCES, 24, 1, rec["gflops"], TIP, UUID, metadata3, metadata4)
     assert name == "addDPRequestV2"
-    assert arguments == [8, 32, 255, 100, 24, 2500, TIP, UUID, "v3", FIXTURE["metadata3"]["value"],
+    assert arguments == [8, 32, 255, 100, 24, 250, TIP, UUID, "v3", FIXTURE["metadata3"]["value"],
                          FIXTURE["metadata4"]["value"]]
+    assert abi_inputs("addDPRequestV2")[5]["name"] == "gflops"
     assert DP_REQUEST_PROTOCOL == "v3"
 
 
@@ -60,7 +61,7 @@ def test_the_v2_arguments_without_a_record():
 def test_the_legacy_list_is_unchanged():
     metadata3 = capability.metadata3(GEO, None)
     metadata4 = capability.metadata4(RUNNABLE, None, PEER_ID, None)
-    name, arguments = dp_request_arguments(True, RESOURCES, 24, 3, 2500, TIP, UUID, metadata3, metadata4)
+    name, arguments = dp_request_arguments(True, RESOURCES, 24, 3, 250, TIP, UUID, metadata3, metadata4)
     assert name == "_addDPRequest"
     assert arguments == [8, 32, 255, 100, 24, 3, UUID, "v3", metadata3, metadata4]
 
@@ -68,7 +69,7 @@ def test_the_legacy_list_is_unchanged():
 def test_the_lists_match_the_bundled_abi():
     rec = record()
     for legacy, name in ((False, "addDPRequestV2"), (True, "_addDPRequest")):
-        found, arguments = dp_request_arguments(legacy, RESOURCES, 24, 1, rec["cu"], TIP, UUID, "m3", "m4")
+        found, arguments = dp_request_arguments(legacy, RESOURCES, 24, 1, rec["gflops"], TIP, UUID, "m3", "m4")
         assert found == name
         inputs = abi_inputs(name)
         assert len(arguments) == len(inputs)
@@ -84,7 +85,9 @@ def test_metadata_key_reads_the_record_the_request_carries():
     metadata4 = capability.metadata4(RUNNABLE, RECORD_IMAGE, PEER_ID, rec)
     assert metadata_key(metadata4, "cusig") == record_key(rec)
     assert metadata_key(metadata4, "cusig") == FIXTURE["signatureDerHex"].lower()
-    assert metadata_key(metadata4, "cu") == "2500"
+    assert metadata_key(metadata4, "cugflops") == "250"
+    assert ";cugflops=250;cuv=4;" in metadata4
+    assert metadata_key(metadata4, "cu") is None
     assert metadata_key(metadata4, "ipfs") == PEER_ID
     assert metadata_key(capability.metadata4(RUNNABLE, None, PEER_ID, None), "cusig") is None
     assert metadata_key("", "cusig") is None

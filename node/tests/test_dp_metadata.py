@@ -34,6 +34,15 @@ def test_metadata4_keys_are_the_fixture_keys_in_order():
     assert [entry.partition("=")[0] for entry in value.split(";")] == FIXTURE["metadata4"]["keys"]
 
 
+def test_metadata4_carries_the_records_gflops_as_cugflops():
+    found = record()
+    value = capability.metadata4(RUNNABLE, RECORD_IMAGE, PEER_ID, found)
+    keys = dict(entry.split("=", 1) for entry in value.split(";"))
+    assert keys["cugflops"] == str(found["gflops"]) == str(FIXTURE["measurement"]["gflops"])
+    assert keys["cuv"] == "4"
+    assert "cu" not in keys
+
+
 def test_the_record_trustedzone_comes_first_and_the_rest_sorted():
     value = capability.metadata4({"c-tz", "a-tz", "b-tz"}, "b-tz", PEER_ID, record())
     assert value.startswith("trustedzones=b-tz,a-tz,c-tz;")
@@ -89,7 +98,7 @@ def test_cuat_equals_cut1_and_cub_values_are_the_statement_blocks():
 
 def test_no_metadata_value_contains_a_semicolon():
     found = record()
-    for key in ("validator", "nonce", "sig0", "sig1", "sig_der_hex", "heap", "cu", "cuv", "t0", "t1",
+    for key in ("validator", "nonce", "sig0", "sig1", "sig_der_hex", "heap", "gflops", "cuv", "t0", "t1",
                 "block0", "block1", "workers"):
         assert ";" not in str(found[key])
 

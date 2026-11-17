@@ -25,7 +25,15 @@ def entries():
 
 def test_the_changelog_opens_with_the_release():
     top, _ = entries()[0]
-    assert top == "3.8.12"
+    assert top == "3.8.13"
+
+
+def test_the_3813_entry_names_the_gflops_unit():
+    text = dict(entries())["3.8.13"]
+    for item in ("cuv 4", "GFLOPS", "GFLOPS_PER_CU", "CU_MAX_GFLOPS", "(6400", "CU_VERSION_MIN", "cugflops",
+                 "GflopsAboveMax", "CuVersionBelowMinimum", "node above maxGflops", "RecordStore.retest_pending",
+                 "predecessor_gflops", "maxGflops", "gflopsMax"):
+        assert item in text, item
 
 
 def test_the_3812_entry_names_the_intakes_cors_answers():

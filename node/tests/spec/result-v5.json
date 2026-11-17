@@ -1,5 +1,5 @@
 {
-  "description": "Plan amendment 8 (result string v5): every result carries fifteen colon-separated positional fields -- the v4 task and ESR fields, the five session fields with zero roots, 00 counts and status 0f when there is no session, then etny-esr-commits=<n>, etny-cu-delivered=<...> and etny-esr-gas=<wei>. Seven examples: plain task, session, ESR task with three relayed commits, probed task, session transferred cleanly at a handover (task code 41, session status 06), session transferred by force (task code 42, session status 07), the successor's session replaying the forced one's cut input (its first output row answering the predecessor's unanswered input).",
+  "description": "Plan amendment 8 (result string v5): every result carries fifteen colon-separated positional fields -- the v4 task and ESR fields, the five session fields with zero roots, 00 counts and status 0f when there is no session, then etny-esr-commits=<n>, etny-cu-delivered-gflops=<...> and etny-esr-gas=<wei>. Seven examples: plain task, session, ESR task with three relayed commits, probed task, session transferred cleanly at a handover (task code 41, session status 06), session transferred by force (task code 42, session status 07), the successor's session replaying the forced one's cut input (its first output row answering the predecessor's unanswered input).",
   "generator": "spec/make/result-v5.js",
   "version": "v5",
   "separator": ":",
@@ -73,7 +73,7 @@
     {
       "index": 13,
       "name": "cuDelivered",
-      "value": "etny-cu-delivered=<cu x 1000>|<run nonce>|<t0>|<t1>|<validator>|<sig t0>|<sig t1>|<block0>|<block1>, or etny-cu-delivered= when the order was not probed"
+      "value": "etny-cu-delivered-gflops=<gflops>|<run nonce>|<t0>|<t1>|<validator>|<sig t0>|<sig t1>|<block0>|<block1>, the first value the probe's gflops (one CU is 100 GFLOPS), or the empty label etny-cu-delivered-gflops= when the order was not probed"
     },
     {
       "index": 14,
@@ -178,7 +178,7 @@
         {
           "index": 13,
           "name": "cuDelivered",
-          "value": "etny-cu-delivered="
+          "value": "etny-cu-delivered-gflops="
         },
         {
           "index": 14,
@@ -186,7 +186,7 @@
           "value": "etny-esr-gas=0"
         }
       ],
-      "result": "v5:0:dffd6021bb2bd5b0af676290809ec3a53191dd81c7f70a4b28688a362182986f:k7p2x9qv4m1zr8t3hw6n:0000000000000000000000000000000000000000000000000000000000000000:00::0000000000000000000000000000000000000000000000000000000000000000:00:0000000000000000000000000000000000000000000000000000000000000000:00:0f:etny-esr-commits=0:etny-cu-delivered=:etny-esr-gas=0"
+      "result": "v5:0:dffd6021bb2bd5b0af676290809ec3a53191dd81c7f70a4b28688a362182986f:k7p2x9qv4m1zr8t3hw6n:0000000000000000000000000000000000000000000000000000000000000000:00::0000000000000000000000000000000000000000000000000000000000000000:00:0000000000000000000000000000000000000000000000000000000000000000:00:0f:etny-esr-commits=0:etny-cu-delivered-gflops=:etny-esr-gas=0"
     },
     "session": {
       "name": "session",
@@ -275,7 +275,7 @@
         {
           "index": 13,
           "name": "cuDelivered",
-          "value": "etny-cu-delivered="
+          "value": "etny-cu-delivered-gflops="
         },
         {
           "index": 14,
@@ -283,7 +283,7 @@
           "value": "etny-esr-gas=0"
         }
       ],
-      "result": "v5:0:180edc7b0e462ea92529ec3e68442a575f53ce34384bd6f53cdc845993dbb46c:k7p2x9qv4m1zr8t3hw6n:0000000000000000000000000000000000000000000000000000000000000000:00::ceb5d8c50b7698746fe058e0551b171e819accd2315fa5b8eb5dd4f74ca2dd4d:01:77e911d2943aa9523dba8af18c210146475c5d595ae05c08f99bf3e11d716e43:01:00:etny-esr-commits=0:etny-cu-delivered=:etny-esr-gas=0"
+      "result": "v5:0:180edc7b0e462ea92529ec3e68442a575f53ce34384bd6f53cdc845993dbb46c:k7p2x9qv4m1zr8t3hw6n:0000000000000000000000000000000000000000000000000000000000000000:00::ceb5d8c50b7698746fe058e0551b171e819accd2315fa5b8eb5dd4f74ca2dd4d:01:77e911d2943aa9523dba8af18c210146475c5d595ae05c08f99bf3e11d716e43:01:00:etny-esr-commits=0:etny-cu-delivered-gflops=:etny-esr-gas=0"
     },
     "esr": {
       "name": "esr",
@@ -423,7 +423,7 @@
         {
           "index": 13,
           "name": "cuDelivered",
-          "value": "etny-cu-delivered="
+          "value": "etny-cu-delivered-gflops="
         },
         {
           "index": 14,
@@ -431,15 +431,15 @@
           "value": "etny-esr-gas=27641742500000000"
         }
       ],
-      "result": "v5:0:30de2218ca0d0af4e87096f054ce46c3868bbc6c26e3b668802e400824dd80a0:k7p2x9qv4m1zr8t3hw6n:19f47a6645815eb491c9835effb168157db6ec127ab806eedac86fd0a2ea703f:02:bafkreidspmoigauzlox6cshweg4kp2jbphgkl22q7v32jggny7gurfhjoi:0000000000000000000000000000000000000000000000000000000000000000:00:0000000000000000000000000000000000000000000000000000000000000000:00:0f:etny-esr-commits=3:etny-cu-delivered=:etny-esr-gas=27641742500000000"
+      "result": "v5:0:30de2218ca0d0af4e87096f054ce46c3868bbc6c26e3b668802e400824dd80a0:k7p2x9qv4m1zr8t3hw6n:19f47a6645815eb491c9835effb168157db6ec127ab806eedac86fd0a2ea703f:02:bafkreidspmoigauzlox6cshweg4kp2jbphgkl22q7v32jggny7gurfhjoi:0000000000000000000000000000000000000000000000000000000000000000:00:0000000000000000000000000000000000000000000000000000000000000000:00:0f:etny-esr-commits=3:etny-cu-delivered-gflops=:etny-esr-gas=27641742500000000"
     },
     "probed": {
       "name": "probed",
       "inputs": {
         "taskResult": "Hello, World!",
         "taskCode": 0,
-        "source": "capability-record.json: cu, runNonce, t0, t1, validator.address, timeStatements.t0/t1.signature.serialized, block0, block1",
-        "deliveredRule": "nine values: cu x 1000 of the probe, the run nonce the trustedzone drew for the probe, the two validator timestamps, the validator address lower-case, the two 65-byte signatures 0x hex, then the block field of the t0 and t1 statements in decimal, taken by the trustedzone from the two time answers it holds; a production probe draws its own nonce and its t1 - t0 is the probe length. The validators recover the two signatures over the statements rebuilt with node = the order's dproc, nonce, t and block from this field."
+        "source": "capability-record.json: measurement.gflops, runNonce, t0, t1, validator.address, timeStatements.t0/t1.signature.serialized, block0, block1",
+        "deliveredRule": "nine values: the probe's gflops (one CU is 100 GFLOPS), the run nonce the trustedzone drew for the probe, the two validator timestamps, the validator address lower-case, the two 65-byte signatures 0x hex, then the block field of the t0 and t1 statements in decimal, taken by the trustedzone from the two time answers it holds; a production probe draws its own nonce and its t1 - t0 is the probe length. The validators recover the two signatures over the statements rebuilt with node = the order's dproc, nonce, t and block from this field."
       },
       "fields": [
         {
@@ -510,7 +510,7 @@
         {
           "index": 13,
           "name": "cuDelivered",
-          "value": "etny-cu-delivered=2500|0xf9324b49b24c8561481ef6b84ec6cbeabd1ccd691e3e55f109d1243ea864e569|1761724800|1761724830|0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278|0x32dac36e060115ab6b0c8904fe92c8588affd0fec146186f68a61902a2f89d7f20c5392feeb2db341616f71eb82f6309fde0c8f6bdd9cd0237f21e43482551a81c|0x00f6af616becd151b753b09ee4830c51df8449e840a57a135160facdccf410a8203b15fc4d879e3c9a9cd94befa207d5032f1ef951731f26d5db40bc0d85278c1b|29000000|29000015"
+          "value": "etny-cu-delivered-gflops=250|0xf9324b49b24c8561481ef6b84ec6cbeabd1ccd691e3e55f109d1243ea864e569|1761724800|1761724830|0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278|0x32dac36e060115ab6b0c8904fe92c8588affd0fec146186f68a61902a2f89d7f20c5392feeb2db341616f71eb82f6309fde0c8f6bdd9cd0237f21e43482551a81c|0x00f6af616becd151b753b09ee4830c51df8449e840a57a135160facdccf410a8203b15fc4d879e3c9a9cd94befa207d5032f1ef951731f26d5db40bc0d85278c1b|29000000|29000015"
         },
         {
           "index": 14,
@@ -518,7 +518,7 @@
           "value": "etny-esr-gas=0"
         }
       ],
-      "result": "v5:0:dffd6021bb2bd5b0af676290809ec3a53191dd81c7f70a4b28688a362182986f:k7p2x9qv4m1zr8t3hw6n:0000000000000000000000000000000000000000000000000000000000000000:00::0000000000000000000000000000000000000000000000000000000000000000:00:0000000000000000000000000000000000000000000000000000000000000000:00:0f:etny-esr-commits=0:etny-cu-delivered=2500|0xf9324b49b24c8561481ef6b84ec6cbeabd1ccd691e3e55f109d1243ea864e569|1761724800|1761724830|0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278|0x32dac36e060115ab6b0c8904fe92c8588affd0fec146186f68a61902a2f89d7f20c5392feeb2db341616f71eb82f6309fde0c8f6bdd9cd0237f21e43482551a81c|0x00f6af616becd151b753b09ee4830c51df8449e840a57a135160facdccf410a8203b15fc4d879e3c9a9cd94befa207d5032f1ef951731f26d5db40bc0d85278c1b|29000000|29000015:etny-esr-gas=0"
+      "result": "v5:0:dffd6021bb2bd5b0af676290809ec3a53191dd81c7f70a4b28688a362182986f:k7p2x9qv4m1zr8t3hw6n:0000000000000000000000000000000000000000000000000000000000000000:00::0000000000000000000000000000000000000000000000000000000000000000:00:0000000000000000000000000000000000000000000000000000000000000000:00:0f:etny-esr-commits=0:etny-cu-delivered-gflops=250|0xf9324b49b24c8561481ef6b84ec6cbeabd1ccd691e3e55f109d1243ea864e569|1761724800|1761724830|0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278|0x32dac36e060115ab6b0c8904fe92c8588affd0fec146186f68a61902a2f89d7f20c5392feeb2db341616f71eb82f6309fde0c8f6bdd9cd0237f21e43482551a81c|0x00f6af616becd151b753b09ee4830c51df8449e840a57a135160facdccf410a8203b15fc4d879e3c9a9cd94befa207d5032f1ef951731f26d5db40bc0d85278c1b|29000000|29000015:etny-esr-gas=0"
     },
     "transferred": {
       "name": "transferred",
@@ -606,7 +606,7 @@
         {
           "index": 13,
           "name": "cuDelivered",
-          "value": "etny-cu-delivered="
+          "value": "etny-cu-delivered-gflops="
         },
         {
           "index": 14,
@@ -614,7 +614,7 @@
           "value": "etny-esr-gas=0"
         }
       ],
-      "result": "v5:41:9a619a23f4e8626e9b1a22d3d1fee129d85f27546aa5f22eeb2d3485f36193f9:k7p2x9qv4m1zr8t3hw6n:0000000000000000000000000000000000000000000000000000000000000000:00::ceb5d8c50b7698746fe058e0551b171e819accd2315fa5b8eb5dd4f74ca2dd4d:01:77e911d2943aa9523dba8af18c210146475c5d595ae05c08f99bf3e11d716e43:01:06:etny-esr-commits=0:etny-cu-delivered=:etny-esr-gas=0"
+      "result": "v5:41:9a619a23f4e8626e9b1a22d3d1fee129d85f27546aa5f22eeb2d3485f36193f9:k7p2x9qv4m1zr8t3hw6n:0000000000000000000000000000000000000000000000000000000000000000:00::ceb5d8c50b7698746fe058e0551b171e819accd2315fa5b8eb5dd4f74ca2dd4d:01:77e911d2943aa9523dba8af18c210146475c5d595ae05c08f99bf3e11d716e43:01:06:etny-esr-commits=0:etny-cu-delivered-gflops=:etny-esr-gas=0"
     },
     "forced": {
       "name": "transfer-forced",
@@ -754,7 +754,7 @@
         {
           "index": 13,
           "name": "cuDelivered",
-          "value": "etny-cu-delivered="
+          "value": "etny-cu-delivered-gflops="
         },
         {
           "index": 14,
@@ -762,7 +762,7 @@
           "value": "etny-esr-gas=27641742500000000"
         }
       ],
-      "result": "v5:42:7f5181529085a1a9abb4486ea940e69d2328275b7054bd0fa1afa9e7460ec712:k7p2x9qv4m1zr8t3hw6n:19f47a6645815eb491c9835effb168157db6ec127ab806eedac86fd0a2ea703f:02:bafkreidspmoigauzlox6cshweg4kp2jbphgkl22q7v32jggny7gurfhjoi:ceb5d8c50b7698746fe058e0551b171e819accd2315fa5b8eb5dd4f74ca2dd4d:01:04933b3c02873c8f280914960f843c9f5ee69a0bfe58653dd5557ce488e83bf9:00:07:etny-esr-commits=3:etny-cu-delivered=:etny-esr-gas=27641742500000000"
+      "result": "v5:42:7f5181529085a1a9abb4486ea940e69d2328275b7054bd0fa1afa9e7460ec712:k7p2x9qv4m1zr8t3hw6n:19f47a6645815eb491c9835effb168157db6ec127ab806eedac86fd0a2ea703f:02:bafkreidspmoigauzlox6cshweg4kp2jbphgkl22q7v32jggny7gurfhjoi:ceb5d8c50b7698746fe058e0551b171e819accd2315fa5b8eb5dd4f74ca2dd4d:01:04933b3c02873c8f280914960f843c9f5ee69a0bfe58653dd5557ce488e83bf9:00:07:etny-esr-commits=3:etny-cu-delivered-gflops=:etny-esr-gas=27641742500000000"
     },
     "replayed": {
       "name": "replayed",
@@ -861,7 +861,7 @@
         {
           "index": 13,
           "name": "cuDelivered",
-          "value": "etny-cu-delivered="
+          "value": "etny-cu-delivered-gflops="
         },
         {
           "index": 14,
@@ -869,7 +869,7 @@
           "value": "etny-esr-gas=0"
         }
       ],
-      "result": "v5:0:7a43cb6dafa4fc42bfa63dc19d92c68f70e3c63db1c60784188360fd471631ad:k7p2x9qv4m1zr8t3hw6n:0000000000000000000000000000000000000000000000000000000000000000:00::cdd965c7234cf232eaf632c8573a973fd5cf22bf70d052443fdcf71f5409193d:01:689e8449a1d28174325fb555981e89688648d05d48ed1cac4e75da6a64e38f4f:02:00:etny-esr-commits=0:etny-cu-delivered=:etny-esr-gas=0"
+      "result": "v5:0:7a43cb6dafa4fc42bfa63dc19d92c68f70e3c63db1c60784188360fd471631ad:k7p2x9qv4m1zr8t3hw6n:0000000000000000000000000000000000000000000000000000000000000000:00::cdd965c7234cf232eaf632c8573a973fd5cf22bf70d052443fdcf71f5409193d:01:689e8449a1d28174325fb555981e89688648d05d48ed1cac4e75da6a64e38f4f:02:00:etny-esr-commits=0:etny-cu-delivered-gflops=:etny-esr-gas=0"
     }
   },
   "session": {

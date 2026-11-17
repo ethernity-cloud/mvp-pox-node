@@ -22,7 +22,7 @@ from web3 import middleware
 from web3.gas_strategies.time_based import fast_gas_price_strategy
 from web3.gas_strategies.rpc import rpc_gas_price_strategy
 
-from utils import scone_queues, get_or_generate_uuid, run_subprocess, run_subprocess_status, environment_failure, record_enclave_image_tree, compose_images, compose_services, await_enclave_runtime, tree_image_tag, las_image, passed_las_tag, candidate_las_names, compose_service_block, las_start_lines, las_start_to_apply, compose_with_las_start, revert_reason, wallet_covers, insufficient_funds, transaction_known, placement_block_of, block_ranges, WALLET_GAS_TRANSACTIONS, retry, holds_within, pinned_within, FetchDeferrals, staging_plan, remaining_order_seconds, record_order_placement, order_placed_at, pending_approvals, record_pending_approval, forget_pending_approval, ORDER_STARTED_KEY, order_started_row, ORDER_GRACE_SECONDS, session_wallet_attestation, Storage, Cache, ListCache, ListCacheWithTimestamp, MergedOrdersCache, subprocess, get_node_geo, HardwareInfoProvider, parse_transaction_bytes_ut, looks_like_cid, canonical_cid, PEER_MULTIADDR, next_registered_image, enclave_failure, enclave_may_have_failed, docker_container_states, docker_container_log_tail, stale_integration_tests, integration_tests_due, runnable_trustedzones, image_trees, stale_image_trees, directory_size, remove_tree, removal_leftovers, integration_env, order_env, dp_terms, tip_per_cu_hour_wei, dp_request_arguments, metadata_key, record_key, resume_admits, has_standing_dp_request, dp_request_disposition, bounded_cancel, do_request_verdict, refusal_cached, do_request_compare, resource_refusal_holds, ResourceRefusals, gas_with_headroom, placement_refusal_disposition, settlement_line, settlement_reward_wei, order_window, order_relay_ledger_path, ledger_rebuild, result_fields, result_send_decision, SESSION_WALLET_KEY, SESSION_OUTPUT_KEY
+from utils import scone_queues, get_or_generate_uuid, run_subprocess, run_subprocess_status, environment_failure, record_enclave_image_tree, compose_images, compose_services, await_enclave_runtime, tree_image_tag, las_image, passed_las_tag, candidate_las_names, compose_service_block, las_start_lines, las_start_to_apply, compose_with_las_start, revert_reason, wallet_covers, insufficient_funds, transaction_known, placement_block_of, block_ranges, WALLET_GAS_TRANSACTIONS, retry, holds_within, pinned_within, FetchDeferrals, staging_plan, remaining_order_seconds, record_order_placement, order_placed_at, pending_approvals, record_pending_approval, forget_pending_approval, ORDER_STARTED_KEY, order_started_row, ORDER_GRACE_SECONDS, session_wallet_attestation, Storage, Cache, ListCache, ListCacheWithTimestamp, MergedOrdersCache, subprocess, get_node_geo, HardwareInfoProvider, parse_transaction_bytes_ut, looks_like_cid, canonical_cid, PEER_MULTIADDR, next_registered_image, enclave_failure, enclave_may_have_failed, docker_container_states, docker_container_log_tail, stale_integration_tests, integration_tests_due, runnable_trustedzones, image_trees, stale_image_trees, directory_size, remove_tree, removal_leftovers, integration_env, order_env, dp_terms, GFLOPS_PER_CU, tip_per_cu_hour_wei, dp_request_arguments, metadata_key, record_key, resume_admits, has_standing_dp_request, dp_request_disposition, bounded_cancel, do_request_verdict, refusal_cached, do_request_compare, resource_refusal_holds, ResourceRefusals, gas_with_headroom, placement_refusal_disposition, settlement_line, settlement_reward_wei, order_window, order_relay_ledger_path, ledger_rebuild, result_fields, result_send_decision, SESSION_WALLET_KEY, SESSION_OUTPUT_KEY
 import scone_image
 import pox12
 import capability
@@ -30,7 +30,7 @@ import gas_profile
 import gas_ledger
 import broker
 import replay
-from constants import INTEGRATION_TEST_SECONDS, INTEGRATION_TEST_RETRY_MIN_SECONDS, INTEGRATION_TEST_RETRY_MAX_SECONDS, INTEGRATION_TEST_REGISTRY_CHECK_SECONDS, RPC_REPLICA_LAG_BLOCKS, DP_TERMS_POLL_SECONDS, CANCEL_ATTEMPTS, RELAY_BATCH_MIN, ESR_LEDGER_CAP, RESULT_SEND_GRACE_SECONDS, FENCE_STAGE_SECONDS, FENCE_STAGE_TICKS, HANDOVER_REQUEST_TIMEOUT_SECONDS
+from constants import INTEGRATION_TEST_SECONDS, INTEGRATION_TEST_RETRY_MIN_SECONDS, INTEGRATION_TEST_RETRY_MAX_SECONDS, INTEGRATION_TEST_REGISTRY_CHECK_SECONDS, RPC_REPLICA_LAG_BLOCKS, DP_TERMS_POLL_SECONDS, CANCEL_ATTEMPTS, RELAY_BATCH_MIN, ESR_LEDGER_CAP, RESULT_SEND_GRACE_SECONDS, FENCE_STAGE_SECONDS, FENCE_STAGE_TICKS, HANDOVER_REQUEST_TIMEOUT_SECONDS, CU_VERSION_MIN
 from models import *
 from error_messages import errorMessages
 from swift_stream_service import SwiftStreamService
@@ -2293,27 +2293,28 @@ class EtnyPoXNode:
     def __quote(self):
         """The reader's quote() on a 1.2 contract with a reader:
         (pricePerCuHourWei, tokenPerPol, avgGasPriceWei, smoothedUtilization,
-        capacityCu, loadCu, epochIndex, params); None without a reader."""
+        capacityGflops, loadGflops, epochIndex, params); None without a
+        reader."""
         if self.__reader is None:
             return None
         return self.__reader.caller().quote()
 
-    def __current_tip(self, cu):
-        """The tip of this node's 1.2 DP request for `cu` thousandths
-        (utils.tip_per_cu_hour_wei): the configured tip plus its own gas
+    def __current_tip(self, gflops):
+        """The tip of this node's 1.2 DP request for `gflops` GFLOPS (0: one
+        CU) (utils.tip_per_cu_hour_wei): the configured tip plus its own gas
         (the gas profile's three figures) at the quote's avgGasPriceWei and
         tokenPerPol; the configured tip alone without a reader."""
         quote = self.__quote()
         if quote is None:
-            return tip_per_cu_hour_wei(self.__network_config.tip_per_cu_hour_wei, {}, 0, 0, cu)
+            return tip_per_cu_hour_wei(self.__network_config.tip_per_cu_hour_wei, {}, 0, 0, gflops)
         return tip_per_cu_hour_wei(self.__network_config.tip_per_cu_hour_wei, self.__gas_profile.figures(),
-                                   quote[2], quote[1], cu)
+                                   quote[2], quote[1], gflops)
 
     def __dp_request_params(self):
         """(function name, arguments) of this node's DP request
         (utils.dp_request_arguments): its hardware resources, read now,
         bandwidth, duration, then the legacy price or the advertised record's
-        cu (0 without one) and the tip (__current_tip), uuid, protocol
+        gflops (0 without one) and the tip (__current_tip), uuid, protocol
         version, geography with the record's time statements
         (capability.metadata3) and capabilities (__dp_metadata4)."""
         if self.__price is None:
@@ -2325,13 +2326,13 @@ class EtnyPoXNode:
         record = advertised[1] if advertised else None
         resources = (self._limited_arg(self.__number_of_cpus), self._limited_arg(self.__free_memory),
                      self._limited_arg(self.__free_storage), self._limited_arg(self.__bandwidth))
-        cu = int(record['cu']) if record is not None else 0
+        gflops = int(record['gflops']) if record is not None else 0
         # While this node's acceptance of a handover stands, its offer is at
-        # most the predecessor's cu (broker.bounded_cu).
-        if cu and self.__broker is not None:
-            cu = broker.bounded_cu(cu, self.__accepted_handover())
-        tip = self.__current_tip(cu) if self.__pox_is_12 else 0
-        return dp_request_arguments(not self.__pox_is_12, resources, self.__duration, self.__price, cu, tip,
+        # most the predecessor's gflops (broker.bounded_gflops).
+        if gflops and self.__broker is not None:
+            gflops = broker.bounded_gflops(gflops, self.__accepted_handover())
+        tip = self.__current_tip(gflops) if self.__pox_is_12 else 0
+        return dp_request_arguments(not self.__pox_is_12, resources, self.__duration, self.__price, gflops, tip,
                                     self.__uuid, capability.metadata3(self.__node_geo, record),
                                     self.__dp_metadata4(advertised))
 
@@ -2396,13 +2397,13 @@ class EtnyPoXNode:
 
     def __refresh_dp_request(self, req_id, terms):
         """Refreshes DP request `req_id` (refreshDPRequest: its expiry moves to
-        now + the pricing's dpRequestTtl) with the current tip for the cu of
+        now + the pricing's dpRequestTtl) with the current tip for the gflops of
         `terms` (utils.DPTerms), awaits the receipt and logs the new expiry and
         tip; True when the refresh landed. A failure is logged, and the next
         tick tries again."""
         logger = self.logger
         try:
-            tip = self.__current_tip(terms.cu)
+            tip = self.__current_tip(terms.gflops)
             time.sleep(self.__network_config.rpc_delay / 1000)
             fn = self.__etny.functions.refreshDPRequest(int(req_id), int(tip))
             _hash = self.send_transaction(fn.build_transaction(self.get_transaction_build()))
@@ -2440,11 +2441,11 @@ class EtnyPoXNode:
         advertised_key = record_key(advertised[1] if advertised else None)
         accepts = bool(self.__network_config.accept_reserved) if self.__accepts_reserved_set else None
         disposition = dp_request_disposition(terms, time.time(), self.__dprequest_record_key, advertised_key, accepts)
-        # A standing acceptance bounds the offer at the predecessor's cu: a
-        # request recorded above it is replaced.
+        # A standing acceptance bounds the offer at the predecessor's gflops:
+        # a request recorded above it is replaced.
         accepted = self.__accepted_handover() if self.__broker is not None else None
-        cu_bound = broker.bounded_cu(terms.cu, accepted) if terms.cu else terms.cu
-        if disposition in ('keep', 'refresh') and cu_bound < terms.cu:
+        gflops_bound = broker.bounded_gflops(terms.gflops, accepted) if terms.gflops else terms.gflops
+        if disposition in ('keep', 'refresh') and gflops_bound < terms.gflops:
             disposition = 'readd'
         if disposition == 'refresh':
             self.__refresh_dp_request(self.__dprequest, terms)
@@ -2455,8 +2456,9 @@ class EtnyPoXNode:
             why = 'it has no terms on the 1.2 contract'
         elif self.__dprequest_record_key != advertised_key:
             why = 'the advertised capability record changed'
-        elif cu_bound < terms.cu:
-            why = f"its cu {terms.cu} is above the predecessor's {cu_bound} of the handover this node accepted"
+        elif gflops_bound < terms.gflops:
+            why = (f"its gflops {terms.gflops} is above the predecessor's {gflops_bound} of the handover this node "
+                   f"accepted")
         else:
             why = 'its accept-reserved flag differs from the configuration'
         logger.info(f"DP request {self.__dprequest} is replaced: {why}")
@@ -2598,8 +2600,8 @@ class EtnyPoXNode:
         self.logger.info(f"Payout address set to the farm's reward address {reward}")
 
     def __accepted_handover(self):
-        """The acceptance standing in accepted.json ({orderId, predecessor_cu,
-        reservation}), None for none."""
+        """The acceptance standing in accepted.json ({orderId,
+        predecessor_gflops, reservation}), None for none."""
         try:
             with open(self.cache_config.accepted_handover_filepath) as f:
                 record = json.load(f)
@@ -2607,11 +2609,12 @@ class EtnyPoXNode:
         except (OSError, ValueError):
             return None
 
-    def __record_accepted_handover(self, order_id, predecessor_cu, reservation):
+    def __record_accepted_handover(self, order_id, predecessor_gflops, reservation):
         path = self.cache_config.accepted_handover_filepath
         temporary = f"{path}.tmp"
         with open(temporary, 'w') as f:
-            json.dump({'orderId': int(order_id), 'predecessor_cu': int(predecessor_cu), 'reservation': int(reservation)}, f)
+            json.dump({'orderId': int(order_id), 'predecessor_gflops': int(predecessor_gflops),
+                       'reservation': int(reservation)}, f)
         os.replace(temporary, path)
 
     def __forget_accepted_handover(self):
@@ -2780,15 +2783,15 @@ class EtnyPoXNode:
                 logger.info(f"The handover of order {order_id} (reservation {event.id}) was not accepted ({e}); not retried")
                 self.__set_scan_cursor('refused_acceptances', sorted(refused | {order_id}))
                 continue
-            predecessor_cu = 0
+            predecessor_gflops = 0
             try:
                 predecessor = Order(self.__etny.caller()._getOrder(int(order_id)))
-                predecessor_cu = dp_terms(self.__etny.caller().dpTerms(int(predecessor.dp_req))).cu
+                predecessor_gflops = dp_terms(self.__etny.caller().dpTerms(int(predecessor.dp_req))).gflops
             except Exception as e:
-                logger.debug(f"The predecessor's cu of order {order_id} was not read ({e}); the offer is not bounded")
-            self.__record_accepted_handover(order_id, predecessor_cu, event.id)
+                logger.debug(f"The predecessor's gflops of order {order_id} was not read ({e}); the offer is not bounded")
+            self.__record_accepted_handover(order_id, predecessor_gflops, event.id)
             logger.info(f"Accepted the handover of order {order_id} (reservation {event.id}, announced by {event.dproc}); "
-                        f"the offer is held for its successor at most cu {predecessor_cu or 'unbounded'}")
+                        f"the offer is held for its successor at most gflops {predecessor_gflops or 'unbounded'}")
         return sent
 
     def __supervise_hint(self, reservation, kind, next_due):
@@ -5378,7 +5381,7 @@ class EtnyPoXNode:
                 # The price (utils.do_request_verdict): without a quote the
                 # legacy uint8 compare; with the pass's quote the request's
                 # recorded terms against the quote's price plus this node's
-                # tip and its cu. A refusal that holds for the request's life
+                # tip and its gflops. A refusal that holds for the request's life
                 # is cached (utils.refusal_cached), a price refusal is not.
                 if quote is None:
                     refusal = do_request_verdict(doreq[i].price, req.price)
@@ -5393,7 +5396,7 @@ class EtnyPoXNode:
                     except Exception as e:
                         logger.debug(f"DO request {i}: its terms were not read ({e}); next pass")
                         continue
-                    refusal = do_request_verdict(doreq[i].price, req.price, quote[0], do_v2[i], terms.tip, terms.cu,
+                    refusal = do_request_verdict(doreq[i].price, req.price, quote[0], do_v2[i], terms.tip, terms.gflops,
                                                  self.__fee_percents, publisher_fees[i])
                 if refusal is not None:
                     if refusal_cached(refusal):
@@ -6760,9 +6763,9 @@ class EtnyPoXNode:
         is admitted (capability.capability_record_from: the record names
         this wallet and this network's chain id and PoX contract, a seated
         validator signed both time statements, the image requires dcap, the
-        network has a validator set, the run length, cu and t1 are within the
-        bounds), None otherwise, the reason logged. A registry read that
-        fails refuses the record and keeps the test's pass."""
+        network has a validator set, the run length, gflops, cuv and t1 are
+        within the bounds), None otherwise, the reason logged. A registry read
+        that fails refuses the record and keeps the test's pass."""
         logger = self.logger
         registry = self.__validator_registry_address()
         try:
@@ -6775,7 +6778,8 @@ class EtnyPoXNode:
         if record is None:
             logger.info(f"Integration test of {image}: no capability record admitted: {reason}")
             return None
-        logger.info(f"Integration test of {image}: record admitted (cu {record['cu']}, cuv {record['cuv']}, "
+        logger.info(f"Integration test of {image}: record admitted (gflops {record['gflops']} "
+                    f"({record['gflops'] / GFLOPS_PER_CU:.2f} CU), cuv {record['cuv']}, "
                     f"validator {record['validator']}, t1 {record['t1']}, blocks {record['block0']}..{record['block1']})")
         return record
 
@@ -6783,10 +6787,12 @@ class EtnyPoXNode:
         """Loads the passed tests of this network's images from the record
         store into integration_test_passed, one due for its re-measure
         (capability.remeasure_due) or without its tested LAS kept
-        (__tested_las_kept) into integration_test_remeasure as well (it runs
-        again now, the pass standing), and drops the records that reached
-        CU_TTL_SECONDS; then marks the loaded tests the image registry's
-        latest made stale."""
+        (__tested_las_kept) or whose record the store dropped at a load
+        (RecordStore.retest_pending: below CU_VERSION_MIN or without gflops,
+        held in the file until the next pass) into integration_test_remeasure
+        as well (it runs again now, the pass standing), and drops the records
+        that reached CU_TTL_SECONDS; then marks the loaded tests the image
+        registry's latest made stale."""
         now = time.time()
         with integration_test_lock:
             for image in self.__integration_images:
@@ -6799,7 +6805,12 @@ class EtnyPoXNode:
                 integration_test_passed[image] = entry['image_hash']
                 self.logger.info(f"Integration test of {image} passed at {entry['passed_at']} on {entry['image_hash']}"
                                  f"{' with a capability record' if entry.get('record') else ''}; loaded")
-                if capability.remeasure_due(entry['passed_at'], now) and image not in integration_test_remeasure:
+                if self.__record_store.retest_pending(image) and image not in integration_test_remeasure:
+                    self.logger.info(f"Integration test of {image}: its stored capability record is dropped (below "
+                                     f"CU_VERSION_MIN {CU_VERSION_MIN} or without gflops); it runs again")
+                    integration_test_remeasure.add(image)
+                    integration_test_retry[image] = (0, 0.0)
+                elif capability.remeasure_due(entry['passed_at'], now) and image not in integration_test_remeasure:
                     self.logger.info(f"Integration test of {image}: its re-measure is due: it runs again")
                     integration_test_remeasure.add(image)
                     integration_test_retry[image] = (0, 0.0)

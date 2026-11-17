@@ -9,7 +9,7 @@ from gas_ledger import OrderGasLedger, OrderTerms, PricingParams, WEI_PER_TOKEN,
 GWEI = 10**9
 LIVE = 130 * GWEI
 PARAMS = PricingParams(343834, 267445, 971708, 30 * GWEI)
-TERMS = OrderTerms(10**15, 1000, 0, 0, 0, WEI_PER_TOKEN)
+TERMS = OrderTerms(10**15, 100, 0, 0, 0, WEI_PER_TOKEN)
 
 
 def chain_cost(commit_gas, live, rows, terms, params):

@@ -13,9 +13,9 @@
     "rule": "ETNY_NODE_ADDRESS from the integration bucket .env, lower-case 0x hex in the record."
   },
   "measurement": {
-    "cu": 2500,
-    "cuUnit": "thousandths of a compute unit (2500 = 2.5 CU)",
-    "cuv": 1,
+    "gflops": 250,
+    "gflopsUnit": "whole GFLOPS of the benchmark kernel (250 = 2.5 CU; one CU is 100 GFLOPS)",
+    "cuv": 4,
     "heap": "256M",
     "workers": 4,
     "runNonce": "0xf9324b49b24c8561481ef6b84ec6cbeabd1ccd691e3e55f109d1243ea864e569",
@@ -93,16 +93,16 @@
     "publicKeyPem": "-----BEGIN PUBLIC KEY-----\nMHYwEAYHKoZIzj0CAQYFK4EEACIDYgAEywr/me1Dyph8kkrzjtgkIxkF4b7/pb9H\njGVlgqJQiGvG25tNjAlldf8YO76YH54IBjiA+o9b5+JyC+zhMgqN5PRURlWrdIOj\nNK5RT3izKpMxzh51If8fJ+EANFDlb2bS\n-----END PUBLIC KEY-----\n",
     "note": "test key only; stands for the enclave key whose certificate the image registry holds"
   },
-  "lineLayout": "etny-cu|v1|<chainId>:<pox address>|<node address lower-case>|<cu x 1000>|<cuv>|<validator address lower-case>|<run nonce 0x+64 hex>|<t0>|<t1>|<sig t0 0x+130 hex>|<sig t1 0x+130 hex>|heap=<SCONE_HEAP>;workers=<n>",
-  "line": "etny-cu|v1|80002:0xB8f46D2B943fFbe2A061Ae8be087ef5055AD96A3|0x470d8b388f4a0ae6bd512b74038c7e87957bb8fe|2500|1|0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278|0xf9324b49b24c8561481ef6b84ec6cbeabd1ccd691e3e55f109d1243ea864e569|1761724800|1761724830|0x32dac36e060115ab6b0c8904fe92c8588affd0fec146186f68a61902a2f89d7f20c5392feeb2db341616f71eb82f6309fde0c8f6bdd9cd0237f21e43482551a81c|0x00f6af616becd151b753b09ee4830c51df8449e840a57a135160facdccf410a8203b15fc4d879e3c9a9cd94befa207d5032f1ef951731f26d5db40bc0d85278c1b|heap=256M;workers=4",
-  "lineSha256": "67d833f268a2775ba2b617c313c552c985d18d70d89aa269c76459d87f22b11c",
+  "lineLayout": "etny-cu|v1|<chainId>:<pox address>|<node address lower-case>|<gflops>|<cuv>|<validator address lower-case>|<run nonce 0x+64 hex>|<t0>|<t1>|<sig t0 0x+130 hex>|<sig t1 0x+130 hex>|heap=<SCONE_HEAP>;workers=<n>",
+  "line": "etny-cu|v1|80002:0xB8f46D2B943fFbe2A061Ae8be087ef5055AD96A3|0x470d8b388f4a0ae6bd512b74038c7e87957bb8fe|250|4|0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278|0xf9324b49b24c8561481ef6b84ec6cbeabd1ccd691e3e55f109d1243ea864e569|1761724800|1761724830|0x32dac36e060115ab6b0c8904fe92c8588affd0fec146186f68a61902a2f89d7f20c5392feeb2db341616f71eb82f6309fde0c8f6bdd9cd0237f21e43482551a81c|0x00f6af616becd151b753b09ee4830c51df8449e840a57a135160facdccf410a8203b15fc4d879e3c9a9cd94befa207d5032f1ef951731f26d5db40bc0d85278c1b|heap=256M;workers=4",
+  "lineSha256": "91f5c4e30fd27030822f8fc5cff38e5574d38c71471e2224eb0785c5d48d2a2f",
   "signatureScheme": "ECDSA secp384r1 over SHA-256 of the UTF-8 bytes of line (no trailing newline), DER encoded, lower-case hex without 0x. Verifiers prehash with SHA-256 and parse the DER (from_der), never SHA-384.",
-  "signatureDerHex": "3065023100cb379b39747915703252bee96e4e7b1adb7450330a9f78828a43907408431e08a4ec10b12f8ee72bc1fad7e98bce531102307d0058065324d4666c4689d5ff93d16a97869a6b01f70c4ffb222642cfdb5fb4bc9b416b7e79edb8d7da97644588831e",
+  "signatureDerHex": "30660231009ed1a9f357e9c1f5a1c47d972f39a9972f8d535bfbb02994bb7b26a5a416e2d76d0cc9bd655c2212698c628462a199fe023100a21975f8209b93d18bec1a6f6d1c4daf43010f9cdc97d292fff39b5ac9a2a880c1092ac048af8c937ec33044a8e49a26",
   "capabilityEtny": {
     "bucket": "etny-bucket-integration",
     "object": "capability.etny",
     "layout": "three LF-terminated lines: the record line, its DER hex signature, then an unsigned platform line (cpu model, cores, MHz read from the host); written after capability.time.etny and before context_test.etny",
-    "content": "etny-cu|v1|80002:0xB8f46D2B943fFbe2A061Ae8be087ef5055AD96A3|0x470d8b388f4a0ae6bd512b74038c7e87957bb8fe|2500|1|0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278|0xf9324b49b24c8561481ef6b84ec6cbeabd1ccd691e3e55f109d1243ea864e569|1761724800|1761724830|0x32dac36e060115ab6b0c8904fe92c8588affd0fec146186f68a61902a2f89d7f20c5392feeb2db341616f71eb82f6309fde0c8f6bdd9cd0237f21e43482551a81c|0x00f6af616becd151b753b09ee4830c51df8449e840a57a135160facdccf410a8203b15fc4d879e3c9a9cd94befa207d5032f1ef951731f26d5db40bc0d85278c1b|heap=256M;workers=4\n3065023100cb379b39747915703252bee96e4e7b1adb7450330a9f78828a43907408431e08a4ec10b12f8ee72bc1fad7e98bce531102307d0058065324d4666c4689d5ff93d16a97869a6b01f70c4ffb222642cfdb5fb4bc9b416b7e79edb8d7da97644588831e\nplatform|cpu=Intel(R) Xeon(R) E-2288G CPU @ 3.70GHz|cores=8|mhz=3700\n",
+    "content": "etny-cu|v1|80002:0xB8f46D2B943fFbe2A061Ae8be087ef5055AD96A3|0x470d8b388f4a0ae6bd512b74038c7e87957bb8fe|250|4|0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278|0xf9324b49b24c8561481ef6b84ec6cbeabd1ccd691e3e55f109d1243ea864e569|1761724800|1761724830|0x32dac36e060115ab6b0c8904fe92c8588affd0fec146186f68a61902a2f89d7f20c5392feeb2db341616f71eb82f6309fde0c8f6bdd9cd0237f21e43482551a81c|0x00f6af616becd151b753b09ee4830c51df8449e840a57a135160facdccf410a8203b15fc4d879e3c9a9cd94befa207d5032f1ef951731f26d5db40bc0d85278c1b|heap=256M;workers=4\n30660231009ed1a9f357e9c1f5a1c47d972f39a9972f8d535bfbb02994bb7b26a5a416e2d76d0cc9bd655c2212698c628462a199fe023100a21975f8209b93d18bec1a6f6d1c4daf43010f9cdc97d292fff39b5ac9a2a880c1092ac048af8c937ec33044a8e49a26\nplatform|cpu=Intel(R) Xeon(R) E-2288G CPU @ 3.70GHz|cores=8|mhz=3700\n",
     "platformLine": "platform|cpu=Intel(R) Xeon(R) E-2288G CPU @ 3.70GHz|cores=8|mhz=3700"
   },
   "capabilityTimeEtny": {
@@ -128,13 +128,13 @@
     }
   },
   "metadata4": {
-    "layout": "trustedzones=<a,b>;ipfs=<peer id>;startrow=v1;cu=<cu x 1000>;cuv=<cuv>;cuat=<t1>;cusig=<DER hex of the record signature>;cuheap=<SCONE_HEAP>;cuworkers=<n>",
-    "value": "trustedzones=ecld-nodenithy-amoy,ecld-pynithy-amoy;ipfs=12D3KooWQYhTNQdmr3ArTeUHRYzFg94BKyTkoWBDWez9kSCVe2Xo;startrow=v1;cu=2500;cuv=1;cuat=1761724830;cusig=3065023100cb379b39747915703252bee96e4e7b1adb7450330a9f78828a43907408431e08a4ec10b12f8ee72bc1fad7e98bce531102307d0058065324d4666c4689d5ff93d16a97869a6b01f70c4ffb222642cfdb5fb4bc9b416b7e79edb8d7da97644588831e;cuheap=256M;cuworkers=4",
+    "layout": "trustedzones=<a,b>;ipfs=<peer id>;startrow=v1;cugflops=<gflops>;cuv=<cuv>;cuat=<t1>;cusig=<DER hex of the record signature>;cuheap=<SCONE_HEAP>;cuworkers=<n>",
+    "value": "trustedzones=ecld-nodenithy-amoy,ecld-pynithy-amoy;ipfs=12D3KooWQYhTNQdmr3ArTeUHRYzFg94BKyTkoWBDWez9kSCVe2Xo;startrow=v1;cugflops=250;cuv=4;cuat=1761724830;cusig=30660231009ed1a9f357e9c1f5a1c47d972f39a9972f8d535bfbb02994bb7b26a5a416e2d76d0cc9bd655c2212698c628462a199fe023100a21975f8209b93d18bec1a6f6d1c4daf43010f9cdc97d292fff39b5ac9a2a880c1092ac048af8c937ec33044a8e49a26;cuheap=256M;cuworkers=4",
     "keys": [
       "trustedzones",
       "ipfs",
       "startrow",
-      "cu",
+      "cugflops",
       "cuv",
       "cuat",
       "cusig",
@@ -159,7 +159,7 @@
     "blocksRule": "cub0 and cub1 are the block field of the t0 and t1 time statements (decimal), written by the node agent from the first and second line of capability.time.etny (capabilityTimeEtny); the record line does not carry them, so they are unsigned by the trustedzone, and a wrong value only fails the recovery of cusig0 / cusig1 to a seated member (the node's own offer is cancelled)"
   },
   "lineFromMetadata": {
-    "rule": "a validator rebuilds the signed line from the DP request alone: etny-cu|v1|<baked chainId>:<baked pox>|<dproc lower-case>|<cu>|<cuv>|<cuval>|<cun>|<cut0>|<cut1>|<cusig0>|<cusig1>|heap=<cuheap>;workers=<cuworkers>, then verifies cusig over it; cun, cuheap and cuworkers carry the three fields of the line that no other key or chain state holds; the line carries no block numbers: cusig0 and cusig1 are recovered over the time statements rebuilt with node = dproc, nonce = cun, t = cut0 / cut1 and block = cub0 / cub1",
-    "rebuilt": "etny-cu|v1|80002:0xB8f46D2B943fFbe2A061Ae8be087ef5055AD96A3|0x470d8b388f4a0ae6bd512b74038c7e87957bb8fe|2500|1|0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278|0xf9324b49b24c8561481ef6b84ec6cbeabd1ccd691e3e55f109d1243ea864e569|1761724800|1761724830|0x32dac36e060115ab6b0c8904fe92c8588affd0fec146186f68a61902a2f89d7f20c5392feeb2db341616f71eb82f6309fde0c8f6bdd9cd0237f21e43482551a81c|0x00f6af616becd151b753b09ee4830c51df8449e840a57a135160facdccf410a8203b15fc4d879e3c9a9cd94befa207d5032f1ef951731f26d5db40bc0d85278c1b|heap=256M;workers=4"
+    "rule": "a validator rebuilds the signed line from the DP request alone: etny-cu|v1|<baked chainId>:<baked pox>|<dproc lower-case>|<gflops>|<cuv>|<cuval>|<cun>|<cut0>|<cut1>|<cusig0>|<cusig1>|heap=<cuheap>;workers=<cuworkers>, then verifies cusig over it; gflops is the cugflops key; cun, cuheap and cuworkers carry the three fields of the line that no other key or chain state holds; the line carries no block numbers: cusig0 and cusig1 are recovered over the time statements rebuilt with node = dproc, nonce = cun, t = cut0 / cut1 and block = cub0 / cub1",
+    "rebuilt": "etny-cu|v1|80002:0xB8f46D2B943fFbe2A061Ae8be087ef5055AD96A3|0x470d8b388f4a0ae6bd512b74038c7e87957bb8fe|250|4|0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278|0xf9324b49b24c8561481ef6b84ec6cbeabd1ccd691e3e55f109d1243ea864e569|1761724800|1761724830|0x32dac36e060115ab6b0c8904fe92c8588affd0fec146186f68a61902a2f89d7f20c5392feeb2db341616f71eb82f6309fde0c8f6bdd9cd0237f21e43482551a81c|0x00f6af616becd151b753b09ee4830c51df8449e840a57a135160facdccf410a8203b15fc4d879e3c9a9cd94befa207d5032f1ef951731f26d5db40bc0d85278c1b|heap=256M;workers=4"
   }
 }

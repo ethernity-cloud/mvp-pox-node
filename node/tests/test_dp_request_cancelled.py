@@ -1,7 +1,7 @@
 """capability.cancel_reason_name / cancel_disposition (PHASE-E-PLAN.md E15,
-C.5): the reason table of cancelDPRequestByValidators 1..7, 're-test then
-re-add' for the record's faults 1..6 and 're-add' for the strike reason 7
-and any code outside the table."""
+C.5): the reason table of cancelDPRequestByValidators 1..8, 're-test then
+re-add' for the record's faults 1..6 and 8 and 're-add' for the strike
+reason 7 and any code outside the table."""
 import pytest
 
 import capability
@@ -13,17 +13,23 @@ import capability
     (3, "TimestampNotSeated"),
     (4, "RunTooLong"),
     (5, "RecordExpired"),
-    (6, "CuAboveMax"),
+    (6, "GflopsAboveMax"),
     (7, "DeliveredBelowAttested"),
+    (8, "CuVersionBelowMinimum"),
 ])
 def test_the_reason_table(code, name):
     assert capability.cancel_reason_name(code) == name
     assert capability.CANCEL_REASONS[code] == name
 
 
-@pytest.mark.parametrize("code", range(1, 7))
+@pytest.mark.parametrize("code", [1, 2, 3, 4, 5, 6, 8])
 def test_a_record_fault_re_tests_before_the_re_add(code):
     assert capability.cancel_disposition(code) == "retest"
+
+
+def test_a_record_below_the_minimum_version_re_tests_then_re_adds():
+    assert 8 in capability.RETEST_REASONS
+    assert capability.cancel_disposition(8) == "retest"
 
 
 def test_the_strike_reason_re_adds_without_a_re_test():
@@ -32,5 +38,5 @@ def test_the_strike_reason_re_adds_without_a_re_test():
 
 def test_a_code_outside_the_table_re_adds_without_a_re_test():
     assert capability.cancel_disposition(0) == "readd"
-    assert capability.cancel_disposition(8) == "readd"
+    assert capability.cancel_disposition(9) == "readd"
     assert capability.cancel_reason_name(0) == "Unknown(0)"

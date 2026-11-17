@@ -15,7 +15,7 @@ by `spec/make/capability-record.js`; this file is written by
 ## metadata4
 
 ```
-trustedzones=<a,b>;ipfs=<peer id>;startrow=v1;cu=<cu x 1000>;cuv=<cuv>;cuat=<t1>;cusig=<DER hex of the record signature>;cuheap=<SCONE_HEAP>;cuworkers=<n>
+trustedzones=<a,b>;ipfs=<peer id>;startrow=v1;cugflops=<gflops>;cuv=<cuv>;cuat=<t1>;cusig=<DER hex of the record signature>;cuheap=<SCONE_HEAP>;cuworkers=<n>
 ```
 
 | key | value | written by |
@@ -23,21 +23,24 @@ trustedzones=<a,b>;ipfs=<peer id>;startrow=v1;cu=<cu x 1000>;cuv=<cuv>;cuat=<t1>
 | `trustedzones` | comma-separated trustedzone image names of this network the node runs | agent |
 | `ipfs` | the node's Kubo peer id; empty when Kubo did not answer | agent |
 | `startrow` | `v1`: the agent adds the `etny-st` started row when it starts an order | agent |
-| `cu` | compute units x 1000 from the capability record (`2500` = 2.5 CU) | agent, from the record |
-| `cuv` | benchmark version of the record | agent, from the record |
+| `cugflops` | the record's gflops, field 4 of the line: the node's attested GFLOPS; one CU is 100 GFLOPS (`250` = 2.5 CU); at most `CU_MAX x 100` = 6,400 | agent, from the record |
+| `cuv` | the benchmark version of the record (benchmark.json `cuv`); at least `CU_VERSION_MIN` (4) | agent, from the record |
 | `cuat` | `t1` of the record: the unix second the benchmark ended, for the CU_TTL check | agent, from the record |
 | `cusig` | the trustedzone's DER hex P-384 signature over the record line | agent, from the record |
 | `cuheap` | the `SCONE_HEAP` of the record's last field (`heap=`) | agent, from the record |
 | `cuworkers` | the benchmark worker count of the record's last field (`workers=`) | agent, from the record |
 
-A DP request without `cu` is an unattested offer (1 CU, cancellable where a
-validator set runs). The agent appends the six `cu*` keys after
-`startrow=v1` and only when it holds a record.
+A DP request without `cugflops` is an unattested offer (counted as one CU,
+100 GFLOPS, and not cancelled). The `cu` prefix names the capability
+record's key family: `cugflops`, `cuv`, `cuat`, `cusig`, `cuheap` and
+`cuworkers` here, and the `cuval`, `cun`, `cut0`, `cut1`, `cub0`,
+`cub1`, `cusig0`, `cusig1` group of metadata3. The agent appends the six
+metadata4 `cu*` keys after `startrow=v1` and only when it holds a record.
 
 Example:
 
 ```
-trustedzones=ecld-nodenithy-amoy,ecld-pynithy-amoy;ipfs=12D3KooWQYhTNQdmr3ArTeUHRYzFg94BKyTkoWBDWez9kSCVe2Xo;startrow=v1;cu=2500;cuv=1;cuat=1761724830;cusig=3065023100cb379b39747915703252bee96e4e7b1adb7450330a9f78828a43907408431e08a4ec10b12f8ee72bc1fad7e98bce531102307d0058065324d4666c4689d5ff93d16a97869a6b01f70c4ffb222642cfdb5fb4bc9b416b7e79edb8d7da97644588831e;cuheap=256M;cuworkers=4
+trustedzones=ecld-nodenithy-amoy,ecld-pynithy-amoy;ipfs=12D3KooWQYhTNQdmr3ArTeUHRYzFg94BKyTkoWBDWez9kSCVe2Xo;startrow=v1;cugflops=250;cuv=4;cuat=1761724830;cusig=30660231009ed1a9f357e9c1f5a1c47d972f39a9972f8d535bfbb02994bb7b26a5a416e2d76d0cc9bd655c2212698c628462a199fe023100a21975f8209b93d18bec1a6f6d1c4daf43010f9cdc97d292fff39b5ac9a2a880c1092ac048af8c937ec33044a8e49a26;cuheap=256M;cuworkers=4
 ```
 
 ## metadata3
@@ -82,7 +85,7 @@ Example with the geography empty (the string starts with `;`):
 
 ## Key names
 
-metadata4: `trustedzones`, `ipfs`, `startrow`, `cu`, `cuv`, `cuat`, `cusig`, `cuheap`, `cuworkers`
+metadata4: `trustedzones`, `ipfs`, `startrow`, `cugflops`, `cuv`, `cuat`, `cusig`, `cuheap`, `cuworkers`
 
 metadata3: geography (positional, first field), `cuval`, `cun`, `cut0`, `cut1`, `cub0`, `cub1`, `cusig0`, `cusig1`
 
@@ -93,10 +96,11 @@ validators do not read, so every signed field is baked, on chain or in these
 keys: the line's fields as listed below, and the two time statements' fields
 (`chainId` and `registry` baked, `node` = the request's `dproc`,
 `nonce` = `cun`, `t` = `cut0` / `cut1`, `block` = `cub0` / `cub1`). A
-validator rebuilds
+validator rebuilds (`<gflops>` from `cugflops`, the other `cu*` placeholders
+from the keys of their names)
 
 ```
-etny-cu|v1|<baked chainId>:<baked pox>|<dproc lower-case>|<cu>|<cuv>|<cuval>|<cun>|<cut0>|<cut1>|<cusig0>|<cusig1>|heap=<cuheap>;workers=<cuworkers>
+etny-cu|v1|<baked chainId>:<baked pox>|<dproc lower-case>|<gflops>|<cuv>|<cuval>|<cun>|<cut0>|<cut1>|<cusig0>|<cusig1>|heap=<cuheap>;workers=<cuworkers>
 ```
 
 and checks:
@@ -108,8 +112,23 @@ and checks:
   `nonce` = `cun`, `t` = `cut0` / `cut1` and `block` = `cub0` / `cub1`,
   and `cuval` is a seated member of the registry;
 - `cut1 - cut0` is at most `BENCHMARK_MAX_SECONDS`; `cuat` equals `cut1`
-  and is within `CU_TTL` of the block timestamp; `cu` is at most
-  `CU_MAX x 1000`.
+  and is within `CU_TTL` of the block timestamp; `cugflops` is at most
+  `CU_MAX x 100` (6,400); `cuv` is at least `CU_VERSION_MIN` (4).
+
+A failed check cancels the offer with a reason code, the `uint8` the
+validators carry in `voteCancel` and the PoX in `DPRequestCancelled`
+(ethernity-cas `capability.rs` `Reason`; PRICING-DESIGN.md section 9):
+
+| code | reason | check |
+|---|---|---|
+| 1 | `RecordSignatureInvalid` | `cusig` verifies under no certificate and no session key of the trustedzone name |
+| 2 | `RecordNodeMismatch` | the rebuilt line's node or PoX differs from the request's |
+| 3 | `TimestampNotSeated` | `cusig0` / `cusig1` do not recover to `cuval`, or `cuval` is not seated |
+| 4 | `RunTooLong` | `cut1 - cut0` above `BENCHMARK_MAX_SECONDS` |
+| 5 | `RecordExpired` | `cuat` is not `cut1`, or more than `CU_TTL` from the block timestamp either way |
+| 6 | `GflopsAboveMax` | `cugflops` above `CU_MAX x 100` (6,400) |
+| 7 | `DeliveredBelowAttested` | the node's window holds `CU_STRIKES` strikes (a probe delivered below 80 % of the attested gflops) |
+| 8 | `CuVersionBelowMinimum` | `cuv` below `CU_VERSION_MIN` (4); checked after the `GflopsAboveMax` check |
 
 `cun`, `cuheap` and `cuworkers` carry the three fields of the line that no
 other key or chain state holds (the run nonce and the `heap=;workers=`

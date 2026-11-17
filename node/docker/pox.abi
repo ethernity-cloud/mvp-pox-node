@@ -1008,7 +1008,7 @@
       },
       {
         "internalType": "uint32",
-        "name": "maxCu",
+        "name": "maxGflops",
         "type": "uint32"
       },
       {
@@ -1099,7 +1099,7 @@
       },
       {
         "internalType": "uint32",
-        "name": "maxCu",
+        "name": "maxGflops",
         "type": "uint32"
       },
       {
@@ -1175,7 +1175,7 @@
       },
       {
         "internalType": "uint32",
-        "name": "cu",
+        "name": "gflops",
         "type": "uint32"
       },
       {
@@ -1295,7 +1295,7 @@
       },
       {
         "internalType": "uint32",
-        "name": "maxCu",
+        "name": "maxGflops",
         "type": "uint32"
       },
       {
@@ -1361,7 +1361,7 @@
     "outputs": [
       {
         "internalType": "uint32",
-        "name": "cu",
+        "name": "gflops",
         "type": "uint32"
       },
       {
@@ -1911,7 +1911,7 @@
       },
       {
         "internalType": "uint32",
-        "name": "cu",
+        "name": "gflops",
         "type": "uint32"
       },
       {

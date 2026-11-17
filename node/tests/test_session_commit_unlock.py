@@ -15,7 +15,7 @@ with open(FIXTURE, encoding="utf-8") as f:
 LISTING = SPEC["relay"]["afterReceipt"]["listing"]
 FENCE = SPEC["fence"]["name"]
 NAMES = json.loads(SPEC["steps"]["withCommits"]["commitsObject"]["content"])
-TERMS = OrderTerms(10**15, 1000, 3 * 10**17, 100 * 10**9, 0, 10**18)
+TERMS = OrderTerms(10**15, 100, 3 * 10**17, 100 * 10**9, 0, 10**18)
 PARAMS = PricingParams(343834, 267445, 971708, 30 * 10**9)
 
 

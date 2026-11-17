@@ -34,7 +34,7 @@ class DORequestV2:
         self.instances = req[6]
         self.max_price = int(req[7])
         self.reserved_price = int(req[8])
-        self.max_cu = int(req[9])
+        self.max_gflops = int(req[9])
         self.relays_per_hour = req[10]
         self.gas_level = int(req[11])
         self.chain_fee = int(req[12])

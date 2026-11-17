@@ -420,7 +420,7 @@ def acceptance_due(event, now, self_address, my_farm, params, commitment, farm_a
 
 def acceptance_standing(accepted, window):
     """Whether the acceptance recorded in accepted.json ({'orderId',
-    'predecessor_cu'}) still holds the node's offer: until the window's
+    'predecessor_gflops'}) still holds the node's offer: until the window's
     successor is placed or the window is gone (handoverOf found false or
     fromBlock 0)."""
     if not accepted:
@@ -430,15 +430,16 @@ def acceptance_standing(accepted, window):
     return not window.successor_placed
 
 
-def bounded_cu(record_cu, accepted):
-    """The cu argument of this node's DP request while an acceptance stands:
-    min(record cu, the predecessor's cu); the record's otherwise."""
+def bounded_gflops(record_gflops, accepted):
+    """The gflops argument of this node's DP request while an acceptance
+    stands: min(record gflops, the predecessor's gflops); the record's
+    otherwise."""
     if not accepted:
-        return int(record_cu)
-    predecessor_cu = int(accepted.get('predecessor_cu') or 0)
-    if predecessor_cu <= 0:
-        return int(record_cu)
-    return min(int(record_cu), predecessor_cu)
+        return int(record_gflops)
+    predecessor_gflops = int(accepted.get('predecessor_gflops') or 0)
+    if predecessor_gflops <= 0:
+        return int(record_gflops)
+    return min(int(record_gflops), predecessor_gflops)
 
 
 # ------------------------------------------------------------------ the farm

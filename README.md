@@ -175,18 +175,22 @@ reservation broker and the ECLD token the contract names and logs
 runs as before (`pox=legacy`). `polygon_amoy` and `polygon_amoy_unsafe` bind
 the 1.2 implementation `0x3Aa1A0d7A8A9DaE9e13345D3261afe86D67326A4`.
 
-On a 1.2 PoX the node's offer is `addDPRequestV2`, carrying the compute
-units of its capability record and a tip per CU-hour, and is refreshed an hour
-before its expiry (`refreshDPRequest`; the pricing's `dpRequestTtl` sets the
-expiry). The record comes from the trustedzone's integration test, which now
-waits `INTEGRATION_TEST_SECONDS` (900 s): the test writes
-`capability.time.etny` and `capability.etny`, the agent admits the record
-(`record admitted` in the log) and keeps it in `node/<network>/capability.json`
-for seven days, re-measuring a day before. A V2 DO request is judged on its
-recorded terms against the reader's quote plus the tip; an order's relays are
-paid from the order's own chain fee at its gas price cap, and the agent waits
-while the chain's gas price is above the cap (`gas wait` in the log). The
-result of a recorded order is posted with `_addResultToOrderV2`.
+On a 1.2 PoX the node's offer is `addDPRequestV2`, carrying the GFLOPS of its
+capability record (`gflops`, cuv 4; one CU is 100 GFLOPS) and a tip per
+CU-hour, and is refreshed an hour before its expiry (`refreshDPRequest`; the
+pricing's `dpRequestTtl` sets the expiry). The record comes from the
+trustedzone's integration test, which waits `INTEGRATION_TEST_SECONDS`
+(900 s): the test writes `capability.time.etny` and `capability.etny`, the
+agent admits the record (`record admitted` in the log) at cuv 4
+(`CU_VERSION_MIN`) and above with `gflops` at most `CU_MAX_GFLOPS` (6,400),
+and keeps it in `node/<network>/capability.json` for seven days, re-measuring
+a day before; a stored record below cuv 4 or without `gflops` is dropped when
+the store loads, and its integration test runs again. A V2 DO request is
+judged on its recorded terms against the reader's quote plus the tip; an
+order's relays are paid from the order's own chain fee at its gas price cap,
+and the agent waits while the chain's gas price is above the cap (`gas wait`
+in the log). The result of a recorded order is posted with
+`_addResultToOrderV2`.
 
 Settings, per network in `node/.env` or the operator's `config` (every one
 optional; `node/.env.example` documents them all):

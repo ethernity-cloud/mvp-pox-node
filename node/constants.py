@@ -23,9 +23,13 @@ INTEGRATION_TEST_REGISTRY_CHECK_SECONDS = 300
 # bound); the node re-measures CU_REMEASURE_MARGIN_SECONDS before that.
 CU_TTL_SECONDS = 604800
 CU_REMEASURE_MARGIN_SECONDS = 86400
-# The largest cu (thousandths) a record may claim: the validators cancel a
-# request above it.
-CU_MAX_THOUSANDTHS = 64000
+# The largest gflops a record may claim, CU_MAX x 100 (6,400; one CU is 100
+# GFLOPS): the validators cancel a request above it (ethernity-cas
+# capability.rs CU_MAX_GFLOPS, reason GflopsAboveMax).
+CU_MAX_GFLOPS = 6400
+# The lowest benchmark version (benchmark.json cuv) a record may carry, 4
+# (ethernity-cas capability.rs CU_VERSION_MIN, reason CuVersionBelowMinimum).
+CU_VERSION_MIN = 4
 
 # A 1.2 DP request is refreshed when its expiry is this close.
 DP_REFRESH_MARGIN_SECONDS = 3600

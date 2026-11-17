@@ -6,7 +6,7 @@ from utils import do_request_compare, dp_terms
 
 
 def terms():
-    return dp_terms((2500, 46_810_056_000_000_000, False, 1_762_000_000, True))
+    return dp_terms((250, 46_810_056_000_000_000, False, 1_762_000_000, True))
 
 
 def test_a_reader_handle_with_terms_judges_by_the_terms():

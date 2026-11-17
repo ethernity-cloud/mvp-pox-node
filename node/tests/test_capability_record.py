@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 import capability
-from constants import BENCHMARK_MAX_SECONDS, CU_MAX_THOUSANDTHS, CU_REMEASURE_MARGIN_SECONDS, CU_TTL_SECONDS
+from constants import BENCHMARK_MAX_SECONDS, CU_MAX_GFLOPS, CU_REMEASURE_MARGIN_SECONDS, CU_TTL_SECONDS, CU_VERSION_MIN
 
 FIXTURE = json.loads((Path(__file__).parent / "spec" / "capability-record.json").read_text())
 CAPABILITY = FIXTURE["capabilityEtny"]["content"]
@@ -70,8 +70,9 @@ def test_the_digest_is_the_fixture_digest():
 def test_the_fixture_record_is_admitted_with_its_values():
     record, reason = admit()
     assert reason is None
-    assert record["cu"] == 2500
-    assert record["cuv"] == 1
+    assert record["gflops"] == 250
+    assert "cu" not in record
+    assert record["cuv"] == 4
     assert record["validator"] == VALIDATOR
     assert record["nonce"] == FIXTURE["measurement"]["runNonce"]
     assert (record["t0"], record["t1"]) == (T0, T1)
@@ -168,10 +169,26 @@ def test_a_validator_that_is_not_seated_is_refused():
     assert record is None and "not seated" in reason
 
 
-def test_cu_above_the_cap_is_refused_and_the_cap_is_admitted():
-    record, reason = admit(capability_etny=with_field(4, str(CU_MAX_THOUSANDTHS + 1)))
-    assert record is None and "above CU_MAX_THOUSANDTHS" in reason
-    assert admit(capability_etny=with_field(4, str(CU_MAX_THOUSANDTHS)))[1] is None
+def test_gflops_above_the_cap_is_refused_and_the_cap_is_admitted():
+    record, reason = admit(capability_etny=with_field(4, str(CU_MAX_GFLOPS + 1)))
+    assert record is None and "above CU_MAX_GFLOPS" in reason
+    assert admit(capability_etny=with_field(4, str(CU_MAX_GFLOPS)))[1] is None
+
+
+def test_a_record_below_the_minimum_version_is_refused():
+    record, reason = admit(capability_etny=with_field(5, "3"))
+    assert record is None and reason == "cuv 3 is below CU_VERSION_MIN 4"
+    assert admit(capability_etny=with_field(5, "0"))[0] is None
+    record, reason = admit(capability_etny=with_field(5, str(CU_VERSION_MIN)))
+    assert reason is None and record["cuv"] == CU_VERSION_MIN
+
+
+def test_the_gflops_bound_is_checked_before_the_version():
+    line, sig, platform, _ = CAPABILITY.split("\n")
+    fields = line.split("|")
+    fields[4], fields[5] = str(CU_MAX_GFLOPS + 1), "3"
+    record, reason = admit(capability_etny="\n".join(["|".join(fields), sig, platform, ""]))
+    assert record is None and "above CU_MAX_GFLOPS" in reason
 
 
 def test_an_sgx_requirement_is_refused():
@@ -215,7 +232,7 @@ def test_the_re_measure_is_due_a_margin_before_the_ttl():
 
 
 def test_the_reason_table_names_the_validators_codes():
-    assert [capability.cancel_reason_name(code) for code in range(1, 8)] == [
+    assert [capability.cancel_reason_name(code) for code in range(1, 9)] == [
         "RecordSignatureInvalid", "RecordNodeMismatch", "TimestampNotSeated", "RunTooLong",
-        "RecordExpired", "CuAboveMax", "DeliveredBelowAttested"]
+        "RecordExpired", "GflopsAboveMax", "DeliveredBelowAttested", "CuVersionBelowMinimum"]
     assert capability.cancel_reason_name(9) == "Unknown(9)"

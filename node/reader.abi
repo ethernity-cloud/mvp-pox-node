@@ -56,7 +56,7 @@
       },
       {
         "internalType": "uint32",
-        "name": "maxCu",
+        "name": "maxGflops",
         "type": "uint32"
       },
       {
@@ -130,7 +130,7 @@
       },
       {
         "internalType": "uint32",
-        "name": "cu",
+        "name": "gflops",
         "type": "uint32"
       },
       {
@@ -179,7 +179,7 @@
       },
       {
         "internalType": "uint32",
-        "name": "cu",
+        "name": "gflops",
         "type": "uint32"
       },
       {
@@ -310,7 +310,7 @@
       },
       {
         "internalType": "uint32",
-        "name": "maxCu",
+        "name": "maxGflops",
         "type": "uint32"
       }
     ],
@@ -328,7 +328,7 @@
       },
       {
         "internalType": "uint32",
-        "name": "cu",
+        "name": "gflops",
         "type": "uint32"
       }
     ],
@@ -369,12 +369,12 @@
       },
       {
         "internalType": "uint32",
-        "name": "minCu",
+        "name": "minGflops",
         "type": "uint32"
       },
       {
         "internalType": "uint32",
-        "name": "maxCu",
+        "name": "maxGflops",
         "type": "uint32"
       }
     ],
@@ -387,7 +387,7 @@
       },
       {
         "internalType": "uint32[]",
-        "name": "cus",
+        "name": "gflops",
         "type": "uint32[]"
       },
       {
@@ -449,12 +449,12 @@
       },
       {
         "internalType": "uint256",
-        "name": "capacityCu",
+        "name": "capacityGflops",
         "type": "uint256"
       },
       {
         "internalType": "uint256",
-        "name": "loadCu",
+        "name": "loadGflops",
         "type": "uint256"
       },
       {
@@ -511,7 +511,7 @@
           },
           {
             "internalType": "uint32",
-            "name": "cuMax",
+            "name": "gflopsMax",
             "type": "uint32"
           },
           {
@@ -571,7 +571,7 @@
           },
           {
             "internalType": "uint32",
-            "name": "cuMaxDefault",
+            "name": "gflopsMaxDefault",
             "type": "uint32"
           }
         ],

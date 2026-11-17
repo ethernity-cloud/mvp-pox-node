@@ -28,7 +28,7 @@ def chain_cost(commit_gas, live, rows, terms, params):
 
 
 def terms_with(chain_fee_wei, token_per_pol=WEI_PER_TOKEN):
-    return OrderTerms(10**15, 1000, chain_fee_wei, CAP, 0, token_per_pol)
+    return OrderTerms(10**15, 100, chain_fee_wei, CAP, 0, token_per_pol)
 
 
 def charged(ledger, live=LIVE_UNDER_CAP):
@@ -128,7 +128,7 @@ def test_terms_without_params_are_judged_as_legacy():
 
 
 def test_terms_and_params_parse_from_the_contract_shapes():
-    terms = order_terms({'pricePerCuHourWei': 1, 'cu': 2, 'chainFeeWei': 3, 'gasPriceCapWei': 4,
+    terms = order_terms({'pricePerCuHourWei': 1, 'gflops': 2, 'chainFeeWei': 3, 'gasPriceCapWei': 4,
                          'gasAllocated': 5, 'tokenPerPol': 6})
     assert terms == OrderTerms(1, 2, 3, 4, 5, 6)
     assert order_terms([1, 2, 3, 4, 5, 6]) == terms

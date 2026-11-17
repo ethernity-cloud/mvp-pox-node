@@ -12,7 +12,8 @@ def test_the_phase_e_values():
     assert constants.INTEGRATION_TEST_REGISTRY_CHECK_SECONDS == 300
     assert constants.CU_TTL_SECONDS == 604800
     assert constants.CU_REMEASURE_MARGIN_SECONDS == 86400
-    assert constants.CU_MAX_THOUSANDTHS == 64000
+    assert constants.CU_MAX_GFLOPS == 6400
+    assert constants.CU_VERSION_MIN == 4
     assert constants.DP_REFRESH_MARGIN_SECONDS == 3600
     assert constants.CANCEL_ATTEMPTS == 5
     assert constants.TIP_HOURS == 1
