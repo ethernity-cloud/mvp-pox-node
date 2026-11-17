@@ -22,7 +22,7 @@ from web3 import middleware
 from web3.gas_strategies.time_based import fast_gas_price_strategy
 from web3.gas_strategies.rpc import rpc_gas_price_strategy
 
-from utils import scone_queues, get_or_generate_uuid, run_subprocess, run_subprocess_status, environment_failure, record_enclave_image_tree, compose_images, compose_services, await_enclave_runtime, tree_image_tag, las_image, passed_las_tag, candidate_las_names, compose_service_block, las_start_lines, las_start_to_apply, compose_with_las_start, revert_reason, wallet_covers, insufficient_funds, transaction_known, placement_block_of, block_ranges, WALLET_GAS_TRANSACTIONS, retry, holds_within, pinned_within, FetchDeferrals, staging_plan, remaining_order_seconds, record_order_placement, order_placed_at, pending_approvals, record_pending_approval, forget_pending_approval, ORDER_STARTED_KEY, order_started_row, ORDER_GRACE_SECONDS, session_wallet_attestation, Storage, Cache, ListCache, ListCacheWithTimestamp, MergedOrdersCache, subprocess, get_node_geo, HardwareInfoProvider, parse_transaction_bytes_ut, looks_like_cid, canonical_cid, PEER_MULTIADDR, next_registered_image, enclave_failure, enclave_may_have_failed, docker_container_states, docker_container_log_tail, stale_integration_tests, integration_tests_due, runnable_trustedzones, image_trees, stale_image_trees, directory_size, remove_tree, removal_leftovers, integration_env, order_env, dp_terms, GFLOPS_PER_CU, tip_per_cu_hour_wei, dp_request_arguments, metadata_key, record_key, resume_admits, has_standing_dp_request, dp_request_disposition, bounded_cancel, do_request_verdict, refusal_cached, do_request_compare, resource_refusal_holds, ResourceRefusals, gas_with_headroom, placement_refusal_disposition, settlement_line, settlement_reward_wei, order_window, order_relay_ledger_path, ledger_rebuild, result_fields, result_send_decision, SESSION_WALLET_KEY, SESSION_OUTPUT_KEY
+from utils import scone_queues, get_or_generate_uuid, run_subprocess, run_subprocess_status, environment_failure, record_enclave_image_tree, compose_images, compose_services, await_enclave_runtime, tree_image_tag, las_image, passed_las_tag, candidate_las_names, compose_service_block, las_start_lines, las_start_to_apply, compose_with_las_start, revert_reason, wallet_covers, insufficient_funds, transaction_known, placement_block_of, block_ranges, WALLET_GAS_TRANSACTIONS, retry, holds_within, pinned_within, FetchDeferrals, staging_plan, remaining_order_seconds, record_order_placement, order_placed_at, pending_approvals, record_pending_approval, forget_pending_approval, ORDER_STARTED_KEY, order_started_row, ORDER_GRACE_SECONDS, session_wallet_attestation, Storage, Cache, ListCache, ListCacheWithTimestamp, MergedOrdersCache, subprocess, get_node_geo, HardwareInfoProvider, parse_transaction_bytes_ut, looks_like_cid, canonical_cid, PEER_MULTIADDR, next_registered_image, enclave_failure, enclave_may_have_failed, docker_container_states, docker_container_log_tail, stale_integration_tests, integration_tests_due, runnable_trustedzones, image_trees, stale_image_trees, directory_size, remove_tree, removal_leftovers, integration_env, order_env, dp_terms, GFLOPS_PER_CU, tip_per_cu_hour_wei, dp_request_arguments, metadata_key, record_key, resume_admits, has_standing_dp_request, read_cursor, write_cursor, dp_request_disposition, bounded_cancel, do_request_verdict, refusal_cached, do_request_compare, resource_refusal_holds, ResourceRefusals, gas_with_headroom, placement_refusal_disposition, settlement_line, settlement_reward_wei, order_window, order_relay_ledger_path, ledger_rebuild, result_fields, result_send_decision, SESSION_WALLET_KEY, SESSION_OUTPUT_KEY
 import scone_image
 import pox12
 import capability
@@ -526,6 +526,11 @@ class EtnyPoXNode:
         # The passed integration tests and their capability records of this
         # network, kept across process starts (capability.RecordStore).
         self.__record_store = capability.RecordStore(self.cache_config.capability_filepath)
+        # The RecordMissing hold of this network (capability.RecordMissingHold),
+        # kept in broker_cursor.json across process starts, and whether the
+        # hold's current state is logged (__dp_request_held).
+        self.__record_missing_hold = capability.RecordMissingHold(self.cache_config.broker_cursor_filepath)
+        self.__record_missing_hold_logged = False
         # The gas this node's own transactions use, priced into its tip
         # (gas_profile.GasProfile), seeded for the network at its first start.
         self.__gas_profile = gas_profile.GasProfile.load(
@@ -2343,22 +2348,19 @@ class EtnyPoXNode:
         return getattr(self.__etny.functions, name)(*arguments), arguments
 
     def __adopt_dp_request(self, req_id, block):
-        """Makes `req_id` this node's current DP request. The DPRequestCancelled
-        scan starts at `block` (None: the head at its first run). On a 1.2
-        contract the capability record the request carries is read from its
-        metadata4 (utils.metadata_key 'cusig') for the idle tick's comparison
-        with the advertised record; a metadata read the RPC does not answer in
-        ten tries leaves the key None, and the tick replaces the request when
-        a record is advertised."""
+        """Makes `req_id` this node's current DP request. Without a
+        'dp_request_cancelled' cursor the DPRequestCancelled scan starts at
+        `block` (None: the head at its first run). On a 1.2 contract the
+        capability record the request carries is read from its metadata4
+        (__dp_request_record_key) for the idle tick's comparison with the
+        advertised record and for a validators' cancel; a metadata read the
+        RPC does not answer in ten tries leaves the key None, and the tick
+        replaces the request when a record is advertised."""
         self.__dprequest = req_id
         self.__cancel_scan_from = block
         self.__dprequest_record_key = None
         if self.__pox_is_12:
-            answered, metadata = retry(self.__etny.caller()._getDPRequestMetadata, req_id, attempts=10, delay=3)
-            if answered:
-                self.__dprequest_record_key = metadata_key(metadata[4], 'cusig')
-            else:
-                self.logger.warning(f"DP request {req_id}: its metadata was not read; its capability record is unknown")
+            self.__dprequest_record_key = self.__dp_request_record_key(req_id)
 
     def __dp_request_from_receipt(self, receipt):
         """Makes the DP request a confirmed add receipt created this node's
@@ -2425,8 +2427,9 @@ class EtnyPoXNode:
         carrying another capability record than the advertised one, or one
         recording the other accept_reserved flag than this process set, is
         cancelled (cancel_dp_request) and a new one sent (__send_dp_request,
-        whose receipt add_dp_request adopts); the loop then ends, so the
-        return is (True, terms). A request whose refresh is due is refreshed
+        whose receipt add_dp_request adopts; none while the RecordMissing
+        hold keeps it back); the loop then ends, so the return is (True,
+        terms). A request whose refresh is due is refreshed
         (__refresh_dp_request). Returns (False, terms) otherwise, terms None
         on a legacy contract or when the read failed."""
         if not self.__pox_is_12 or not has_standing_dp_request(self.__dprequest):
@@ -2931,58 +2934,43 @@ class EtnyPoXNode:
 
     def __scan_cursor(self, name):
         """The next block the idle tick's `name` log scan reads
-        (broker_cursor.json), None when none is recorded."""
-        try:
-            with open(self.cache_config.broker_cursor_filepath) as f:
-                return json.load(f).get(name)
-        except (OSError, ValueError):
-            return None
+        (broker_cursor.json, utils.read_cursor), None when none is recorded."""
+        return read_cursor(self.cache_config.broker_cursor_filepath, name)
 
     def __set_scan_cursor(self, name, value):
         """Records `value` (JSON: the next block of a scan, the order ids of
         the refused acceptances, the pending acceptances' list, the started
-        reservations' mapping) under `name` in broker_cursor.json, the file
-        replaced whole."""
-        path = self.cache_config.broker_cursor_filepath
-        try:
-            with open(path) as f:
-                cursors = json.load(f)
-        except (OSError, ValueError):
-            cursors = {}
-        cursors[name] = value
-        temporary = f"{path}.tmp"
-        with open(temporary, 'w') as f:
-            json.dump(cursors, f)
-        os.replace(temporary, path)
+        reservations' mapping) under `name` in broker_cursor.json
+        (utils.write_cursor), the file replaced whole."""
+        write_cursor(self.cache_config.broker_cursor_filepath, name, value)
 
-    def __dp_request_cancelled_logs(self, req, from_block, to_block):
-        """DPRequestCancelled logs naming request `req` over [from_block,
-        to_block], read in ranges of the network's logs_chunk_blocks as
-        __esr_state_committed_logs reads."""
+    def __dp_request_cancelled_logs(self, from_block, to_block):
+        """DPRequestCancelled logs naming this node as `dproc` (an indexed
+        topic) over [from_block, to_block], read in ranges of the network's
+        logs_chunk_blocks as __esr_state_committed_logs reads."""
         out = []
         for start, stop in block_ranges(from_block, to_block, self.__network_config.logs_chunk_blocks):
             out.extend(self.__etny.events.DPRequestCancelled().get_logs(
-                argument_filters={'id': int(req)}, from_block=start, to_block=stop))
+                argument_filters={'dproc': self.__address}, from_block=start, to_block=stop))
         return out
 
-    def __dp_request_cancelled_by_validators(self):
-        """Whether the validators cancelled this node's DP request
-        (cancelDPRequestByValidators, a 1.2 contract's). The scan runs from
-        the 'dp_request_cancelled' cursor and the request's confirmation
-        block, whichever is later (the head without either), to
-        RPC_REPLICA_LAG_BLOCKS below the head, and the cursor moves there.
-        On a cancel the reason is logged by name; one that faults the record
-        (capability.cancel_disposition 'retest') drops the advertised
-        record with its trustedzone's passed test, so the test runs again
-        before the next request; the strike reason leaves both. A scan the
-        RPC does not answer returns False and keeps its cursor."""
-        if not self.__pox_is_12 or not has_standing_dp_request(self.__dprequest):
+    def __scan_dp_request_cancellations(self):
+        """Scans the validators' cancels of this node's DP requests
+        (cancelDPRequestByValidators, a 1.2 contract's DPRequestCancelled
+        with `dproc` this node) from the 'dp_request_cancelled' cursor (the
+        standing request's confirmation block without one, the head without
+        either) to RPC_REPLICA_LAG_BLOCKS below the head. Each cancel is
+        handled (__dp_request_cancelled) before the cursor moves past it, so
+        a RecordMissing hold is written first. resume_processing runs it
+        before every add, a process start's first included, and the idle
+        tick at every pass. Returns whether the standing request was
+        cancelled; a scan the RPC does not answer returns False and keeps
+        the cursor."""
+        if not self.__pox_is_12:
             return False
-        logger = self.logger
-        start = self.__cancel_scan_from
-        cursor = self.__scan_cursor('dp_request_cancelled')
-        if cursor is not None:
-            start = cursor if start is None else max(start, cursor)
+        start = self.__scan_cursor('dp_request_cancelled')
+        if start is None:
+            start = self.__cancel_scan_from
         try:
             head = self.__w3.eth.block_number
             end = head - RPC_REPLICA_LAG_BLOCKS
@@ -2990,38 +2978,125 @@ class EtnyPoXNode:
                 start = end
             if start > end:
                 return False
-            logs = self.__dp_request_cancelled_logs(self.__dprequest, start, end)
+            logs = self.__dp_request_cancelled_logs(start, end)
         except Exception as e:
-            logger.warning(f"The DPRequestCancelled scan of DP request {self.__dprequest} failed ({e}); next tick")
+            self.logger.warning(f"The DPRequestCancelled scan failed ({e}); next tick")
             return False
+        standing = False
+        for log in logs:
+            if self.__dp_request_cancelled(int(log.args.id), int(log.args.reason)):
+                standing = True
         self.__set_scan_cursor('dp_request_cancelled', end + 1)
-        self.__cancel_scan_from = end + 1
-        if not logs:
+        return standing
+
+    def __dp_request_cancelled(self, req, reason):
+        """Handles the validators' cancel of this node's DP request `req` for
+        `reason` (capability.cancel_reaction over the cusig `req` carried:
+        __dprequest_record_key for the standing request, its metadata4 read
+        for another). The reason is logged by name. RecordMissing
+        (capability.REASON_RECORD_MISSING) sets this network's hold
+        (capability.RecordMissingHold), written at once: until an
+        integration test produces a capability record, no DP request without
+        one is posted unless it names only -unsafe trustedzones, and the
+        passed tests whose images can carry a record and whose pass holds
+        none run again (__retest_for_record). A reason that faults the record
+        on a request that carried one drops that record
+        (RecordStore.image_of) with its trustedzone's passed test, so the
+        test runs again before the next request; the strike reason, and a
+        record reason on a request without a record, leave both. Returns
+        whether `req` is the standing request."""
+        logger = self.logger
+        standing = has_standing_dp_request(self.__dprequest) and int(req) == int(self.__dprequest)
+        key = self.__dprequest_record_key if standing else self.__dp_request_record_key(req)
+        hold, retest = capability.cancel_reaction(reason, key)
+        cancelled = (f"DP request {req} was cancelled by the validators: "
+                     f"{capability.cancel_reason_name(reason)} ({reason})")
+        if hold:
+            self.__record_missing_hold.set(True)
+        if retest:
+            image = self.__record_store.image_of(key)
+            if image is None:
+                logger.warning(f"{cancelled}; the capability record it carried is not in the store")
+            else:
+                logger.warning(f"{cancelled}; the capability record of {image} is dropped and its integration "
+                               f"test runs again")
+                with integration_test_lock:
+                    self.__record_store.drop(image)
+                    integration_test_passed.pop(image, None)
+                    integration_test_remeasure.discard(image)
+                    integration_test_retry[image] = (0, 0.0)
+        if hold:
+            logger.warning(f"{cancelled}; the RecordMissing hold is set: until an integration test produces a "
+                           f"capability record, no DP request without one is posted on this network unless it "
+                           f"names only -unsafe trustedzones, and the tests whose images can carry one run again")
+            self.__record_missing_hold_logged = True
+            self.__retest_for_record()
+        elif not retest:
+            logger.warning(f"{cancelled}; a new request follows" if standing else cancelled)
+        self.dpreq_cache.add(int(req))
+        return standing
+
+    def __dp_request_record_key(self, req):
+        """The cusig of DP request `req`'s metadata4 (utils.metadata_key), the
+        key of the capability record it carries; None without one, and when
+        the RPC does not answer the metadata read in ten tries (logged)."""
+        answered, metadata = retry(self.__etny.caller()._getDPRequestMetadata, int(req), attempts=10, delay=3)
+        if not answered:
+            self.logger.warning(f"DP request {req}: its metadata was not read; its capability record is unknown")
+            return None
+        return metadata_key(metadata[4], 'cusig')
+
+    def __dp_request_held(self):
+        """Whether this node posts no DP request now: on a 1.2 contract, the
+        RecordMissing hold stands, no capability record is advertised and
+        the request's trustedzones= list names no trustedzone or one that can
+        carry a record (capability.RecordMissingHold.disposition 'hold'). An
+        advertised record clears the hold ('clear'), and the request carries
+        it. The hold and its clearing are each logged once per change."""
+        if not self.__pox_is_12:
             return False
-        reason = int(logs[-1].args.reason)
-        name = capability.cancel_reason_name(reason)
-        advertised = self.__advertised_record()
-        if capability.cancel_disposition(reason) == 'retest' and advertised:
-            image = advertised[0]
-            logger.warning(f"DP request {self.__dprequest} was cancelled by the validators: {name} ({reason}); "
-                           f"the capability record of {image} is dropped and its integration test runs again")
-            with integration_test_lock:
-                self.__record_store.drop(image)
-                integration_test_passed.pop(image, None)
-                integration_test_remeasure.discard(image)
-                integration_test_retry[image] = (0, 0.0)
+        disposition = self.__record_missing_hold.disposition(self.__advertised_record(),
+                                                             self.__runnable_trustedzones())
+        if disposition == 'clear':
+            self.__record_missing_hold.set(False)
+            self.__record_missing_hold_logged = False
+            self.logger.info("A capability record is advertised: the RecordMissing hold is cleared and the DP "
+                             "request carries the record")
+        elif disposition == 'hold':
+            if not self.__record_missing_hold_logged:
+                self.__record_missing_hold_logged = True
+                self.logger.warning("No DP request is posted on this network: the validators cancelled an offer "
+                                    "without a capability record (RecordMissing, 9), no record is held and the "
+                                    "request would name a trustedzone that can carry one, or none; the request "
+                                    "is posted once an integration test produces a record")
         else:
-            logger.warning(f"DP request {self.__dprequest} was cancelled by the validators: {name} ({reason}); "
-                           f"a new request follows")
-        self.dpreq_cache.add(self.__dprequest)
-        return True
+            self.__record_missing_hold_logged = False
+        return disposition == 'hold'
+
+    def __retest_for_record(self):
+        """Marks this network's passed integration tests that the
+        RecordMissing hold runs again (capability.RecordMissingHold.retest_due:
+        the image can carry a record and its pass holds none) to run now, the
+        pass standing."""
+        with integration_test_lock:
+            for image in self.__integration_images:
+                entry = self.__record_store.get(image)
+                if (image in integration_test_passed and entry is not None
+                        and self.__record_missing_hold.retest_due(self.__trustedzones.get(image),
+                                                                  entry.get('record'))):
+                    integration_test_remeasure.add(image)
+                    integration_test_retry[image] = (0, 0.0)
 
     def __send_dp_request(self, nonce):
         """Sends this node's next DP request with `nonce` and returns without
         awaiting its receipt, which add_dp_request awaits. Sent with the nonce
         after an order's result, the two are mined together, and the node
-        takes its next request as soon as the order is closed."""
+        takes its next request as soon as the order is closed. Nothing is
+        sent while the RecordMissing hold keeps the request back
+        (__dp_request_held)."""
         logger = self.logger
+        if self.__dp_request_held():
+            return
         logger.info("Preparing transaction for new DP request")
         fn, _arguments = self.__dp_request_function()
         unicorn_txn = fn.build_transaction(self.get_transaction_build(existing_nonce=nonce))
@@ -3038,7 +3113,9 @@ class EtnyPoXNode:
     def add_dp_request(self, waiting_period_on_error=15, beginning_of_recursion=None):
         """Makes this node's next DP request current: the one __send_dp_request
         sent with the last order's result, once its receipt confirms it, else
-        a new one sent and awaited here."""
+        a new one sent and awaited here. Returns whether a request is
+        current: False, nothing sent, while the RecordMissing hold keeps the
+        request back (__dp_request_held)."""
         logger = self.logger
 
         try:
@@ -3054,11 +3131,14 @@ class EtnyPoXNode:
                 if receipt.status == 1:
                     logger.info(f"TXID {pending} confirmed!")
                     self.__dp_request_from_receipt(receipt)
-                    return
+                    return True
                 logger.warning(f"The DP request sent with the result (TXID {pending}) reverted; sending a new one")
             except Exception as ex:
                 logger.warning(f"The DP request sent with the result (TXID {pending}) was not confirmed ({ex}); "
                                f"sending a new one")
+
+        if self.__dp_request_held():
+            return False
 
         max_retries = 20
         retries = 0
@@ -3076,7 +3156,7 @@ class EtnyPoXNode:
                     raise Exception(f"TXID {_hash} reverted with parameters {params[:7]}")
                 logger.info(f"TXID {_hash} confirmed!")
                 self.__dp_request_from_receipt(receipt)
-                break
+                return True
             except Exception as ex:
                 retries += 1
                 logger.warning(f"Warning while adding DP request. Retry {retries}/{max_retries}. Message: {ex}")
@@ -5266,8 +5346,9 @@ class EtnyPoXNode:
 
                 # A request the validators cancelled takes no order: the loop
                 # ends and resume_processing re-tests where the reason asks
-                # for it, then adds the next request.
-                if self.__dp_request_cancelled_by_validators():
+                # for it, then adds the next request, or holds it back while
+                # the RecordMissing hold keeps it (__dp_request_held).
+                if self.__scan_dp_request_cancellations():
                     next_dp_request = True
                     break
 
@@ -6547,12 +6628,43 @@ class EtnyPoXNode:
                 logger.error("Not enough gas to run on this network, exiting")
                 break
 
-            # A test due now (one dropped by a validators' cancel, a stale or
-            # failed one past its backoff) runs before the request, so the
-            # request carries the record it produces.
+            # The validators' cancels of this node's requests are read before
+            # the add (a cancel that landed while the agent was stopped
+            # included), so a RecordMissing hold applies to it. A test due now
+            # (one dropped by a validators' cancel, one the RecordMissing hold
+            # runs for a record, a stale or failed one past its backoff) runs
+            # before the request, so the request carries the record it
+            # produces. While the hold keeps the request back (add_dp_request
+            # False), the duties that need no standing request run
+            # (__held_tick) and the loop waits
+            # capability.RECORD_MISSING_POLL_SECONDS before it looks again.
+            self.__scan_dp_request_cancellations()
             self.__maybe_retry_integration_tests()
-            self.add_dp_request()
+            if not self.add_dp_request():
+                self.__held_tick()
+                stop_event.wait(capability.RECORD_MISSING_POLL_SECONDS)
+                continue
             self.process_dp_request()
+
+    def __held_tick(self):
+        """The idle tick's duties that need no standing DP request, run while
+        the RecordMissing hold keeps the request back: the heartbeat, the IPFS
+        cleanup and peering, then, while no task runs, an order approved
+        after its window (__take_up_approved_order) and the broker's tick
+        (the commitment, the log scan, a --handover request answered). A
+        duty that raises is logged and the next pass runs it again."""
+        try:
+            self.__call_heart_beat()
+            self.__maybe_clear_ipfs_cache()
+            self.__maybe_sync_ipfs_peers()
+            if get_task_running_on():
+                return
+            if self.__take_up_approved_order():
+                return
+            self.__broker_tick()
+        except Exception as e:
+            self.logger.warning(f"An idle duty failed while the RecordMissing hold keeps the DP request back ({e}); "
+                                f"next pass")
 
     def _check_installed_drivers(self):
         driver_list = os.listdir('/dev')
@@ -6711,7 +6823,9 @@ class EtnyPoXNode:
         ran on, replacing the standing pass and record, or the next attempt
         after a backoff that doubles from INTEGRATION_TEST_RETRY_MIN_SECONDS
         up to INTEGRATION_TEST_RETRY_MAX_SECONDS, a standing pass left as it
-        is. The caller holds the task slot."""
+        is. A pass without a capability record that the RecordMissing hold
+        runs again (capability.RecordMissingHold.retest_due) is recorded and
+        stays due on the same backoff. The caller holds the task slot."""
         logger = self.logger
         with integration_test_lock:
             if image in integration_test_passed and image not in integration_test_remeasure:
@@ -6729,14 +6843,19 @@ class EtnyPoXNode:
                 record = self.__admit_capability_record(image, capability_etny, capability_time_etny)
                 self.__record_store.put(image, image_hash, time.time(), record)
                 integration_test_passed[image] = image_hash
-                integration_test_remeasure.discard(image)
-                integration_test_retry.pop(image, None)
-                return
+                if not self.__record_missing_hold.retest_due(self.__trustedzones.get(image), record):
+                    integration_test_remeasure.discard(image)
+                    integration_test_retry.pop(image, None)
+                    return
+                integration_test_remeasure.add(image)
+                outcome = "passed without a capability record under the RecordMissing hold"
+            else:
+                outcome = "failed"
             failures += 1
             backoff = min(INTEGRATION_TEST_RETRY_MIN_SECONDS * 2 ** (failures - 1),
                           INTEGRATION_TEST_RETRY_MAX_SECONDS)
             integration_test_retry[image] = (failures, time.monotonic() + backoff)
-            logger.warning(f"Integration test of {image} failed {failures} time(s); "
+            logger.warning(f"Integration test of {image} {outcome} {failures} time(s); "
                            f"next attempt in {backoff // 60} min")
 
     def __validator_registry_address(self):
@@ -6789,10 +6908,11 @@ class EtnyPoXNode:
         (capability.remeasure_due) or without its tested LAS kept
         (__tested_las_kept) or whose record the store dropped at a load
         (RecordStore.retest_pending: below CU_VERSION_MIN or without gflops,
-        held in the file until the next pass) into integration_test_remeasure
-        as well (it runs again now, the pass standing), and drops the records
-        that reached CU_TTL_SECONDS; then marks the loaded tests the image
-        registry's latest made stale."""
+        held in the file until the next pass) or that the RecordMissing hold
+        runs again (capability.RecordMissingHold.retest_due) into
+        integration_test_remeasure as well (it runs again now, the pass
+        standing), and drops the records that reached CU_TTL_SECONDS; then
+        marks the loaded tests the image registry's latest made stale."""
         now = time.time()
         with integration_test_lock:
             for image in self.__integration_images:
@@ -6808,6 +6928,12 @@ class EtnyPoXNode:
                 if self.__record_store.retest_pending(image) and image not in integration_test_remeasure:
                     self.logger.info(f"Integration test of {image}: its stored capability record is dropped (below "
                                      f"CU_VERSION_MIN {CU_VERSION_MIN} or without gflops); it runs again")
+                    integration_test_remeasure.add(image)
+                    integration_test_retry[image] = (0, 0.0)
+                elif (self.__record_missing_hold.retest_due(self.__trustedzones.get(image), entry.get('record'))
+                      and image not in integration_test_remeasure):
+                    self.logger.info(f"Integration test of {image}: its pass holds no capability record and the "
+                                     f"RecordMissing hold stands; it runs again")
                     integration_test_remeasure.add(image)
                     integration_test_retry[image] = (0, 0.0)
                 elif capability.remeasure_due(entry['passed_at'], now) and image not in integration_test_remeasure:

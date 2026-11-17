@@ -30,12 +30,24 @@ trustedzones=<a,b>;ipfs=<peer id>;startrow=v1;cugflops=<gflops>;cuv=<cuv>;cuat=<
 | `cuheap` | the `SCONE_HEAP` of the record's last field (`heap=`) | agent, from the record |
 | `cuworkers` | the benchmark worker count of the record's last field (`workers=`) | agent, from the record |
 
-A DP request without `cugflops` is an unattested offer (counted as one CU,
-100 GFLOPS, and not cancelled). The `cu` prefix names the capability
+A DP request without `cugflops` is an unattested offer; the PoX records it
+at one CU, 100 GFLOPS. The validators pass it over, counting it one CU, only
+when its `trustedzones=` list names at least one trustedzone, every name it
+lists ends in `-unsafe` and the network admits `-unsafe` trustedzones
+(ethernity-cas `Deployment::admits_unsafe`): an `-unsafe` trustedzone
+contacts no CAS, so its node never carries a record, and an `-unsafe`
+network bakes the PoX of its CAS twin. Any other offer without `cugflops`
+(naming no trustedzone, naming one that can carry a record, or on a network
+that admits no `-unsafe` trustedzone) is cancelled with reason 9
+(`RecordMissing`, below) where the network's validators vote; where they do
+not vote it counts one CU. The `cu` prefix names the capability
 record's key family: `cugflops`, `cuv`, `cuat`, `cusig`, `cuheap` and
 `cuworkers` here, and the `cuval`, `cun`, `cut0`, `cut1`, `cub0`,
 `cub1`, `cusig0`, `cusig1` group of metadata3. The agent appends the six
-metadata4 `cu*` keys after `startrow=v1` and only when it holds a record.
+metadata4 `cu*` keys after `startrow=v1` and only when it holds a record;
+after a reason-9 cancel on a network it adds no DP request without a record
+there, unless the request names only `-unsafe` trustedzones, until its
+integration test has produced one.
 
 Example:
 
@@ -115,9 +127,13 @@ and checks:
   and is within `CU_TTL` of the block timestamp; `cugflops` is at most
   `CU_MAX x 100` (6,400); `cuv` is at least `CU_VERSION_MIN` (4).
 
-A failed check cancels the offer with a reason code, the `uint8` the
-validators carry in `voteCancel` and the PoX in `DPRequestCancelled`
-(ethernity-cas `capability.rs` `Reason`; PRICING-DESIGN.md section 9):
+A failed check, or a missing record on an offer that is not passed over,
+cancels the offer where the network's validators vote, with a reason code:
+the `uint8` the validators carry in `voteCancel` and the PoX in
+`DPRequestCancelled` (ethernity-cas
+`capability.rs` `Reason`; PRICING-DESIGN.md section 9). Reasons 1 to 8
+are judged on an offer that carries `cugflops`, reason 9 on one that does
+not:
 
 | code | reason | check |
 |---|---|---|
@@ -129,6 +145,7 @@ validators carry in `voteCancel` and the PoX in `DPRequestCancelled`
 | 6 | `GflopsAboveMax` | `cugflops` above `CU_MAX x 100` (6,400) |
 | 7 | `DeliveredBelowAttested` | the node's window holds `CU_STRIKES` strikes (a probe delivered below 80 % of the attested gflops) |
 | 8 | `CuVersionBelowMinimum` | `cuv` below `CU_VERSION_MIN` (4); checked after the `GflopsAboveMax` check |
+| 9 | `RecordMissing` | the offer carries no `cugflops` and is not passed over: its `trustedzones=` list names none, names a trustedzone that can carry a record (one without the `-unsafe` suffix), or the network admits no `-unsafe` trustedzone |
 
 `cun`, `cuheap` and `cuworkers` carry the three fields of the line that no
 other key or chain state holds (the run nonce and the `heap=;workers=`

@@ -192,6 +192,29 @@ and the agent waits while the chain's gas price is above the cap (`gas wait`
 in the log). The result of a recorded order is posted with
 `_addResultToOrderV2`.
 
+Where a network's validators vote on offers, they cancel an offer whose
+record fails a check or whose node's probes deliver below its attested
+GFLOPS, with the reason in `DPRequestCancelled` (1 to 8,
+`node/tests/spec/metadata-keys.md`; the agent logs it by name). The agent
+reads these cancels for every request of its own, before each add and at
+every idle tick, from a cursor kept in `node/<network>/broker_cursor.json`,
+so a cancel that landed while it was stopped is seen at its start. A reason
+that faults the record drops the record the cancelled request carried, and
+the integration test runs again before the next request. An offer without a
+record is cancelled with reason 9 (`RecordMissing`) unless its
+`trustedzones=` list names at least one trustedzone, every one ending in
+`-unsafe`, and the network admits them: an `-unsafe` trustedzone contacts no
+CAS, so its node never carries a record. After a reason-9 cancel the agent
+posts no DP request without a record on that network, unless the request
+names only `-unsafe` trustedzones, until an integration test produces one.
+The hold is logged, kept in `node/<network>/broker_cursor.json` across
+restarts, and the tests able to produce a record (requirement `dcap`) run
+again at once, then on the failure backoff while they pass without one;
+meanwhile the heartbeat, the IPFS upkeep, an order approved late and the
+broker's tick go on; the first advertised record clears it. On a network
+that has not cancelled its offer with reason 9, an agent holding no record
+posts its offer without one.
+
 Settings, per network in `node/.env` or the operator's `config` (every one
 optional; `node/.env.example` documents them all):
 

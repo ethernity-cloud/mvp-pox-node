@@ -2,7 +2,8 @@
 WS-C, E1-E3, E8, E15, E40; tests/spec/capability-record.json): the two
 integration-bucket objects parsed, the record admitted, persisted per network
 in capability.json, expired, and the DP request's metadata3 and metadata4
-built from it (tests/spec/metadata-keys.md)."""
+built from it (tests/spec/metadata-keys.md); the validators' cancel reasons
+and the RecordMissing hold a reason-9 cancel sets."""
 import json
 import os
 import re
@@ -18,7 +19,7 @@ from eth_keys.exceptions import BadSignature
 from eth_utils import keccak
 
 from constants import BENCHMARK_MAX_SECONDS, CU_MAX_GFLOPS, CU_REMEASURE_MARGIN_SECONDS, CU_TTL_SECONDS, CU_VERSION_MIN
-from utils import DP_STARTED_ROW_CAPABILITY
+from utils import DP_STARTED_ROW_CAPABILITY, UNSAFE_TRUSTEDZONE_SUFFIX, read_cursor, record_key, write_cursor
 
 RECORD_TAG = 'etny-cu'
 RECORD_VERSION = 'v1'
@@ -43,8 +44,8 @@ DER_HEX_RE = re.compile(r'^[0-9a-f]+$')
 
 # The reason codes of PoX.cancelDPRequestByValidators (ethernity-cas
 # capability.rs Reason), and whether the agent re-tests before it re-adds:
-# the record's own faults (1..6 and 8) call for a new record, the strike rule
-# (7) for a new request alone.
+# the faults of the record (1..6 and 8) and its absence (9) call for a new
+# record, the strike rule (7) for a new request alone.
 CANCEL_REASONS = {
     1: 'RecordSignatureInvalid',
     2: 'RecordNodeMismatch',
@@ -54,8 +55,19 @@ CANCEL_REASONS = {
     6: 'GflopsAboveMax',
     7: 'DeliveredBelowAttested',
     8: 'CuVersionBelowMinimum',
+    9: 'RecordMissing',
 }
-RETEST_REASONS = frozenset({1, 2, 3, 4, 5, 6, 8})
+RETEST_REASONS = frozenset({1, 2, 3, 4, 5, 6, 8, 9})
+# The reason of an offer that carries no capability record and is not passed
+# over (tests/spec/metadata-keys.md): its trustedzones= list names none, names
+# a trustedzone that can carry one (without the -unsafe suffix), or the
+# network admits no -unsafe trustedzone.
+REASON_RECORD_MISSING = 9
+# The broker_cursor.json key of the RecordMissing hold (RecordMissingHold).
+RECORD_MISSING_HOLD = 'record_missing_hold'
+# How often the agent, while the RecordMissing hold keeps its DP request back,
+# runs its due integration tests and looks for an advertised record.
+RECORD_MISSING_POLL_SECONDS = 60
 
 
 def cancel_reason_name(code):
@@ -64,10 +76,76 @@ def cancel_reason_name(code):
 
 
 def cancel_disposition(code):
-    """'retest' when the reason faults the record (1..6 and 8: the test runs
-    again before the next request), 'readd' otherwise (7, and any code outside
-    the table: the request alone is replaced)."""
+    """'retest' when the reason faults the record or its absence (1..6, 8 and
+    9: the test runs again before the next request), 'readd' otherwise (7,
+    and any code outside the table: the request alone is replaced)."""
     return 'retest' if int(code) in RETEST_REASONS else 'readd'
+
+
+def cancel_reaction(code, request_key):
+    """What a validators' cancel of one of the node's DP requests asks of the
+    agent, from its reason `code` and `request_key`, the cusig the cancelled
+    request carried (utils.record_key form, None for a request without a
+    record): (hold, retest). hold: RecordMissing (9) sets the network's
+    RecordMissingHold. retest: a reason that faults the record
+    (cancel_disposition 'retest') on a request that carried one drops that
+    record (RecordStore.image_of `request_key`) and its integration test runs
+    again before the next request; a request without a record has none to
+    drop."""
+    return int(code) == REASON_RECORD_MISSING, request_key is not None and cancel_disposition(code) == 'retest'
+
+
+def unsafe_only(trustedzones):
+    """Whether a DP request's trustedzones= list (`trustedzones`, the names)
+    names at least one trustedzone and every one ends in
+    UNSAFE_TRUSTEDZONE_SUFFIX: the offer without a record the validators pass
+    over on a network that admits -unsafe trustedzones (ethernity-cas
+    CapabilityKeys::unsafe_only), since such a trustedzone contacts no CAS
+    and its node never carries a record."""
+    names = list(trustedzones)
+    return bool(names) and all(name.endswith(UNSAFE_TRUSTEDZONE_SUFFIX) for name in names)
+
+
+class RecordMissingHold:
+    """The hold a RecordMissing (9) cancel sets on a network: until an
+    integration test has produced a capability record, the agent posts no DP
+    request without one there unless the request names only -unsafe
+    trustedzones (unsafe_only), which the validators pass over. Kept under
+    RECORD_MISSING_HOLD in the network's broker_cursor.json beside its scan
+    cursors (utils.read_cursor, utils.write_cursor), so a restart keeps it; a
+    network whose validators never cancelled with reason 9 has no hold."""
+
+    def __init__(self, filepath):
+        self.filepath = str(filepath)
+        self.held = bool(read_cursor(self.filepath, RECORD_MISSING_HOLD))
+
+    def set(self, held):
+        """Sets (True) or clears (False) the hold and writes it."""
+        self.held = bool(held)
+        write_cursor(self.filepath, RECORD_MISSING_HOLD, self.held)
+
+    def disposition(self, advertised, runnable):
+        """What the agent does with its next DP request, `advertised` the
+        (image, record) the request would carry (RecordStore.advertised, None
+        without one) and `runnable` the trustedzone names its trustedzones=
+        list carries: 'clear' (clear the hold and post the request carrying
+        the record) while the hold stands and a record is advertised; 'hold'
+        (post nothing) while it stands, no record is advertised and the list
+        names no trustedzone or one that can carry a record (unsafe_only
+        false); 'post' otherwise: without the hold, or for a request without
+        a record that names only -unsafe trustedzones."""
+        if not self.held:
+            return 'post'
+        if advertised is not None:
+            return 'clear'
+        return 'post' if unsafe_only(runnable) else 'hold'
+
+    def retest_due(self, requirement, record):
+        """Whether a passed integration test runs again for a capability
+        record: the hold stands, the image's platform requirement is
+        ADMITTED_REQUIREMENT (the images whose records are admitted) and its
+        pass holds no record."""
+        return self.held and requirement == ADMITTED_REQUIREMENT and record is None
 
 
 def parse_capability_etny(text):
@@ -369,6 +447,16 @@ class RecordStore:
             entry['probe_first_pending'] = False
             self._write()
             return True
+
+    def image_of(self, key):
+        """The image whose stored record `key` identifies (utils.record_key,
+        the cusig a DP request carries), None when no stored record has it."""
+        if key is None:
+            return None
+        for image, entry in self.entries.items():
+            if entry.get('record') is not None and record_key(entry['record']) == key:
+                return image
+        return None
 
     def records(self, now):
         """{image: record} of the entries holding a record not expired at `now`."""

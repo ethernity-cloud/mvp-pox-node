@@ -11,7 +11,7 @@ from distutils.util import strtobool
 dependency_manager.check_dependencies()
 
 import psutil
-from utils import HardwareInfoProvider
+from utils import HardwareInfoProvider, UNSAFE_TRUSTEDZONE_SUFFIX
 from minio import Minio
 from dotenv import load_dotenv
 
@@ -164,9 +164,9 @@ NETWORKS = {
 # An -unsafe network has the chain and contracts of the network it is named
 # after and runs only that network's -unsafe trustedzones: the ones that run
 # without a CAS, for hardware SGX platforms the CAS cannot attest. It is run
-# only when named; "all", "auto" and the legacy names never select one.
+# only when named; "all", "auto" and the legacy names never select one. The
+# trustedzones' suffix, UNSAFE_TRUSTEDZONE_SUFFIX, is defined in utils.
 UNSAFE_NETWORK_SUFFIX = "_unsafe"
-UNSAFE_TRUSTEDZONE_SUFFIX = "-unsafe"
 
 
 def available_networks() -> list:

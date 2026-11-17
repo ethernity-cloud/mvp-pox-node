@@ -30,8 +30,11 @@ class CacheConfig:
         # The passed integration tests and their capability records
         # (capability.RecordStore).
         self.capability_filepath = base_path / 'capability.json'
-        # The block cursors of the idle tick's log scans (DPRequestCancelled
-        # and the broker's events), {scan name: next block to scan}.
+        # The idle tick's state kept across process starts, {name: value}
+        # (utils.read_cursor, utils.write_cursor): the block cursors of its log
+        # scans (DPRequestCancelled and the broker's events), the broker's
+        # pending and refused acceptances and started reservations, and the
+        # RecordMissing hold (capability.RecordMissingHold).
         self.broker_cursor_filepath = base_path / 'broker_cursor.json'
         # The gas this node's DP requests, placements and started rows used
         # (gas_profile.GasProfile), priced into its tip.

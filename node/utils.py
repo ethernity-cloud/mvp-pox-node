@@ -331,6 +331,12 @@ def integration_tests_due(images, passed, remeasure, retry, now):
             if (image not in passed or image in remeasure) and retry.get(image, (0, 0.0))[1] <= now]
 
 
+# The name suffix of the trustedzones that run without a CAS (an -unsafe
+# network's, config.check_trustedzone_names): debug-signed, they obtain no
+# validator's time statement, so their node never carries a capability record.
+UNSAFE_TRUSTEDZONE_SUFFIX = "-unsafe"
+
+
 def runnable_trustedzones(trustedzones, tested, passed):
     """The names of `trustedzones` ({name: platform requirement}) a node
     runs: one among the `tested` integration images once its own test is in
@@ -1074,6 +1080,35 @@ def has_standing_dp_request(dp_request_id):
     None before one is adopted. Request ids count from 0, so the first
     request on a storage is a standing request too."""
     return dp_request_id is not None
+
+
+def read_cursor(path, name):
+    """The value recorded under `name` in the JSON object of `path` (a
+    network's broker_cursor.json), None when the file, its object or the
+    name is absent or the file is unreadable."""
+    try:
+        with open(path) as f:
+            cursors = json.load(f)
+    except (OSError, ValueError):
+        return None
+    return cursors.get(name) if isinstance(cursors, dict) else None
+
+
+def write_cursor(path, name, value):
+    """Records `value` (JSON) under `name` in the JSON object of `path`, the
+    other names kept; the file is replaced whole through a temporary file."""
+    try:
+        with open(path) as f:
+            cursors = json.load(f)
+    except (OSError, ValueError):
+        cursors = {}
+    if not isinstance(cursors, dict):
+        cursors = {}
+    cursors[name] = value
+    temporary = f"{path}.tmp"
+    with open(temporary, 'w') as f:
+        json.dump(cursors, f)
+    os.replace(temporary, path)
 
 
 # The enclave images are signed with 64 TCS (scone-signer --tcs=64) and ship

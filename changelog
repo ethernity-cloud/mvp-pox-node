@@ -17,7 +17,36 @@ addDPRequestV2 carries the record's gflops (0 without a record, recorded by
   placement refusal "node above maxGflops" names the offer
 the validators' cancel reasons 6 GflopsAboveMax and 8 CuVersionBelowMinimum
   (capability.CANCEL_REASONS) re-test the record before the re-add
-  (RETEST_REASONS 1..6 and 8); 7 DeliveredBelowAttested re-adds
+  (RETEST_REASONS 1..6, 8 and 9); 7 DeliveredBelowAttested re-adds
+the validators' cancel reason 9 RecordMissing (an offer without a capability
+  record that the validators do not pass over: its trustedzones= list names
+  none, names a trustedzone without the -unsafe suffix, or the network admits
+  no -unsafe trustedzone)
+  sets the network's RecordMissing hold (capability.RecordMissingHold, kept
+  under record_missing_hold in node/<network>/broker_cursor.json, written
+  before the scan's cursor moves, so a restart keeps it): the agent posts no
+  DP request without a record on that network unless the request names only
+  -unsafe trustedzones (capability.unsafe_only, the offer the validators pass
+  over) (add_dp_request, the request sent with a result and the idle tick's
+  replacement), logs the hold once per change and waits
+  RECORD_MISSING_POLL_SECONDS (60) between its looks for a record, running
+  meanwhile the idle duties that need no standing request (the heartbeat,
+  the IPFS cleanup and peering, an order approved after its window, the
+  broker's tick); the passed tests whose image requires dcap and whose pass
+  holds no record run again at once, and while they pass without one they
+  run again on the failure backoff (10 min doubling to 6 h); an advertised
+  record clears the hold and the request carries it. A network whose
+  validators never cancelled with reason 9 has no hold, and its agent posts
+  a request without a record (where the validators do not vote, as on LitVM,
+  it stands)
+the DPRequestCancelled scan reads the cancels of every DP request of the
+  node (the indexed dproc topic) from the persisted dp_request_cancelled
+  cursor, before every add (a process start's first included, so a cancel
+  that landed while the agent was stopped is seen) and at every idle tick;
+  the reaction follows the record the cancelled request carried
+  (capability.cancel_reaction over its cusig, RecordStore.image_of): a
+  record reason on a request that carried a record drops that record and
+  re-tests, a request without a record has none to drop
 the bundled ABI files node/docker/pox.abi, node/reader.abi, node/pricing.abi
   and node/broker.abi are the pox-smart-contract-litvm exports with the GFLOPS
   names (gflops, maxGflops, minGflops, gflopsMax, gflopsMaxDefault,

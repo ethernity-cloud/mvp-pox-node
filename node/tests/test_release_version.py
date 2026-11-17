@@ -36,6 +36,15 @@ def test_the_3813_entry_names_the_gflops_unit():
         assert item in text, item
 
 
+def test_the_3813_entry_names_the_record_missing_hold():
+    text = dict(entries())["3.8.13"]
+    for item in ("9 RecordMissing", "capability.RecordMissingHold", "record_missing_hold",
+                 "node/<network>/broker_cursor.json", "RETEST_REASONS 1..6, 8 and 9", "RECORD_MISSING_POLL_SECONDS",
+                 "requires dcap", "has no hold", "capability.unsafe_only", "capability.cancel_reaction",
+                 "RecordStore.image_of", "indexed dproc topic", "dp_request_cancelled"):
+        assert item in text, item
+
+
 def test_the_3812_entry_names_the_intakes_cors_answers():
     text = dict(entries())["3.8.12"]
     for item in ("ipfs_intake.py", "CORS", "OPTIONS", "Access-Control-Allow-Origin: *",
