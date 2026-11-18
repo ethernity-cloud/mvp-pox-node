@@ -6,7 +6,7 @@ from types import SimpleNamespace
 
 from utils import integration_env, order_env
 
-NETWORK = SimpleNamespace(chain_id=80002, contract_address="0x3Aa1A0d7A8A9DaE9e13345D3261afe86D67326A4",
+NETWORK = SimpleNamespace(chain_id=80002, contract_address="0xd1182deA61CDa785C320cdBE5888EaC4178cAAF2",
                           rpc_url="https://polygon-amoy-bor-rpc.publicnode.com")
 WALLET = "0x470D8B388f4a0AE6bD512b74038c7e87957bb8FE"
 

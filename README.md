@@ -172,8 +172,11 @@ At start the agent probes each network's protocol contract for
 (pox-smart-contract-litvm): the agent binds the reader, the pricing, the
 reservation broker and the ECLD token the contract names and logs
 `pox=1.2 reader=... pricing=...`; one that reverts is a legacy contract and
-runs as before (`pox=legacy`). `polygon_amoy` and `polygon_amoy_unsafe` bind
-the 1.2 implementation `0x3Aa1A0d7A8A9DaE9e13345D3261afe86D67326A4`.
+runs as before (`pox=legacy`). `bloxberg_testnet` and
+`bloxberg_testnet_unsafe` bind the 1.2 implementation
+`0x830c781F0352050343211B6BFA83600B3e77647C`, `polygon_amoy` and
+`polygon_amoy_unsafe` the 1.2 implementation
+`0xd1182deA61CDa785C320cdBE5888EaC4178cAAF2`.
 
 On a 1.2 PoX the node's offer is `addDPRequestV2`, carrying the GFLOPS of its
 capability record (`gflops`, cuv 4; one CU is 100 GFLOPS) and a tip per

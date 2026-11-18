@@ -54,6 +54,12 @@ the bundled ABI files node/docker/pox.abi, node/reader.abi, node/pricing.abi
   agent reads them as DORequestV2.max_gflops, DPTerms.gflops and
   OrderTerms.gflops, and accepted.json holds predecessor_gflops
   (broker.bounded_gflops)
+bloxberg_testnet and bloxberg_testnet_unsafe bind the PoX 1.2 implementation
+  0x830c781F0352050343211B6BFA83600B3e77647C, polygon_amoy and
+  polygon_amoy_unsafe the PoX 1.2 implementation
+  0xd1182deA61CDa785C320cdBE5888EaC4178cAAF2 (node/.env): the
+  implementations of pox-smart-contract-litvm deployed 2026-11-18, whose
+  compute figures are whole GFLOPS
 
 v3.8.12
 the payload intake (ipfs_intake.py, the bootnode's ipfs.ethernity.cloud

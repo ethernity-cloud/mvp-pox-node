@@ -36,6 +36,13 @@ def test_the_3813_entry_names_the_gflops_unit():
         assert item in text, item
 
 
+def test_the_3813_entry_names_the_gflops_contracts():
+    text = dict(entries())["3.8.13"]
+    for item in ("0x830c781F0352050343211B6BFA83600B3e77647C", "0xd1182deA61CDa785C320cdBE5888EaC4178cAAF2",
+                 "bloxberg_testnet_unsafe", "polygon_amoy_unsafe", "node/.env"):
+        assert item in text, item
+
+
 def test_the_3813_entry_names_the_record_missing_hold():
     text = dict(entries())["3.8.13"]
     for item in ("9 RecordMissing", "capability.RecordMissingHold", "record_missing_hold",
