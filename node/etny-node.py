@@ -22,7 +22,7 @@ from web3 import middleware
 from web3.gas_strategies.time_based import fast_gas_price_strategy
 from web3.gas_strategies.rpc import rpc_gas_price_strategy
 
-from utils import scone_queues, get_or_generate_uuid, run_subprocess, run_subprocess_status, environment_failure, record_enclave_image_tree, compose_images, compose_services, await_enclave_runtime, tree_image_tag, las_image, passed_las_tag, candidate_las_names, compose_service_block, las_start_lines, las_start_to_apply, compose_with_las_start, revert_reason, wallet_covers, insufficient_funds, transaction_known, placement_block_of, block_ranges, WALLET_GAS_TRANSACTIONS, retry, holds_within, pinned_within, FetchDeferrals, staging_plan, remaining_order_seconds, record_order_placement, order_placed_at, pending_approvals, record_pending_approval, forget_pending_approval, ORDER_STARTED_KEY, order_started_row, ORDER_GRACE_SECONDS, session_wallet_attestation, Storage, Cache, ListCache, ListCacheWithTimestamp, MergedOrdersCache, subprocess, get_node_geo, HardwareInfoProvider, parse_transaction_bytes_ut, looks_like_cid, canonical_cid, PEER_MULTIADDR, next_registered_image, enclave_failure, enclave_may_have_failed, docker_container_states, docker_container_log_tail, stale_integration_tests, integration_tests_due, runnable_trustedzones, image_trees, stale_image_trees, directory_size, remove_tree, removal_leftovers, integration_env, order_env, dp_terms, GFLOPS_PER_CU, tip_per_cu_hour_wei, dp_request_arguments, metadata_key, record_key, resume_admits, has_standing_dp_request, read_cursor, write_cursor, dp_request_disposition, bounded_cancel, do_request_verdict, refusal_cached, do_request_compare, resource_refusal_holds, ResourceRefusals, gas_with_headroom, placement_refusal_disposition, settlement_line, settlement_reward_wei, order_window, order_relay_ledger_path, ledger_rebuild, result_fields, result_send_decision, SESSION_WALLET_KEY, SESSION_OUTPUT_KEY
+from utils import scone_queues, enclave_compose_env, get_or_generate_uuid, run_subprocess, run_subprocess_status, environment_failure, record_enclave_image_tree, compose_images, compose_services, await_enclave_runtime, tree_image_tag, las_image, passed_las_tag, candidate_las_names, compose_service_block, las_start_lines, las_start_to_apply, compose_with_las_start, revert_reason, wallet_covers, insufficient_funds, transaction_known, placement_block_of, block_ranges, WALLET_GAS_TRANSACTIONS, retry, holds_within, pinned_within, FetchDeferrals, staging_plan, remaining_order_seconds, record_order_placement, order_placed_at, pending_approvals, record_pending_approval, forget_pending_approval, ORDER_STARTED_KEY, order_started_row, ORDER_GRACE_SECONDS, session_wallet_attestation, Storage, Cache, ListCache, ListCacheWithTimestamp, MergedOrdersCache, subprocess, get_node_geo, HardwareInfoProvider, parse_transaction_bytes_ut, looks_like_cid, canonical_cid, PEER_MULTIADDR, next_registered_image, enclave_failure, enclave_may_have_failed, docker_container_states, docker_container_log_tail, stale_integration_tests, integration_tests_due, runnable_trustedzones, image_trees, stale_image_trees, directory_size, remove_tree, removal_leftovers, integration_env, order_env, dp_terms, GFLOPS_PER_CU, tip_per_cu_hour_wei, dp_request_arguments, metadata_key, record_key, resume_admits, has_standing_dp_request, read_cursor, write_cursor, dp_request_disposition, bounded_cancel, do_request_verdict, refusal_cached, do_request_compare, resource_refusal_holds, ResourceRefusals, gas_with_headroom, placement_refusal_disposition, settlement_line, settlement_reward_wei, order_window, order_relay_ledger_path, ledger_rebuild, result_fields, result_send_decision, SESSION_WALLET_KEY, SESSION_OUTPUT_KEY
 import scone_image
 import pox12
 import capability
@@ -367,11 +367,6 @@ class EtnyPoXNode:
         self.__number_of_cpus = int(HardwareInfoProvider.get_number_of_cpus());
         self.__free_memory = int(HardwareInfoProvider.get_free_memory());
         self.__free_storage = int(HardwareInfoProvider.get_free_storage());
-        # The enclave composes read ETNY_SCONE_QUEUES from this process's
-        # environment (docker-compose substitutes it into SCONE_QUEUES of the
-        # trustedzone and the securelock): twice the CPUs, 4 to 64.
-        os.environ['ETNY_SCONE_QUEUES'] = str(scone_queues(self.__number_of_cpus))
-        logger.info(f"SCONE queues for the enclaves: {os.environ['ETNY_SCONE_QUEUES']} ({self.__number_of_cpus} CPUs)")
 
         with open(config.image_registry_abi_filepath) as f:
             self.__image_registry_abi = f.read()
@@ -414,6 +409,11 @@ class EtnyPoXNode:
             logger.warning(f"Could not initialise the Enclave State Registry: {e}")
 
         self.__bind_pox_generation()
+        # The count this network's enclave composes get as ETNY_SCONE_QUEUES
+        # (__enclave_compose_env).
+        logger.info("SCONE queues for the enclaves: "
+                    f"{scone_queues(self.__number_of_cpus, legacy=not self.__pox_is_12)} "
+                    f"({self.__number_of_cpus} CPUs, pox={'1.2' if self.__pox_is_12 else 'legacy'})")
 
         # ethernity-cas SessionRegistry -- same wiring pattern as the ESR
         # above: resolved per network, and never allowed to stop the node.
@@ -4307,6 +4307,16 @@ class EtnyPoXNode:
             return None
         return int(self.__w3.eth.get_block(block).timestamp)
 
+    def __enclave_compose_env(self):
+        """The environment of a docker-compose run on an order's or an
+        integration test's compose, self.order_docker_compose_file
+        (utils.enclave_compose_env): the process's own with ETNY_SCONE_QUEUES,
+        which the composes of the SDKs and of the trustedzone templates
+        substitute into SCONE_QUEUES of the trustedzone and the securelock,
+        at the count of this node's CPUs under this network's PoX
+        generation."""
+        return enclave_compose_env(self.__number_of_cpus, legacy=not self.__pox_is_12)
+
     def __enclave_environment_down(self):
         """Removes the enclave containers __start_enclave_environment brought
         up with their compose, self.order_docker_compose_file, unless they
@@ -4317,7 +4327,8 @@ class EtnyPoXNode:
             return
         self.__enclave_up = False
         self.logger.debug('Cleaning up SecureLock and TrustedZone containers.')
-        run_subprocess(['docker-compose', '-f', self.order_docker_compose_file, 'down'], self.logger)
+        run_subprocess(['docker-compose', '-f', self.order_docker_compose_file, 'down'], self.logger,
+                       env=self.__enclave_compose_env())
 
     def __order_result_sent(self, transaction):
         """Runs once an order's result transaction is in the pool, while its
@@ -4367,7 +4378,9 @@ class EtnyPoXNode:
         runs otherwise, and for the integration test, which passes no names;
         every las service starts the LAS bound to IPv4, a service without an
         entrypoint and command taking the templates' (utils.las_start_to_apply,
-        LAS_TEMPLATE_START). The LAS is in no enclave's measurement. Raises EnclaveFailed when the
+        LAS_TEMPLATE_START). The LAS is in no enclave's measurement. Every
+        docker-compose run on the compose (pull, down, up) takes the
+        environment of __enclave_compose_env. Raises EnclaveFailed when the
         registry, the pull or the compose fails, with the failing command's
         error."""
         logger = self.logger
@@ -4409,21 +4422,23 @@ class EtnyPoXNode:
                 raise EnclaveFailed(environment_failure('the docker registry did not start', output))
             logger.info(f'Pulling the enclave images of {enclave_image_hash} from the registry')
             code, output = run_subprocess_status(['docker-compose', '-f', self.order_docker_compose_file, 'pull'],
-                                                 logger)
+                                                 logger, env=self.__enclave_compose_env())
             if code != 0:
                 raise EnclaveFailed(environment_failure('the enclave images were not pulled', output))
             for image in images:
                 run_subprocess(['docker', 'tag', image, tree_image_tag(image, enclave_image_hash)], logger)
         if tested is not None:
             run_subprocess(['docker', 'tag', tested[1], las], logger)
-        run_subprocess(['docker-compose', '-f', self.order_docker_compose_file, 'down'], logger)
+        run_subprocess(['docker-compose', '-f', self.order_docker_compose_file, 'down'], logger,
+                       env=self.__enclave_compose_env())
         self.__enclave_up = True
         services = compose_services(self.order_docker_compose_file)
         staggered = (config.enclave_start_stagger_seconds > 0
                      and ENCLAVE_SECURELOCK in services and ENCLAVE_TRUSTEDZONE in services)
         first = [service for service in services if service != ENCLAVE_SECURELOCK] if staggered else []
         code, output = run_subprocess_status(
-            ['docker-compose', '-f', self.order_docker_compose_file, 'up', '-d', *first], logger)
+            ['docker-compose', '-f', self.order_docker_compose_file, 'up', '-d', *first], logger,
+            env=self.__enclave_compose_env())
         if code != 0:
             raise EnclaveFailed(environment_failure('the enclave containers did not start', output))
         if staggered:
@@ -4431,7 +4446,8 @@ class EtnyPoXNode:
             logger.info(f"Trustedzone enclave {'created' if up else 'not seen created'} after {waited:.0f} s; "
                         f"starting the securelock")
             code, output = run_subprocess_status(
-                ['docker-compose', '-f', self.order_docker_compose_file, 'up', '-d', ENCLAVE_SECURELOCK], logger)
+                ['docker-compose', '-f', self.order_docker_compose_file, 'up', '-d', ENCLAVE_SECURELOCK], logger,
+                env=self.__enclave_compose_env())
             if code != 0:
                 raise EnclaveFailed(environment_failure('the securelock container did not start', output))
         self.__drop_enclave_images(

@@ -25,7 +25,14 @@ def entries():
 
 def test_the_changelog_opens_with_the_release():
     top, _ = entries()[0]
-    assert top == "3.8.13"
+    assert top == "3.8.14"
+
+
+def test_the_3814_entry_names_the_queues_per_generation():
+    text = dict(entries())["3.8.14"]
+    for item in ("ETNY_SCONE_QUEUES", "utils.enclave_compose_env", "SCONE_QUEUES_LEGACY_MAX", "--tcs",
+                 "within 4 and 8", "legacy", "pox=", "order 22069"):
+        assert item in text, item
 
 
 def test_the_3813_entry_names_the_gflops_unit():

@@ -1,3 +1,19 @@
+v3.8.14
+the enclave composes get ETNY_SCONE_QUEUES per network: every docker-compose
+  run on an order's or an integration test's compose (pull, down, up) takes
+  the agent's environment with the count of the network's PoX generation
+  (utils.enclave_compose_env), twice the node's CPUs within 4 and 64 on a
+  PoX 1.2 and within 4 and 8 (utils.SCONE_QUEUES_LEGACY_MAX) on a legacy
+  PoX, whose trustedzone images are signed without --tcs and take at most
+  eight queues; the agent's own environment is no longer given the variable
+  (one process serves networks of both generations), and the start line
+  "SCONE queues for the enclaves" follows the network's pox= line and names
+  the count and the generation. Until now every network got the one count
+  of 3.8.11: on a node with 8 CPUs a bloxberg mainnet trustedzone, given 16
+  queues, exited with code 1 every 9 seconds (order 22069, 2026-11-19); the
+  SCONE runtime's error "Trying to create 16 queues, max allowed: 8" is not
+  printed under SCONE_LOG=FATAL
+
 v3.8.13
 the capability record's compute figure is gflops, whole GFLOPS of the
   benchmark kernel under cuv 4 (one CU is 100 GFLOPS, utils.GFLOPS_PER_CU):

@@ -442,17 +442,19 @@ def get_or_generate_uuid(filename):
         f.write(_uuid)
     return _uuid
 
-def run_subprocess(args, logger):
+def run_subprocess(args, logger, env=None):
     """Runs the command `args` to completion, logging its output at DEBUG;
-    its exit code is not looked at."""
-    run_subprocess_status(args, logger)
+    its exit code is not looked at. `env` is the command's environment, the
+    process's own when None."""
+    run_subprocess_status(args, logger, env)
 
 
-def run_subprocess_status(args, logger):
+def run_subprocess_status(args, logger, env=None):
     """Runs the command `args` to completion and returns (exit code, output),
     the output being its stdout and stderr merged and decoded, logged at
-    DEBUG."""
-    out = subprocess.run(args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    DEBUG. `env` is the command's environment, the process's own when
+    None."""
+    out = subprocess.run(args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=env)
     output = out.stdout.decode(errors='replace') if out.stdout else ''
     if output:
         logger.debug(output)
@@ -1111,21 +1113,35 @@ def write_cursor(path, name, value):
     os.replace(temporary, path)
 
 
-# The enclave images are signed with 64 TCS (scone-signer --tcs=64) and ship
-# /etc/sgx-musl.conf with four queues, the floor SCONE accepts.
+# The enclave images of the networks on PoX 1.2 are signed with 64 TCS
+# (scone-signer --tcs=64) and ship /etc/sgx-musl.conf with four queues, the
+# floor SCONE accepts.
 SCONE_QUEUES_MIN = 4
 SCONE_QUEUES_MAX = 64
+# An enclave image signed without --tcs takes at most eight queues; the
+# trustedzones of the networks on a legacy PoX are such images.
+SCONE_QUEUES_LEGACY_MAX = 8
 
 
-def scone_queues(cpus):
+def scone_queues(cpus, legacy=False):
     """The SCONE queue count (enclave threads) of the trustedzone and the
     securelock on a node with `cpus` CPUs: twice the CPUs, at least
-    SCONE_QUEUES_MIN and at most SCONE_QUEUES_MAX. The agent exports it as
-    ETNY_SCONE_QUEUES, which the enclave composes substitute into
-    SCONE_QUEUES; inside the enclave the SCONE runtime reports that count as
-    the CPUs, so the trustedzone's benchmark runs the same count of workers
-    (benchmark.json workersPerCpu 1, workersMax 64)."""
-    return max(SCONE_QUEUES_MIN, min(SCONE_QUEUES_MAX, 2 * int(cpus)))
+    SCONE_QUEUES_MIN and at most SCONE_QUEUES_LEGACY_MAX on a network whose
+    PoX is legacy (`legacy`), SCONE_QUEUES_MAX on one whose PoX is 1.2. The
+    enclave composes get it as ETNY_SCONE_QUEUES (enclave_compose_env) and
+    substitute it into SCONE_QUEUES; inside the enclave the SCONE runtime
+    reports that count as the CPUs, so the trustedzone's benchmark runs the
+    same count of workers (benchmark.json workersPerCpu 1, workersMax 64)."""
+    return max(SCONE_QUEUES_MIN, min(SCONE_QUEUES_LEGACY_MAX if legacy else SCONE_QUEUES_MAX, 2 * int(cpus)))
+
+
+def enclave_compose_env(cpus, legacy):
+    """The environment of a docker-compose run on an enclave compose (an
+    order's or an integration test's): the process's own with
+    ETNY_SCONE_QUEUES at scone_queues(cpus, legacy). os.environ is left as it
+    is: one process serves networks of both PoX generations, each from its
+    own thread."""
+    return {**os.environ, 'ETNY_SCONE_QUEUES': str(scone_queues(cpus, legacy))}
 
 
 def resume_admits(terms, now):
