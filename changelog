@@ -1,3 +1,36 @@
+v3.8.15
+Polygon mainnet's default fee ceiling is 500 gwei where it was 200
+  (POLYGON_MAINNET_MAX_FEE_PER_GAS in node/.env). On Polygon mainnet the
+  agent builds its offer, heartbeat, placement and result with maxFeePerGas
+  int(baseFee * 1.1) plus the priority fee of 32 gwei
+  (get_transaction_build) and builds none above the ceiling: at a base fee
+  of 251 gwei (Polygon mainnet's on 2026-11-19: 251.3 gwei at block
+  97605732) that is 308.1 gwei; 200 admitted a base fee up to 152.7 gwei,
+  500 admits one up to 425.4 gwei. At 200 an agent on Polygon mainnet logged
+  "Network base fee is too high!" for every try of its offer ("Warning
+  while adding DP request. Retry n/20") and, after 20 tries 5 s apart,
+  "Restarting due to error": the network was started again and the offer
+  tried again, for as long as the base fee stood above 152.7 gwei. An agent
+  whose offer stood logged the same refusal for every try of its heartbeat
+  ("Warning while sending heartbeat. Retry n/20") at each idle tick once the
+  heartbeat was due, and judged no DO request in those ticks. With this
+  release a node that serves polygon_mainnet sends its offer and its
+  heartbeat with the maxFeePerGas above, paid in POL from its own wallet
+an operator sets another ceiling for one node, in gwei, with the variable
+  POLYGON_MAINNET_MAX_FEE_PER_GAS in the service's environment (a drop-in
+  of etny-node.service: ubuntu/etny-node-start.sh installs the repository's
+  unit file over an edited one): config.parse_networks reads the process's
+  environment, into which config's load_dotenv puts node/.env's values only
+  for the variables that are not set. The argument
+  --polygon_mainnet_max_fee_per_gas stands before both: a start script that
+  passes its config lines as arguments (ubuntu/etny-node-start.sh
+  parse_config_to_args) passes the line
+  POLYGON_MAINNET_MAX_FEE_PER_GAS=<gwei> of the node's config
+  (/home/vagrant/etny/node/config) as that argument when the line ends
+  with a newline (parse_config_to_args reads complete lines: a last line
+  without one is not passed). An edit of node/.env does not last: the start
+  script resets the checkout to origin/master at every start
+
 v3.8.14
 the enclave composes get ETNY_SCONE_QUEUES per network: every docker-compose
   run on an order's or an integration test's compose (pull, down, up) takes

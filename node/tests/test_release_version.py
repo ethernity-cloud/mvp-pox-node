@@ -25,7 +25,25 @@ def entries():
 
 def test_the_changelog_opens_with_the_release():
     top, _ = entries()[0]
-    assert top == "3.8.14"
+    assert top == "3.8.15"
+
+
+def test_the_3815_entry_names_the_polygon_mainnet_fee_ceiling():
+    text = dict(entries())["3.8.15"]
+    for item in ("POLYGON_MAINNET_MAX_FEE_PER_GAS", "500 gwei", "where it was 200", "int(baseFee * 1.1)", "32 gwei",
+                 "get_transaction_build", "308.1 gwei", "152.7 gwei", "425.4 gwei", "Network base fee is too high!",
+                 "20 tries", "Restarting due to error", "Warning while sending heartbeat", "no DO request",
+                 "heartbeat", "paid in POL"):
+        assert item in text, item
+
+
+def test_the_3815_entry_names_the_ways_to_another_ceiling():
+    text = dict(entries())["3.8.15"]
+    for item in ("POLYGON_MAINNET_MAX_FEE_PER_GAS in the service's environment", "etny-node.service",
+                 "config.parse_networks", "load_dotenv", "--polygon_mainnet_max_fee_per_gas", "parse_config_to_args",
+                 "POLYGON_MAINNET_MAX_FEE_PER_GAS=<gwei>", "/home/vagrant/etny/node/config", "with a newline",
+                 "origin/master"):
+        assert item in text, item
 
 
 def test_the_3814_entry_names_the_queues_per_generation():
