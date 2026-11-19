@@ -70,19 +70,28 @@ def compose_of(order_id):
     return f"./orders/{order_id}/docker-compose.yml"
 
 
+class Environment(dict):
+    """A copy of an environment whose repr is its variables' names. pytest
+    prints the operands of a failed assertion and the arguments of the
+    function it fails in; of this mapping it prints no variable's value."""
+
+    def __repr__(self):
+        return f"Environment({sorted(self)})"
+
+
 def recorded_node(agent, monkeypatch, tmp_path, pox_is_12, order_id):
     """(node, calls): an EtnyPoXNode of a node with 8 CPUs on a network of
     the given PoX generation, working in `tmp_path`, whose commands are
-    appended to `calls` as (args, env) and not run. COMPOSE is the compose of
-    order `order_id` there, and docker holds none of its images, so they are
-    pulled."""
+    appended to `calls` as (args, env) and not run, env the Environment the
+    command is given or None. COMPOSE is the compose of order `order_id`
+    there, and docker holds none of its images, so they are pulled."""
     calls = []
 
     def run_subprocess(args, logger, env=None):
-        calls.append((list(args), env))
+        calls.append((list(args), None if env is None else Environment(env)))
 
     def run_subprocess_status(args, logger, env=None):
-        calls.append((list(args), env))
+        calls.append((list(args), None if env is None else Environment(env)))
         return 0, ""
 
     monkeypatch.setattr(agent, "run_subprocess", run_subprocess)
@@ -136,7 +145,7 @@ def assert_the_enclave_runs_alone_carry(calls, compose_file, queues, environment
 def test_an_orders_compose_runs_carry_the_generations_count(agent, monkeypatch, tmp_path, pox_is_12, queues):
     node, calls = recorded_node(agent, monkeypatch, tmp_path, pox_is_12, "74")
     node.order_docker_compose_file = compose_of("74")
-    environment = dict(os.environ)
+    environment = Environment(os.environ)
     node._EtnyPoXNode__start_enclave_environment(TREE)
     node._EtnyPoXNode__enclave_environment_down()
     assert_the_enclave_runs_alone_carry(calls, compose_of("74"), queues, environment)
@@ -159,7 +168,7 @@ def test_an_integration_tests_compose_runs_carry_the_generations_count(agent, mo
     node._EtnyPoXNode__network = "bloxberg_testnet" if pox_is_12 else "bloxberg_mainnet"
     node._EtnyPoXNode__trustedzones = {IMAGE: "dcap"}
     node._EtnyPoXNode__latest_trustedzone_image = lambda image: (TREE, TREE_COMPOSE)
-    environment = dict(os.environ)
+    environment = Environment(os.environ)
     assert node._EtnyPoXNode__run_integration_test(IMAGE) == (TREE, "written", "written")
     assert [call for call in calls if "swift-stream" in call[0]] == [(SWIFT_STREAM_UP, None)]
     assert_the_enclave_runs_alone_carry(calls, compose_of("integration_test"), queues, environment)
