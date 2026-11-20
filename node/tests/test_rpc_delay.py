@@ -25,12 +25,17 @@ web3 posts three requests for a contract read (eth_chainId, eth_call,
 eth_chainId) and one for a balance, the block number or logs: 3,014 requests a
 round from 200 orders. The idle tick of a standing offer with no DO request to
 judge (process_dp_request) sleeps block_time - 1.3 s, reads the balance,
-sleeps the delay and reads the DO request count; the tick that places a new
-DO request sleeps the delay twice more before the placement is sent, a due
-heartbeat is built after the delay, and the first pass of a node without
-doreq_cache.txt reads each DO request and its metadata and, for one it may
-place, the block number, then sleeps the delay and reads the request again:
-10 requests a sleep. A round's result and input scans post at most 15
+sleeps the delay and reads the DO request count. A tick with a DO request to
+judge establishes the age boundary first, sleeping the delay before each
+read: the latest block, then on a handle's first boundary ethStorageAddress()
+and the storage's length and newest request, then the storage word of the
+boundary before (a request created within do_request_max_age_seconds
+leaves it in place). The tick that places a new DO request sleeps the delay
+twice more before the placement is sent, a due heartbeat is built after the
+delay, and the first pass of a node without doreq_cache.txt reads, after the
+boundary, each DO request and its metadata and, for one it may place, the
+block number, then sleeps the delay and reads the request again: 10 requests
+a sleep. A round's result and input scans post at most 15
 requests a second and its session scan 30 if the RPC answered at once; beside
 the idle tick the session scan keeps to 1,200 requests in 60 s once a request
 takes 29 ms, where 10 ms needs 62 ms and 400 ms no time."""
@@ -53,6 +58,7 @@ from web3.middleware import ExtraDataToPOAMiddleware
 from web3.providers.rpc.utils import ExceptionRetryConfiguration
 
 import config
+import do_request_age
 from models import OrderStatus, RequestStatus
 from utils import Cache, ListCache, ResourceRefusals
 
@@ -60,6 +66,8 @@ NODE = Path(__file__).resolve().parents[1]
 VARIABLE = "POLYGON_MAINNET_RPC_DELAY"
 ARGUMENT = "--polygon_mainnet_rpc_delay"
 ADDRESS = "0x" + "11" * 20
+# The storage ethStorageAddress() of the recorded PoX names.
+STORAGE_CHECKSUM = Web3.to_checksum_address("0x" + "44" * 20)
 # <NETWORK>_RPC_DELAY of node/.env, in milliseconds.
 DELAYS = {
     "polygon_mainnet": 200,
@@ -85,6 +93,10 @@ DP_REQUEST = 7
 # round before stopped at: within one range of logs_chunk_blocks (9000).
 HEAD = 97_700_000
 SCANNED_TO = HEAD - 300
+# The head's timestamp, 2026-11-20T12:40:00Z, and every DO request's
+# createdAt, a minute before it.
+HEAD_TIMESTAMP = 1795178400
+CREATED_AT = HEAD_TIMESTAMP - 60
 # The requests polygon_mainnet's RPC of node/.env,
 # https://polygon-bor-rpc.publicnode.com, serves an address in 60 s.
 LIMIT = 1200
@@ -139,7 +151,8 @@ def agent():
 def posts():
     """The JSON-RPC methods web3 posts for one read of the PoX
     (_getDORequestsCount, under 'read') and for one read of a balance, of
-    the block number and of logs (under their methods): on an HTTPProvider
+    the block number, of logs, of a storage word and of the latest block
+    (under their methods): on an HTTPProvider
     with the retry configuration and the POA middleware
     EtnyPoXNode.__init__ gives its Web3 (a copy of that construction), whose
     posts are answered here and not sent. The web3 is the one installed
@@ -151,7 +164,10 @@ def posts():
     w3.middleware_onion.inject(ExtraDataToPOAMiddleware, layer=0)
     pox = w3.eth.contract(address=Web3.to_checksum_address(ADDRESS), abi=config.abi_filepath.read_text())
     answers = {"eth_chainId": hex(137), "eth_call": "0x" + ITEMS.to_bytes(32, "big").hex(),
-               "eth_getBalance": hex(10**18), "eth_blockNumber": hex(HEAD), "eth_getLogs": []}
+               "eth_getBalance": hex(10**18), "eth_blockNumber": hex(HEAD), "eth_getLogs": [],
+               "eth_getStorageAt": "0x" + CREATED_AT.to_bytes(32, "big").hex(),
+               "eth_getBlockByNumber": {"number": hex(HEAD), "timestamp": hex(HEAD_TIMESTAMP), "hash": "0x" + "00" * 32,
+                                        "parentHash": "0x" + "00" * 32, "extraData": "0x", "transactions": []}}
     posted = []
 
     def post(endpoint_uri, data, **kwargs):
@@ -170,7 +186,10 @@ def posts():
             "eth_getBalance": methods(lambda: w3.eth.get_balance(ADDRESS), 10**18),
             "eth_blockNumber": methods(lambda: w3.eth.block_number, HEAD),
             "eth_getLogs": methods(lambda: w3.eth.get_logs({"address": ADDRESS, "fromBlock": SCANNED_TO,
-                                                            "toBlock": HEAD}), [])}
+                                                            "toBlock": HEAD}), []),
+            "eth_getStorageAt": methods(lambda: int.from_bytes(w3.eth.get_storage_at(STORAGE_CHECKSUM, 3), "big"),
+                                        CREATED_AT),
+            "eth_getBlockByNumber": methods(lambda: w3.eth.get_block("latest").timestamp, HEAD_TIMESTAMP)}
 
 
 def load(monkeypatch, network, environment=None, arguments=()):
@@ -207,13 +226,16 @@ def started(variable=None):
 
 class Chain:
     """What an agent reads and sends on a legacy PoX: `requests` DO requests,
-    BOOKED but those in `available`, unpinned and naming the trustedzone
-    ecld-pynithy; `orders` CLOSED orders (order i of DO request i), none of
-    them this node's; this node's AVAILABLE DP request; the heartbeat
-    contract; the node's wallet; the head block HEAD and no logs. It stands
-    for the PoX contract and for web3's eth namespace. Each read appends its
-    name to `events`, with the order or request it reads, and `counted` is
-    called at each read of the DO request count."""
+    BOOKED but those in `available`, unpinned, naming the trustedzone
+    ecld-pynithy and created at CREATED_AT; `orders` CLOSED orders (order i
+    of DO request i), none of them this node's; this node's AVAILABLE DP
+    request; the heartbeat contract; the node's wallet; the head block HEAD
+    at HEAD_TIMESTAMP and no logs; the storage ethStorageAddress() names,
+    whose doRequestsList length slot (3) holds `requests` and whose every
+    other word CREATED_AT. It stands for the PoX contract and for web3's eth
+    namespace. Each read appends its name to `events`, with the order or
+    request it reads, and `counted` is called at each read of the DO request
+    count."""
 
     def __init__(self, requests=ITEMS, available=(), counted=lambda: None, orders=ITEMS):
         self.events = []
@@ -221,9 +243,11 @@ class Chain:
         self.available = set(available)
         self.counted = counted
         self.orders = orders
+        self.address = Web3.to_checksum_address(ADDRESS)
         self.functions = SimpleNamespace(
             _getMyDOOrders=lambda: SimpleNamespace(call=lambda transaction: self.read("_getMyDOOrders", [])),
             _placeOrder=self.placement,
+            ethStorageAddress=lambda: SimpleNamespace(call=lambda: self.read("ethStorageAddress", STORAGE_CHECKSUM)),
             logCall=lambda version: SimpleNamespace(build_transaction=lambda fields: self.read("logCall built", {})))
 
     def read(self, name, answer):
@@ -247,7 +271,12 @@ class Chain:
         return self.read("eth_getTransactionCount", 3)
 
     def get_block(self, block):
-        return self.read("eth_getBlockByNumber", SimpleNamespace(baseFeePerGas=100 * 10**9))
+        return self.read("eth_getBlockByNumber", SimpleNamespace(number=HEAD, timestamp=HEAD_TIMESTAMP,
+                                                                 baseFeePerGas=100 * 10**9))
+
+    def get_storage_at(self, address, slot):
+        word = self.requests if (address, slot) == (STORAGE_CHECKSUM, do_request_age.CLOUD.length_slot) else CREATED_AT
+        return self.read("eth_getStorageAt", word.to_bytes(32, "big"))
 
     def _getOrdersCount(self):
         return self.read("_getOrdersCount", self.orders)
@@ -335,9 +364,9 @@ def idle_node(agent, monkeypatch, directory, network, chain, stop, heartbeat_at,
     requests `cached` in its doreq_cache.txt, no approval awaited, the IPFS
     cleanup and peer sync done now, the heartbeat last sent at
     `heartbeat_at`, SKIP_INTEGRATION_TEST set and no SGX driver conflict.
-    The task slot is taken in name only, a send is appended to the chain's
-    events as 'sent' and raises Sent, and the SLEEPS_MAX-th sleep raises
-    Stuck."""
+    The task slot is taken in name only, no DO request age boundary is
+    established yet, a send is appended to the chain's events as 'sent' and
+    raises Sent, and the SLEEPS_MAX-th sleep raises Stuck."""
     slept = []
 
     def sleep(seconds):
@@ -372,6 +401,9 @@ def idle_node(agent, monkeypatch, directory, network, chain, stop, heartbeat_at,
     node._EtnyPoXNode__do_requests_build_pending = False
     node._EtnyPoXNode__last_ipfs_cleanup_at = time.time()
     node._EtnyPoXNode__last_ipfs_peer_sync_at = time.time()
+    node._EtnyPoXNode__do_request_ages = None
+    node._EtnyPoXNode__do_request_boundary = 0
+    monkeypatch.setattr(agent, "do_request_age_logged", {})
 
     def send(transaction):
         chain.events.append("sent")
@@ -481,7 +513,8 @@ def test_a_replication_round_on_polygon_mainnet_posts_3014_requests_after_800_sl
                       config.validator_registry_addresses):
         assert "POLYGON_MAINNET" not in addresses
     assert posts == {"read": ["eth_chainId", "eth_call", "eth_chainId"], "eth_getBalance": ["eth_getBalance"],
-                     "eth_blockNumber": ["eth_blockNumber"], "eth_getLogs": ["eth_getLogs"]}
+                     "eth_blockNumber": ["eth_blockNumber"], "eth_getLogs": ["eth_getLogs"],
+                     "eth_getStorageAt": ["eth_getStorageAt"], "eth_getBlockByNumber": ["eth_getBlockByNumber"]}
     events = replication_round(agent, monkeypatch, tmp_path, load(monkeypatch, "polygon_mainnet"))
     results = ["_getOrdersCount"] + scan(0.2, "_getOrder")
     inputs = ["_getDORequestsCount"] + scan(0.2, "_getDORequest") + ["_getOrdersCount"] + scan(0.2, "_getOrder")
@@ -526,35 +559,52 @@ def test_the_idle_tick_reads_the_balance_and_the_count_after_0_7_s_and_the_delay
     assert sum(sleeps(events[-4:])) == pytest.approx(0.71)
 
 
-def test_the_tick_that_places_a_new_do_request_sleeps_the_delay_three_times_before_the_send(
+def test_the_tick_that_places_a_new_do_request_sleeps_the_delay_before_each_read_up_to_the_send(
         agent, monkeypatch, tmp_path):
-    def placing(environment):
+    def placing(environment, bound):
         """The events of the first tick, which finds DO request ITEMS new,
-        AVAILABLE and unpinned, through the send of its placement."""
+        AVAILABLE and unpinned, through the send of its placement; the
+        storage of the DO requests' ages is bound before the tick when
+        `bound`."""
         chain = Chain(requests=ITEMS + 1, available={ITEMS})
         node = idle_node(agent, monkeypatch, tmp_path, load(monkeypatch, "polygon_mainnet", environment), chain,
                          threading.Event(), heartbeat_at=time.time())
+        if bound:
+            node._EtnyPoXNode__do_request_ages = (STORAGE_CHECKSUM, do_request_age.CLOUD)
         with pytest.raises(Sent):
             node.process_dp_request()
         return chain.events[4:]
 
     placement = f"_placeOrder({ITEMS}, {DP_REQUEST})"
-    events = placing({})
+    request = [f"_getDORequest({ITEMS})", f"_getDORequestMetadata({ITEMS})", "eth_blockNumber",
+               0.2, f"_getDORequest({ITEMS})",
+               0.2, f"{placement} simulated", "eth_getTransactionCount", "eth_getBlockByNumber",
+               f"{placement} built", "sent"]
+    # A handle's first boundary: the latest block, ethStorageAddress(), the
+    # storage's length and newest request, then request 0, the boundary
+    # before, created within the limit.
+    events = placing({}, bound=False)
     assert events == [0.7, "eth_getBalance", 0.2, "_getDORequestsCount",
-                      f"_getDORequest({ITEMS})", f"_getDORequestMetadata({ITEMS})", "eth_blockNumber",
-                      0.2, f"_getDORequest({ITEMS})",
-                      0.2, f"{placement} simulated", "eth_getTransactionCount", "eth_getBlockByNumber",
-                      f"{placement} built", "sent"]
-    # After the tick's 0.7 s: the delay before the count, before the
-    # request's status and before the placement's simulation; the last two
-    # follow the count read that sees the request.
+                      0.2, "eth_getBlockByNumber", 0.2, "ethStorageAddress", 0.2, "eth_getStorageAt",
+                      0.2, "eth_getStorageAt", 0.2, "eth_getStorageAt"] + request
+    # A bound handle: the latest block and the boundary before.
+    bound = placing({}, bound=True)
+    assert bound == [0.7, "eth_getBalance", 0.2, "_getDORequestsCount",
+                     0.2, "eth_getBlockByNumber", 0.2, "eth_getStorageAt"] + request
+
+    # After the tick's 0.7 s: the delay before the count, before each read
+    # of the boundary, before the request's status and before the
+    # placement's simulation; all but the first follow the count read that
+    # sees the request.
     def delays(events):
         seen = events.index("_getDORequestsCount")
         return sum(sleeps(events[1:])), sum(sleeps(events[seen:]))
 
-    assert delays(events) == pytest.approx((0.6, 0.4))
-    # The same tick at 10 ms, given through the environment.
-    assert delays(placing({VARIABLE: "10"})) == pytest.approx((0.03, 0.02))
+    assert delays(events) == pytest.approx((1.6, 1.4))
+    assert delays(bound) == pytest.approx((1.0, 0.8))
+    # The same ticks at 10 ms, given through the environment.
+    assert delays(placing({VARIABLE: "10"}, bound=False)) == pytest.approx((0.08, 0.07))
+    assert delays(placing({VARIABLE: "10"}, bound=True)) == pytest.approx((0.05, 0.04))
 
 
 def test_a_due_heartbeat_is_built_after_the_ticks_sleep_and_the_delay(agent, monkeypatch, tmp_path):
@@ -584,17 +634,23 @@ def test_the_first_pass_of_a_node_without_doreq_cache_sleeps_the_delay_once_a_do
         assert events[4:8] == events[-4:] == tick
         return events[8:-4]
 
-    # Each of the 241 BOOKED, unpinned DO requests: the request and its
-    # metadata, the block number of the node's dispersion turn, the delay, and
-    # the request again, which caches it as matched.
+    # The age boundary, each read after the delay: the latest block,
+    # ethStorageAddress(), the storage's length and newest request, and
+    # request 0, created within the limit. Then each of the 241 BOOKED,
+    # unpinned DO requests: the request and its metadata, the block number of
+    # the node's dispersion turn, the delay, and the request again, which
+    # caches it as matched.
     work = first_pass({}, 0.2)
-    assert work == [event for request in range(ITEMS - 1, -1, -1)
-                    for event in (f"_getDORequest({request})", f"_getDORequestMetadata({request})", "eth_blockNumber",
-                                  0.2, f"_getDORequest({request})")]
-    assert sum(posted(read, posts) for read in reads(work)) == 10 * ITEMS
-    # 48.2 s of sleep where 10 ms gives 2.41 s: 45.79 s more.
-    assert sum(sleeps(work)) == pytest.approx(48.2)
-    assert sum(sleeps(first_pass({VARIABLE: "10"}, 0.01))) == pytest.approx(2.41)
+    boundary = [0.2, "eth_getBlockByNumber", 0.2, "ethStorageAddress", 0.2, "eth_getStorageAt",
+                0.2, "eth_getStorageAt", 0.2, "eth_getStorageAt"]
+    assert work == boundary + [event for request in range(ITEMS - 1, -1, -1)
+                               for event in (f"_getDORequest({request})", f"_getDORequestMetadata({request})",
+                                             "eth_blockNumber", 0.2, f"_getDORequest({request})")]
+    assert sum(posted(read, posts) for read in reads(boundary)) == 7
+    assert sum(posted(read, posts) for read in reads(work)) == 10 * ITEMS + 7
+    # 49.2 s of sleep where 10 ms gives 2.46 s: 46.74 s more.
+    assert sum(sleeps(work)) == pytest.approx(49.2)
+    assert sum(sleeps(first_pass({VARIABLE: "10"}, 0.01))) == pytest.approx(2.46)
 
 
 def test_beside_the_idle_tick_a_round_keeps_to_1200_requests_in_60_s_from_29_ms_a_request(

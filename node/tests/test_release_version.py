@@ -25,7 +25,22 @@ def entries():
 
 def test_the_changelog_opens_with_the_release():
     top, _ = entries()[0]
-    assert top == "3.8.17"
+    assert top == "3.8.18"
+
+
+def test_the_3818_entry_names_the_do_request_age_rule():
+    text = dict(entries())["3.8.18"]
+    for item in ("DO_REQUEST_MAX_AGE_SECONDS", "86400 s", "<NETWORK>_DO_REQUEST_MAX_AGE_SECONDS",
+                 "--<network>_do_request_max_age_seconds", "pinned to the node", "createdAt", "eth_getStorageAt",
+                 "do_request_age.py", "ethStorageAddress()", "layout cloud", "layout v05", "slot 3", "slot 19",
+                 "keccak256(3) + 10 id + 1", "keccak256(19) + 9 id", "0x549A6E06BB2084100148D50F51CF77a3436C3Ae7",
+                 "0x6aAafE99746Bd9f9258DbC1A8C82f3C15563636C", "0xEE3aAa1A7a8C00BeBBb5DfC570F80f6FA12a968d",
+                 "within 16", "binary-searches", "never moves back", "never reads a request",
+                 "DO requests below <boundary>", "DO request ages are not established",
+                 "DO request ages were not read", "at most once an hour", "ceil(log2(count))", "23 on 34,542"):
+        assert item in text, item
+    for absent in ("requests 98", "2024-12-20", "where it was", "until now"):
+        assert absent not in text, absent
 
 
 def test_the_3817_entry_names_the_repo_size_read_before_a_pin():

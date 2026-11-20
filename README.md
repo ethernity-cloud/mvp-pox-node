@@ -165,6 +165,26 @@ A testnet comes in two kinds. `bloxberg_testnet`, `litvm_liteforge` and `ethereu
 
 The agent runs a trustedzone only after an integration test has passed on this platform: the trustedzone's own (`<NETWORK>_INTEGRATION_TEST_IMAGES`), or one that covers its requirement. A DCAP platform therefore runs both kinds; a platform whose CAS-provisioned test fails and whose `-unsafe` test passes runs the `-unsafe` trustedzones alone. The names it runs are logged at start (`Platform meets dcap and sgx: runs ...`), advertised in its DP request's `metadata4` (`trustedzones=<names>;ipfs=<peer id>`), and a DO request whose image metadata names another trustedzone (field 2) is not taken, with the reason logged. Mainnet has no `-unsafe` network. An order's enclaves run with the LAS of a trustedzone tree that passed the integration test, not the LAS bundled in the dApp's own tree: the pass keeps the tree's las service block in `node/<network>/las-tested-<trustedzone>.yml` and its image under the docker tag `localhost:5000/etny-las:tested-<trustedzone>`; the order's compose takes that block's entrypoint and command and its LAS image name is pointed at the tested image (logged as `The LAS of <trustedzone>'s tested tree runs this order's enclaves`). A trustedzone without a test of its own takes the tested LAS of one with the same platform requirement; a recorded pass loaded at start without a kept LAS runs its test again; until a tested LAS is held the order runs its tree's own. The LAS is in no enclave's measurement.
 
+## DO request age (release 3.8.18)
+
+The agent places no order on a DO request created more than
+`DO_REQUEST_MAX_AGE_SECONDS` (86400 in `node/.env`) before the timestamp of
+the chain's latest block, on every network and whether the request is pinned
+to the node or not; `<NETWORK>_DO_REQUEST_MAX_AGE_SECONDS` or the argument
+`--<network>_do_request_max_age_seconds` sets one network's. A request's
+`createdAt` is read from the PoX's storage with `eth_getStorageAt`
+(`node/do_request_age.py`): from the storage `ethStorageAddress()` names
+(layout `cloud`, every network but bloxberg mainnet) or from the PoX itself
+(layout `v05`, bloxberg mainnet), logged at the first pass as `DO request
+ages: createdAt is read from <address> (layout <name>)`. Each pass with a
+request to judge establishes the age boundary, the lowest id created within
+the limit, by a binary search from the boundary before; the pass never reads
+a request below it (`DO requests below <boundary> ... none of them is judged
+or placed`, logged when it moves). A pass whose boundary is not established
+places no order: an implausible storage is logged at ERROR (`DO request ages
+are not established`), an RPC failure at WARNING (`DO request ages were not
+read`), each at most once an hour.
+
 ## The 1.2 PoX (release 3.8.0)
 
 At start the agent probes each network's protocol contract for

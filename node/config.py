@@ -66,6 +66,11 @@ esr_relay_gas_budget_wei_default = int(os.environ.get('ESR_RELAY_GAS_BUDGET_WEI'
 # blocks ("eth_getLogs range exceeds 3000 blocks; split the range"), so the
 # LitVM pair's is 3000.
 logs_chunk_blocks_default = 9000
+# A DO request created more than this many seconds before the timestamp of
+# the chain's latest block takes no order from the agent (etny-node.py
+# __do_request_age_boundary). <NETWORK>_DO_REQUEST_MAX_AGE_SECONDS sets a
+# network's; DO_REQUEST_MAX_AGE_SECONDS (node/.env: 86400) every other's.
+do_request_max_age_seconds_default = int(os.environ.get('DO_REQUEST_MAX_AGE_SECONDS', 86400))
 # The values of a network's defaulted NetworkConfig fields when their
 # variables are unset, {<PREFIX>: {field: value}}; parse_networks applies
 # them.
@@ -110,6 +115,10 @@ class NetworkConfig:
     # The widest eth_getLogs block range of one scan on this network
     # (<NETWORK>_LOGS_CHUNK_BLOCKS, else network_field_defaults, else 9000).
     logs_chunk_blocks: int = logs_chunk_blocks_default
+    # The age, in seconds before the latest block's timestamp, beyond which a
+    # DO request takes no order on this network
+    # (<NETWORK>_DO_REQUEST_MAX_AGE_SECONDS, else DO_REQUEST_MAX_AGE_SECONDS).
+    do_request_max_age_seconds: int = do_request_max_age_seconds_default
     # The operator's tip in token weis per CU-hour, added to the gas tip of a
     # 1.2 DP request (<NETWORK>_TIP_PER_CU_HOUR_WEI).
     tip_per_cu_hour_wei: int = 0
@@ -588,6 +597,10 @@ def parse_networks(arguments: argparse.Namespace, parser: argparse.ArgumentParse
         if network_config.logs_chunk_blocks < 1:
             raise EnvironmentError(
                 f"{prefix}_LOGS_CHUNK_BLOCKS must be at least 1 block, not {network_config.logs_chunk_blocks}")
+        if network_config.do_request_max_age_seconds < 1:
+            raise EnvironmentError(
+                f"{prefix}_DO_REQUEST_MAX_AGE_SECONDS must be at least 1 second, "
+                f"not {network_config.do_request_max_age_seconds}")
         trustedzones = trustedzone_requirements(network_config.trustedzone_images)
         for image in integration_test_images(network_config):
             if image not in trustedzones:

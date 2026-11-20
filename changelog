@@ -1,3 +1,66 @@
+v3.8.18
+the agent places no order on a DO request created more than
+  do_request_max_age_seconds before the timestamp of the chain's latest
+  block, on every network and whether the request is pinned to the node or
+  not: DO_REQUEST_MAX_AGE_SECONDS in node/.env (86400 s), replaced for one
+  network by <NETWORK>_DO_REQUEST_MAX_AGE_SECONDS in the environment or by
+  the argument --<network>_do_request_max_age_seconds, which stands before
+  it (config.NetworkConfig.do_request_max_age_seconds, at least 1 s). The
+  rule holds where the agent places, the intake loop (process_dp_request,
+  place_order); a reserved order the broker places on the node's offer and
+  an order the node placed that is approved after its window are run
+  whatever their DO request's age
+a DO request's createdAt, uint32 of the timestamp of the block that added
+  it, is read with eth_getStorageAt (do_request_age.py). Where the PoX
+  answers ethStorageAddress(), from the storage it names, layout cloud
+  (EthernityCloudStorage: doRequestsList's length at slot 3, 10 slots a
+  request, createdAt the low 32 bits of slot keccak256(3) + 10 id + 1);
+  where it does not, from the PoX itself, layout v05 (doRequestsList's
+  length at slot 19, 9 slots a request, createdAt the top 32 bits of slot
+  keccak256(19) + 9 id). bloxberg_mainnet (PoX
+  0x549A6E06BB2084100148D50F51CF77a3436C3Ae7) is read as v05; the storages
+  of the other networks, read as cloud: bloxberg_testnet and
+  bloxberg_testnet_unsafe 0xEE3aAa1A7a8C00BeBBb5DfC570F80f6FA12a968d,
+  polygon_mainnet 0x6aAafE99746Bd9f9258DbC1A8C82f3C15563636C, polygon_amoy
+  and polygon_amoy_unsafe 0xD7f6826EeC7606E41198CD06C2147645bD15AC9d,
+  iotex_testnet 0xD6AF20E8E03e18e42E42DFAa6EC0c559301A5523, ethereum_sepolia
+  and ethereum_sepolia_unsafe 0x02882F03097fE8cD31afbdFbB5D72a498B41112c,
+  litvm_liteforge and litvm_liteforge_unsafe
+  0x41269644d3a4Cd29ec01fbB6abcDCE93A99fDF0b. A layout is taken when its
+  length slot lies within 16 of the DO request count read before it and the
+  newest request both hold has a createdAt from 2020-01-01 to 60 s after the
+  latest block's timestamp; the line "DO request ages: createdAt is read
+  from <address> (layout <name>)" names it
+a pass with a DO request to judge reads the latest block and establishes the
+  age boundary, the lowest id created at or after its timestamp less the
+  limit: requests are appended in block order, so createdAt does not
+  decrease with the id; the search reads the boundary of the pass before,
+  then binary-searches the ids above it, and the boundary never moves back.
+  The pass judges the ids from the boundary on and never reads a request
+  below it. "DO requests below <boundary> (of <count>) were created more
+  than <limit> s before block <number> (<time>); none of them is judged or
+  placed" is logged when the boundary moves. A pass whose every request from
+  the boundary on is in doreq_cache.txt or held for its resources reads
+  neither the latest block nor the storage
+a pass whose boundary is not established places no order, and the next pass
+  tries again: a layout or a createdAt that is not plausible is logged at
+  ERROR ("DO request ages are not established (<reason>); no order is placed
+  until they are"), an RPC failure or a createdAt of 0, a request the RPC's
+  node does not hold yet, at WARNING ("DO request ages were not read
+  (<error>); no order is placed this pass"), each at most once an hour per
+  network. After a createdAt that is not plausible or is 0 the storage and
+  layout are established again
+the boundary's reads, each after the network's RPC delay: the latest block
+  (eth_getBlockByNumber, one request); on a handle's first boundary
+  ethStorageAddress() (three requests: eth_chainId, eth_call, eth_chainId),
+  the length slot and the newest request (eth_getStorageAt, one request
+  each); then the boundary before, and at most ceil(log2(count - boundary))
+  more when it moved. A handle's first boundary posts 6 + 1 +
+  ceil(log2(count)) requests at most, 23 on 34,542 DO requests; a boundary
+  that has not moved posts 2. At polygon_mainnet's 200 ms the boundary
+  sleeps 0.4 s before a placement on a bound handle, 1.0 s on a handle's
+  first boundary
+
 v3.8.17
 the registered-image pin reads the IPFS repository's size before it starts
   (utils.Storage.repo_size, Kubo's repo/stat) up to three times, 5 s apart,

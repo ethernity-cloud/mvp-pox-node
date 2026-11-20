@@ -14,10 +14,10 @@ def required_fields():
     return {f.name: "" for f in fields(config.NetworkConfig) if f.default is MISSING}
 
 
-def test_the_defaulted_fields_are_the_relay_budget_the_logs_chunk_and_the_phase_e_four():
+def test_the_defaulted_fields_are_the_relay_budget_the_logs_chunk_the_do_request_age_and_the_phase_e_four():
     optional = [f.name for f in fields(config.NetworkConfig) if f.default is not MISSING]
-    assert optional == ["esr_relay_gas_budget_wei", "logs_chunk_blocks", "tip_per_cu_hour_wei",
-                        "accept_reserved", "farm_invite", "farm_accept"]
+    assert optional == ["esr_relay_gas_budget_wei", "logs_chunk_blocks", "do_request_max_age_seconds",
+                        "tip_per_cu_hour_wei", "accept_reserved", "farm_invite", "farm_accept"]
 
 
 def test_a_network_without_the_variable_takes_the_global_default():

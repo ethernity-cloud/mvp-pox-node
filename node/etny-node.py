@@ -30,6 +30,7 @@ import gas_profile
 import gas_ledger
 import broker
 import replay
+import do_request_age
 from constants import INTEGRATION_TEST_SECONDS, INTEGRATION_TEST_RETRY_MIN_SECONDS, INTEGRATION_TEST_RETRY_MAX_SECONDS, INTEGRATION_TEST_REGISTRY_CHECK_SECONDS, RPC_REPLICA_LAG_BLOCKS, DP_TERMS_POLL_SECONDS, CANCEL_ATTEMPTS, RELAY_BATCH_MIN, ESR_LEDGER_CAP, RESULT_SEND_GRACE_SECONDS, FENCE_STAGE_SECONDS, FENCE_STAGE_TICKS, HANDOVER_REQUEST_TIMEOUT_SECONDS, CU_VERSION_MIN
 from models import *
 from error_messages import errorMessages
@@ -212,6 +213,12 @@ _registered_image_gc = {'at': 0, 'due': False}
 # publisher before calling it unreachable (__peer_publisher).
 PUBLISHER_DIALS = 6
 PUBLISHER_DIAL_WAIT = 10
+# A pass whose DO request age boundary is not established
+# (__do_request_age_boundary) logs it at most once every
+# DO_REQUEST_AGE_LOG_SECONDS per network and level: {(network, level):
+# time.monotonic() of the last line}, kept across the network's handles.
+DO_REQUEST_AGE_LOG_SECONDS = 3600
+do_request_age_logged = {}
 
 
 def collect_garbage(storage, logger):
@@ -495,6 +502,12 @@ class EtnyPoXNode:
         self.__order_id = 0
         self.__total_nodes_count = 0
         self.__is_first_cycle = defaultdict(lambda: True)
+        # The contract and layout the DO requests' createdAt is read from
+        # (__do_request_age_boundary), None until established; the lowest id
+        # of a DO request created within the network's
+        # do_request_max_age_seconds, as last established.
+        self.__do_request_ages = None
+        self.__do_request_boundary = 0
         # {trustedzone name: platform requirement} and the images whose
         # integration tests prove those requirements on this platform.
         self.__trustedzones = config.trustedzone_requirements(self.__network_config.trustedzone_images)
@@ -5223,6 +5236,67 @@ class EtnyPoXNode:
             self.__is_first_cycle[do_req_id] = False
             return True
 
+    def __do_request_age_boundary(self, count):
+        """The lowest id of the network's `count` DO requests whose createdAt
+        is at or after the latest block's timestamp less the network's
+        do_request_max_age_seconds, `count` when none is; None when it is not
+        established this pass. It is searched from the boundary established
+        before, which does not move back (do_request_age.boundary), and
+        createdAt is read from the contract and layout do_request_age.bind
+        takes, bound at the first search and again after a createdAt the
+        search refuses. The network's rpc_delay is slept before every read:
+        the latest block, ethStorageAddress() and each storage word. An
+        implausible layout or createdAt is logged at ERROR, an RPC failure or
+        a createdAt of 0 at WARNING (__log_do_request_age_failure); a boundary
+        that moved is logged at INFO."""
+        limit = self.__network_config.do_request_max_age_seconds
+        try:
+            time.sleep(self.__network_config.rpc_delay / 1000)
+            head = self.__w3.eth.get_block('latest')
+            if self.__do_request_ages is None:
+                time.sleep(self.__network_config.rpc_delay / 1000)
+                tried = do_request_age.candidates(self.__etny.functions.ethStorageAddress().call, self.__etny.address)
+                self.__do_request_ages = do_request_age.bind(tried, self.__storage_word, count, head.timestamp)
+                self.logger.info(f"DO request ages: createdAt is read from {self.__do_request_ages[0]} "
+                                 f"(layout {self.__do_request_ages[1].name})")
+            address, layout = self.__do_request_ages
+            boundary = do_request_age.boundary(self.__storage_word, address, layout, self.__do_request_boundary, count,
+                                               head.timestamp, limit)
+        except do_request_age.AgeUnknown as e:
+            self.__do_request_ages = None
+            self.__log_do_request_age_failure(logging.ERROR, f"DO request ages are not established ({e}); "
+                                                             f"no order is placed until they are")
+            return None
+        except Exception as e:
+            # A createdAt of 0 binds the contract again at the next search.
+            if isinstance(e, do_request_age.NotHeld):
+                self.__do_request_ages = None
+            self.__log_do_request_age_failure(logging.WARNING, f"DO request ages were not read ({e}); "
+                                                               f"no order is placed this pass")
+            return None
+        if boundary != self.__do_request_boundary:
+            self.__do_request_boundary = boundary
+            self.logger.info(f"DO requests below {boundary} (of {count}) were created more than {limit} s before block "
+                             f"{head.number} ({do_request_age.utc(head.timestamp)}); none of them is judged or placed")
+        return boundary
+
+    def __storage_word(self, address, slot):
+        """The storage word at `slot` of the contract at `address`, as an
+        int, read after the network's rpc_delay."""
+        time.sleep(self.__network_config.rpc_delay / 1000)
+        return int.from_bytes(self.__w3.eth.get_storage_at(address, slot), 'big')
+
+    def __log_do_request_age_failure(self, level, message):
+        """Logs `message` at `level` unless this network logged one at that
+        level in the last DO_REQUEST_AGE_LOG_SECONDS (do_request_age_logged)."""
+        key = (self.__network, level)
+        now = time.monotonic()
+        last = do_request_age_logged.get(key)
+        if last is not None and now - last < DO_REQUEST_AGE_LOG_SECONDS:
+            return
+        do_request_age_logged[key] = now
+        self.logger.log(level, message)
+
     def process_dp_request(self):
         logger = self.logger
        
@@ -5312,7 +5386,6 @@ class EtnyPoXNode:
                 f'''Skipping Order, DORequestId = {_doreq[i]}, DPRequestId = {i}, Order has different status: '{RequestStatus._status_as_string(doreq[i].status)}' ''')
             return
 
-        checked = 0
         seconds = 0
 
         self.__total_nodes_count = self.__heart_beat.caller().getNodesCount()
@@ -5408,7 +5481,6 @@ class EtnyPoXNode:
                 # The pass's quote, which the DO requests are judged against
                 # (utils.admits_do_request) with the standing request's terms.
                 quote = self.__quote() if compare == 'terms' else None
-                checked = 0
             except Exception as e:
                 logger.warning(f"Warning while trying to get DORequestCount, Message: {e}")
                 continue
@@ -5422,7 +5494,18 @@ class EtnyPoXNode:
             offer = (req.cpu, req.memory, req.storage, req.bandwidth)
             cached_do_requests = self.doreq_cache.get_values + self.resource_refusals.held(offer)
 
-            req_to_process = list(set(range(checked, count)) - set(cached_do_requests))
+            # Only the DO requests created within the network's
+            # do_request_max_age_seconds of the latest block are judged, the
+            # ids from the age boundary on (__do_request_age_boundary): it is
+            # established when a request from the boundary of the pass before
+            # on is not cached, and a pass whose boundary is not established
+            # judges none. A request below the boundary is never read.
+            req_to_process = list(set(range(self.__do_request_boundary, count)) - set(cached_do_requests))
+            if req_to_process:
+                boundary = self.__do_request_age_boundary(count)
+                if boundary is None:
+                    continue
+                req_to_process = [i for i in req_to_process if i >= boundary]
 
             total_requests = len(req_to_process)
             threshold = 0

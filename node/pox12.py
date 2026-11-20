@@ -8,6 +8,9 @@ from eth_abi.exceptions import DecodingError
 from web3.exceptions import BadFunctionCallOutput, ContractLogicError
 
 ZERO_ADDRESS = '0x' + '00' * 20
+# What a call raises when the contract has no such function: it reverts, or
+# its answer does not decode.
+FUNCTION_ABSENT = (ContractLogicError, BadFunctionCallOutput, DecodingError)
 
 
 def pox_generation(call):
@@ -15,7 +18,7 @@ def pox_generation(call):
     answer does not decode (a legacy PoX). Any other failure propagates."""
     try:
         call()
-    except (ContractLogicError, BadFunctionCallOutput, DecodingError):
+    except FUNCTION_ABSENT:
         return False
     return True
 
