@@ -1,3 +1,20 @@
+v3.8.17
+A registered image's pin goes on past a failed read of the IPFS
+  repository's size: the read the pin takes before it starts
+  (utils.Storage.repo_size, Kubo's repo/stat) is asked up to three times,
+  5 s apart, and the attempt fails only on the third failure, as the pin's
+  watch, which reads the size every 10 s, goes on through two failed reads
+  in a row. Kubo answers repo/stat with 500 ("getting disk usage at /:
+  lstat /data/ipfs/datastore/<n>.ldb: no such file or directory") when
+  leveldb removes a file while the read walks the datastore; one such
+  answer failed the attempt, and the next one came 600 s later, the delay
+  doubling with each failure. The bootnode mirror logged the answer six
+  times on 2026-11-20: it held the pin of the etny-pynithy-testnet-unsafe
+  tree QmfHxkZHuZhRZLzg7T535HCjBzS94U2qcwgbxoQTZU4m5M from 09:50:55 to
+  10:11:09 UTC, and the CI stage job waiting for that pin reached its 1 h
+  limit before it wrote the image's certificate. The watch's own reads are
+  unchanged: one read each, the pin ended at three failed reads in a row
+
 v3.8.16
 Polygon mainnet's default delay between the agent's chain calls is 200 ms
   where it was 10 (POLYGON_MAINNET_RPC_DELAY in node/.env), the delay of

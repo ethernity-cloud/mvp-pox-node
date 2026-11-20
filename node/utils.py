@@ -3023,9 +3023,19 @@ class Storage:
         peers = self._api_call('swarm/peering/ls', timeout=10).get('Peers') or []
         return {p.get('ID') for p in peers}
 
-    def repo_size(self):
-        """The bytes Kubo's repository holds (repo/stat RepoSize)."""
-        return int(self._api_call('repo/stat', params={'size-only': 'true'}, timeout=60)['RepoSize'])
+    def repo_size(self, attempts=1, delay=5):
+        """The bytes Kubo's repository holds (repo/stat RepoSize), read up to
+        `attempts` times `delay` seconds apart; the last failure is raised.
+        Kubo answers repo/stat with 500 ("getting disk usage at /: lstat
+        ...: no such file or directory") when leveldb removes a file while
+        the read walks the datastore."""
+        for attempt in range(1, attempts + 1):
+            try:
+                return int(self._api_call('repo/stat', params={'size-only': 'true'}, timeout=60)['RepoSize'])
+            except Exception:
+                if attempt == attempts:
+                    raise
+                time.sleep(delay)
 
     def unpin(self, cid):
         """pin/rm `cid`, whatever the connection state recorded; done when Kubo

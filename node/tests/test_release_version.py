@@ -25,7 +25,15 @@ def entries():
 
 def test_the_changelog_opens_with_the_release():
     top, _ = entries()[0]
-    assert top == "3.8.16"
+    assert top == "3.8.17"
+
+
+def test_the_3817_entry_names_the_repo_size_read_before_a_pin():
+    text = dict(entries())["3.8.17"]
+    for item in ("utils.Storage.repo_size", "repo/stat", "up to three times", "5 s apart",
+                 "through two failed reads", "getting disk usage at /", "leveldb", "600 s later",
+                 "QmfHxkZHuZhRZLzg7T535HCjBzS94U2qcwgbxoQTZU4m5M", "1 h", "three failed reads in a row"):
+        assert item in text, item
 
 
 def test_the_3816_entry_names_the_polygon_mainnet_rpc_delay():

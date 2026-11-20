@@ -1673,7 +1673,9 @@ class EtnyPoXNode:
         pinned."""
         floor = config.esr_min_free_storage_gb
         before = self.storage.recursive_pins()
-        start = self.storage.repo_size()
+        # Read up to three times before the attempt fails, as the watch
+        # below goes on through two failed reads in a row.
+        start = self.storage.repo_size(attempts=3)
         limit = 2 * declared + 2 * 1024 ** 3
 
         def watch():
