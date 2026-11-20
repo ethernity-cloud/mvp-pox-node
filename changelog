@@ -1,3 +1,51 @@
+v3.8.16
+Polygon mainnet's default delay between the agent's chain calls is 200 ms
+  where it was 10 (POLYGON_MAINNET_RPC_DELAY in node/.env), the delay of
+  every network but the bloxberg testnet pair (0). At 10 ms an agent
+  serving polygon_mainnet logged "Warning while trying to get
+  DORequestCount, Message: 429 Client Error: Too Many Requests for url:
+  https://polygon-bor-rpc.publicnode.com/" whenever the default RPC, which
+  serves an address 1,200 requests in 60 s, refused its idle tick's read of
+  the DO request count at each of web3's five tries: 441 times in the three
+  hours to 01:22 UTC on 2026-11-20, in 21 bursts about nine and a half
+  minutes apart, a replication round (run_esr_replication_loop) and its
+  interval (ESR_REPLICATION_INTERVAL_SECONDS, 300). A round reads the
+  newest 200 orders for their results and session rows
+  (ESR_RESULT_SCAN_ORDERS) and the newest 200 DO requests and orders for
+  their inputs (DO_REQUEST_SCAN_REQUESTS), sleeping the delay before each
+  order or request: at 10 ms, beside the idle tick, its requests kept to
+  the limit only when the RPC took 62 ms or more to answer one. An order's
+  enclaves read the chain through the same RPC from the same address, and
+  a legacy PoX's trustedzone does not try a refused read again: its task
+  ends without a result. At 200 ms a round and the idle tick keep to the
+  limit once the RPC takes 29 ms to answer a request, at 400 ms whatever
+  that time: an agent that still logs the warning sets 400. The delay
+  costs: a round sleeps it at least 800 times while the PoX holds 200 or
+  more orders (with fewer, 200 times and 3 more for each order), 160 s
+  where it slept 8 s; a new DO request is seen up to 0.19 s later, its
+  placement sent 0.38 to 0.57 s later and a due heartbeat sent 0.19 to
+  0.38 s later; a node without doreq_cache.txt takes up to 0.19 s more for
+  each DO request of its first pass (46 s for Polygon mainnet's 241)
+an operator sets another delay for one node, 0 or more whole milliseconds,
+  with the variable POLYGON_MAINNET_RPC_DELAY in the service's environment
+  (a drop-in of etny-node.service: ubuntu/etny-node-start.sh installs the
+  repository's unit file over an edited one): config.parse_networks reads
+  the process's environment, into which config's load_dotenv puts
+  node/.env's values only for the variables that are not set. The argument
+  --polygon_mainnet_rpc_delay stands before both: a start script that
+  passes its config lines as arguments (ubuntu/etny-node-start.sh
+  parse_config_to_args) passes the line
+  POLYGON_MAINNET_RPC_DELAY=<milliseconds> of the node's config
+  (/home/vagrant/etny/node/config) as that argument when the line ends
+  with a newline (parse_config_to_args reads complete lines: a last line
+  without one is not passed). An older start script, in which "grep
+  parse_config_to_args /home/vagrant/etny/node/etny-node-start.sh" finds
+  nothing, passes no config line: the line alone does not reach the agent
+  there (the script sources the config into unexported shell variables),
+  and the drop-in sets the delay. On either kind of start script a config
+  line replaces a drop-in's value. An edit of node/.env does not last: the
+  start script resets the checkout to origin/master at every start
+
 v3.8.15
 Polygon mainnet's default fee ceiling is 500 gwei where it was 200
   (POLYGON_MAINNET_MAX_FEE_PER_GAS in node/.env). On Polygon mainnet the

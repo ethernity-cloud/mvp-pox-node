@@ -25,7 +25,31 @@ def entries():
 
 def test_the_changelog_opens_with_the_release():
     top, _ = entries()[0]
-    assert top == "3.8.15"
+    assert top == "3.8.16"
+
+
+def test_the_3816_entry_names_the_polygon_mainnet_rpc_delay():
+    text = dict(entries())["3.8.16"]
+    for item in ("POLYGON_MAINNET_RPC_DELAY", "200 ms", "where it was 10", "bloxberg testnet pair (0)",
+                 "Warning while trying to get", "429 Client Error: Too Many Requests",
+                 "https://polygon-bor-rpc.publicnode.com/", "1,200 requests in 60 s", "web3's five tries", "441 times",
+                 "21 bursts", "nine and a half", "run_esr_replication_loop", "ESR_REPLICATION_INTERVAL_SECONDS, 300",
+                 "ESR_RESULT_SCAN_ORDERS", "DO_REQUEST_SCAN_REQUESTS", "62 ms", "does not try a refused read again",
+                 "ends without a result", "29 ms", "400 ms", "sets 400", "at least 800 times",
+                 "3 more for each order", "160 s", "where it slept 8 s", "up to 0.19 s later", "0.38 to 0.57 s later",
+                 "heartbeat sent 0.19 to", "doreq_cache.txt", "46 s"):
+        assert item in text, item
+
+
+def test_the_3816_entry_names_the_ways_to_another_delay():
+    text = dict(entries())["3.8.16"]
+    for item in ("0 or more whole milliseconds", "POLYGON_MAINNET_RPC_DELAY in the service's environment",
+                 "etny-node.service", "config.parse_networks", "load_dotenv", "--polygon_mainnet_rpc_delay",
+                 "parse_config_to_args", "POLYGON_MAINNET_RPC_DELAY=<milliseconds>",
+                 "/home/vagrant/etny/node/config", "with a newline", "/home/vagrant/etny/node/etny-node-start.sh",
+                 "unexported shell variables", "On either kind of start script", "replaces a drop-in's value",
+                 "origin/master"):
+        assert item in text, item
 
 
 def test_the_3815_entry_names_the_polygon_mainnet_fee_ceiling():
