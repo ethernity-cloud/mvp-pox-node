@@ -1,116 +1,66 @@
 v3.8.17
-A registered image's pin goes on past a failed read of the IPFS
-  repository's size: the read the pin takes before it starts
-  (utils.Storage.repo_size, Kubo's repo/stat) is asked up to three times,
-  5 s apart, and the attempt fails only on the third failure, as the pin's
-  watch, which reads the size every 10 s, goes on through two failed reads
-  in a row. Kubo answers repo/stat with 500 ("getting disk usage at /:
-  lstat /data/ipfs/datastore/<n>.ldb: no such file or directory") when
-  leveldb removes a file while the read walks the datastore; one such
-  answer failed the attempt, and the next one came 600 s later, the delay
-  doubling with each failure. The bootnode mirror logged the answer six
-  times on 2026-11-20: it held the pin of the etny-pynithy-testnet-unsafe
-  tree QmfHxkZHuZhRZLzg7T535HCjBzS94U2qcwgbxoQTZU4m5M from 09:50:55 to
-  10:11:09 UTC, and the CI stage job waiting for that pin reached its 1 h
-  limit before it wrote the image's certificate. The watch's own reads are
-  unchanged: one read each, the pin ended at three failed reads in a row
+the registered-image pin reads the IPFS repository's size before it starts
+  (utils.Storage.repo_size, Kubo's repo/stat) up to three times, 5 s apart,
+  and the attempt fails at the third failure; the pin's watch reads the size
+  every 10 s, one read each, and ends the pin at three failed reads in a row
+Kubo answers repo/stat with 500 ("getting disk usage at /: lstat
+  /data/ipfs/datastore/<n>.ldb: no such file or directory") when leveldb
+  removes a file while the read walks the datastore
 
 v3.8.16
 Polygon mainnet's default delay between the agent's chain calls is 200 ms
-  where it was 10 (POLYGON_MAINNET_RPC_DELAY in node/.env), the delay of
-  every network but the bloxberg testnet pair (0). At 10 ms an agent
-  serving polygon_mainnet logged "Warning while trying to get
-  DORequestCount, Message: 429 Client Error: Too Many Requests for url:
-  https://polygon-bor-rpc.publicnode.com/" whenever the default RPC, which
-  serves an address 1,200 requests in 60 s, refused its idle tick's read of
-  the DO request count at each of web3's five tries: 441 times in the three
-  hours to 01:22 UTC on 2026-11-20, in 21 bursts about nine and a half
-  minutes apart, a replication round (run_esr_replication_loop) and its
-  interval (ESR_REPLICATION_INTERVAL_SECONDS, 300). A round reads the
-  newest 200 orders for their results and session rows
-  (ESR_RESULT_SCAN_ORDERS) and the newest 200 DO requests and orders for
-  their inputs (DO_REQUEST_SCAN_REQUESTS), sleeping the delay before each
-  order or request: at 10 ms, beside the idle tick, its requests kept to
-  the limit only when the RPC took 62 ms or more to answer one. An order's
-  enclaves read the chain through the same RPC from the same address, and
-  a legacy PoX's trustedzone does not try a refused read again: its task
-  ends without a result. At 200 ms a round and the idle tick keep to the
-  limit once the RPC takes 29 ms to answer a request, at 400 ms whatever
-  that time: an agent that still logs the warning sets 400. The delay
-  costs: a round sleeps it at least 800 times while the PoX holds 200 or
-  more orders (with fewer, 200 times and 3 more for each order), 160 s
-  where it slept 8 s; a new DO request is seen up to 0.19 s later, its
-  placement sent 0.38 to 0.57 s later and a due heartbeat sent 0.19 to
-  0.38 s later; a node without doreq_cache.txt takes up to 0.19 s more for
-  each DO request of its first pass (46 s for Polygon mainnet's 241)
-an operator sets another delay for one node, 0 or more whole milliseconds,
-  with the variable POLYGON_MAINNET_RPC_DELAY in the service's environment
-  (a drop-in of etny-node.service: ubuntu/etny-node-start.sh installs the
-  repository's unit file over an edited one): config.parse_networks reads
-  the process's environment, into which config's load_dotenv puts
-  node/.env's values only for the variables that are not set. The argument
-  --polygon_mainnet_rpc_delay stands before both: a start script that
-  passes its config lines as arguments (ubuntu/etny-node-start.sh
-  parse_config_to_args) passes the line
-  POLYGON_MAINNET_RPC_DELAY=<milliseconds> of the node's config
-  (/home/vagrant/etny/node/config) as that argument when the line ends
-  with a newline (parse_config_to_args reads complete lines: a last line
-  without one is not passed). An older start script, in which "grep
-  parse_config_to_args /home/vagrant/etny/node/etny-node-start.sh" finds
-  nothing, passes no config line: the line alone does not reach the agent
-  there (the script sources the config into unexported shell variables),
-  and the drop-in sets the delay. On either kind of start script a config
-  line replaces a drop-in's value. An edit of node/.env does not last: the
-  start script resets the checkout to origin/master at every start
+  (POLYGON_MAINNET_RPC_DELAY in node/.env), the delay of every network but
+  the bloxberg testnet pair (0). Polygon mainnet's default RPC
+  (https://polygon-bor-rpc.publicnode.com/) serves an address 1,200 requests
+  in 60 s
+a replication round (run_esr_replication_loop, every
+  ESR_REPLICATION_INTERVAL_SECONDS) reads the newest 200 orders
+  (ESR_RESULT_SCAN_ORDERS) and the newest 200 DO requests and orders
+  (DO_REQUEST_SCAN_REQUESTS), sleeping the delay before each; at 200 ms a
+  round sleeps at least 160 s once the PoX holds 200 orders. A new DO request
+  is seen up to 0.19 s later and its placement sent 0.38 to 0.57 s later; a
+  node without doreq_cache.txt takes up to 0.19 s more for each DO request of
+  its first pass
+the delay of one node, 0 or more whole milliseconds, is set by
+  POLYGON_MAINNET_RPC_DELAY in the service's environment (a drop-in of
+  etny-node.service) or by the argument --polygon_mainnet_rpc_delay, which
+  stands before it; config.parse_networks reads the process's environment,
+  into which load_dotenv puts node/.env's values only for the variables that
+  are not set. A start script with parse_config_to_args
+  (ubuntu/etny-node-start.sh) passes the config line
+  POLYGON_MAINNET_RPC_DELAY=<milliseconds> of /home/vagrant/etny/node/config
+  as that argument; a start script without it passes no config line. The
+  start script resets the checkout, node/.env included, to origin/master at
+  every start
 
 v3.8.15
-Polygon mainnet's default fee ceiling is 500 gwei where it was 200
-  (POLYGON_MAINNET_MAX_FEE_PER_GAS in node/.env). On Polygon mainnet the
-  agent builds its offer, heartbeat, placement and result with maxFeePerGas
-  int(baseFee * 1.1) plus the priority fee of 32 gwei
-  (get_transaction_build) and builds none above the ceiling: at a base fee
-  of 251 gwei (Polygon mainnet's on 2026-11-19: 251.3 gwei at block
-  97605732) that is 308.1 gwei; 200 admitted a base fee up to 152.7 gwei,
-  500 admits one up to 425.4 gwei. At 200 an agent on Polygon mainnet logged
-  "Network base fee is too high!" for every try of its offer ("Warning
-  while adding DP request. Retry n/20") and, after 20 tries 5 s apart,
-  "Restarting due to error": the network was started again and the offer
-  tried again, for as long as the base fee stood above 152.7 gwei. An agent
-  whose offer stood logged the same refusal for every try of its heartbeat
-  ("Warning while sending heartbeat. Retry n/20") at each idle tick once the
-  heartbeat was due, and judged no DO request in those ticks. With this
-  release a node that serves polygon_mainnet sends its offer and its
-  heartbeat with the maxFeePerGas above, paid in POL from its own wallet
-an operator sets another ceiling for one node, in gwei, with the variable
-  POLYGON_MAINNET_MAX_FEE_PER_GAS in the service's environment (a drop-in
-  of etny-node.service: ubuntu/etny-node-start.sh installs the repository's
-  unit file over an edited one): config.parse_networks reads the process's
-  environment, into which config's load_dotenv puts node/.env's values only
-  for the variables that are not set. The argument
-  --polygon_mainnet_max_fee_per_gas stands before both: a start script that
-  passes its config lines as arguments (ubuntu/etny-node-start.sh
-  parse_config_to_args) passes the line
-  POLYGON_MAINNET_MAX_FEE_PER_GAS=<gwei> of the node's config
-  (/home/vagrant/etny/node/config) as that argument when the line ends
-  with a newline (parse_config_to_args reads complete lines: a last line
-  without one is not passed). An edit of node/.env does not last: the start
-  script resets the checkout to origin/master at every start
+Polygon mainnet's default fee ceiling is 500 gwei
+  (POLYGON_MAINNET_MAX_FEE_PER_GAS in node/.env). On Polygon mainnet the agent
+  builds its offer, heartbeat, placement and result with maxFeePerGas
+  int(baseFee * 1.1) plus the priority fee of 32 gwei (get_transaction_build),
+  paid in POL from its own wallet, and sends none above the ceiling ("Network
+  base fee is too high!"); 500 gwei admits a base fee up to 425.4 gwei
+the ceiling of one node, in gwei, is set by POLYGON_MAINNET_MAX_FEE_PER_GAS in
+  the service's environment (a drop-in of etny-node.service) or by the
+  argument --polygon_mainnet_max_fee_per_gas, which stands before it;
+  config.parse_networks reads the process's environment, into which
+  load_dotenv puts node/.env's values only for the variables that are not set.
+  A start script with parse_config_to_args (ubuntu/etny-node-start.sh) passes
+  the config line POLYGON_MAINNET_MAX_FEE_PER_GAS=<gwei> of
+  /home/vagrant/etny/node/config as that argument. The start script resets the
+  checkout, node/.env included, to origin/master at every start
 
 v3.8.14
 the enclave composes get ETNY_SCONE_QUEUES per network: every docker-compose
   run on an order's or an integration test's compose (pull, down, up) takes
   the agent's environment with the count of the network's PoX generation
   (utils.enclave_compose_env), twice the node's CPUs within 4 and 64 on a
-  PoX 1.2 and within 4 and 8 (utils.SCONE_QUEUES_LEGACY_MAX) on a legacy
-  PoX, whose trustedzone images are signed without --tcs and take at most
-  eight queues; the agent's own environment is no longer given the variable
-  (one process serves networks of both generations), and the start line
-  "SCONE queues for the enclaves" follows the network's pox= line and names
-  the count and the generation. Until now every network got the one count
-  of 3.8.11: on a node with 8 CPUs a bloxberg mainnet trustedzone, given 16
-  queues, exited with code 1 every 9 seconds (order 22069, 2026-11-19); the
-  SCONE runtime's error "Trying to create 16 queues, max allowed: 8" is not
-  printed under SCONE_LOG=FATAL
+  PoX 1.2 and within 4 and 8 (utils.SCONE_QUEUES_LEGACY_MAX) on a legacy PoX,
+  whose trustedzone images are signed without --tcs and take at most eight
+  queues; the agent's own environment is not given the variable (one process
+  serves networks of both generations), and the start line "SCONE queues for
+  the enclaves" follows the network's pox= line and names the count and the
+  generation
 
 v3.8.13
 the capability record's compute figure is gflops, whole GFLOPS of the
@@ -182,9 +132,7 @@ the payload intake (ipfs_intake.py, the bootnode's ipfs.ethernity.cloud
   Access-Control-Allow-Origin: *, Access-Control-Allow-Methods: POST, OPTIONS,
   Access-Control-Allow-Headers: Content-Type, Content-Length,
   X-Etny-Owner-Signature and Access-Control-Max-Age: 86400, and every reply,
-  refusals included, carries Access-Control-Allow-Origin: *, so the page reads
-  the status and the body (until now the preflight was answered 501 and the
-  browser blocked the upload)
+  refusals included, carries Access-Control-Allow-Origin: *
 
 v3.8.11
 the agent exports ETNY_SCONE_QUEUES, twice the node's CPUs within 4 and 64
@@ -200,19 +148,15 @@ the agent exports ETNY_SCONE_QUEUES, twice the node's CPUs within 4 and 64
 v3.8.10
 the reward banner after a result names, on a recorded 1.2 order, the node's
   payout from the settlement (the reader's settlementOf: work plus the chain
-  gas repaid, utils.settlement_reward_wei, four decimals) instead of the DO
-  request's price less the legacy fees, which a 1.2 order no longer pays
-  (bloxberg testnet order 23: "Reward: 2.55 tETNY" beside a settlement of
-  0.2002 tETNY of work); a legacy order keeps its figure
+  gas repaid, utils.settlement_reward_wei, four decimals); on a legacy order
+  it names the DO request's price less the legacy fees
 
 v3.8.9
 the idle tick's standing-request gates (the terms tick, the enclave wait's
   refresh, the supervise hint, the broker's placed order, the DPRequestCancelled
   scan) test the stored request id with utils.has_standing_dp_request, None
-  before a request is adopted, instead of its truth value: DP request 0, the
-  first request on a storage, was skipped by all five, so that node judged no
-  DO request, never refreshed its request and missed the validators' cancel
-  (rig node 6 on bloxberg testnet, 2026-11-14 to 15)
+  before a request is adopted, so DP request 0, the first request on a
+  storage, counts as a standing request
 
 v3.8.8
 bloxberg_testnet and bloxberg_testnet_unsafe bind the PoX 1.2 implementation
@@ -220,8 +164,7 @@ bloxberg_testnet and bloxberg_testnet_unsafe bind the PoX 1.2 implementation
   own EthernityCloudStorage; the legacy proxy 0x02882F03... keeps the orders
   placed through it), the ValidatorRegistry R3
   0xc346BfFC83f318FbbC34987cEF85716a3f7dCcB0 and its ValidatorIpfsEndpoints
-  0x935c2AD8C402DB922131a48D9d92ceeD02e74720 (ethernity-cas CAS-SETUP.md, "The
-  cut of 2026-11-14 on bloxberg testnet")
+  0x935c2AD8C402DB922131a48D9d92ceeD02e74720
 
 v3.8.7
 every las service the node starts runs the LAS bound to IPv4: a command that
@@ -232,8 +175,8 @@ every las service the node starts runs the LAS bound to IPv4: a command that
 
 v3.8.6
 the installer keeps IPv6 disabled on the node (net.ipv6.conf.all,
-  .default and .lo disable_ipv6 = 1 in /etc/sysctl.conf, as before); every
-  LAS the node starts binds IPv4 (3.8.5)
+  .default and .lo disable_ipv6 = 1 in /etc/sysctl.conf); every LAS the node
+  starts binds IPv4 (3.8.5)
 
 v3.8.5
 a las service that sets no entrypoint and command, in an order's compose
@@ -244,15 +187,13 @@ a las service that sets no entrypoint and command, in an order's compose
 
 v3.8.4
 the passed integration test reads the tree's compose by its absolute path
-  when it keeps the tested LAS, and a compose it cannot read leaves the LAS
-  unkept with a warning instead of failing the pass; the process's working
-  directory is shared by the network threads, which move it to their own
-  node/<network>/
+  when it keeps the tested LAS; a compose it cannot read leaves the LAS unkept
+  with a warning and the pass stands; the process's working directory is
+  shared by the network threads, which move it to their own node/<network>/
 
 v3.8.3
 an order's enclaves run with the LAS of a trustedzone tree that passed this
-  node's integration test instead of the LAS bundled in the dApp's own tree:
-  the pass keeps the tree's las service block in
+  node's integration test: the pass keeps the tree's las service block in
   node/<network>/las-tested-<trustedzone>.yml and its image under the docker
   tag localhost:5000/etny-las:tested-<trustedzone>, the order's compose takes
   that block's entrypoint and command and its LAS image name is pointed at
@@ -266,9 +207,7 @@ an order's enclaves run with the LAS of a trustedzone tree that passed this
 v3.8.2
 the DP request sent behind an order's result, and the one sent after a
   cancel, carry DP_REQUEST_GAS_HEADROOM_PERCENT (25) over their gas estimate
-  on an EIP-1559 network: the estimate is made at the head block and the
-  request is mined in a later one, where the call needs up to 1.5 % more
-  (Amoy)
+  on an EIP-1559 network
 a DO request refused for its resources is held in
   node/<network>/doreq_resources.json with the four it needs and judged again
   once this node's offer serves it; a request refused before 3.8.2 stays in
@@ -289,11 +228,11 @@ the agent runs on the 1.2 PoX (pox-smart-contract-litvm) beside the legacy
   contracts: at start it probes each network's contract for pricingVersion()
   and, where it answers, binds the reader, the pricing, the reservation broker
   and the ECLD token the contract names (the log line "pox=1.2 reader=...");
-  a contract that reverts is legacy and runs as before. polygon_amoy and
-  polygon_amoy_unsafe bind the 1.2 implementation
-  0x3Aa1A0d7A8A9DaE9e13345D3261afe86D67326A4 (node/.env); the request and
-  order caches of a network whose contract address changed start again
-the integration test waits INTEGRATION_TEST_SECONDS (900 s, from 300) for the
+  a contract that reverts is legacy. polygon_amoy and polygon_amoy_unsafe bind
+  the 1.2 implementation 0x3Aa1A0d7A8A9DaE9e13345D3261afe86D67326A4
+  (node/.env); the request and order caches of a network whose contract
+  address changed start again
+the integration test waits INTEGRATION_TEST_SECONDS (900 s) for the
   trustedzone's result and reads capability.time.etny and capability.etny
   before context_test.etny and the bucket clean-up: the node's capability
   record (its benchmarked compute units, the validators' two time statements
@@ -305,7 +244,7 @@ the integration test waits INTEGRATION_TEST_SECONDS (900 s, from 300) for the
   writes no record the agent admits. The integration .env and every order
   .env carry ETNY_NODE_ADDRESS (the wallet adding the DP requests); the first
   order after a new record carries ETNY_PROBE_FIRST=1; ETNY_NGROK_AUTHTOKEN is
-  no longer injected
+  not injected
 on a 1.2 contract the DP request is addDPRequestV2 with the record's cu and a
   tip per CU-hour: <NETWORK>_TIP_PER_CU_HOUR_WEI (0) plus the node's own gas
   (the DP request, the placement and the started row, from a moving average of
@@ -322,8 +261,8 @@ on a 1.2 contract the DP request is addDPRequestV2 with the record's cu and a
   terms against the reader's quote plus the tip and the node's cu (a reserved
   request is left to the broker, a legacy request is judged with the network,
   validator and publisher fees); a sub-token V2 request, which the legacy
-  getter reads as price 0, is still skipped where no quote is read, as every
-  3.7.x agent skips it. settlementOf is logged after the result
+  getter reads as price 0, is skipped where no quote is read. settlementOf is
+  logged after the result
 the relay: the session rows are served before the commits in the enclave-wait
   tick and the final sweep; a row counts on a status-1 receipt; a
   session.commit.<n>.<key16>.<relayNonce>.json is relayed once a
@@ -343,26 +282,26 @@ the result of a recorded 1.2 order is posted with _addResultToOrderV2 carrying
   result held by the gas price past the order's end is sent at the live price
   up to the operator's fee ceiling for RESULT_SEND_GRACE_SECONDS (3600), then
   abandoned with a log line
-the reservation broker, on a 1.2 contract that names one (none is deployed
-  yet): setAcceptsReserved and commitReserved at every start unless
-  <NETWORK>_ACCEPT_RESERVED=0 (true), the window extended while the agent
-  runs; an order the broker places on the node's offer approved and run at
-  once; <NETWORK>_FARM_INVITE (<farm>:<expiresAt>:<signature>) joins the farm
-  with joinFarm, <NETWORK>_FARM_ACCEPT (true) accepts the handovers the farm's
-  members and the node's appointers announce; the successor of a handover
-  window stages the predecessor's unanswered inputs as session.replay.<seq>
-  and the state objects the fence needs as state.<cid>.enc. The handover's
-  gas deposit is pulled in ECLD: the node wallet holds the deposit and
-  approves the broker for it. `etny-node.py --handover --network <name>
-  [--appoint <node>]` asks the running agent to announce the handover of the
-  reserved order it runs (node/<network>/handover.json) and prints its
-  answer; the agent serves the order to the window, posts the result and
-  adds no next DP request. SIGHUP, the unit's KillSignal, does the same while
-  a reserved order runs and its announcement is not refused (the drain state
-  survives the daily restart) and stops the agent as before otherwise;
-  ubuntu/etc/systemd/system/etny-node.service sets TimeoutStopSec=21600 so a
-  stop waits for the window, and ubuntu/etny-node-start.sh installs the
-  repository's unit when it differs from the installed one
+the reservation broker, on a 1.2 contract that names one: setAcceptsReserved
+  and commitReserved at every start unless <NETWORK>_ACCEPT_RESERVED=0 (true),
+  the window extended while the agent runs; an order the broker places on the
+  node's offer approved and run at once; <NETWORK>_FARM_INVITE
+  (<farm>:<expiresAt>:<signature>) joins the farm with joinFarm,
+  <NETWORK>_FARM_ACCEPT (true) accepts the handovers the farm's members and
+  the node's appointers announce; the successor of a handover window stages
+  the predecessor's unanswered inputs as session.replay.<seq> and the state
+  objects the fence needs as state.<cid>.enc. The handover's gas deposit is
+  pulled in ECLD: the node wallet holds the deposit and approves the broker
+  for it. `etny-node.py --handover --network <name> [--appoint <node>]` asks
+  the running agent to announce the handover of the reserved order it runs
+  (node/<network>/handover.json) and prints its answer; the agent serves the
+  order to the window, posts the result and adds no next DP request. SIGHUP,
+  the unit's KillSignal, does the same while a reserved order runs and its
+  announcement is not refused (the drain state survives the daily restart)
+  and stops the agent otherwise; ubuntu/etc/systemd/system/etny-node.service
+  sets TimeoutStopSec=21600 so a stop waits for the window, and
+  ubuntu/etny-node-start.sh installs the repository's unit when it differs
+  from the installed one
 the mirror (REPLICATION_ONLY): probes the contract's generation and binds the
   broker, reads no fee percents and sends nothing; on a broker network it pins
   the artefacts every reservation's template names for the reservation's term
@@ -381,18 +320,15 @@ the constants of the above are in node/constants.py; the agent's ABI files
 v3.7.17
 the per-order relay gas budget is a network setting
   (<NETWORK>_ESR_RELAY_GAS_BUDGET_WEI; ESR_RELAY_GAS_BUDGET_WEI, 0.1 of the
-  native token, for the networks without one): Polygon Amoy's is 1 POL, a
-  metadata row costing about 0.012 POL there, where 0.1 POL held eight
-  session output rows
-a session row the budget refuses is logged once, not every tick
+  native token, for the networks without one); Polygon Amoy's is 1 POL
+a session row the budget refuses is logged once
 
 v3.7.6
 the bloxberg testnet and its -unsafe twin run the integration tests of their
   nodenithy trustedzones (etny-nodenithy-testnet,
   etny-nodenithy-testnet-unsafe) after the pynithy ones
 a trustedzone with an integration test of its own runs once that test
-  passed; one without runs once a passed test covers its platform
-  requirement, as before
+  passed; one without runs once a passed test covers its platform requirement
 an order's prerequisites remove the integration bucket, whose .env the
   trustedzones read before the order's own
 
@@ -415,7 +351,7 @@ a registered image is pinned only when it is an enclave image the Ethernity
   and while the pin runs; a pin that grows the repository past twice the
   declared size plus 2 GiB is ended and tried again later. Archives are walked
   by the agent itself, header by header, with extended headers over 1 MiB
-  refused unread, so no layer makes it hold more than a few MiB
+  refused unread
 a verdict (verified, refused, unreadable by this agent) stands until those
   bounds or the verifier's version change; an image pinned without a verdict
   is judged in place; a verified image whose pin Kubo no longer holds is
@@ -437,8 +373,8 @@ a replication-only agent collects the garbage of refused, unreadable and
   failed attempts at most hourly, while no registered-image pin is in flight
 the handles of a network share one esr_progress, written as one snapshot that
   replaces the file
-the replication loop runs for the life of the process: the daily restart of
-  the order-processing threads stopped it for good
+the replication loop runs for the life of the process, through the daily
+  restart of the order-processing threads
 
 v3.7.0
 the -unsafe trustedzones are networks of their own, bloxberg_testnet_unsafe
@@ -459,17 +395,12 @@ the installer lists LitVM and the two -unsafe networks
 
 v3.6.2
 an order placement is simulated before it is sent, and a DO request the
-  protocol contract refuses is skipped and cached instead of retried: on
-  bloxberg a request whose metadata4 is the zero address cannot be placed
-  by any node, and the node re-sent the reverting _placeOrder without end,
-  paying gas each time and taking no other request
+  protocol contract refuses is skipped and cached
 a placement that is mined but reverted is retried at most three times
 
 v3.6.1
 an RPC call on a keep-alive connection the RPC closed while idle is retried
-  on a fresh one: web3's default retry missed requests' ConnectionError, so
-  the first call after a quiet spell failed with "Remote end closed
-  connection without response" (the integration tests' registry reads)
+  on a fresh one
 
 v3.6.0
 a node runs the trustedzones whose platform requirement its integration
@@ -478,9 +409,8 @@ a node runs the trustedzones whose platform requirement its integration
   and <NETWORK>_INTEGRATION_TEST_IMAGES (renamed from
   _INTEGRATION_TEST_IMAGE) lists the images tested
 integration tests are tracked per image and a failed one is retried with a
-  backoff from 10 minutes doubling to 6 hours, instead of only at the
-  daily restart; a test whose image cannot be downloaded cleans up and
-  counts as failed
+  backoff from 10 minutes doubling to 6 hours; a test whose image cannot be
+  downloaded cleans up and counts as failed
 a DO request is skipped, with the reason logged, when the trustedzone it
   names is not one the node runs or its image metadata is not v3;
   process_order refuses such an order after re-running the failed tests
@@ -488,25 +418,22 @@ the CAS is resolved only for a compose that names SCONE_CAS_ADDR
 a DP request's metadata4 carries the trustedzones the node runs and the
   peer id of its IPFS node
 pin retention skips a trustedzone the image registry does not hold
-  instead of the whole cleanup round
+  and goes on with the cleanup round
 IPFS_GATEWAY_URL is read from the key node/.env sets
 removed the legacy /dev/isgx etny-pynithy composes from node/docker, with
-  their Dockerfile, wrapper and result script; the agent used none of them
+  their Dockerfile, wrapper and result script
 
 v3.5.0
-fixed result pinning: retries never reconnected, so a stale connection
-  flag failed every attempt against a healthy IPFS daemon
-one failed pin/ls no longer disables pinning node-wide
-serialised IPFS restarts across network threads (lock + 60s cooldown),
-  which stops one thread's restart from breaking the others' calls
+result pinning reconnects to IPFS on every retry
+a failed pin/ls does not disable pinning node-wide
+IPFS restarts are serialised across network threads (lock + 60s cooldown)
 results that fail to pin are queued on disk and retried after an IPFS
-  outage or a node restart, instead of being lost with the process
-CAS endpoints are read from CasKeyStore rather than the registry, which
-  no longer forwards them (requires a registry exposing keyStore())
-3s RPC connect timeout, replacing 120s applied to both phases
+  outage or a node restart
+CAS endpoints are read from CasKeyStore (the registry must expose
+  keyStore())
+RPC connect timeout 3 s
 HTTP sessions are closed when a network iteration ends
-the shared task slot is acquired atomically, so two networks can no
-  longer hold it at once or clear each other's ownership
+the shared task slot is acquired atomically
 
 v0.7.3
 fixed installation issue on Ubuntu 20.04
