@@ -4,7 +4,7 @@ scans, at the signature the agent uses (PHASE-E-PLAN.md E6, E12-E36); the reader
 _getOrderTerms answers its twenty outputs in IPoxReader.sol's order; the
 resolver's two selectors XOR to broker-interface-id.json's id; and
 utils.parse_transaction_bytes_ut decodes a signed _addResultToOrder under
-the 1.2 union, the seven result-v5.json examples' fields by position."""
+the 2.0 union, the seven result-v5.json examples' fields by position."""
 import json
 from pathlib import Path
 

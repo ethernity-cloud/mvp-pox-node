@@ -22,7 +22,7 @@ class DPRequest(Request):
 
 
 class DORequestV2:
-    """A 1.2 reader's _getDORequestV2 answer: the resources as the legacy
+    """A 2.0 reader's _getDORequestV2 answer: the resources as the legacy
     getter's, then the recorded terms (zero on a legacy request)."""
     def __init__(self, req):
         self.downer = req[0]

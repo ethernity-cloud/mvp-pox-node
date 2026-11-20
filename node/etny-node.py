@@ -24,7 +24,7 @@ from web3.gas_strategies.rpc import rpc_gas_price_strategy
 
 from utils import scone_queues, enclave_compose_env, get_or_generate_uuid, run_subprocess, run_subprocess_status, environment_failure, record_enclave_image_tree, compose_images, compose_services, await_enclave_runtime, tree_image_tag, las_image, passed_las_tag, candidate_las_names, compose_service_block, las_start_lines, las_start_to_apply, compose_with_las_start, revert_reason, wallet_covers, insufficient_funds, transaction_known, placement_block_of, block_ranges, WALLET_GAS_TRANSACTIONS, retry, holds_within, pinned_within, FetchDeferrals, staging_plan, remaining_order_seconds, record_order_placement, order_placed_at, pending_approvals, record_pending_approval, forget_pending_approval, ORDER_STARTED_KEY, order_started_row, ORDER_GRACE_SECONDS, session_wallet_attestation, Storage, Cache, ListCache, ListCacheWithTimestamp, MergedOrdersCache, subprocess, get_node_geo, HardwareInfoProvider, parse_transaction_bytes_ut, looks_like_cid, canonical_cid, PEER_MULTIADDR, next_registered_image, enclave_failure, enclave_may_have_failed, docker_container_states, docker_container_log_tail, stale_integration_tests, integration_tests_due, runnable_trustedzones, image_trees, stale_image_trees, directory_size, remove_tree, removal_leftovers, integration_env, order_env, dp_terms, GFLOPS_PER_CU, tip_per_cu_hour_wei, dp_request_arguments, metadata_key, record_key, resume_admits, has_standing_dp_request, read_cursor, write_cursor, dp_request_disposition, bounded_cancel, do_request_verdict, refusal_cached, do_request_compare, resource_refusal_holds, ResourceRefusals, gas_with_headroom, placement_refusal_disposition, settlement_line, settlement_reward_wei, order_window, order_relay_ledger_path, ledger_rebuild, result_fields, result_send_decision, SESSION_WALLET_KEY, SESSION_OUTPUT_KEY
 import scone_image
-import pox12
+import pox20
 import capability
 import gas_profile
 import gas_ledger
@@ -419,8 +419,8 @@ class EtnyPoXNode:
         # The count this network's enclave composes get as ETNY_SCONE_QUEUES
         # (__enclave_compose_env).
         logger.info("SCONE queues for the enclaves: "
-                    f"{scone_queues(self.__number_of_cpus, legacy=not self.__pox_is_12)} "
-                    f"({self.__number_of_cpus} CPUs, pox={'1.2' if self.__pox_is_12 else 'legacy'})")
+                    f"{scone_queues(self.__number_of_cpus, legacy=not self.__pox_is_20)} "
+                    f"({self.__number_of_cpus} CPUs, pox={'2.0' if self.__pox_is_20 else 'legacy'})")
 
         # ethernity-cas SessionRegistry -- same wiring pattern as the ESR
         # above: resolved per network, and never allowed to stop the node.
@@ -476,10 +476,10 @@ class EtnyPoXNode:
         # The block the current DP request was confirmed in, where the idle
         # tick's DPRequestCancelled scan starts without a persisted cursor.
         self.__cancel_scan_from = None
-        # The capability record the current DP request carries on a 1.2
+        # The capability record the current DP request carries on a 2.0
         # contract (utils.record_key of its metadata4), None for none.
         self.__dprequest_record_key = None
-        # Whether this process recorded its accept_reserved flag on the 1.2
+        # Whether this process recorded its accept_reserved flag on the 2.0
         # contract (__set_accepts_reserved_once).
         self.__accepts_reserved_set = False
         # The (DP request, reason) placement refusals of this node's offer
@@ -627,7 +627,7 @@ class EtnyPoXNode:
             tests_settled(self.__network).set()
             self.__log_runnable_trustedzones()
 
-        # The broker's start calls (the commitment, the farm) on a 1.2
+        # The broker's start calls (the commitment, the farm) on a 2.0
         # contract with a reservation broker; a replication-only handle sends
         # nothing.
         if not self.__replication_only:
@@ -2274,14 +2274,14 @@ class EtnyPoXNode:
                     time.sleep(self.__network_config.rpc_delay/1000)
                     req = DPRequest(self.__etny.caller()._getDPRequest(req_id))
                     if req.status == RequestStatus.AVAILABLE:
-                        if self.__pox_is_12:
+                        if self.__pox_is_20:
                             # The request's terms (utils.resume_admits): one
                             # added through a legacy call has none and is
                             # replaced; one about to expire is refreshed first.
                             terms = dp_terms(self.__etny.caller().dpTerms(req_id))
                             action = resume_admits(terms, time.time())
                             if action == 'cancel':
-                                logger.info(f"DP Request {req_id} has no terms on the 1.2 contract; cancelled, a new one follows")
+                                logger.info(f"DP Request {req_id} has no terms on the 2.0 contract; cancelled, a new one follows")
                                 self.cancel_dp_request(req_id)
                                 self.dpreq_cache.add(req_id)
                                 continue
@@ -2306,12 +2306,12 @@ class EtnyPoXNode:
         carries (capability.RecordStore.advertised: the newest among the
         runnable trustedzones' admitted records), None without one and on a
         legacy contract, whose requests carry no capability keys."""
-        if not self.__pox_is_12:
+        if not self.__pox_is_20:
             return None
         return self.__record_store.advertised(self.__runnable_trustedzones(), time.time())
 
     def __quote(self):
-        """The reader's quote() on a 1.2 contract with a reader:
+        """The reader's quote() on a 2.0 contract with a reader:
         (pricePerCuHourWei, tokenPerPol, avgGasPriceWei, smoothedUtilization,
         capacityGflops, loadGflops, epochIndex, params); None without a
         reader."""
@@ -2320,7 +2320,7 @@ class EtnyPoXNode:
         return self.__reader.caller().quote()
 
     def __current_tip(self, gflops):
-        """The tip of this node's 1.2 DP request for `gflops` GFLOPS (0: one
+        """The tip of this node's 2.0 DP request for `gflops` GFLOPS (0: one
         CU) (utils.tip_per_cu_hour_wei): the configured tip plus its own gas
         (the gas profile's three figures) at the quote's avgGasPriceWei and
         tokenPerPol; the configured tip alone without a reader."""
@@ -2351,8 +2351,8 @@ class EtnyPoXNode:
         # most the predecessor's gflops (broker.bounded_gflops).
         if gflops and self.__broker is not None:
             gflops = broker.bounded_gflops(gflops, self.__accepted_handover())
-        tip = self.__current_tip(gflops) if self.__pox_is_12 else 0
-        return dp_request_arguments(not self.__pox_is_12, resources, self.__duration, self.__price, gflops, tip,
+        tip = self.__current_tip(gflops) if self.__pox_is_20 else 0
+        return dp_request_arguments(not self.__pox_is_20, resources, self.__duration, self.__price, gflops, tip,
                                     self.__uuid, capability.metadata3(self.__node_geo, record),
                                     self.__dp_metadata4(advertised))
 
@@ -2365,7 +2365,7 @@ class EtnyPoXNode:
     def __adopt_dp_request(self, req_id, block):
         """Makes `req_id` this node's current DP request. Without a
         'dp_request_cancelled' cursor the DPRequestCancelled scan starts at
-        `block` (None: the head at its first run). On a 1.2 contract the
+        `block` (None: the head at its first run). On a 2.0 contract the
         capability record the request carries is read from its metadata4
         (__dp_request_record_key) for the idle tick's comparison with the
         advertised record and for a validators' cancel; a metadata read the
@@ -2374,7 +2374,7 @@ class EtnyPoXNode:
         self.__dprequest = req_id
         self.__cancel_scan_from = block
         self.__dprequest_record_key = None
-        if self.__pox_is_12:
+        if self.__pox_is_20:
             self.__dprequest_record_key = self.__dp_request_record_key(req_id)
 
     def __dp_request_from_receipt(self, receipt):
@@ -2395,12 +2395,12 @@ class EtnyPoXNode:
             self.logger.debug(f"The gas profile did not record the {kind} receipt ({e})")
 
     def __set_accepts_reserved_once(self):
-        """Records this node's accept_reserved setting on a 1.2 contract with a
+        """Records this node's accept_reserved setting on a 2.0 contract with a
         reservation broker (setAcceptsReserved, read into each DP request it
         adds), once per process start: the contract has no getter for it. The
         call is simulated, sent and awaited; a failure propagates and the
         setting is tried again before the next request."""
-        if not self.__pox_is_12 or self.__broker is None or self.__accepts_reserved_set:
+        if not self.__pox_is_20 or self.__broker is None or self.__accepts_reserved_set:
             return
         accepts = bool(self.__network_config.accept_reserved)
         fn = self.__etny.functions.setAcceptsReserved(accepts)
@@ -2437,7 +2437,7 @@ class EtnyPoXNode:
         return True
 
     def __dp_request_terms_tick(self):
-        """The idle tick's read of the standing DP request's terms on a 1.2
+        """The idle tick's read of the standing DP request's terms on a 2.0
         contract (utils.dp_request_disposition). A request without terms, one
         carrying another capability record than the advertised one, or one
         recording the other accept_reserved flag than this process set, is
@@ -2447,7 +2447,7 @@ class EtnyPoXNode:
         terms). A request whose refresh is due is refreshed
         (__refresh_dp_request). Returns (False, terms) otherwise, terms None
         on a legacy contract or when the read failed."""
-        if not self.__pox_is_12 or not has_standing_dp_request(self.__dprequest):
+        if not self.__pox_is_20 or not has_standing_dp_request(self.__dprequest):
             return False, None
         logger = self.logger
         try:
@@ -2471,7 +2471,7 @@ class EtnyPoXNode:
         if disposition != 'readd':
             return False, terms
         if not terms.recorded:
-            why = 'it has no terms on the 1.2 contract'
+            why = 'it has no terms on the 2.0 contract'
         elif self.__dprequest_record_key != advertised_key:
             why = 'the advertised capability record changed'
         elif gflops_bound < terms.gflops:
@@ -2491,10 +2491,10 @@ class EtnyPoXNode:
 
     def __refresh_standing_dp_request(self):
         """The enclave wait's refresh check (every DP_TERMS_POLL_SECONDS): on a
-        1.2 contract, while this node's current DP request is AVAILABLE and
+        2.0 contract, while this node's current DP request is AVAILABLE and
         its refresh is due, it is refreshed; nothing is read for a request an
         order holds. A read that fails is logged at debug."""
-        if not self.__pox_is_12 or not has_standing_dp_request(self.__dprequest):
+        if not self.__pox_is_20 or not has_standing_dp_request(self.__dprequest):
             return
         try:
             request = DPRequest(self.__etny.caller()._getDPRequest(self.__dprequest))
@@ -2538,7 +2538,7 @@ class EtnyPoXNode:
         return receipt
 
     def __broker_start(self):
-        """The broker's start calls on a 1.2 contract with a reservation
+        """The broker's start calls on a 2.0 contract with a reservation
         broker (PHASE-E-PLAN.md E27, E30): the commitment window committed or
         extended when accept_reserved is set (the flag itself is recorded by
         add_dp_request before the first request), the farm joined on the
@@ -2697,7 +2697,7 @@ class EtnyPoXNode:
         started reservations are kept in broker_cursor.json, whose
         'broker_events' cursor passes their logs, so a process start finds
         them."""
-        if self.__broker is None or not self.__pox_is_12:
+        if self.__broker is None or not self.__pox_is_20:
             return sent
         logger = self.logger
         cursor = self.__scan_cursor('broker_events')
@@ -2851,7 +2851,7 @@ class EtnyPoXNode:
         return True
 
     def __broker_tick(self):
-        """The idle tick's broker work on a 1.2 contract with a reservation
+        """The idle tick's broker work on a 2.0 contract with a reservation
         broker: the commitment's extension, the log scan with its
         acceptances and hints (at most BROKER_TX_PER_TICK transactions in
         all), the standing acceptance refreshed and a --handover request
@@ -2890,7 +2890,7 @@ class EtnyPoXNode:
         ('approve'); a PROCESSING one is run ('run'); a CANCELED one on an
         AVAILABLE request is the offer waiting for the next placement, its
         orders-cache entry dropped ('offer'). True when an order was run."""
-        if not self.__pox_is_12 or self.__broker is None or not has_standing_dp_request(self.__dprequest):
+        if not self.__pox_is_20 or self.__broker is None or not has_standing_dp_request(self.__dprequest):
             return False
         logger = self.logger
         try:
@@ -2971,7 +2971,7 @@ class EtnyPoXNode:
 
     def __scan_dp_request_cancellations(self):
         """Scans the validators' cancels of this node's DP requests
-        (cancelDPRequestByValidators, a 1.2 contract's DPRequestCancelled
+        (cancelDPRequestByValidators, a 2.0 contract's DPRequestCancelled
         with `dproc` this node) from the 'dp_request_cancelled' cursor (the
         standing request's confirmation block without one, the head without
         either) to RPC_REPLICA_LAG_BLOCKS below the head. Each cancel is
@@ -2981,7 +2981,7 @@ class EtnyPoXNode:
         tick at every pass. Returns whether the standing request was
         cancelled; a scan the RPC does not answer returns False and keeps
         the cursor."""
-        if not self.__pox_is_12:
+        if not self.__pox_is_20:
             return False
         start = self.__scan_cursor('dp_request_cancelled')
         if start is None:
@@ -3062,13 +3062,13 @@ class EtnyPoXNode:
         return metadata_key(metadata[4], 'cusig')
 
     def __dp_request_held(self):
-        """Whether this node posts no DP request now: on a 1.2 contract, the
+        """Whether this node posts no DP request now: on a 2.0 contract, the
         RecordMissing hold stands, no capability record is advertised and
         the request's trustedzones= list names no trustedzone or one that can
         carry a record (capability.RecordMissingHold.disposition 'hold'). An
         advertised record clears the hold ('clear'), and the request carries
         it. The hold and its clearing are each logged once per change."""
-        if not self.__pox_is_12:
+        if not self.__pox_is_20:
             return False
         disposition = self.__record_missing_hold.disposition(self.__advertised_record(),
                                                              self.__runnable_trustedzones())
@@ -3241,7 +3241,7 @@ class EtnyPoXNode:
 
 
     def calculate_reward(self):
-        """Logs the node's payout for the order just closed: on a recorded 1.2
+        """Logs the node's payout for the order just closed: on a recorded 2.0
         order the settlement's work plus the chain gas repaid (the reader's
         settlementOf, what validate transfers to the node), with the
         settlement line; on a legacy order the DO request's price less the
@@ -3282,7 +3282,7 @@ class EtnyPoXNode:
         logger.info(f"Reward: {reward} {self.__network_config.token_name}. You’ve earned it. ")
         logger.info("***")
 
-        # A recorded 1.2 order's settlement (the reader's settlementOf): the
+        # A recorded 2.0 order's settlement (the reader's settlementOf): the
         # hours billed, the work, the fees, the chain gas repaid and the
         # client's refund.
         if line is not None:
@@ -3446,7 +3446,7 @@ class EtnyPoXNode:
 
             # The waits are sized from the block that placed the order, so a
             # run resumed after a restart gets what is left of the window, not
-            # the duration over again: the placement the PoX recorded (1.2's
+            # the duration over again: the placement the PoX recorded (2.0's
             # orderPlacedAt), else the agent's record. An order placed by an
             # agent that did not record its placement gets the duration from
             # now. The gas waits are bounded by the order's end, the enclave
@@ -3456,7 +3456,7 @@ class EtnyPoXNode:
             window = order_deadline - time.time()
 
             # The order's gas ledger: its terms and the pricing's per-relay
-            # gas on a recorded 1.2 order, the network budget otherwise; and
+            # gas on a recorded 2.0 order, the network budget otherwise; and
             # its handover state (reserved or not, the window polled at the
             # enclave wait's idle points).
             self.__open_order_ledger(order_id, order_end)
@@ -3629,7 +3629,7 @@ class EtnyPoXNode:
                 # The enclave's result string inside the signed transaction:
                 # its task code, and on v5 the relayed commits and their gas
                 # (fields 12 and 14), which _addResultToOrderV2 carries
-                # verbatim on a recorded 1.2 order.
+                # verbatim on a recorded 2.0 order.
                 task_code = 0
                 attested = None
                 try:
@@ -3695,7 +3695,7 @@ class EtnyPoXNode:
                  'fence_scanned_to': None,
                  # supervise sent, and the earliest time of its next try.
                  'supervised': False, 'supervise_after': 0}
-        if self.__broker is not None and self.__pox_is_12:
+        if self.__broker is not None and self.__pox_is_20:
             try:
                 found, reservation = self.__broker.caller().orderReservation(int(order_id))
                 state['reserved'], state['reservation'] = bool(found), int(reservation)
@@ -4165,10 +4165,10 @@ class EtnyPoXNode:
             self.logger.info(f"Order {order_id}: supervise({reservation}) failed ({e})")
 
     def __order_placed_at_on_chain(self, order_id):
-        """The placement time the 1.2 PoX recorded for `order_id`
+        """The placement time the 2.0 PoX recorded for `order_id`
         (orderPlacedAt); 0 on a legacy PoX, for an order it did not record
         and when the read fails."""
-        if not self.__pox_is_12:
+        if not self.__pox_is_20:
             return 0
         try:
             return int(self.__etny.caller().orderPlacedAt(int(order_id)))
@@ -4177,9 +4177,9 @@ class EtnyPoXNode:
             return 0
 
     def __read_order_terms(self, order_id):
-        """gas_ledger.order_terms of orderTerms(order_id) on a 1.2 PoX; None
+        """gas_ledger.order_terms of orderTerms(order_id) on a 2.0 PoX; None
         on legacy, for an order without terms and when the read fails."""
-        if not self.__pox_is_12:
+        if not self.__pox_is_20:
             return None
         try:
             return gas_ledger.order_terms(self.__etny.caller().orderTerms(int(order_id)))
@@ -4190,7 +4190,7 @@ class EtnyPoXNode:
     def __open_order_ledger(self, order_id, order_end):
         """Opens the gas ledger of `order_id` (gas_ledger.OrderGasLedger,
         persisted in orders/<id>/relay.json and reloaded by a resumed order):
-        the order's terms and the pricing's params() on a recorded 1.2 order,
+        the order's terms and the pricing's params() on a recorded 2.0 order,
         the network's relay budget otherwise; `order_end` bounds its gas
         waits. The budget is logged once."""
         params = None
@@ -4223,7 +4223,7 @@ class EtnyPoXNode:
 
     def __gas_wait_active(self, ledger):
         """Whether the order's relays and result wait for gas
-        (gas_ledger.gas_wait_active over the latest block): a recorded 1.2
+        (gas_ledger.gas_wait_active over the latest block): a recorded 2.0
         order on an EIP-1559 chain whose base fee plus the pricing's priority
         fee is above the order's cap, before the order's end. A wait that
         holds re-reads the terms when they are HANDOVER_POLL_SECONDS old and
@@ -4262,7 +4262,7 @@ class EtnyPoXNode:
     def __relay_fee(self, ledger):
         """(price per gas, fee fields) of a row or commit of the order: the
         cap-bounded EIP-1559 fields (gas_ledger.capped_fee_fields) on a
-        recorded 1.2 order before its end, today's fields (__esr_fee)
+        recorded 2.0 order before its end, today's fields (__esr_fee)
         otherwise and inside the own handover window, where the closing
         rows, commits and result go at the live price whatever the cap."""
         if (ledger.recorded and ledger.cap_wei and getattr(self.__network_config, 'eip1559', False)
@@ -4330,7 +4330,7 @@ class EtnyPoXNode:
         substitute into SCONE_QUEUES of the trustedzone and the securelock,
         at the count of this node's CPUs under this network's PoX
         generation."""
-        return enclave_compose_env(self.__number_of_cpus, legacy=not self.__pox_is_12)
+        return enclave_compose_env(self.__number_of_cpus, legacy=not self.__pox_is_20)
 
     def __enclave_environment_down(self):
         """Removes the enclave containers __start_enclave_environment brought
@@ -4822,7 +4822,7 @@ class EtnyPoXNode:
         return f'v3:{transaction_hex}:{result_hash}'
 
     def add_result_to_order(self, order_id, result, until=None, after_send=None, order_end=None, attested=None):
-        """Sends the order's result from this node's wallet: on a 1.2 PoX
+        """Sends the order's result from this node's wallet: on a 2.0 PoX
         that recorded the order (orderReport.recorded), with an enclave-signed
         result whose fields `attested` (utils.result_fields) are known,
         _addResultToOrderV2(orderId, result, esrCommits, esrGasWei) with the
@@ -4896,10 +4896,10 @@ class EtnyPoXNode:
                 time.sleep(5)
 
     def __order_recorded(self, order_id):
-        """Whether the 1.2 PoX recorded `order_id` (orderReport.recorded):
+        """Whether the 2.0 PoX recorded `order_id` (orderReport.recorded):
         False on legacy and when the read fails, which sends the legacy
         call."""
-        if not self.__pox_is_12:
+        if not self.__pox_is_20:
             return False
         try:
             return bool(self.__etny.caller().orderReport(int(order_id))[1])
@@ -4909,7 +4909,7 @@ class EtnyPoXNode:
 
     def __result_send_plan(self, order_id, ledger, order_end, deadline):
         """(decision, fee fields) of the next result build
-        (utils.result_send_decision over the latest block): on a recorded 1.2
+        (utils.result_send_decision over the latest block): on a recorded 2.0
         order before `order_end` the cap-bounded fields (__relay_fee) once the
         gas wait is over; otherwise today's fields, waiting while the base
         fee is above the operator's ceiling (the raise of
@@ -5393,7 +5393,7 @@ class EtnyPoXNode:
         _doreq = {}
         doreq = {}
         metadata = {}
-        # On a 1.2 contract with a reader: each DO request's recorded terms
+        # On a 2.0 contract with a reader: each DO request's recorded terms
         # (models.DORequestV2) and, for a legacy one, its publishers' fees,
         # read once; the quote is read every pass.
         do_v2 = {}
@@ -5443,7 +5443,7 @@ class EtnyPoXNode:
                     next_dp_request = True
                     break
 
-                # The standing request's terms on a 1.2 contract: refreshed
+                # The standing request's terms on a 2.0 contract: refreshed
                 # when due; replaced, the loop ending for the new request,
                 # when it has no terms, carries another capability record or
                 # the other accept-reserved flag.
@@ -6116,9 +6116,9 @@ class EtnyPoXNode:
             marker.write_text(current)
 
     def __bind_pox_generation(self):
-        """Probes the protocol contract for pricingVersion() and binds the 1.2
+        """Probes the protocol contract for pricingVersion() and binds the 2.0
         handles when it answers: the reader, the pricing, the broker and its
-        token (pox12.chain_handles), None each for a zero address. A legacy
+        token (pox20.chain_handles), None each for a zero address. A legacy
         contract leaves every handle None and the generation legacy. The
         probe and the address reads are each tried ten times, three seconds
         apart, on an RPC failure; past that a node handle raises, as the
@@ -6131,28 +6131,28 @@ class EtnyPoXNode:
         nothing."""
         logger = self.logger
         address = self.__etny.address
-        self.__pox_is_12 = False
+        self.__pox_is_20 = False
         self.__reader = self.__pricing = self.__broker = self.__token = None
-        # (NETWORK_FEE_PERCENT, VALIDATOR_FEE_PERCENT) of a 1.2 contract, the
+        # (NETWORK_FEE_PERCENT, VALIDATOR_FEE_PERCENT) of a 2.0 contract, the
         # legacy DO requests' fee-inclusive compare; None on a replication-only
         # handle.
         self.__fee_percents = None
         percents = None
         step = 'pricingVersion probe'
-        answered, is_12 = retry(pox12.pox_generation, self.__etny.functions.pricingVersion().call, attempts=10, delay=3)
-        if answered and is_12:
+        answered, is_20 = retry(pox20.pox_generation, self.__etny.functions.pricingVersion().call, attempts=10, delay=3)
+        if answered and is_20:
             abis = {}
             for name, path in (('reader', config.reader_abi_filepath), ('pricing', config.pricing_abi_filepath),
                                ('broker', config.broker_abi_filepath), ('erc20', config.erc20_abi_filepath)):
                 with open(path) as f:
                     abis[name] = f.read()
             step = 'readerAddress, pricingAddress, reservationBrokerAddress and token reads'
-            answered, handles = retry(pox12.chain_handles, self.__etny, self.__w3, abis, attempts=10, delay=3)
+            answered, handles = retry(pox20.chain_handles, self.__etny, self.__w3, abis, attempts=10, delay=3)
             if answered and not self.__replication_only:
                 step = 'NETWORK_FEE_PERCENT and VALIDATOR_FEE_PERCENT reads'
                 answered, percents = retry(self.__read_fee_percents, attempts=10, delay=3)
             if answered:
-                self.__pox_is_12 = True
+                self.__pox_is_20 = True
                 self.__reader = handles['reader']
                 self.__pricing = handles['pricing']
                 self.__broker = handles['broker']
@@ -6162,13 +6162,13 @@ class EtnyPoXNode:
             if not self.__replication_only:
                 raise Exception(f"Protocol contract {address}: the {step} failed on the RPC")
             logger.warning(f"Protocol contract {address}: the {step} failed on the RPC; taken as legacy")
-        if self.__pox_is_12:
+        if self.__pox_is_20:
             named = {name: handle.address for name, handle in
                      (('reader', self.__reader), ('pricing', self.__pricing),
                       ('broker', self.__broker), ('token', self.__token)) if handle is not None}
             fees = (f" fees=network {self.__fee_percents[0]}% validator {self.__fee_percents[1]}%"
                     if self.__fee_percents is not None else "")
-            logger.info(f"Protocol contract {address}: pox=1.2 "
+            logger.info(f"Protocol contract {address}: pox=2.0 "
                         + ' '.join(f"{name}={value}" for name, value in named.items()) + fees)
             if self.__reader is None and not self.__replication_only:
                 logger.info(f"Protocol contract {address}: no reader; the DO requests are compared as on a legacy contract")
@@ -6176,7 +6176,7 @@ class EtnyPoXNode:
             logger.info(f"Protocol contract {address}: pox=legacy")
 
     def __read_fee_percents(self):
-        """(NETWORK_FEE_PERCENT, VALIDATOR_FEE_PERCENT) of the 1.2 contract."""
+        """(NETWORK_FEE_PERCENT, VALIDATOR_FEE_PERCENT) of the 2.0 contract."""
         return (int(self.__etny.functions.NETWORK_FEE_PERCENT().call()),
                 int(self.__etny.functions.VALIDATOR_FEE_PERCENT().call()))
 
@@ -6185,7 +6185,7 @@ class EtnyPoXNode:
         EIP-1559 network the fee is the latest base fee plus a tenth and the
         configured priority fee, and a base fee that takes it over the
         operator's max_fee_per_gas raises; `fee_fields` (maxFeePerGas and
-        maxPriorityFeePerGas, the cap-bounded fields of a recorded 1.2
+        maxPriorityFeePerGas, the cap-bounded fields of a recorded 2.0
         order's result) replace that fee and its raise."""
         logger = self.logger
 
@@ -6368,7 +6368,7 @@ class EtnyPoXNode:
         """Broadcasts the DP-request metadata rows `rows` ([(key, value)]) of
         the order from this node's wallet in one transaction
         (_addMetadataToDPRequest for one row, _addMetadataToDPRequestBatch
-        for several on 1.2), outside the order's gas wait and within its gas
+        for several on 2.0), outside the order's gas wait and within its gas
         ledger: the rows' cost (gas_ledger.OrderGasLedger.rows_cost) must
         leave the counter, with the result's reserve, within the budget
         unless `held_by_reserve` is False (the etny-sw row, held by the gas
@@ -6506,7 +6506,7 @@ class EtnyPoXNode:
     def __session_relay_outputs(self, bucket_name, order_id, st, ledger):
         """Broadcasts the staged output proofs (__session_staged_outputs) as
         etny-so rows from this node's wallet, strictly in proof order: two or
-        more pending rows go as one _addMetadataToDPRequestBatch on 1.2, a
+        more pending rows go as one _addMetadataToDPRequestBatch on 2.0, a
         batch that fails falls back to single rows in the same tick (a batch
         the gas wait or the budget holds waits as a whole), and a row that
         does not land stops the relay until the next tick. A landed row is
@@ -6515,7 +6515,7 @@ class EtnyPoXNode:
         staged = self.__session_staged_outputs(bucket_name, order_id, st)
         if not staged:
             return
-        if self.__pox_is_12 and len(staged) >= RELAY_BATCH_MIN:
+        if self.__pox_is_20 and len(staged) >= RELAY_BATCH_MIN:
             label = f"output rows {staged[0][0]} to {staged[-1][0]}"
             outcome = self.__session_broadcast_rows(order_id, st, [(SESSION_OUTPUT_KEY, proof) for _, proof, _, _ in staged],
                                                     ledger, label)
@@ -7271,7 +7271,7 @@ class EtnyPoXNode:
                 logger.info('Skipping hearbeat on inactive network...');
                 return
 
-            logger.info(f"Calling hearbeat... pox={'1.2' if self.__pox_is_12 else 'legacy'}")
+            logger.info(f"Calling hearbeat... pox={'2.0' if self.__pox_is_20 else 'legacy'}")
             params = [
                 "v" + config.version
             ]

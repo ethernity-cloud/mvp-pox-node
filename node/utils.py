@@ -980,7 +980,7 @@ DP_REQUEST_PROTOCOL = 'v3'
 # GFLOPS per CU, the contracts' GFLOPS_PER_CU; a DP request with gflops 0 is
 # recorded at 100 (one CU).
 GFLOPS_PER_CU = 100
-# A 1.2 DP request's terms, as dpTerms(id) answers them; gflops is the GFLOPS
+# A 2.0 DP request's terms, as dpTerms(id) answers them; gflops is the GFLOPS
 # the offer was added with (dp_request_arguments' gflops, 100 for one added
 # with 0).
 DPTerms = namedtuple('DPTerms', 'gflops tip accepts_reserved expires_at recorded')
@@ -1021,7 +1021,7 @@ def dp_terms(raw):
 
 
 def tip_per_cu_hour_wei(configured_tip, profile_gas, avg_gas_price_wei, token_per_pol, gflops, hours=TIP_HOURS):
-    """A 1.2 DP request's tip in token wei per CU-hour: the operator's
+    """A 2.0 DP request's tip in token wei per CU-hour: the operator's
     `configured_tip` plus the node's own gas, the sum of `profile_gas`
     ({kind: gas} of the gas profile) at `avg_gas_price_wei` converted at
     `token_per_pol` (token wei per 1e18 gas-token wei), spread over
@@ -1039,7 +1039,7 @@ def dp_request_arguments(legacy, resources, duration, price, gflops, tip, uuid, 
     """(function name, arguments) of the node's DP request: _addDPRequest with
     the uint8 `price` on a legacy contract, addDPRequestV2 with `gflops` (the
     advertised record's GFLOPS, 0 without one; the contract stores 0 as 100)
-    and `tip` on a 1.2 one.
+    and `tip` on a 2.0 one.
     `resources` is (cpu, memory, storage, bandwidth), `uuid` the node's
     metadata1 and DP_REQUEST_PROTOCOL its metadata2."""
     cpu, memory, storage, bandwidth = resources
@@ -1113,7 +1113,7 @@ def write_cursor(path, name, value):
     os.replace(temporary, path)
 
 
-# The enclave images of the networks on PoX 1.2 are signed with 64 TCS
+# The enclave images of the networks on PoX 2.0 are signed with 64 TCS
 # (scone-signer --tcs=64) and ship /etc/sgx-musl.conf with four queues, the
 # floor SCONE accepts.
 SCONE_QUEUES_MIN = 4
@@ -1127,7 +1127,7 @@ def scone_queues(cpus, legacy=False):
     """The SCONE queue count (enclave threads) of the trustedzone and the
     securelock on a node with `cpus` CPUs: twice the CPUs, at least
     SCONE_QUEUES_MIN and at most SCONE_QUEUES_LEGACY_MAX on a network whose
-    PoX is legacy (`legacy`), SCONE_QUEUES_MAX on one whose PoX is 1.2. The
+    PoX is legacy (`legacy`), SCONE_QUEUES_MAX on one whose PoX is 2.0. The
     enclave composes get it as ETNY_SCONE_QUEUES (enclave_compose_env) and
     substitute it into SCONE_QUEUES; inside the enclave the SCONE runtime
     reports that count as the CPUs, so the trustedzone's benchmark runs the
@@ -1145,7 +1145,7 @@ def enclave_compose_env(cpus, legacy):
 
 
 def resume_admits(terms, now):
-    """What the resume does with an AVAILABLE DP request of a 1.2 contract:
+    """What the resume does with an AVAILABLE DP request of a 2.0 contract:
     'cancel' one without terms (added through a legacy call), 'refresh' one
     whose refresh is due, 'resume' any other."""
     if not terms.recorded:
@@ -1193,7 +1193,7 @@ def bounded_cancel(available, simulate, send, wait, attempts=CANCEL_ATTEMPTS):
 
 
 def admits_do_request(do_v2, legacy_price_tokens, price_per_cu_hour_wei, tip, gflops, fee_percents, publisher_fees):
-    """Why this node's 1.2 offer does not take DO request `do_v2`
+    """Why this node's 2.0 offer does not take DO request `do_v2`
     (models.DORequestV2), a Refusal, or None when it does. A reserved request
     (a reserved price recorded) is left to the broker, which places on the
     offer. A recorded spot request takes the bid, the pricing's price plus
@@ -1227,7 +1227,7 @@ def do_request_verdict(legacy_price_tokens, node_price_tokens, quote_price_wei=N
                        fee_percents=(0, 0), publisher_fees=(0, 0)):
     """Why the pre-filter skips a DO request whose resources fit, a Refusal,
     or None when the request goes on to the placement. Without a quote
-    (`quote_price_wei` None: a legacy contract, or a 1.2 one without a
+    (`quote_price_wei` None: a legacy contract, or a 2.0 one without a
     reader) the legacy compare runs: the request's uint8 price
     (`legacy_price_tokens`) at least this node's (`node_price_tokens`); a V2
     request priced below one token reads 0 there and is skipped, as every
@@ -1278,7 +1278,7 @@ def placement_refusal_disposition(reason):
 
 
 def settlement_line(order_id, raw):
-    """The log line of a recorded 1.2 order's settlementOf answer (hoursBilled,
+    """The log line of a recorded 2.0 order's settlementOf answer (hoursBilled,
     workWei, feesWei, chainPaidWei, refundWei, outcome); None when the order
     is not recorded (every field zero)."""
     settlement = Settlement(*(int(value) for value in raw))
@@ -1290,7 +1290,7 @@ def settlement_line(order_id, raw):
 
 
 def settlement_reward_wei(raw):
-    """The node's payout of a recorded 1.2 order from its settlementOf answer:
+    """The node's payout of a recorded 2.0 order from its settlementOf answer:
     the work plus the chain gas repaid, what validate transfers to the node's
     payout address; None when the order is not recorded (every field zero)."""
     settlement = Settlement(*(int(value) for value in raw))
@@ -1336,7 +1336,7 @@ def order_placed_at(orders_dir, order_id):
 
 def order_window(placed_at, duration_hours, now):
     """(order_end, order_deadline) of an order placed at `placed_at` (the
-    PoX's orderPlacedAt on 1.2, else the agent's placement record; 0 or None
+    PoX's orderPlacedAt on 2.0, else the agent's placement record; 0 or None
     for unknown) for `duration_hours`: order_end the placement plus the
     duration and the deadline ORDER_GRACE_SECONDS later; without a placement,
     order_end is None and the deadline the duration and grace from `now`.

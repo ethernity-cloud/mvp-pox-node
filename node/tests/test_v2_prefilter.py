@@ -1,6 +1,6 @@
 """utils.do_request_verdict and refusal_cached (PHASE-E-PLAN.md D.3, E17,
 WS-G): the idle loop's pre-filter. Without a quote (a legacy contract, or a
-1.2 one without a reader) the legacy uint8 compare runs, so a V2 request
+2.0 one without a reader) the legacy uint8 compare runs, so a V2 request
 priced below one token, which reads 0 there, is skipped as every agent before
 3.8.0 skips it; with the pass's quote a V2 request is judged on its recorded
 terms (taken above the bid, refused below it, maxGflops below the gflops

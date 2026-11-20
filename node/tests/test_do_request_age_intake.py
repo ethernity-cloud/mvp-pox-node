@@ -250,7 +250,7 @@ def run(agent, monkeypatch, directory, chain, passes=None, clock=time.time, netw
     node._EtnyPoXNode__is_first_cycle = defaultdict(lambda: True)
     node._EtnyPoXNode__replication_only = False
     node._EtnyPoXNode__trustedzones = config.trustedzone_requirements(network.trustedzone_images)
-    node._EtnyPoXNode__pox_is_12 = False
+    node._EtnyPoXNode__pox_is_20 = False
     node._EtnyPoXNode__reader = None
     node._EtnyPoXNode__broker = None
     node._EtnyPoXNode__started_row_pending = None

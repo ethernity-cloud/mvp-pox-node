@@ -1,5 +1,5 @@
 """The node's gas profile: the gas its own transactions use, which its tip
-prices into a 1.2 DP request (utils.tip_per_cu_hour_wei).
+prices into a 2.0 DP request (utils.tip_per_cu_hour_wei).
 
 Three kinds are kept, dpRequest, placement and startedRow, each an
 exponential moving average of the gasUsed of this node's status-1 receipts

@@ -16,7 +16,7 @@ from datetime import datetime, timezone
 
 from eth_utils import keccak
 
-from pox12 import FUNCTION_ABSENT
+from pox20 import FUNCTION_ABSENT
 
 # Where a layout keeps doRequestsList: the slot of its length; the slots of
 # one Models.DORequest; the slot within it that holds createdAt and the bit

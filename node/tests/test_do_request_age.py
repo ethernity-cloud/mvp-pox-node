@@ -34,7 +34,7 @@ NOW = 1795178400
 # 2021-11-06T16:14:55Z by 0x4f92201f...; the word holds the downer in its low
 # 160 bits and the resource fields above it. Polygon mainnet's storage
 # 0x6aAafE99... (CLOUD): request 98, created 2024-12-20T09:02:13Z. Bloxberg
-# testnet's 1.2 storage 0xEE3aAa1A... (CLOUD): request 174, created
+# testnet's 2.0 storage 0xEE3aAa1A... (CLOUD): request 174, created
 # 2026-11-20T10:38:25Z.
 WORDS = [
     (V05, 34541, 0x66de8ffda797e3de9c05e8fc57b3bf0ec28a930d40b0d285d93c06501cfb5ee5,

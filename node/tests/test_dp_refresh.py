@@ -1,4 +1,4 @@
-"""The 1.2 DP request's refresh, resume and replacement rules
+"""The 2.0 DP request's refresh, resume and replacement rules
 (PHASE-E-PLAN.md E12-E14, E16, D.2): utils.refresh_due at the margin,
 resume_admits (not recorded: cancel, expiring: refresh, else resume),
 dp_request_disposition (no terms, another record or the other

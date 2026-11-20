@@ -1,6 +1,6 @@
 """utils.scone_queues: the enclave thread count the enclave composes get as
 ETNY_SCONE_QUEUES, twice the node's CPUs within the images' floor of four
-queues and, on a network whose PoX is 1.2, their 64 TCS; on a legacy PoX,
+queues and, on a network whose PoX is 2.0, their 64 TCS; on a legacy PoX,
 whose trustedzones are signed without --tcs, within four and eight."""
 import pytest
 

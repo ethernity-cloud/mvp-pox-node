@@ -120,9 +120,9 @@ class NetworkConfig:
     # (<NETWORK>_DO_REQUEST_MAX_AGE_SECONDS, else DO_REQUEST_MAX_AGE_SECONDS).
     do_request_max_age_seconds: int = do_request_max_age_seconds_default
     # The operator's tip in token weis per CU-hour, added to the gas tip of a
-    # 1.2 DP request (<NETWORK>_TIP_PER_CU_HOUR_WEI).
+    # 2.0 DP request (<NETWORK>_TIP_PER_CU_HOUR_WEI).
     tip_per_cu_hour_wei: int = 0
-    # Whether the node's 1.2 DP request accepts reserved orders placed by the
+    # Whether the node's 2.0 DP request accepts reserved orders placed by the
     # reservation broker (<NETWORK>_ACCEPT_RESERVED).
     accept_reserved: bool = True
     # A farm invitation "<farm>:<expiresAt>:<signature>" the node joins on a
@@ -238,13 +238,13 @@ image_registry_address = None
 
 base_path = Path(__file__).parent
 
-# The PoX ABI is the 1.2 union (pox-smart-contract-litvm
-# abi/EthernityImplementationV2_1_2.json): the 1.0/1.1 entries are a subset
-# of it, so one file binds a legacy and a 1.2 contract alike.
+# The PoX ABI is the 2.0 union (pox-smart-contract-litvm
+# abi/EthernityImplementationV2_2_0.json): the 1.0/1.1 entries are a subset
+# of it, so one file binds a legacy and a 2.0 contract alike.
 abi_filepath = base_path / 'docker/pox.abi'
 image_registry_abi_filepath = base_path / 'image_registry.abi'
 heart_beat_abi_filepath = base_path / 'heart_beat.abi'
-# The contracts a 1.2 PoX names (readerAddress, pricingAddress,
+# The contracts a 2.0 PoX names (readerAddress, pricingAddress,
 # reservationBrokerAddress), the broker's token and the resolver interface a
 # reserved request's owner answers; copied from pox-smart-contract-litvm abi/
 # (IPoxReader, IPoxPricing, IReservationBroker, IReservationResolver,

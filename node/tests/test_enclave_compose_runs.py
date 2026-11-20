@@ -4,7 +4,7 @@ __run_integration_test), driven on an EtnyPoXNode built without __init__
 whose commands are recorded and not run: no docker, no chain. On a node with
 8 CPUs every docker-compose run on the compose (pull, down, up) gets the
 process's environment with ETNY_SCONE_QUEUES at 8 on a legacy PoX and at 16
-on PoX 1.2 (utils.enclave_compose_env); the swift-stream compose and the
+on PoX 2.0 (utils.enclave_compose_env); the swift-stream compose and the
 docker commands run in the process's own environment, which the agent leaves
 as it is."""
 import importlib.util
@@ -79,7 +79,7 @@ class Environment(dict):
         return f"Environment({sorted(self)})"
 
 
-def recorded_node(agent, monkeypatch, tmp_path, pox_is_12, order_id):
+def recorded_node(agent, monkeypatch, tmp_path, pox_is_20, order_id):
     """(node, calls): an EtnyPoXNode of a node with 8 CPUs on a network of
     the given PoX generation, working in `tmp_path`, whose commands are
     appended to `calls` as (args, env) and not run, env the Environment the
@@ -109,7 +109,7 @@ def recorded_node(agent, monkeypatch, tmp_path, pox_is_12, order_id):
     node.cache_config = SimpleNamespace(base_path=tmp_path,
                                         tested_las_filepath=lambda name: tmp_path / f"las-tested-{name}.yml")
     node._EtnyPoXNode__number_of_cpus = 8
-    node._EtnyPoXNode__pox_is_12 = pox_is_12
+    node._EtnyPoXNode__pox_is_20 = pox_is_20
     node._EtnyPoXNode__enclave_up = False
     node._EtnyPoXNode__images_held = lambda tags: False
     return node, calls
@@ -141,9 +141,9 @@ def assert_the_enclave_runs_alone_carry(calls, compose_file, queues, environment
     assert left == []
 
 
-@pytest.mark.parametrize("pox_is_12, queues", [(False, "8"), (True, "16")])
-def test_an_orders_compose_runs_carry_the_generations_count(agent, monkeypatch, tmp_path, pox_is_12, queues):
-    node, calls = recorded_node(agent, monkeypatch, tmp_path, pox_is_12, "74")
+@pytest.mark.parametrize("pox_is_20, queues", [(False, "8"), (True, "16")])
+def test_an_orders_compose_runs_carry_the_generations_count(agent, monkeypatch, tmp_path, pox_is_20, queues):
+    node, calls = recorded_node(agent, monkeypatch, tmp_path, pox_is_20, "74")
     node.order_docker_compose_file = compose_of("74")
     environment = Environment(os.environ)
     node._EtnyPoXNode__start_enclave_environment(TREE)
@@ -151,9 +151,9 @@ def test_an_orders_compose_runs_carry_the_generations_count(agent, monkeypatch, 
     assert_the_enclave_runs_alone_carry(calls, compose_of("74"), queues, environment)
 
 
-@pytest.mark.parametrize("pox_is_12, queues", [(False, "8"), (True, "16")])
-def test_an_integration_tests_compose_runs_carry_the_generations_count(agent, monkeypatch, tmp_path, pox_is_12, queues):
-    node, calls = recorded_node(agent, monkeypatch, tmp_path, pox_is_12, "integration_test")
+@pytest.mark.parametrize("pox_is_20, queues", [(False, "8"), (True, "16")])
+def test_an_integration_tests_compose_runs_carry_the_generations_count(agent, monkeypatch, tmp_path, pox_is_20, queues):
+    node, calls = recorded_node(agent, monkeypatch, tmp_path, pox_is_20, "integration_test")
 
     # The test's prerequisites are in place (its compose in the order's
     # folder) and its enclave has written the objects the agent reads.
@@ -165,7 +165,7 @@ def test_an_integration_tests_compose_runs_carry_the_generations_count(agent, mo
     node.storage = SimpleNamespace(download_many=lambda hashes, attempts, delay: True)
     node.swift_stream_service = SimpleNamespace(get_file_content=lambda bucket_name, object_name: (True, "written"),
                                                 delete_bucket=lambda bucket_name: None)
-    node._EtnyPoXNode__network = "bloxberg_testnet" if pox_is_12 else "bloxberg_mainnet"
+    node._EtnyPoXNode__network = "bloxberg_testnet" if pox_is_20 else "bloxberg_mainnet"
     node._EtnyPoXNode__trustedzones = {IMAGE: "dcap"}
     node._EtnyPoXNode__latest_trustedzone_image = lambda image: (TREE, TREE_COMPOSE)
     environment = Environment(os.environ)

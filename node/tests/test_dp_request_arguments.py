@@ -1,5 +1,5 @@
 """utils.dp_request_arguments (PHASE-E-PLAN.md E2, D.2): addDPRequestV2 on a
-1.2 contract with the record's gflops (0 without one), the tip and the fixture's
+2.0 contract with the record's gflops (0 without one), the tip and the fixture's
 two metadata strings; _addDPRequest on a legacy contract unchanged; the
 argument lists match the bundled ABI; utils.metadata_key / record_key tie a
 request's metadata4 to the record it carries."""

@@ -1,5 +1,5 @@
 """gas_ledger under a gasPriceCapWei of 0 (PHASE-D-PLAN.md divergence 22: a
-1.2 order on a chain without a base fee): every recorded cost is 0, as
+2.0 order on a chain without a base fee): every recorded cost is 0, as
 chain_fee.js chainCost prices it (cappedGasPrice gives the cap, 0, and the
 rows and the result are priced at the cap) and as the PoX accrues the rows
 at min(tx.gasprice, cap); the counter is never over any chainFeeWei, so no

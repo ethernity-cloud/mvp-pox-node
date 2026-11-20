@@ -1,5 +1,5 @@
 """gas_ledger.OrderGasLedger judges one counter as the trustedzones do
-(nodenithy chain_fee.js chainCost): on a recorded 1.2 order the rows at
+(nodenithy chain_fee.js chainCost): on a recorded 2.0 order the rows at
 gasPerRow x cap, the commits at their estimate x min(live, cap), the result
 reserved at gasPerResult x cap, in token wei at tokenPerPol against
 chainFeeWei; on an order without terms the network budget over rows and

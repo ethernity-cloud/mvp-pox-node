@@ -31,7 +31,7 @@ CU_MAX_GFLOPS = 6400
 # (ethernity-cas capability.rs CU_VERSION_MIN, reason CuVersionBelowMinimum).
 CU_VERSION_MIN = 4
 
-# A 1.2 DP request is refreshed when its expiry is this close.
+# A 2.0 DP request is refreshed when its expiry is this close.
 DP_REFRESH_MARGIN_SECONDS = 3600
 # How often the enclave wait reads the standing DP request's terms for the
 # refresh (the idle tick reads them every pass).

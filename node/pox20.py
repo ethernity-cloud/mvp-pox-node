@@ -1,7 +1,7 @@
-"""The PoX contract's generation and the contracts a 1.2 PoX names.
+"""The PoX contract's generation and the contracts a 2.0 PoX names.
 
-A 1.2 PoX answers pricingVersion(); a legacy one (1.0, 1.1) has no such
-function, so the call reverts or its answer does not decode. On 1.2 the
+A 2.0 PoX answers pricingVersion(); a legacy one (1.0, 1.1) has no such
+function, so the call reverts or its answer does not decode. On 2.0 the
 contract names its reader, its pricing and its reservation broker (the zero
 address for none), and the broker names the ECLD token."""
 from eth_abi.exceptions import DecodingError
@@ -14,7 +14,7 @@ FUNCTION_ABSENT = (ContractLogicError, BadFunctionCallOutput, DecodingError)
 
 
 def pox_generation(call):
-    """True when `call()` answers (a 1.2 PoX), False when it reverts or its
+    """True when `call()` answers (a 2.0 PoX), False when it reverts or its
     answer does not decode (a legacy PoX). Any other failure propagates."""
     try:
         call()
@@ -31,7 +31,7 @@ def _bind(w3, address, abi):
 
 
 def chain_handles(pox, w3, abis):
-    """{reader, pricing, broker, token} of a 1.2 PoX: its readerAddress(),
+    """{reader, pricing, broker, token} of a 2.0 PoX: its readerAddress(),
     pricingAddress() and reservationBrokerAddress() bound under
     abis['reader'], abis['pricing'] and abis['broker'], and the broker's
     token() under abis['erc20']; None for a zero address, and no token

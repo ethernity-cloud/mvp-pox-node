@@ -4,7 +4,7 @@ E19, E21, E22).
 The ledger is one counter of gas-token wei over the order's etny-sw and
 etny-so rows, its ESR commits and its result, judged as the trustedzones
 judge it (nodenithy chain_fee.js chainCost, pynithy __esr_cost_within_terms):
-on a recorded 1.2 order against the chainFeeWei of orderTerms(orderId), the
+on a recorded 2.0 order against the chainFeeWei of orderTerms(orderId), the
 sum converted at the order's tokenPerPol, with a row at the pricing's
 gasPerRow and the cap, a commit at its estimated gas and the live price
 capped at gasPriceCapWei (the receipt's gasUsed x effectiveGasPrice once it
@@ -56,7 +56,7 @@ def _field(raw, name, index):
 def order_terms(raw):
     """OrderTerms from orderTerms(orderId) (a sequence in the ABI's order, or
     a mapping by name); None when every field is zero: an order the PoX did
-    not record (a 1.1 placement on a 1.2 PoX) is judged as legacy."""
+    not record (a 1.1 placement on a 2.0 PoX) is judged as legacy."""
     values = [int(_field(raw, name, index)) for index, name in enumerate(TERMS_FIELDS)]
     if not any(values):
         return None
@@ -71,7 +71,7 @@ def pricing_params(raw):
 
 def capped_price(live_price_wei, cap_wei):
     """The price a relay is accrued at: the live price, at most the cap
-    (chain_fee.js cappedGasPrice). Under a cap of 0 (a 1.2 order on a chain
+    (chain_fee.js cappedGasPrice). Under a cap of 0 (a 2.0 order on a chain
     without a base fee) it is 0, as the PoX accrues the rows at
     min(tx.gasprice, cap): the counter stays at the reserve alone and no
     budget refuses a relay there."""
@@ -94,7 +94,7 @@ def gas_wait_active(base_fee_wei, priority_fee_wei, cap_wei, now, order_end, in_
 
 def capped_fee_fields(cap_wei, priority_fee_wei, ceiling_wei):
     """(price per gas, EIP-1559 fee fields) of a row, commit or result of a
-    recorded 1.2 order outside a gas wait: maxFeePerGas the cap, at most the
+    recorded 2.0 order outside a gas wait: maxFeePerGas the cap, at most the
     operator's ceiling, and maxPriorityFeePerGas the pricing's priority fee,
     at most maxFeePerGas."""
     max_fee = min(int(cap_wei), int(ceiling_wei))

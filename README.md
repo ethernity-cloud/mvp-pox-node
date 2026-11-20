@@ -185,20 +185,21 @@ places no order: an implausible storage is logged at ERROR (`DO request ages
 are not established`), an RPC failure at WARNING (`DO request ages were not
 read`), each at most once an hour.
 
-## The 1.2 PoX (release 3.8.0)
+## The 2.0 PoX (release 3.8.0)
 
 At start the agent probes each network's protocol contract for
-`pricingVersion()`. A contract that answers is a 1.2 PoX
+`pricingVersion()`. A contract that answers is a 2.0 PoX
 (pox-smart-contract-litvm): the agent binds the reader, the pricing, the
 reservation broker and the ECLD token the contract names and logs
-`pox=1.2 reader=... pricing=...`; one that reverts is a legacy contract and
-runs as before (`pox=legacy`). `bloxberg_testnet` and
-`bloxberg_testnet_unsafe` bind the 1.2 implementation
+`pox=2.0 reader=... pricing=...`; one that reverts is a legacy contract and
+runs as before (`pox=legacy`). The 3.8 releases log `pox=1.2` for a contract
+that answers. `bloxberg_testnet` and `bloxberg_testnet_unsafe` bind the 2.0
+implementation
 `0x830c781F0352050343211B6BFA83600B3e77647C`, `polygon_amoy` and
-`polygon_amoy_unsafe` the 1.2 implementation
+`polygon_amoy_unsafe` the 2.0 implementation
 `0xd1182deA61CDa785C320cdBE5888EaC4178cAAF2`.
 
-On a 1.2 PoX the node's offer is `addDPRequestV2`, carrying the GFLOPS of its
+On a 2.0 PoX the node's offer is `addDPRequestV2`, carrying the GFLOPS of its
 capability record (`gflops`, cuv 4; one CU is 100 GFLOPS) and a tip per
 CU-hour, and is refreshed an hour before its expiry (`refreshDPRequest`; the
 pricing's `dpRequestTtl` sets the expiry). The record comes from the
@@ -293,7 +294,7 @@ run to its bounds. `IPFS_INTAKE_BIND=host:port` adds the
 payload intake (`ipfs_intake.py`). A private key is still required for the
 chain reads' account context; the mirror sends no transaction.
 
-Of the 1.2 PoX the mirror loads the configuration only: it probes each
+Of the 2.0 PoX the mirror loads the configuration only: it probes each
 contract's generation and binds the broker the contract names (reading no fee
 percents, running no integration test and sending nothing), and on a network
 with a broker it pins the artefacts every reservation's template names

@@ -394,7 +394,7 @@ def idle_node(agent, monkeypatch, directory, network, chain, stop, heartbeat_at,
     node._EtnyPoXNode__heart_beat = chain
     node._EtnyPoXNode__replication_only = False
     node._EtnyPoXNode__trustedzones = config.trustedzone_requirements(network.trustedzone_images)
-    node._EtnyPoXNode__pox_is_12 = False
+    node._EtnyPoXNode__pox_is_20 = False
     node._EtnyPoXNode__reader = None
     node._EtnyPoXNode__broker = None
     node._EtnyPoXNode__started_row_pending = None
