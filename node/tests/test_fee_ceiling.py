@@ -35,8 +35,8 @@ ADDRESS = "0x" + "11" * 20
 # GAS_PRICE_MEASURE.
 CEILINGS = {
     "polygon_mainnet": 500,
-    "polygon_amoy": 64,
-    "polygon_amoy_unsafe": 64,
+    "polygon_amoy": 500,
+    "polygon_amoy_unsafe": 500,
     "polygon_amoy_pox10": 500,
     "bloxberg_mainnet": 0,
     "bloxberg_testnet": 0,
