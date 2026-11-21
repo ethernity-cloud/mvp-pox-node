@@ -163,8 +163,8 @@ def integration_test_images(network_config) -> list:
 
 
 NETWORKS = {
-    "POLYGON": ["MAINNET", "AMOY", "AMOY_UNSAFE"],
-    "BLOXBERG": ["MAINNET", "TESTNET", "TESTNET_UNSAFE"],
+    "POLYGON": ["MAINNET", "AMOY", "AMOY_UNSAFE", "AMOY_POX10"],
+    "BLOXBERG": ["MAINNET", "TESTNET", "TESTNET_UNSAFE", "TESTNET_POX10"],
     "IOTEX": ["TESTNET"],
     "ETHEREUM": ["SEPOLIA", "SEPOLIA_UNSAFE"],
     "LITVM": ["LITEFORGE", "LITEFORGE_UNSAFE"],
@@ -192,6 +192,19 @@ def unsafe_twin(name: str):
     """The -unsafe network named after `name`, if NETWORKS defines one."""
     twin = f"{name.lower()}{UNSAFE_NETWORK_SUFFIX}"
     return twin if twin in available_networks() else None
+
+
+# The testnet copies of the mainnets' PoX 1.0: bloxberg mainnet's 1.0
+# contracts on chain 8995 beside bloxberg_testnet, Polygon mainnet's on Amoy
+# beside polygon_amoy. Each has a PoX, an image registry and a heartbeat of
+# its own and trustedzones signed --production and provisioned by Scontain's
+# CAS, as its mainnet's. One is run when named or under "all"; "auto",
+# "openbeta" and the legacy names never select one.
+POX10_TESTNETS = ("bloxberg_testnet_pox10", "polygon_amoy_pox10")
+
+
+def is_pox10_testnet(name: str) -> bool:
+    return name.lower() in POX10_TESTNETS
 
 
 def check_trustedzone_names(network_config) -> None:
@@ -277,6 +290,9 @@ esr_contract_addresses = {
     "BLOXBERG_MAINNET": os.environ.get('ESR_CONTRACT_ADDRESS', "0x4Bf5cDE3BFD73dd10B707f8B123Ba631D2EBEAD2"),
     "BLOXBERG_TESTNET": os.environ.get('ESR_CONTRACT_ADDRESS', "0x0Ea1728EAE108FD3B9340ae91451348E2Cc6b4E4"),
     "BLOXBERG_TESTNET_UNSAFE": os.environ.get('ESR_CONTRACT_ADDRESS', "0x0Ea1728EAE108FD3B9340ae91451348E2Cc6b4E4"),
+    # bloxberg_testnet_pox10's trustedzones bake bloxberg testnet's registry;
+    # polygon_amoy_pox10's bake none, as polygon_mainnet's.
+    "BLOXBERG_TESTNET_POX10": os.environ.get('BLOXBERG_TESTNET_POX10_ESR_CONTRACT_ADDRESS', "0x0Ea1728EAE108FD3B9340ae91451348E2Cc6b4E4"),
     "LITVM_LITEFORGE": os.environ.get('ESR_CONTRACT_ADDRESS', "0x709052Fe77Af543d3d9FE2Ac06a15c635c8D4Be5"),
     "LITVM_LITEFORGE_UNSAFE": os.environ.get('ESR_CONTRACT_ADDRESS', "0x709052Fe77Af543d3d9FE2Ac06a15c635c8D4Be5"),
     "ETHEREUM_SEPOLIA": os.environ.get('ESR_CONTRACT_ADDRESS', "0x9927809B61122B2af3f3b3A3303875e0687b8eE3"),
@@ -499,7 +515,8 @@ def parse_networks(arguments: argparse.Namespace, parser: argparse.ArgumentParse
     AVAILABLE_NETWORKS = [n for n in available_networks()
                           if n.split('_')[0].upper() in network_names]
 
-    ALL_NETWORKS = ["all", "auto"]
+    ALL_NETWORKS = ["all"]
+    AUTO_NETWORKS = ["auto"]
     CURRENT_NETWORKS = ["openbeta"]
     LEGACY_NETWORKS = ["bloxberg", "testnet", "polygon"]
 
@@ -508,6 +525,10 @@ def parse_networks(arguments: argparse.Namespace, parser: argparse.ArgumentParse
     if any(n in ALL_NETWORKS for n in lower_networks):
         # Every network but the -unsafe ones, which run only when named.
         selected_networks = [n for n in AVAILABLE_NETWORKS if not is_unsafe_network(n)]
+    elif any(n in AUTO_NETWORKS for n in lower_networks):
+        # The networks of "all" but the testnet copies of PoX 1.0.
+        selected_networks = [n for n in AVAILABLE_NETWORKS
+                             if not is_unsafe_network(n) and not is_pox10_testnet(n)]
     elif any(n in CURRENT_NETWORKS for n in lower_networks):
         # "openbeta" selects the mainnets
         selected_networks = [ "polygon_mainnet", "bloxberg_mainnet" ]
@@ -696,7 +717,7 @@ def parse_arguments(network_names: list) -> argparse.ArgumentParser:
     parser.add_argument(
         "-n",
         "--network",
-        help="Networks the node runs on. Specify multiple networks separated by space (e.g., polygon_mainnet polygon_amoy bloxberg_mainnet bloxberg_testnet iotex_testnet). If not specified, all available networks are loaded except the -unsafe ones (bloxberg_testnet_unsafe, litvm_liteforge_unsafe), which run trustedzones without a CAS and are loaded only when named.",
+        help="Networks the node runs on. Specify multiple networks separated by space (e.g., polygon_mainnet polygon_amoy bloxberg_mainnet bloxberg_testnet iotex_testnet). If not specified, all available networks are loaded except the -unsafe ones (bloxberg_testnet_unsafe, litvm_liteforge_unsafe), which run trustedzones without a CAS and are loaded only when named. 'auto' also leaves out the testnet copies of PoX 1.0 (bloxberg_testnet_pox10, polygon_amoy_pox10), which are loaded when named or under 'all'.",
         nargs='+',
         default=["all"],
         required=False

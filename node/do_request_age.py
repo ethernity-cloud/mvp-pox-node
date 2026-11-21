@@ -5,9 +5,11 @@ added it, and no getter of the PoX returns it: the agent reads it with
 eth_getStorageAt from the contract that holds doRequestsList. Where the PoX
 answers ethStorageAddress(), that is the storage contract it names, laid out
 as CLOUD (EthernityCloudStorage, behind every PoX of node/.env but bloxberg
-mainnet's); where it does not, the PoX itself, laid out as V05 (bloxberg
-mainnet's PoX 1.0, whose proxy holds its storage). A layout is taken once its
-length slot and its newest request's createdAt are plausible (bind).
+mainnet's and bloxberg_testnet_pox10's); where it does not, the PoX itself,
+laid out as V05 (bloxberg mainnet's PoX 1.0 and bloxberg_testnet_pox10's,
+the testnet copy of its code: each proxy holds its storage). A layout is
+taken once its length slot and its newest request's createdAt are plausible
+(bind).
 Requests are appended in block order, so createdAt does not decrease with the
 id: the requests created at or after a cutoff are the ids from a boundary on
 (first_within, boundary)."""
@@ -29,8 +31,9 @@ Layout = namedtuple('Layout', 'name length_slot struct_slots created_at_slot cre
 # slots: downer, the five resource fields, instances and bookedInstances fill
 # 31 bytes of its slot 0, createdAt the low 32 bits of its slot 1.
 CLOUD = Layout('cloud', 3, 10, 1, 0)
-# EthernityStorage of the bloxberg mainnet PoX (pox-smart-contract
-# contracts/v05 EthernityStorage.sol, Models.sol): doRequestsList at slot 19.
+# EthernityStorage of the bloxberg mainnet PoX and of its testnet copy
+# (pox-smart-contract contracts/v05 EthernityStorage.sol, Models.sol):
+# doRequestsList at slot 19.
 # A DORequest takes 9 slots: downer, the six resource fields, instances and
 # bookedInstances fill 28 bytes of its slot 0, createdAt its top 32 bits.
 V05 = Layout('v05', 19, 9, 0, 224)
