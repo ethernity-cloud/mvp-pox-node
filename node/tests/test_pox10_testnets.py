@@ -619,7 +619,7 @@ def serving(agent, monkeypatch, directory, network, chain):
     node._EtnyPoXNode__replication_only = False
     node._EtnyPoXNode__trustedzones = config.trustedzone_requirements(network.trustedzone_images)
     node._EtnyPoXNode__integration_images = config.integration_test_images(network)
-    node._EtnyPoXNode__pox_is_12 = False
+    node._EtnyPoXNode__pox_is_20 = False
     node._EtnyPoXNode__reader = None
     node._EtnyPoXNode__broker = None
     node._EtnyPoXNode__do_requests_build_pending = False
