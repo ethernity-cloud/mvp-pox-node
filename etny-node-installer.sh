@@ -485,9 +485,11 @@ check_config_file() {
         echo "Configuration check successful!"
         echo "Writing network and price to the config file"
 
-        # Remove existing entries and append the current values
+        # Remove existing entries and append the current values. The start
+        # script sources the config file, so the value stands in double
+        # quotes: several networks are one space-separated value.
         sed -i "/^NETWORK=/d" "$nodefolder/$configfile"
-        echo "NETWORK=$NETWORK" >> "$nodefolder/$configfile"
+        echo "NETWORK=\"$NETWORK\"" >> "$nodefolder/$configfile"
 
         # Loop through each RPC variable and write to config file if set
         for rpc_var in "${rpc_vars[@]}"; do
