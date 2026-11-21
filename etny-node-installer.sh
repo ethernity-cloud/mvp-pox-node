@@ -86,11 +86,13 @@ choose_network() {
     echo ""
     echo "##########################  NETWORK SETTINGS  ##########################"
     echo "Please select one or more networks (separated by spaces or commas):"
-    echo "0. AUTO (Select all networks except the UNSAFE ones)"
+    echo "0. AUTO (Select all networks except the UNSAFE and the PoX 1.0 testnet ones)"
     echo "   When AUTO is selected, the node will operate on"
     echo "   all available networks. An UNSAFE network runs"
     echo "   trustedzones without a CAS and is run only when"
-    echo "   selected by its number."
+    echo "   selected by its number. A PoX 1.0 testnet network"
+    echo "   is a testnet copy of a mainnet's PoX 1.0 and is"
+    echo "   run only when selected by its number."
     for key in $(echo "${!networks[@]}" | tr ' ' '\n' | sort -n); do
         echo "$key. ${networks[$key]}"
     done
@@ -117,11 +119,15 @@ choose_network() {
 
         # Check if AUTO is selected
         if [[ " ${choices[@]} " =~ " 0 " ]]; then
-            echo "You selected: AUTO (All Networks except the UNSAFE ones)"
-            # Select every network key but the -unsafe networks', which the
-            # agent's AUTO does not run either.
+            echo "You selected: AUTO (All Networks except the UNSAFE and the PoX 1.0 testnet ones)"
+            # Select every network key but those of the -unsafe networks and
+            # of the testnet copies of PoX 1.0, which the agent's AUTO does
+            # not run either.
             selected_keys=($(for key in "${!networks[@]}"; do
-                [[ "${shortnames[$key]}" == *_UNSAFE ]] || echo "$key"
+                case "${shortnames[$key]}" in
+                    *_UNSAFE|BLOXBERG_TESTNET_POX10|POLYGON_AMOY_POX10) ;;
+                    *) echo "$key" ;;
+                esac
             done | sort -n))
             for key in "${selected_keys[@]}"; do
                 selected_networks+=("${networks[$key]}")

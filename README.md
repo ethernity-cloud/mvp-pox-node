@@ -159,11 +159,50 @@ $ ./etny-node-installer.sh
 
 ## Networks and platforms
 
-`-n`/`--network` names the networks the agent runs (`node/config.py`): `bloxberg_mainnet`, `bloxberg_testnet`, `polygon_mainnet`, `polygon_amoy`, `iotex_testnet`, `ethereum_sepolia`, `litvm_liteforge`, and the `-unsafe` networks `bloxberg_testnet_unsafe`, `litvm_liteforge_unsafe` and `ethereum_sepolia_unsafe`. Without it every network is loaded except the `-unsafe` ones, which are loaded only when named.
+`-n`/`--network` names the networks the agent runs (`node/config.py`): `bloxberg_mainnet`, `bloxberg_testnet`, `polygon_mainnet`, `polygon_amoy`, `iotex_testnet`, `ethereum_sepolia`, `litvm_liteforge`, the `-unsafe` networks `bloxberg_testnet_unsafe`, `litvm_liteforge_unsafe` and `ethereum_sepolia_unsafe`, and the testnet copies of PoX 1.0 `bloxberg_testnet_pox10` and `polygon_amoy_pox10`. Without it, or with `all`, every network is loaded except the `-unsafe` ones, which are loaded only when named. `auto` (the installer's AUTO) also leaves out the testnet copies of PoX 1.0, which are loaded when named or under `all`.
 
 A testnet comes in two kinds. `bloxberg_testnet`, `litvm_liteforge` and `ethereum_sepolia` run trustedzones provisioned by that chain's ethernity-cas validator set, which admits an enclave on a DCAP quote: the platform must produce one (requirement `dcap`, the default for a name in `<NETWORK>_TRUSTEDZONE_IMAGES`), and the set validates their orders in full, as on mainnet. `bloxberg_testnet_unsafe`, `litvm_liteforge_unsafe` and `ethereum_sepolia_unsafe` have the chain and contracts of the network they are named after and run only that network's `-unsafe` trustedzones (`etny-pynithy-testnet-unsafe`, `etny-nodenithy-testnet-unsafe`; `ecld-pynithy-litvm-testnet-unsafe`, `ecld-nodenithy-litvm-testnet-unsafe`; `ecld-pynithy-ethereum-sepolia-unsafe`, `ecld-nodenithy-ethereum-sepolia-unsafe`), which are debug-signed, self-sign their certificate from their measurement and contact no CAS: any platform with hardware SGX runs them (requirement `sgx`, written `name:sgx`), EPID-only and SGX1 with or without FLC included, and the validators judge their orders with the derived-signer check waived. Named together with the network it is named after, an `-unsafe` network joins it as one handle on their shared contract.
 
 The agent runs a trustedzone only after an integration test has passed on this platform: the trustedzone's own (`<NETWORK>_INTEGRATION_TEST_IMAGES`), or one that covers its requirement. A DCAP platform therefore runs both kinds; a platform whose CAS-provisioned test fails and whose `-unsafe` test passes runs the `-unsafe` trustedzones alone. The names it runs are logged at start (`Platform meets dcap and sgx: runs ...`), advertised in its DP request's `metadata4` (`trustedzones=<names>;ipfs=<peer id>`), and a DO request whose image metadata names another trustedzone (field 2) is not taken, with the reason logged. Mainnet has no `-unsafe` network. An order's enclaves run with the LAS of a trustedzone tree that passed the integration test, not the LAS bundled in the dApp's own tree: the pass keeps the tree's las service block in `node/<network>/las-tested-<trustedzone>.yml` and its image under the docker tag `localhost:5000/etny-las:tested-<trustedzone>`; the order's compose takes that block's entrypoint and command and its LAS image name is pointed at the tested image (logged as `The LAS of <trustedzone>'s tested tree runs this order's enclaves`). A trustedzone without a test of its own takes the tested LAS of one with the same platform requirement; a recorded pass loaded at start without a kept LAS runs its test again; until a tested LAS is held the order runs its tree's own. The LAS is in no enclave's measurement.
+
+## The testnet copies of PoX 1.0 (release 3.8.19)
+
+`bloxberg_testnet_pox10` and `polygon_amoy_pox10` are testnet copies of the
+mainnets' PoX 1.0. `bloxberg_testnet_pox10` is bloxberg mainnet's 1.0
+contract code on chain 8995: the PoX
+`0x69A7bEB5Da2d3dA711d52E491D71e51296b08745`, a proxy and its own token
+(symbol tE10), the V1 image registry
+`0x7dBC1b591cc3b7136D863bc7430C6Db50E929665` and the heartbeat
+`0x4426C87484038F9B720a6012A1191DA73bDa0ad3`. `polygon_amoy_pox10` is Polygon
+mainnet's on Amoy, chain 80002: the PoX
+`0x9Aad82557c84c11C4031382d8Bf2cacF8f256a02`, whose token is Amoy's test ECLD
+(symbol tECLD), the V1 image registry
+`0xa2EE2a9118d0011AF05a6196c862D37d8c29F8eC` and the heartbeat
+`0x937F74419E31c1200e86B6D2439D9f12b3Fa12c9`. Their trustedzones
+(`etny-pynithy-testnet-pox10`, `etny-nodenithy-testnet-pox10`;
+`ecld-pynithy-amoy-pox10`, `ecld-nodenithy-amoy-pox10`) are signed
+`--production` and provisioned by Scontain's CAS, as the mainnets' 1.0
+trustedzones are: requirement `dcap`, no validator set, no CAS resolved from
+the chain.
+
+The agent runs a copy as it runs the copy's mainnet. The contract answers no
+`pricingVersion()` (`pox=legacy`). `NETWORK_TYPE` is `MAINNET`: a DO
+request's placement waits for the node's turn in a cycle of
+`max(1, nodes // 25)` blocks, the nodes being those the copy's heartbeat
+counts, and the payout line is logged after an order. Every setting of
+`node/.env` but the addresses, the token name, the trustedzones and, on Amoy,
+the RPC and the chain id is the mainnet's: on `polygon_amoy_pox10` the fee
+ceiling is 500 gwei over a priority fee of 32. `bloxberg_testnet_pox10`
+names bloxberg testnet's Enclave State Registry, which its trustedzones bake
+(`BLOXBERG_TESTNET_POX10_ESR_CONTRACT_ADDRESS` sets another);
+`polygon_amoy_pox10` names none.
+
+A copy is run when `-n` names it or is `all`; `auto`, `openbeta` and the
+legacy names leave it out, and a selection that holds `all`, `auto` or
+`openbeta` beside network names takes the word's networks alone. It runs
+from the node's wallet, on the gas the wallet holds on the copy's chain, in
+its own directory `node/<network>/`. The installer lists the copies as
+choices 11 and 12 (`networks.ini`), which its AUTO leaves out.
 
 ## DO request age (release 3.8.18)
 
@@ -174,8 +213,9 @@ to the node or not; `<NETWORK>_DO_REQUEST_MAX_AGE_SECONDS` or the argument
 `--<network>_do_request_max_age_seconds` sets one network's. A request's
 `createdAt` is read from the PoX's storage with `eth_getStorageAt`
 (`node/do_request_age.py`): from the storage `ethStorageAddress()` names
-(layout `cloud`, every network but bloxberg mainnet) or from the PoX itself
-(layout `v05`, bloxberg mainnet), logged at the first pass as `DO request
+(layout `cloud`, every network but `bloxberg_mainnet` and
+`bloxberg_testnet_pox10`) or from the PoX itself (layout `v05`, those two),
+logged at the first pass as `DO request
 ages: createdAt is read from <address> (layout <name>)`. Each pass with a
 request to judge establishes the age boundary, the lowest id created within
 the limit, by a binary search from the boundary before; the pass never reads
