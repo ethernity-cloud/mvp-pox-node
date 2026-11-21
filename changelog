@@ -1,3 +1,49 @@
+v3.8.19
+two networks, the testnet copies of the mainnets' PoX 1.0:
+  bloxberg_testnet_pox10, bloxberg mainnet's 1.0 contract code on chain 8995
+  (PoX 0x69A7bEB5Da2d3dA711d52E491D71e51296b08745, a proxy and its own
+  token, symbol tE10; V1 image registry
+  0x7dBC1b591cc3b7136D863bc7430C6Db50E929665; heartbeat
+  0x4426C87484038F9B720a6012A1191DA73bDa0ad3; trustedzones
+  etny-pynithy-testnet-pox10 and etny-nodenithy-testnet-pox10), and
+  polygon_amoy_pox10, Polygon mainnet's on Amoy, chain 80002 (PoX
+  0x9Aad82557c84c11C4031382d8Bf2cacF8f256a02, token tECLD; V1 image registry
+  0xa2EE2a9118d0011AF05a6196c862D37d8c29F8eC; heartbeat
+  0x937F74419E31c1200e86B6D2439D9f12b3Fa12c9; trustedzones
+  ecld-pynithy-amoy-pox10 and ecld-nodenithy-amoy-pox10). The trustedzones
+  are signed --production and provisioned by Scontain's CAS (requirement
+  dcap); the integration test runs each network's pynithy one
+a copy is run when --network names it or is "all", the selection of an
+  agent started without --network; "auto" (the installer's AUTO),
+  "openbeta", "bloxberg", "testnet" and "polygon" select no copy
+  (config.POX10_TESTNETS, config.is_pox10_testnet). A selection that holds
+  "all", "auto" or "openbeta" beside network names takes the word's networks
+  alone, "all" before "auto"
+the agent runs a copy as it runs the copy's mainnet. The contract answers no
+  pricingVersion() (pox=legacy). node/.env gives BLOXBERG_TESTNET_POX10_* the
+  values of BLOXBERG_MAINNET_* and POLYGON_AMOY_POX10_* those of
+  POLYGON_MAINNET_*, but for the addresses, TOKEN_NAME, the two trustedzone
+  variables and, on Amoy, RPC_URL and CHAIN_ID: NETWORK_TYPE MAINNET (a
+  placement waits for the node's turn in a cycle of max(1, nodes // 25)
+  blocks, the nodes being the copy's heartbeat's getNodesCount, and the
+  payout line is logged after an order), RPC_DELAY 200 and, on
+  polygon_amoy_pox10, MAX_FEE_PER_GAS 500 over MAX_PRIORITY_FEE_PER_GAS 32.
+  config.py names no validator registry, CAS session registry or IPFS
+  endpoints contract for a copy
+bloxberg_testnet_pox10 names bloxberg testnet's Enclave State Registry
+  0x0Ea1728EAE108FD3B9340ae91451348E2Cc6b4E4, which its trustedzones bake;
+  BLOXBERG_TESTNET_POX10_ESR_CONTRACT_ADDRESS sets another, and
+  ESR_CONTRACT_ADDRESS does not move it. polygon_amoy_pox10 names none
+a DO request's createdAt is read from the PoX itself, layout v05, on
+  bloxberg_testnet_pox10 and from the storage its PoX names
+  (0x20B9fDBDF3BA99A4FA2e73413AB6f928B73d6734), layout cloud, on
+  polygon_amoy_pox10
+a copy works in node/<network>/ and sends from the node's wallet, on the gas
+  the wallet holds on the copy's chain: MINIMUM_GAS_AT_START is 100000000000
+  wei on bloxberg_testnet_pox10 and 0.1 POL on polygon_amoy_pox10
+the installer lists the copies as choices 11 and 12 (networks.ini); its AUTO
+  leaves them out
+
 v3.8.18
 the agent places no order on a DO request created more than
   do_request_max_age_seconds before the timestamp of the chain's latest

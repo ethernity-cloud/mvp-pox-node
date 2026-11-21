@@ -25,7 +25,31 @@ def entries():
 
 def test_the_changelog_opens_with_the_release():
     top, _ = entries()[0]
-    assert top == "3.8.18"
+    assert top == "3.8.19"
+
+
+def test_the_3819_entry_names_the_testnet_copies_of_pox_10():
+    text = dict(entries())["3.8.19"]
+    for item in ("bloxberg_testnet_pox10", "polygon_amoy_pox10", "chain 8995", "chain 80002",
+                 "0x69A7bEB5Da2d3dA711d52E491D71e51296b08745", "0x7dBC1b591cc3b7136D863bc7430C6Db50E929665",
+                 "0x4426C87484038F9B720a6012A1191DA73bDa0ad3", "0x9Aad82557c84c11C4031382d8Bf2cacF8f256a02",
+                 "0xa2EE2a9118d0011AF05a6196c862D37d8c29F8eC", "0x937F74419E31c1200e86B6D2439D9f12b3Fa12c9",
+                 "etny-pynithy-testnet-pox10", "etny-nodenithy-testnet-pox10", "ecld-pynithy-amoy-pox10",
+                 "ecld-nodenithy-amoy-pox10", "tE10", "tECLD", "Scontain's CAS", "--production",
+                 "BLOXBERG_TESTNET_POX10_*", "POLYGON_AMOY_POX10_*", "NETWORK_TYPE MAINNET",
+                 "max(1, nodes // 25)", "MAX_FEE_PER_GAS 500", "pox=legacy",
+                 "0x0Ea1728EAE108FD3B9340ae91451348E2Cc6b4E4", "BLOXBERG_TESTNET_POX10_ESR_CONTRACT_ADDRESS",
+                 "layout v05", "layout cloud", "0x20B9fDBDF3BA99A4FA2e73413AB6f928B73d6734", "networks.ini",
+                 "choices 11 and 12"):
+        assert item in text, item
+
+
+def test_the_3819_entry_names_the_selection_rule():
+    text = dict(entries())["3.8.19"]
+    for item in ('--network names it or is "all"', '"auto" (the installer\'s AUTO)', '"openbeta"', '"bloxberg"',
+                 '"testnet"', '"polygon"', "select no copy", "config.POX10_TESTNETS", "config.is_pox10_testnet",
+                 '"all" before "auto"'):
+        assert item in text, item
 
 
 def test_the_3818_entry_names_the_do_request_age_rule():
