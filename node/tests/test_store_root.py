@@ -46,7 +46,7 @@ def test_the_root_is_drawn_once_with_mode_0600_and_reused(tmp_path, monkeypatch)
     access_key, secret_key = store_access.root_credential(path)
     assert ROOT_ACCESS_KEY.fullmatch(access_key) and ROOT_SECRET_KEY.fullmatch(secret_key)
     assert path.read_bytes() == store_access.credential_bytes(access_key, secret_key)
-    assert [entry for entry in modes if entry[0] == "open"] == [("open", f"{path}.tmp", 0o600)]
+    assert [entry for entry in modes if entry[0] == "open"] == [("open", f"{path}.tmp", 0o600, "O_EXCL")]
     assert sorted(entry.name for entry in path.parent.iterdir()) == ["store-root.json"]
     del modes[:]
     assert store_access.root_credential(path) == (access_key, secret_key)
@@ -111,6 +111,21 @@ def test_a_partial_file_left_by_an_interrupted_start_is_removed_first(tmp_path):
     access_key, secret_key = store_access.root_credential(path)
     assert path.read_bytes() == store_access.credential_bytes(access_key, secret_key)
     assert not partial.exists()
+
+
+def test_a_partial_file_that_is_there_at_the_creation_is_not_written_through(tmp_path, monkeypatch):
+    """The partial file is created exclusively: a file that holds its name
+    once the one left there is removed keeps its bytes, and no root file is
+    made of it."""
+    path = root_file(tmp_path)
+    path.parent.mkdir(parents=True)
+    partial = path.with_name("store-root.json.tmp")
+    planted = b"written by another process"
+    monkeypatch.setattr(os, "remove", lambda removed: Path(removed).write_bytes(planted))
+    with pytest.raises(FileExistsError):
+        store_access.root_credential(path)
+    assert partial.read_bytes() == planted
+    assert not path.exists()
 
 
 def test_the_draw_in_a_home_without_opt_leaves_the_uuid_directory_to_be_made(tmp_path):

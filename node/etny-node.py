@@ -3602,9 +3602,12 @@ class EtnyPoXNode:
 
             if status_enclave == True:
                 logger.debug(f'Uploading result to {enclave_image_name}-{v3} bucket')
+                # An object that is not read comes back as the store's error,
+                # which is logged as its class and code
+                # (store_access.error_text), here and for transaction.txt.
                 status, result_data = self.swift_stream_service.get_file_content(bucket_name, "result.txt")
                 if not status:
-                    logger.debug(result_data)
+                    logger.debug(f'result.txt was not read: {store_access.error_text(result_data)}')
 
                 with open(f'{self.order_folder}/result.txt', 'w') as f:
                     f.write(result_data)
@@ -3620,10 +3623,13 @@ class EtnyPoXNode:
                 logger.debug('Reading transaction from file')
                 status, transaction_data = self.swift_stream_service.get_file_content(bucket_name, "transaction.txt")
                 if not status:
-                   logger.debug(transaction_data)
+                    logger.debug(f'transaction.txt was not read: {store_access.error_text(transaction_data)}')
                 logger.debug('Building result for v3')
                 result = self.build_result_format_v3(result_hash, transaction_data)
-                logger.debug(f'Result is: {result}')
+                # A result built over a transaction that was not read holds
+                # the text of the store's error, and is not logged.
+                if status:
+                    logger.debug(f'Result is: {result}')
                 # The enclave's result string inside the signed transaction:
                 # its task code, and on v5 the relayed commits and their gas
                 # (fields 12 and 14), which _addResultToOrderV2 carries
@@ -5362,18 +5368,18 @@ class EtnyPoXNode:
                         return
                 logger.debug(f"DP request never finished, processing order {order_id}")
 
-                while not stop_event.is_set():
-                    time.sleep(timeout_in_seconds)
-
+                # The resumed order runs under the task slot, as a placed one
+                # does: its start and its end remove every user of the store
+                # (store_access.sweep), and the slot keeps the other networks
+                # from running an order or a test meanwhile. An agent asked
+                # to stop while it waited for the slot does not run the order.
+                acquire_task_slot(self.__network)
+                try:
                     if stop_event.is_set():
                         return
-
-                    if get_task_running_on():
-                        continue
-
-                    break
-
-                self.process_order(order_id)
+                    self.process_order(order_id)
+                finally:
+                    release_task_slot(self.__network)
             if order.status == OrderStatus.CLOSED:
                 logger.debug(f"DP request {self.__dprequest} completed successfully!")
                 self.dpreq_cache.add(self.__dprequest)

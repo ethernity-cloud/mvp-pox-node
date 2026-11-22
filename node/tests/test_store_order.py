@@ -1,5 +1,5 @@
 """The store's users of an order and of an integration test (etny-node.py
-__start_enclave_environment, __enclave_environment_down,
+__run_order, __start_enclave_environment, __enclave_environment_down,
 __run_integration_test; store_access.prepare, sweep, write_credential,
 StoreAdmin, error_text; the error texts of swift_stream_service), against a
 MinIO kept in memory and a docker that records its commands (store_fakes),
@@ -7,16 +7,21 @@ on the composes of the field (field_composes): no docker, no store, no
 chain. Between the images' arrival in docker and the compose's first `up`
 the labels are read, the mounts added, the store swept, the users of the
 plan created and their files written; after the compose's `down` the store
-is swept. A start whose credentials are not prepared starts no service."""
+is swept. A start whose credentials are not prepared starts no service. An
+error of the store's clients is logged, returned and raised as its class
+and, for an S3 error, its code."""
 import importlib.util
 import logging
 import os
 import re
+import traceback
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from minio.error import MinioAdminException
+import urllib3
+from minio.deleteobjects import DeleteError
+from minio.error import InvalidResponseError, MinioAdminException, ServerError
 
 import store_access
 import swift_stream_service
@@ -171,6 +176,79 @@ def node_of(agent, monkeypatch, tmp_path, rig, pox_is_12=True):
     return node
 
 
+ORDER = 74
+# The image metadata of the order's DO request: v3, the image tree, the
+# trustedzone's name, the compose, the challenge and the public certificate.
+# The order's bucket is the name and the version.
+IMAGE_NAME = "etny-nodenithy-testnet"
+ORDER_METADATA = [None, f"v3:{TREE}:{IMAGE_NAME}:{TREE_COMPOSE}:QmChallenge:certificate", "v3:QmPayload", "v3:", ""]
+
+
+class OrderRun:
+    """Order ORDER of `node` (node_of), placed on a DO request of
+    ORDER_METADATA for one hour, as __run_order runs it on the rig: the
+    chain, IPFS and the staging of the bucket are stand-ins, the enclave
+    environment is the agent's own on the rig's docker and store. The
+    enclaves' waits end as `waits` says, in turn; the store service reads
+    `objects` ({object name: what get_file_content returns}). `staged`
+    holds the bucket of each staging; `waited` the bucket and the object of
+    each wait with the store's users then, {T, S, G or L: policy document};
+    `sent` the order and the result of each result sent."""
+
+    def __init__(self, agent, node, rig, tmp_path, waits, objects=None):
+        self.staged, self.waited, self.sent = [], [], []
+        ends = list(waits)
+        chain = SimpleNamespace(_getOrder=lambda order_id: ("0xd0", "0xd1", 3, 5, agent.OrderStatus.PROCESSING),
+                                _getDORequestMetadata=lambda do_req: ORDER_METADATA,
+                                _getDORequest=lambda do_req: ("0xd0", 1, 1, 1, 1, 1, 1, agent.RequestStatus.BOOKED))
+
+        def stage(bucket_name, order_id, payload_file, input_file, docker_compose_file, challenge):
+            self.staged.append(bucket_name)
+            node.order_folder = f"./orders/{order_id}/etny-order-{order_id}"
+            os.makedirs(node.order_folder)
+
+        def wait(bucket_name, object_name, timeout, order_id=None):
+            users = {letters(access_key): rig.store.policies[policy]
+                     for access_key, policy in rig.store.user_policy.items()}
+            self.waited.append((bucket_name, object_name, users))
+            return ends.pop(0)
+
+        def send(order_id, result, **keywords):
+            self.sent.append((order_id, result))
+            return False
+
+        node.cache_config.process_orders_cache_filepath = tmp_path / "process_order.json"
+        node.process_order_data = {}
+        node.storage = SimpleNamespace(download_many=lambda hashes, attempts, delay, artefacts=False: True,
+                                       pin_bytes_deferred=lambda data, name: "QmResult")
+        node.read_file = lambda path: "challenge"
+        node.build_prerequisites_v3 = stage
+        node.wait_for_enclave_v2 = wait
+        node.add_result_to_order = send
+        node.dpreq_cache = SimpleNamespace(add=lambda request: None)
+        node._order_ledger = None
+        node.swift_stream_service.get_file_content = lambda bucket_name, object_name: (objects or {})[object_name]
+        private = {
+            "network_config": SimpleNamespace(rpc_delay=0, block_time=5),
+            "etny": SimpleNamespace(caller=lambda: chain),
+            "contract_abi": [],
+            "trustedzones": {IMAGE_NAME: "dcap"},
+            "esr": None,
+            "dprequest": 5,
+            "send_order_started": lambda order_id: None,
+            "trustedzone_refusal": lambda image_metadata: None,
+            "order_placed_at_on_chain": lambda order_id: None,
+            "open_order_ledger": lambda order_id, order_end: None,
+            "begin_order_handover": lambda order_id: None,
+            "confirm_order_started": lambda: None,
+            "serve_session": lambda bucket_name, order_id: None,
+            "relay_esr_commits": lambda bucket_name, order_id: None,
+            "end_order_handover": lambda: None,
+        }
+        for name, value in private.items():
+            setattr(node, f"_EtnyPoXNode__{name}", value)
+
+
 O3 = [("admin", "user_list"), ("admin", "policy_list")]
 
 
@@ -213,14 +291,15 @@ def test_an_order_gets_its_users_before_the_first_up_and_loses_them_after_the_do
     assert node._EtnyPoXNode__enclave_up is True
     # The policy documents reached the admin client as files, since removed.
     assert len(rig.store.policy_files) == 2 and not any(os.path.exists(path) for path in rig.store.policy_files)
-    # The modes asked for: 0700 for each directory, 0400 for each file.
+    # The modes asked for: 0700 for each directory, 0400 for each file,
+    # which is created exclusively under its partial name.
     base = str(rig.credential_dir)
     assert [entry for entry in rig.modes if entry[1].startswith(base)] == [
         ("mkdir", base, 0o700),
         ("mkdir", os.path.join(base, TRUSTEDZONE), 0o700),
-        ("open", os.path.join(base, TRUSTEDZONE, "store.json.tmp"), 0o400),
+        ("open", os.path.join(base, TRUSTEDZONE, "store.json.tmp"), 0o400, "O_EXCL"),
         ("mkdir", os.path.join(base, SECURELOCK), 0o700),
-        ("open", os.path.join(base, SECURELOCK, "store.json.tmp"), 0o400)]
+        ("open", os.path.join(base, SECURELOCK, "store.json.tmp"), 0o400, "O_EXCL")]
     # No docker-compose run on the order's compose gets a root variable.
     runs = [env for args, env in rig.docker.runs if args[:3] == ["docker-compose", "-f", rig.compose]]
     assert len(runs) == 4 and all(env is not None and not set(STORE_ROOT_VARIABLES) & set(env) for env in runs)
@@ -236,6 +315,55 @@ def test_an_order_gets_its_users_before_the_first_up_and_loses_them_after_the_do
     mark = len(rig.store.events)
     node._EtnyPoXNode__enclave_environment_down()
     assert rig.store.events[mark:] == []
+
+
+def test_an_order_gets_the_users_of_the_bucket_it_staged(agent, monkeypatch, tmp_path):
+    """__run_order starts the enclave environment over the bucket it staged,
+    the trustedzone's name and the version, as an order's: while the
+    enclaves run, the store's users are a trustedzone's and a securelock's
+    of that bucket."""
+    rig = Rig(monkeypatch, tmp_path, ORDER_COMPOSE, {TZ_IMAGE: TZ_FILE, SL_IMAGE: SL_FILE}, order_id=str(ORDER))
+    node = node_of(agent, monkeypatch, tmp_path, rig)
+    run = OrderRun(agent, node, rig, tmp_path, waits=[False, False])
+    node._EtnyPoXNode__run_order(ORDER)
+    assert BUCKET == f"{IMAGE_NAME}-v3" and run.staged == [BUCKET]
+    users = {"T": store_access.trustedzone_policy(BUCKET), "S": store_access.securelock_policy(BUCKET)}
+    assert run.waited == [(BUCKET, "result.txt", users), (BUCKET, "transaction.txt", users)]
+    assert rig.steps() == ([("pull",), ("down",), ("inspect", TZ_IMAGE), ("inspect", SL_IMAGE)] + O3 + o4("T", "S")
+                           + [("up", "-d", "las", "etny-trustedzone"), ("up", "-d", "etny-securelock"), ("down",)]
+                           + swept("S", "T"))
+    _, text, held = next(snapshot for snapshot in rig.snapshots if snapshot[0] == "up")
+    assert rig.mounted(text) == [TRUSTEDZONE, SECURELOCK] and sorted(held) == [SECURELOCK, TRUSTEDZONE]
+    assert run.sent == [(ORDER, "v3:Task execution timed out:[WARN]")]
+    assert rig.store.users == {} and node._EtnyPoXNode__enclave_up is False
+
+
+@pytest.mark.parametrize("unread", ["result.txt", "transaction.txt"])
+def test_an_object_the_store_does_not_give_is_logged_as_the_class_and_code_of_its_error(agent, monkeypatch, tmp_path,
+                                                                                         caplog, capsys, unread):
+    """get_file_content answers an object it does not read with the store's
+    error. The order's run goes on over that value as it did (the write of
+    an unread result raises, a result is built over an unread transaction);
+    no log record and no printed line holds the error's message."""
+    caplog.set_level(logging.DEBUG)
+    rig = Rig(monkeypatch, tmp_path, ORDER_COMPOSE, {TZ_IMAGE: TZ_FILE, SL_IMAGE: SL_FILE}, order_id=str(ORDER))
+    node = node_of(agent, monkeypatch, tmp_path, rig)
+    error = s3_error("InternalError")
+    objects = {"result.txt": (True, "the result"), "transaction.txt": (True, "00"), unread: (False, error)}
+    run = OrderRun(agent, node, rig, tmp_path, waits=[True, True], objects=objects)
+    if unread == "result.txt":
+        with pytest.raises(TypeError):
+            node._EtnyPoXNode__run_order(ORDER)
+        assert run.sent == []
+    else:
+        node._EtnyPoXNode__run_order(ORDER)
+        assert run.sent == [(ORDER, f"v3:{error}:QmResult")]
+    messages = [record.getMessage() for record in caplog.records]
+    assert f"{unread} was not read: S3Error InternalError" in messages
+    quoted = "is quoted here"
+    assert quoted in str(error)
+    assert [message for message in messages if quoted in message] == []
+    assert quoted not in capsys.readouterr().out
 
 
 @pytest.mark.parametrize("labels, user, pox_is_12", [(TZ_FILE, "G", True), (None, "L", False), ({}, "L", True)])
@@ -319,6 +447,26 @@ def test_each_enclave_service_gets_the_user_of_its_images_label(monkeypatch, tmp
         assert LITERAL_BYTES in [held["store.json"] for held in files.values()]
 
 
+DIGEST = "sha256:" + "0123456789abcdef" * 4
+
+
+@pytest.mark.parametrize("value, reference", [
+    ("localhost:5000/etny-trustedzone", TZ_IMAGE),
+    ("localhost:5000/etny-trustedzone:v3", "localhost:5000/etny-trustedzone:v3"),
+    (f"localhost:5000/etny-trustedzone@{DIGEST}", f"localhost:5000/etny-trustedzone@{DIGEST}"),
+])
+def test_the_label_is_read_of_the_reference_the_compose_names(monkeypatch, tmp_path, value, reference):
+    """`latest` is the tag of a reference without one; a reference with a
+    tag or a digest is inspected as the compose writes it."""
+    image = "    image: localhost:5000/etny-trustedzone\n"
+    assert ORDER_COMPOSE.count(image) == 1
+    rig = Rig(monkeypatch, tmp_path, ORDER_COMPOSE.replace(image, f"    image: {value}\n"),
+              {reference: TZ_FILE, SL_IMAGE: SL_FILE})
+    rig.prepare()
+    assert rig.steps() == [("inspect", reference), ("inspect", SL_IMAGE)] + O3 + o4("T", "S")
+    assert rig.mounted() == [TRUSTEDZONE, SECURELOCK]
+
+
 def test_the_file_of_the_contracts_first_vector_holds_its_bytes(monkeypatch, tmp_path):
     rig = Rig(monkeypatch, tmp_path, NODENITHY_TREE_COMPOSE, {TZ_IMAGE: TZ_FILE})
     drawn = {7: "0123456789abcd", 20: "0123456789abcdef0123456789abcdef01234567"}
@@ -328,7 +476,28 @@ def test_the_file_of_the_contracts_first_vector_holds_its_bytes(monkeypatch, tmp
     path = rig.credential_dir / "etny-trustedzone" / "store.json"
     assert path.read_bytes() == V01_BYTES and len(V01_BYTES) == 92
     assert sorted(entry.name for entry in rig.credential_dir.iterdir()) == ["etny-trustedzone"]
-    assert ("open", f"{path}.tmp", 0o400) in rig.modes
+    assert ("open", f"{path}.tmp", 0o400, "O_EXCL") in rig.modes
+
+
+def test_a_partial_credential_file_that_is_there_at_the_creation_is_not_written_through(monkeypatch, tmp_path):
+    """The credential file is created exclusively under its partial name: a
+    file that holds that name once the one left there is removed keeps its
+    bytes, no store.json is made of it and the start fails at O5."""
+    rig = Rig(monkeypatch, tmp_path, NODENITHY_TREE_COMPOSE, {TZ_IMAGE: TZ_FILE})
+    planted = b"written by another process"
+    remove = os.remove
+
+    def planting_remove(removed):
+        if str(removed).endswith("store.json.tmp"):
+            Path(removed).write_bytes(planted)
+        else:
+            remove(removed)
+
+    monkeypatch.setattr(os, "remove", planting_remove)
+    with pytest.raises(store_access.NotPrepared) as failure:
+        rig.prepare()
+    assert str(failure.value) == "O5 FileExistsError"
+    assert rig.files() == {TRUSTEDZONE: {"store.json.tmp": planted}}
 
 
 def test_a_compose_without_a_securelock_gets_one_file_and_one_mount(monkeypatch, tmp_path):
@@ -545,7 +714,36 @@ class Denied:
         return call
 
 
-@pytest.mark.parametrize("method, arguments", [
+class Failing:
+    """An S3 client whose every call raises `error`."""
+
+    def __init__(self, error):
+        self.error = error
+
+    def __getattr__(self, name):
+        def call(*arguments, **named):
+            raise self.error
+        return call
+
+
+def service_of(client, restarts=False):
+    """A SwiftStreamService built without __init__ over the S3 client
+    `client`, whose restart of the store answers `restarts`."""
+    service = object.__new__(swift_stream_service.SwiftStreamService)
+    service.client = client
+    service.restart_etny_swift_stream_and_reconnect = lambda: restarts
+    return service
+
+
+def printed_with_its_chain(error):
+    """The traceback of `error` as the interpreter prints it, the errors it
+    was raised from or during included."""
+    return "".join(traceback.format_exception(type(error), error, error.__traceback__))
+
+
+# The methods of the store service that answer (status, text), and their
+# arguments.
+TEXT_METHODS = [
     ("create_bucket", ("b",)),
     ("delete_bucket", ("b",)),
     ("delete_file", ("b", "o")),
@@ -556,11 +754,73 @@ class Denied:
     ("download_files", ("b", ["o"], ["path"])),
     ("put_file_content", ("b", "o", "", SimpleNamespace(getbuffer=lambda: b""))),
     ("is_object_in_bucket", ("b", "o")),
-])
+]
+# The methods whose first call of the S3 client is not caught as any error.
+CLIENT_METHODS = TEXT_METHODS + [("get_file_content_bytes", ("b", "o")), ("get_file_content", ("b", "o")),
+                                 ("_is_bucket", ("b",))]
+# Errors of the S3 client that are no S3Error, each with a message that
+# quotes the request or the answer: urllib3's of a connection that fails,
+# minio-py's of an answer that is no S3 answer.
+CLIENT_ERRORS = [
+    urllib3.exceptions.MaxRetryError(None, "/b?location=", "the request is quoted here"),
+    urllib3.exceptions.ProtocolError("the request is quoted here"),
+    urllib3.exceptions.ReadTimeoutError(None, "/b/o", "the request is quoted here"),
+    InvalidResponseError(502, "text/html", "the answer is quoted here"),
+    ServerError("the answer is quoted here", 503),
+]
+
+
+@pytest.mark.parametrize("method, arguments", TEXT_METHODS)
 def test_the_store_services_error_texts_name_the_class_and_the_code_alone(method, arguments):
-    service = object.__new__(swift_stream_service.SwiftStreamService)
-    service.client = Denied()
-    service.restart_etny_swift_stream_and_reconnect = lambda: False
-    status, text = getattr(service, method)(*arguments)
+    status, text = getattr(service_of(Denied()), method)(*arguments)
     assert status is False
     assert text == f"{method} failed: S3Error AccessDenied"
+
+
+def test_the_lines_the_store_service_prints_name_the_class_and_the_code_alone(capsys):
+    refused = DeleteError("AccessDenied", "the request is quoted here", "o", None)
+    service = service_of(SimpleNamespace(remove_objects=lambda bucket_name, names: [refused],
+                                         bucket_exists=Denied().bucket_exists))
+    assert service.delete_files("b", ["o"]) == (True, "Files, ['o'] successfully deleted!")
+    assert service._is_bucket("b") is False
+    assert capsys.readouterr().out == ("[Error] Error occurred when deleting file: DeleteError!\n"
+                                       "_is_bucket failed: S3Error AccessDenied\n")
+
+
+@pytest.mark.parametrize("error", CLIENT_ERRORS, ids=lambda error: type(error).__name__)
+@pytest.mark.parametrize("method, arguments", CLIENT_METHODS)
+def test_an_error_of_the_s3_client_leaves_the_store_service_as_its_class(method, arguments, error):
+    assert "quoted here" in str(error)
+    with pytest.raises(swift_stream_service.StoreClientError) as failure:
+        getattr(service_of(Failing(error)), method)(*arguments)
+    assert str(failure.value) == type(error).__name__
+    assert failure.value.__cause__ is None and failure.value.__suppress_context__
+    assert "quoted here" not in printed_with_its_chain(failure.value)
+
+
+def test_a_listing_that_fails_again_after_a_restart_leaves_the_store_service_as_its_class():
+    quoting = urllib3.exceptions.ProtocolError("the request is quoted here")
+    assert service_of(Failing(quoting)).list_object_names("b") == []
+    ends = [s3_error("InternalError"), quoting]
+
+    def list_objects(bucket_name):
+        raise ends.pop(0)
+
+    with pytest.raises(swift_stream_service.StoreClientError) as failure:
+        service_of(SimpleNamespace(list_objects=list_objects), restarts=True).list_object_names("b")
+    assert str(failure.value) == "ProtocolError" and ends == []
+    assert "quoted here" not in printed_with_its_chain(failure.value)
+
+
+@pytest.mark.parametrize("method, arguments", CLIENT_METHODS)
+def test_an_error_that_is_not_the_s3_clients_leaves_the_store_service_as_it_is(method, arguments):
+    missing = FileNotFoundError(2, "No such file or directory", "./orders/74/payload")
+    with pytest.raises(FileNotFoundError) as failure:
+        getattr(service_of(Failing(missing)), method)(*arguments)
+    assert failure.value is missing
+
+
+def test_the_errors_of_the_s3_client_are_minio_pys_and_urllib3s():
+    assert swift_stream_service.CLIENT_ERRORS == (swift_stream_service.MinioException, urllib3.exceptions.HTTPError)
+    assert issubclass(swift_stream_service.S3Error, swift_stream_service.MinioException)
+    assert not issubclass(swift_stream_service.StoreClientError, swift_stream_service.CLIENT_ERRORS)

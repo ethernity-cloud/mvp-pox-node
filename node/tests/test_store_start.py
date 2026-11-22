@@ -10,6 +10,7 @@ start raises RuntimeError and is run again; a passed start is run once."""
 import ast
 import logging
 import os
+import traceback
 from pathlib import Path
 
 import pytest
@@ -99,6 +100,12 @@ def changed_names(env, environment):
     `environment`, a name one of them lacks included. Names alone: a failed
     assertion on them prints no variable's value."""
     return sorted(name for name in set(env) | set(environment) if env.get(name) != environment.get(name))
+
+
+def printed_with_its_chain(error):
+    """The traceback of `error` as the interpreter prints it, the errors it
+    was raised from or during included."""
+    return "".join(traceback.format_exception(type(error), error, error.__traceback__))
 
 
 def started(root):
@@ -354,6 +361,9 @@ def test_a_pair_that_the_store_knows_at_s5_fails_the_start(rig, pair, name, end,
     with pytest.raises(RuntimeError) as failure:
         rig.construct()
     assert str(failure.value) == f"The store did not start: S5, the store answers {name} ({outcome})"
+    # The failure is printed alone, without the error it was raised over.
+    assert failure.value.__cause__ is None and failure.value.__suppress_context__
+    assert "StoreNotStarted" not in printed_with_its_chain(failure.value)
     assert swift_stream_service._start.root is None
     assert ("admin", "policy_list") in rig.store.events
     getattr(rig.store, end).clear()
@@ -375,8 +385,33 @@ def test_a_sweep_that_fails_fails_the_start_at_s4(rig):
     with pytest.raises(RuntimeError) as failure:
         rig.construct()
     assert str(failure.value) == "The store did not start: S4, MinioAdminException"
+    # The admin client's error, whose message quotes its request, is not
+    # printed with the failure.
+    assert failure.value.__cause__ is None and failure.value.__suppress_context__
+    assert "is quoted here" in str(failure.value.__context__)
+    assert "is quoted here" not in printed_with_its_chain(failure.value)
     assert swift_stream_service._start.root is None
     assert ("s3", "list_buckets", "swiftstreamadmin") not in rig.store.events
+
+
+def test_a_stores_compose_that_does_not_exit_0_fails_the_start_at_s2(rig):
+    rig.store.root = LITERAL_PAIR
+    rig.docker.recreates_on_up = False
+    rig.docker.up_code = 1
+    with pytest.raises(RuntimeError) as failure:
+        rig.construct()
+    assert str(failure.value) == "The store did not start: S2, the store's compose exited 1"
+    assert rig.trace() == [("run", UP)]
+    assert swift_stream_service._start.root is None and not swift_stream_service._start.recreated
+    # The forced recreate is not spent: a later start of the process, whose
+    # compose exits 0 and leaves the store under the other root, runs it.
+    root = store_access.credential_in(rig.root_file.read_bytes())
+    rig.docker.up_code = 0
+    mark = len(rig.store.events)
+    rig.construct()
+    assert rig.trace(mark) == [("run", UP), LIVE, ("s3", "list_buckets", root[0]),
+                               ("run", FORCED), LIVE, ("s3", "list_buckets", root[0])] + started(root)[3:]
+    assert swift_stream_service._start.recreated and swift_stream_service._start.root == root
 
 
 def test_a_store_that_never_comes_live_fails_the_start_and_the_next_construction_starts_again(rig):

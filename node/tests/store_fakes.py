@@ -188,7 +188,8 @@ class FakeDocker:
     runs none, and moves the store as docker would. A run of the store's
     compose gives a store without a container one under the root pair of the
     run's environment; `up -d` of a store with a container puts it under
-    that pair when `recreates_on_up`; `--force-recreate` does when
+    that pair when `recreates_on_up`, and exits `up_code`, moving nothing
+    when that is not 0; `--force-recreate` does when
     `force_recreates`, and exits `force_code`; `docker rm -f` of the store's
     container exits `rm_code` and, at 0, leaves the store without one. `docker
     image inspect` prints `labels`[reference] as JSON and exits 0, or exits 1
@@ -199,6 +200,7 @@ class FakeDocker:
         self.runs = []
         self.recreates_on_up = recreates_on_up
         self.force_recreates = force_recreates
+        self.up_code = 0
         self.force_code = force_code
         self.rm_code = rm_code
         self.labels = labels or {}
@@ -215,6 +217,8 @@ class FakeDocker:
             pair = tuple((env or {}).get(name) for name in STORE_ROOT_VARIABLES)
             self.store.secrets.add(pair[1])
             forced = "--force-recreate" in args
+            if not forced and self.up_code != 0:
+                return self.up_code, ""
             if self.store.root is None or (forced and self.force_recreates) or (not forced and self.recreates_on_up):
                 self.store.root = pair
             return (self.force_code if forced else 0), ""
@@ -246,18 +250,20 @@ def install(monkeypatch, store, modules):
 
 
 def recorded_modes(monkeypatch):
-    """[(call, path, mode)] of every os.mkdir and of every os.open that
-    creates a file, from here to the end of the test: the modes the agent
-    asks for. This workstation's file system keeps no POSIX mode: a file
-    created there without the owner's write permission is read-only and is
-    not removed by os.remove, so on it the file is created with that
-    permission; the mode recorded is the one asked for."""
+    """[('mkdir', path, mode)] of every os.mkdir and [('open', path, mode,
+    'O_EXCL' or '')] of every os.open that creates a file, from here to the
+    end of the test: the modes the agent asks for, and whether it asks for
+    a file that is not there yet (os.O_EXCL). This workstation's file system
+    keeps no POSIX mode: a file created there without the owner's write
+    permission is read-only and is not removed by os.remove, so on it the
+    file is created with that permission; the mode recorded is the one asked
+    for."""
     modes = []
     real_open, real_mkdir = os.open, os.mkdir
 
     def recording_open(path, flags, mode=0o777, **kwargs):
         if flags & os.O_CREAT:
-            modes.append(("open", str(path), mode))
+            modes.append(("open", str(path), mode, "O_EXCL" if flags & os.O_EXCL else ""))
         return real_open(path, flags, mode | 0o200 if os.name == "nt" else mode, **kwargs)
 
     def recording_mkdir(path, mode=0o777, **kwargs):

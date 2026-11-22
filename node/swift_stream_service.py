@@ -1,12 +1,14 @@
 from minio import Minio
-from minio.error import S3Error
+from minio.error import MinioException, S3Error
 from pathlib import Path
 from utils import run_subprocess_status
+import functools
 import os
 import store_access
 import subprocess
 import threading
 import time
+import urllib3
 
 # The store's compose file, relative to a network's working directory, the
 # service it defines and that service's container.
@@ -45,6 +47,33 @@ class StoreNotStarted(Exception):
     go on from; str() says which."""
 
 
+# The classes of an error of the S3 client: minio-py's own, S3Error among
+# them, and urllib3's, which minio-py raises for a connection or an answer
+# that fails.
+CLIENT_ERRORS = (MinioException, urllib3.exceptions.HTTPError)
+
+
+class StoreClientError(Exception):
+    """An error of the S3 client left a method of SwiftStreamService; str()
+    is store_access.error_text of that error: its class and, for an S3
+    error, its code."""
+
+
+def client_errors_named(method):
+    """The method `method` of SwiftStreamService with every error of the S3
+    client that leaves it (CLIENT_ERRORS) raised as a StoreClientError in
+    its place, without the error as its context: a caller that logs what
+    the method raised logs the error's class, never its message, which
+    quotes the request. Any other error leaves the method as it is."""
+    @functools.wraps(method)
+    def named(*arguments, **keywords):
+        try:
+            return method(*arguments, **keywords)
+        except CLIENT_ERRORS as error:
+            raise StoreClientError(store_access.error_text(error)) from None
+    return named
+
+
 class SwiftStreamService:
     """The agent's client of the node's object store, under the node's root
     credential (store_access.root_credential, kept in `root_filepath`), with
@@ -56,16 +85,17 @@ class SwiftStreamService:
     The first construction in a process starts the store:
 
     S1  The root credential is loaded, or drawn and written.
-    S2  The store's compose is run (compose_up) and the store is waited for
-        until it is live (store_access.await_live).
-    S3  The root credential lists the store's buckets. If it does not, the
-        container runs under another root: the compose is run with
-        --force-recreate, once per process, and the store is asked again. If
-        that run exited 0 and the store still does not answer, the container
-        is removed and, when that removal exited 0, every entry of
-        `data_dir` with it; the compose is run and the store asked again.
-        Every order and every test stages its bucket anew, so the store's
-        data carry nothing from one start to the next.
+    S2  The store's compose is run (compose_up); a run that does not exit 0
+        fails the start here. The store is then waited for until it is live
+        (store_access.await_live).
+    S3  The root credential lists the store's buckets. If it does not, or
+        the store is not live, the compose is run with --force-recreate,
+        once per process, and the store is asked again. If that run exited
+        0 and the store still does not answer, the container is removed
+        and, when that removal exited 0, every entry of `data_dir` with it;
+        the compose is run and the store asked again. Every order and every
+        test stages its bucket anew, so the store's data carry nothing from
+        one start to the next.
     S4  store_access.sweep: no user of an earlier process is left.
     S5  The store knows neither of the REFUSED_PAIRS.
 
@@ -74,7 +104,11 @@ class SwiftStreamService:
     and connects under the root credential. The enclave containers of an
     earlier process are removed before any construction, and the
     constructing handle holds the task slot, so no enclave uses the store
-    during S4."""
+    during S4.
+
+    An error of the S3 client leaves the methods that call the store as a
+    StoreClientError, which names its class alone (client_errors_named); an
+    S3 error they do not retry is in the text or the value they return."""
 
     def __init__(self, logger, endpoint: str, root_filepath, credential_dir=store_access.CREDENTIAL_DIR,
                  data_dir=STORE_DATA_DIR):
@@ -104,8 +138,7 @@ class SwiftStreamService:
         """Runs the store's compose (`up -d swift-stream`, with
         --force-recreate when asked) with the root credential in the
         environment of that run alone (store_access.store_compose_env);
-        returns the command's exit code. docker-compose recreates the
-        container when the root credential is not the one it runs under."""
+        returns the command's exit code."""
         args = ['docker-compose', '-f', STORE_COMPOSE_FILE, 'up', '-d']
         if force_recreate:
             args.append('--force-recreate')
@@ -142,7 +175,9 @@ class SwiftStreamService:
         try:
             self._hold_root(store_access.root_credential(root_filepath))
             step = 'S2'
-            self.compose_up()
+            code = self.compose_up()
+            if code != 0:
+                raise StoreNotStarted(f"the store's compose exited {code}")
             step = 'S3'
             answer = self._root_answer()
             if answer != store_access.LISTED and not _start.recreated:
@@ -224,6 +259,7 @@ class SwiftStreamService:
 
         return False
 
+    @client_errors_named
     def create_bucket(self, bucket_name: str) -> (bool, str):
         try:
             if not self.client.bucket_exists(bucket_name):
@@ -238,6 +274,7 @@ class SwiftStreamService:
 
         return True, f"Bucket, {bucket_name} successfully created!"
 
+    @client_errors_named
     def delete_bucket(self, bucket_name: str) -> (bool, str):
         try:
             if self.client.bucket_exists(bucket_name):
@@ -255,6 +292,7 @@ class SwiftStreamService:
 
         return True, f"Bucket, {bucket_name} successfully deleted!"
 
+    @client_errors_named
     def delete_file(self, bucket_name: str, file_name: str) -> (bool, str):
         try:
             self.client.remove_object(bucket_name, file_name)
@@ -266,6 +304,7 @@ class SwiftStreamService:
 
         return True, f"File, {file_name} successfully deleted!"
 
+    @client_errors_named
     def delete_files(self, bucket_name: str, list_of_files: list[str]) -> (bool, str):
         try:
             errors = self.client.remove_objects(bucket_name, list_of_files)
@@ -279,6 +318,7 @@ class SwiftStreamService:
 
         return True, f"Files, {list_of_files} successfully deleted!"
 
+    @client_errors_named
     def upload_file(self, bucket_name: str, file_name: str, file_path: str) -> (bool, str):
         try:
             if self.client.bucket_exists(bucket_name):
@@ -294,6 +334,7 @@ class SwiftStreamService:
 
         return True, f"{file_path} is successfully uploaded to bucket {bucket_name}."
 
+    @client_errors_named
     def upload_files(self, bucket_name: str, list_of_files: list[str],
                      upload_file_paths: list[str]) -> (bool, str):
         try:
@@ -316,6 +357,7 @@ class SwiftStreamService:
 
         return True, f"{upload_file_paths} are successfully uploaded to bucket {bucket_name}."
 
+    @client_errors_named
     def download_file(self, bucket_name: str, file_name: str, file_path: str) -> (bool, str):
         try:
             if self.client.bucket_exists(bucket_name):
@@ -330,6 +372,7 @@ class SwiftStreamService:
 
         return True, f"File, {file_name} from bucket {bucket_name} was downloaded in {file_path}."
 
+    @client_errors_named
     def download_files(self, bucket_name: str, list_of_files: list[str],
                        download_file_paths: list[str]) -> (bool, str):
         try:
@@ -347,6 +390,8 @@ class SwiftStreamService:
                 return False, f"download_files failed: {store_access.error_text(err)}"
 
         return True, f"{download_file_paths} are successfully uploaded to bucket {bucket_name}."
+
+    @client_errors_named
     def get_file_content_bytes(self, bucket_name: str, file_name: str) -> (bool, bytes):
         response = None
         try:
@@ -375,6 +420,7 @@ class SwiftStreamService:
             return True, content.decode('utf-8')
         return status, content
 
+    @client_errors_named
     def put_file_content(self, bucket_name: str, object_name: str, object_path: str,
                          object_data: object = None) -> (bool, str):
         try:
@@ -398,6 +444,7 @@ class SwiftStreamService:
 
         return True, f"{object_name} is successfully uploaded to bucket {bucket_name}."
 
+    @client_errors_named
     def is_object_in_bucket(self, bucket_name: str, object_name: str) -> (bool, str):
         try:
             self.client.stat_object(bucket_name, object_name)
@@ -414,6 +461,7 @@ class SwiftStreamService:
                 return False, f"is_object_in_bucket failed: {store_access.error_text(err)}"
 
 
+    @client_errors_named
     def list_object_names(self, bucket_name: str) -> list:
         """Object names in a bucket, or [] on failure."""
         try:
@@ -428,6 +476,7 @@ class SwiftStreamService:
         except Exception:
             return []
 
+    @client_errors_named
     def _is_bucket(self, bucket_name: str) -> bool:
         try:
             return self.client.bucket_exists(bucket_name)
