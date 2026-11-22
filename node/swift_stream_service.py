@@ -1,31 +1,179 @@
 from minio import Minio
 from minio.error import S3Error
-from utils import run_subprocess
+from pathlib import Path
+from utils import run_subprocess_status
 import os
+import store_access
 import subprocess
+import threading
 import time
 
+# The store's compose file, relative to a network's working directory, the
+# service it defines and that service's container.
+STORE_COMPOSE_FILE = '../docker/docker-compose-swift-stream.yml'
+STORE_SERVICE = 'swift-stream'
+STORE_CONTAINER = 'etny-swift-stream'
+# The directory the store's compose mounts as the store's data: the
+# etny-swift-stream-data beside the compose file.
+STORE_DATA_DIR = Path(__file__).resolve().parent / 'docker' / 'etny-swift-stream-data'
+# The pairs a started store knows as no access key: the pair of the
+# literal-named user, which exists only while an order or a test with an
+# unlabelled image runs, and MinIO's built-in root.
+REFUSED_PAIRS = (('the literal pair', store_access.LITERAL, store_access.LITERAL),
+                 ("MinIO's built-in root", 'minioadmin', 'minioadmin'))
+
+
+class StoreStart:
+    """The start of the store in one process (SwiftStreamService.__init__).
+    `lock` serializes the constructions. `root` is the node's root credential
+    once a start has passed, None before. `recreated` says that the store's
+    container was recreated by force, which is done at most once per
+    process, as is the removal of the store's data, which only follows
+    it."""
+
+    def __init__(self):
+        self.lock = threading.Lock()
+        self.root = None
+        self.recreated = False
+
+
+_start = StoreStart()
+
+
+class StoreNotStarted(Exception):
+    """A step of the store's start found the store in a state it does not
+    go on from; str() says which."""
+
+
 class SwiftStreamService:
+    """The agent's client of the node's object store, under the node's root
+    credential (store_access.root_credential, kept in `root_filepath`), with
+    the admin client (`admin`) and the directory of the enclaves' credential
+    files (`credential_dir`) an order's users are made with
+    (store_access.prepare, store_access.sweep). `data_dir` is the directory
+    the store keeps its data in.
 
-    def __init__(self, logger, endpoint: str, access_key: str, secret_key: str):
+    The first construction in a process starts the store:
+
+    S1  The root credential is loaded, or drawn and written.
+    S2  The store's compose is run (compose_up) and the store is waited for
+        until it is live (store_access.await_live).
+    S3  The root credential lists the store's buckets. If it does not, the
+        container runs under another root: the compose is run with
+        --force-recreate, once per process, and the store is asked again. If
+        that run exited 0 and the store still does not answer, the container
+        is removed and, when that removal exited 0, every entry of
+        `data_dir` with it; the compose is run and the store asked again.
+        Every order and every test stages its bucket anew, so the store's
+        data carry nothing from one start to the next.
+    S4  store_access.sweep: no user of an earlier process is left.
+    S5  The store knows neither of the REFUSED_PAIRS.
+
+    A start that fails raises RuntimeError and is run again by the next
+    construction. Once a start has passed, a construction runs the compose
+    and connects under the root credential. The enclave containers of an
+    earlier process are removed before any construction, and the
+    constructing handle holds the task slot, so no enclave uses the store
+    during S4."""
+
+    def __init__(self, logger, endpoint: str, root_filepath, credential_dir=store_access.CREDENTIAL_DIR,
+                 data_dir=STORE_DATA_DIR):
         self.endpoint = endpoint
-        self.access_key = access_key
-        self.secret_key = secret_key
         self.logger = logger
+        self.credential_dir = str(credential_dir)
+        self.data_dir = str(data_dir)
 
-        run_subprocess(
-            ['docker-compose', '-f', f'../docker/docker-compose-swift-stream.yml', 'up', '-d', 'swift-stream'],
-            self.logger)
+        with _start.lock:
+            if _start.root is None:
+                self._start_store(root_filepath)
+            else:
+                self._hold_root(_start.root)
+                self.compose_up()
 
         if not self.try_connect_minio():
             if not self.restart_etny_swift_stream_and_reconnect():
                 raise RuntimeError("Failed to connect to MinIO after restarting etny-swift-stream.")
 
+    def _hold_root(self, root):
+        """Takes `root` (access key, secret key) as the credential of this
+        service's S3 client and builds its admin client under it."""
+        self._root = root
+        self.admin = store_access.StoreAdmin(self.endpoint, *root)
+
+    def compose_up(self, force_recreate=False):
+        """Runs the store's compose (`up -d swift-stream`, with
+        --force-recreate when asked) with the root credential in the
+        environment of that run alone (store_access.store_compose_env);
+        returns the command's exit code. docker-compose recreates the
+        container when the root credential is not the one it runs under."""
+        args = ['docker-compose', '-f', STORE_COMPOSE_FILE, 'up', '-d']
+        if force_recreate:
+            args.append('--force-recreate')
+        code, _ = run_subprocess_status(args + [STORE_SERVICE], self.logger,
+                                        env=store_access.store_compose_env(self._root))
+        return code
+
+    def _root_answer(self):
+        """store_access.LISTED when the store is live and the root credential
+        lists its buckets, else what kept it from that."""
+        if not store_access.await_live(self.endpoint, store_access.bounded_http()):
+            return 'not live'
+        return store_access.list_outcome(store_access.s3_client(self.endpoint, *self._root))
+
+    def _reset_store(self, answer):
+        """Removes the store's container and, when that command exited 0,
+        every entry of `data_dir`, then runs the compose; returns
+        _root_answer of the store started on the emptied directory, or
+        `answer` when the container was not removed."""
+        self.logger.warning("The recreated store does not answer the node's root credential; its container and "
+                            "its data are removed")
+        code, _ = run_subprocess_status(['docker', 'rm', '-f', STORE_CONTAINER], self.logger)
+        if code != 0:
+            return answer
+        store_access.remove_entries(self.data_dir)
+        self.compose_up()
+        return self._root_answer()
+
+    def _start_store(self, root_filepath):
+        """S1 to S5 of the class's text. Raises RuntimeError naming the step
+        that failed and the class of its error, and leaves _start.root None;
+        sets it when S5 has passed."""
+        step = 'S1'
+        try:
+            self._hold_root(store_access.root_credential(root_filepath))
+            step = 'S2'
+            self.compose_up()
+            step = 'S3'
+            answer = self._root_answer()
+            if answer != store_access.LISTED and not _start.recreated:
+                _start.recreated = True
+                self.logger.warning(f"The store does not answer the node's root credential ({answer}); its "
+                                    f"container is recreated")
+                recreated = self.compose_up(force_recreate=True) == 0
+                answer = self._root_answer()
+                if answer != store_access.LISTED and recreated:
+                    answer = self._reset_store(answer)
+            if answer != store_access.LISTED:
+                raise StoreNotStarted(f"the root credential is not answered ({answer})")
+            step = 'S4'
+            store_access.sweep(self.admin, self.credential_dir)
+            step = 'S5'
+            for name, access_key, secret_key in REFUSED_PAIRS:
+                outcome = store_access.list_outcome(store_access.s3_client(self.endpoint, access_key, secret_key))
+                if outcome != store_access.REFUSED:
+                    raise StoreNotStarted(f"the store answers {name} ({outcome})")
+        except StoreNotStarted as failure:
+            raise RuntimeError(f"The store did not start: {step}, {failure}") from None
+        except Exception as error:
+            raise RuntimeError(f"The store did not start: {step}, {store_access.error_text(error)}") from None
+        _start.root = self._root
+        self.logger.info("The store runs under the node's root credential and holds no user")
+
     def _connect_client(self):
         self.client = Minio(
             endpoint=self.endpoint,
-            access_key=self.access_key,
-            secret_key=self.secret_key,
+            access_key=self._root[0],
+            secret_key=self._root[1],
             secure=False
         )
 
@@ -86,7 +234,7 @@ class SwiftStreamService:
             if self.restart_etny_swift_stream_and_reconnect():
                 return self.create_bucket(bucket_name)
             else:
-                return False, f"create_bucket failed: {err}"
+                return False, f"create_bucket failed: {store_access.error_text(err)}"
 
         return True, f"Bucket, {bucket_name} successfully created!"
 
@@ -103,7 +251,7 @@ class SwiftStreamService:
             if self.restart_etny_swift_stream_and_reconnect():
                 return self.delete_bucket(bucket_name)
             else:
-                return False, f"delete_bucket failed: {err}"
+                return False, f"delete_bucket failed: {store_access.error_text(err)}"
 
         return True, f"Bucket, {bucket_name} successfully deleted!"
 
@@ -114,7 +262,7 @@ class SwiftStreamService:
             if self.restart_etny_swift_stream_and_reconnect():
                 return self.delete_file(bucket_name, file_name)
             else:
-                return False, f"delete_file failed: {err}"
+                return False, f"delete_file failed: {store_access.error_text(err)}"
 
         return True, f"File, {file_name} successfully deleted!"
 
@@ -122,12 +270,12 @@ class SwiftStreamService:
         try:
             errors = self.client.remove_objects(bucket_name, list_of_files)
             for error in errors:
-                print(f"[Error] Error occurred when deleting file: {error}!")
+                print(f"[Error] Error occurred when deleting file: {store_access.error_text(error)}!")
         except S3Error as err:
             if self.restart_etny_swift_stream_and_reconnect():
                 return self.delete_files(bucket_name, list_of_files)
             else:
-                return False, f"delete_files failed: {err}"
+                return False, f"delete_files failed: {store_access.error_text(err)}"
 
         return True, f"Files, {list_of_files} successfully deleted!"
 
@@ -142,7 +290,7 @@ class SwiftStreamService:
             if self.restart_etny_swift_stream_and_reconnect():
                 return self.upload_file(bucket_name, file_name, file_path)
             else:
-                return False, f"upload_file failed: {err}"
+                return False, f"upload_file failed: {store_access.error_text(err)}"
 
         return True, f"{file_path} is successfully uploaded to bucket {bucket_name}."
 
@@ -164,7 +312,7 @@ class SwiftStreamService:
             if self.restart_etny_swift_stream_and_reconnect():
                 return self.upload_files(bucket_name, lif_of_files, upload_file_path)
             else:
-                return False, f"upload_files failed: {err}"
+                return False, f"upload_files failed: {store_access.error_text(err)}"
 
         return True, f"{upload_file_paths} are successfully uploaded to bucket {bucket_name}."
 
@@ -178,7 +326,7 @@ class SwiftStreamService:
             if self.restart_etny_swift_stream_and_reconnect():
                 return self.download_file(bucket_name, file_name, file_path)
             else:
-                return False, f"download_file failed: {err}"
+                return False, f"download_file failed: {store_access.error_text(err)}"
 
         return True, f"File, {file_name} from bucket {bucket_name} was downloaded in {file_path}."
 
@@ -196,7 +344,7 @@ class SwiftStreamService:
             if self.restart_etny_swift_stream_and_reconnect():
                 return self.download_files(bucket_name, list_of_files, download_file_path)
             else:
-                return False, f"download_files failed: {err}"
+                return False, f"download_files failed: {store_access.error_text(err)}"
 
         return True, f"{download_file_paths} are successfully uploaded to bucket {bucket_name}."
     def get_file_content_bytes(self, bucket_name: str, file_name: str) -> (bool, bytes):
@@ -246,7 +394,7 @@ class SwiftStreamService:
             if self.restart_etny_swift_stream_and_reconnect():
                 return self.put_file_content(bucket_name, object_name, object_path, object_data)
             else:
-                return False, err
+                return False, f"put_file_content failed: {store_access.error_text(err)}"
 
         return True, f"{object_name} is successfully uploaded to bucket {bucket_name}."
 
@@ -263,7 +411,7 @@ class SwiftStreamService:
             if self.restart_etny_swift_stream_and_reconnect():
                 return self.is_object_in_bucket(bucket_name, object_name)
             else:
-                return False, err
+                return False, f"is_object_in_bucket failed: {store_access.error_text(err)}"
 
 
     def list_object_names(self, bucket_name: str) -> list:
@@ -287,5 +435,5 @@ class SwiftStreamService:
             if self.restart_etny_swift_stream_and_reconnect():
                 return self._is_bucket(bucket_name)
             else:
-                print(f"_is_bucket failed: {err}")
+                print(f"_is_bucket failed: {store_access.error_text(err)}")
                 return False

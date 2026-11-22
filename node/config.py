@@ -270,6 +270,10 @@ erc20_abi_filepath = base_path / 'erc20.abi'
 # The first sample of each network's gas profile (gas_profile.load_seed).
 gas_profile_seed_filepath = base_path / 'gas_profile_seed.json'
 uuid_filepath = Path(expanduser("~")) / "opt/etny/node/UUID"
+# The root credential of the node's object store (store_access.root_credential),
+# in the parent of the UUID's directory: utils.get_or_generate_uuid creates
+# that directory itself and raises when it finds it without a UUID file.
+store_root_filepath = Path(expanduser("~")) / "opt/etny/store-root.json"
 
 # --- Enclave State Registry (ESR) ------------------------------------------
 # Enclaves publish an IPFS CID of their encrypted state to this registry. Nodes
@@ -690,20 +694,21 @@ def parse_arguments(network_names: list) -> argparse.ArgumentParser:
         required=False,
         default="localhost:9000"
     )
+    # The store's credential is the node's own (store_root_filepath); the two
+    # arguments are parsed, so that a config file or a start line that names
+    # them is accepted, and not used.
     parser.add_argument(
         "-u",
         "--access_key",
-        help="Access key (aka user ID) of your account in S3 service.",
+        help="Accepted and not used: the S3 service runs under the node's own credential.",
         type=str,
-        default="swiftstreamadmin",
         required=False
     )
     parser.add_argument(
         "-p",
         "--secret_key",
-        help="Secret Key (aka password) of your account in S3 service.",
+        help="Accepted and not used: the S3 service runs under the node's own credential.",
         type=str,
-        default="swiftstreamadmin",
         required=False
     )
     parser.add_argument(
@@ -797,7 +802,7 @@ parser = parse_arguments(list(NETWORKS.keys()))
 
 arguments = {
     str: [
-       'privatekey', 'endpoint', 'access_key', 'secret_key', 'network',  'ipfs_connect_url', 'ipfs_gateway_url', 'ipfs_swarm', 'kubo_url', 'kubo_version'
+       'privatekey', 'endpoint', 'network',  'ipfs_connect_url', 'ipfs_gateway_url', 'ipfs_swarm', 'kubo_url', 'kubo_version'
     ],
     int: ['cpu', 'memory', 'storage', 'bandwidth', 'duration', 'ipfs_timeout'],
     float: ['price']

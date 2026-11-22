@@ -31,6 +31,7 @@ import gas_ledger
 import broker
 import replay
 import do_request_age
+import store_access
 from constants import INTEGRATION_TEST_SECONDS, INTEGRATION_TEST_RETRY_MIN_SECONDS, INTEGRATION_TEST_RETRY_MAX_SECONDS, INTEGRATION_TEST_REGISTRY_CHECK_SECONDS, RPC_REPLICA_LAG_BLOCKS, DP_TERMS_POLL_SECONDS, CANCEL_ATTEMPTS, RELAY_BATCH_MIN, ESR_LEDGER_CAP, RESULT_SEND_GRACE_SECONDS, FENCE_STAGE_SECONDS, FENCE_STAGE_TICKS, HANDOVER_REQUEST_TIMEOUT_SECONDS, CU_VERSION_MIN
 from models import *
 from error_messages import errorMessages
@@ -291,8 +292,6 @@ class EtnyPoXNode:
         self.__bandwidth = None
         self.__duration = None
         self.__endpoint = None
-        self.__access_key = None
-        self.__secret_key = None
         self.__network = None
         self.__ipfs_swarm = None
         self.__ipfs_connect_url = None
@@ -574,14 +573,14 @@ class EtnyPoXNode:
 
 
         # The object store is the enclaves' side channel; a replication-only
-        # handle runs no enclave and starts no container for it.
+        # handle runs no enclave and starts no container for it. The first
+        # construction in the process starts the store under the node's root
+        # credential (SwiftStreamService), here under the task slot.
         if self.__replication_only:
             self.swift_stream_service = None
         else:
             logger.info(f"Initializing swift-stream service")
-            self.swift_stream_service = SwiftStreamService(logger, self.__endpoint,
-                                                           self.__access_key,
-                                                           self.__secret_key)
+            self.swift_stream_service = SwiftStreamService(logger, self.__endpoint, config.store_root_filepath)
 
         self.orders_cache = Cache(self.cache_config.orders_cache_limit, self.cache_config.orders_cache_filepath)
         self.dpreq_cache = ListCache(self.cache_config.dpreq_cache_limit, self.cache_config.dpreq_filepath)
@@ -3423,9 +3422,7 @@ class EtnyPoXNode:
             os.chdir(self.cache_config.base_path)
 
             logger.info("Task preloaded. Preparing docker environment")
-            run_subprocess(
-                ['docker-compose', '-f', f'../docker/docker-compose-swift-stream.yml', 'up', '-d', 'swift-stream'],
-                logger)
+            self.swift_stream_service.compose_up()
 
             docker_compose_file = f'{self.cache_config.base_path}/{docker_compose_hash}'
             challenge_file = f'{self.cache_config.base_path}/{challenge_hash}'
@@ -3476,7 +3473,8 @@ class EtnyPoXNode:
                     with integration_test_lock:
                         passed = dict(integration_test_passed)
                     self.__start_enclave_environment(
-                        enclave_image_hash, candidate_las_names(enclave_image_name, self.__trustedzones, passed))
+                        enclave_image_hash, bucket_name,
+                        candidate_las_names(enclave_image_name, self.__trustedzones, passed))
                     # The enclave reads its ESR state as soon as it is up, and
                     # the started row's confirmation below can take a block:
                     # the state objects are staged first (the waits stage
@@ -4337,13 +4335,34 @@ class EtnyPoXNode:
         up with their compose, self.order_docker_compose_file, unless they
         are removed already. Run once an order's result is sent and when an
         order fails: a container left running holds EPC memory and CPU until
-        the next order removes it."""
+        the next order removes it. The store's users, their policies and the
+        credential files of that start are removed once the containers are
+        (store_access.sweep); a removal that fails is logged and left to the
+        sweep of the next start. The callers hold the task slot."""
         if not self.__enclave_up:
             return
         self.__enclave_up = False
         self.logger.debug('Cleaning up SecureLock and TrustedZone containers.')
         run_subprocess(['docker-compose', '-f', self.order_docker_compose_file, 'down'], self.logger,
                        env=self.__enclave_compose_env())
+        try:
+            store_access.sweep(self.swift_stream_service.admin, self.swift_stream_service.credential_dir)
+        except Exception as e:
+            self.logger.warning(f"The store's users and credential files were not removed "
+                                f"({store_access.error_text(e)}); the next start removes them")
+
+    def __prepare_store_credentials(self, bucket_name, integration_test):
+        """Gives the enclave services of self.order_docker_compose_file their
+        credentials of the store for `bucket_name` (store_access.prepare),
+        between the images' arrival in docker and the compose's first `up`.
+        Raises EnclaveFailed when the credentials are not prepared: no
+        service is started without a credential the store accepts."""
+        try:
+            store_access.prepare(self.order_docker_compose_file, bucket_name, integration_test,
+                                 self.swift_stream_service.admin, self.swift_stream_service.credential_dir,
+                                 self.logger, run_subprocess_status)
+        except store_access.NotPrepared as e:
+            raise EnclaveFailed(environment_failure('the store credential was not prepared', str(e)))
 
     def __order_result_sent(self, transaction):
         """Runs once an order's result transaction is in the pool, while its
@@ -4361,11 +4380,14 @@ class EtnyPoXNode:
                 self.logger.info(f"The next DP request was not sent with the result ({e}); it is sent after it")
         self.__enclave_environment_down()
 
-    def __start_enclave_environment(self, enclave_image_hash, trustedzones=()):
+    def __start_enclave_environment(self, enclave_image_hash, bucket_name, trustedzones=(), integration_test=False):
         """Starts the enclave environment of the order whose compose is
-        self.order_docker_compose_file. The previous order's enclave containers
-        are removed. The compose's images (utils.compose_images) come from
-        docker's own copy of the image tree `enclave_image_hash` when it holds
+        self.order_docker_compose_file and whose bucket, staged by the
+        caller, is `bucket_name`; `integration_test` says that the start is
+        a trustedzone's integration test, whose bucket is the integration
+        bucket. The previous order's enclave containers are removed. The
+        compose's images (utils.compose_images) come from docker's own copy
+        of the image tree `enclave_image_hash` when it holds
         one under the tags utils.tree_image_tag gave them after an earlier
         pull (__enclave_images_tagged): the tags are pointed at the names the
         compose uses and nothing is pulled. Otherwise a docker registry serving
@@ -4393,11 +4415,14 @@ class EtnyPoXNode:
         runs otherwise, and for the integration test, which passes no names;
         every las service starts the LAS bound to IPv4, a service without an
         entrypoint and command taking the templates' (utils.las_start_to_apply,
-        LAS_TEMPLATE_START). The LAS is in no enclave's measurement. Every
-        docker-compose run on the compose (pull, down, up) takes the
-        environment of __enclave_compose_env. Raises EnclaveFailed when the
-        registry, the pull or the compose fails, with the failing command's
-        error."""
+        LAS_TEMPLATE_START). The LAS is in no enclave's measurement. Once
+        the images are in docker and the previous compose is down, and
+        before the first `up`, the enclave services get their credentials of
+        the store (__prepare_store_credentials). Every docker-compose run on
+        the compose (pull, down, up) takes the environment of
+        __enclave_compose_env. Raises EnclaveFailed when the registry, the
+        pull, the store credentials or the compose fails, with the failing
+        command's error or the failed step."""
         logger = self.logger
         base_path = str(self.cache_config.base_path)
         for name in (ENCLAVE_SECURELOCK, ENCLAVE_TRUSTEDZONE, ENCLAVE_LAS):
@@ -4447,6 +4472,7 @@ class EtnyPoXNode:
         run_subprocess(['docker-compose', '-f', self.order_docker_compose_file, 'down'], logger,
                        env=self.__enclave_compose_env())
         self.__enclave_up = True
+        self.__prepare_store_credentials(bucket_name, integration_test)
         services = compose_services(self.order_docker_compose_file)
         staggered = (config.enclave_start_stagger_seconds > 0
                      and ENCLAVE_SECURELOCK in services and ENCLAVE_TRUSTEDZONE in services)
@@ -6848,9 +6874,7 @@ class EtnyPoXNode:
         os.chdir(self.cache_config.base_path)
 
         logger.debug("Running docker swift-stream")
-        run_subprocess(
-            ['docker-compose', '-f', f'../docker/docker-compose-swift-stream.yml', 'up', '-d', 'swift-stream'],
-            logger)
+        self.swift_stream_service.compose_up()
 
         docker_compose_file = f'{self.cache_config.base_path}/{docker_compose_hash}'
         logger.debug(f'Preparing prerequisites for integration test')
@@ -6866,7 +6890,7 @@ class EtnyPoXNode:
             raise Exception(f"Integration test initialization failed: {e}")
 
         try:
-            self.__start_enclave_environment(enclave_image_hash)
+            self.__start_enclave_environment(enclave_image_hash, self.integration_bucket_name, integration_test=True)
             logger.debug('Waiting for execution of integration test enclave')
             status_enclave = self.wait_for_enclave_v2(self.integration_bucket_name, integration_test_file, INTEGRATION_TEST_SECONDS)
         except EnclaveFailed as e:

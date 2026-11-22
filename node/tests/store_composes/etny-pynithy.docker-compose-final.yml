@@ -1,0 +1,53 @@
+version: '3.2'
+# Lines ending in the __CAS_ONLY__ tag serve CAS attestation: the CAS address
+# and config id, and the LAS that quotes the enclave for the CAS.
+# .gitlab/run.sh deletes them for a network_type "testnet" build, whose
+# enclave self-signs and contacts no CAS, and drops only the tag otherwise.
+services:
+    las:  # __CAS_ONLY__
+        container_name: las  # __CAS_ONLY__
+        privileged: true  # __CAS_ONLY__
+        image: localhost:5000/etny-las  # __CAS_ONLY__
+        entrypoint: "/las_entrypoint.sh"  # __CAS_ONLY__
+        # -a 0.0.0.0: LAS defaults to the IPv6 wildcard (:::18766) and cannot  # __CAS_ONLY__
+        # bind on a host without an IPv6 stack, where it fails with "Unable to  # __CAS_ONLY__
+        # allocate socket" and restart-loops, taking local attestation with it.  # __CAS_ONLY__
+        command: "bash -c '/las_entrypoint.sh && /usr/local/bin/las -a 0.0.0.0 | tee /var/log/las.log'"  # __CAS_ONLY__
+        devices:  # __CAS_ONLY__
+          - "/dev/sgx_enclave:/dev/sgx_enclave"  # __CAS_ONLY__
+        restart: unless-stopped  # __CAS_ONLY__
+        networks:  # __CAS_ONLY__
+          - ethernity  # __CAS_ONLY__
+        ports:  # __CAS_ONLY__
+          - target: 18766  # __CAS_ONLY__
+            published: 18766  # __CAS_ONLY__
+            protocol: tcp  # __CAS_ONLY__
+            mode: host  # __CAS_ONLY__
+
+    etny-trustedzone:
+      container_name: etny-trustedzone
+      privileged: true
+      image: localhost:5000/etny-trustedzone
+      entrypoint: ""
+      command: [ "/usr/local/bin/python", "/etny-trustedzone/trustedzone.py" ]
+      environment:
+        - SCONE_CAS_ADDR=scone-cas.cf  # __CAS_ONLY__
+        - SCONE_LAS_ADDR=las  # __CAS_ONLY__
+        - SCONE_CONFIG_ID=__ENCLAVE_NAME_TRUSTEDZONE__/application  # __CAS_ONLY__
+        - SCONE_HEAP=256M
+        # Enclave threads: twice the node's CPUs, at most the 64 TCS the image
+        # is signed with; the node agent exports ETNY_SCONE_QUEUES to compose.
+        - SCONE_QUEUES=${ETNY_SCONE_QUEUES:-4}
+        - SCONE_LOG=DEBUG
+        - SCONE_ALLOW_DLOPEN=1
+        - SCONE_EXTENSIONS_PATH=/lib/libbinary-fs.so
+      restart: on-failure
+      networks:
+        - ethernity
+      devices:
+        - "/dev/sgx_enclave:/dev/sgx_enclave"
+      depends_on:  # __CAS_ONLY__
+        - las  # __CAS_ONLY__
+networks:
+  ethernity:
+    external: true

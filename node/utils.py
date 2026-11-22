@@ -719,6 +719,112 @@ def compose_services(compose_file):
     return services
 
 
+def _compose_service(lines, service):
+    """Where the compose whose lines are `lines` has the service `service`,
+    a key directly under its top-level `services:` at whatever indentation
+    the services have (that of the first key under `services:`): (first,
+    last, block), the service's lines being lines[first:last], from its key
+    to the line before the next non-blank, non-comment line indented no
+    deeper, and `block` whether nothing but a comment follows the key on its
+    line; None when the compose has no such service. A key of the same name
+    nested deeper (another service's `depends_on` in its long form) is no
+    service."""
+    top = next((i for i, line in enumerate(lines) if re.match(r'^services:\s*(#.*)?$', line)), None)
+    if top is None:
+        return None
+    indent = first = block = None
+    last = len(lines)
+    for i in range(top + 1, len(lines)):
+        line = lines[i]
+        if not line.strip() or line.lstrip().startswith('#'):
+            continue
+        depth = _indent(line)
+        if indent is None and depth > 0:
+            indent = depth
+        if depth == 0 or (first is not None and depth <= indent):
+            last = i
+            break
+        if first is None and depth == indent:
+            found = re.match(rf'''^ +(["']?){re.escape(service)}\1\s*:(\s.*)?$''', line)
+            if found is not None:
+                first = i
+                block = re.match(r'^\s*(#.*)?$', found.group(2) or '') is not None
+    return None if first is None else (first, last, block)
+
+
+def compose_has_service(text, service):
+    """Whether the compose `text` has the service `service`: a key directly
+    under its top-level `services:`, at whatever indentation."""
+    return _compose_service(text.splitlines(keepends=True), service) is not None
+
+
+def compose_service_image(text, service):
+    """The image reference of the service `service` of the compose `text`:
+    the `image:` value among the keys of that service, with the tag `latest`
+    when its last path segment has none (as compose_images reads a
+    reference). None when the compose has no such service or the service
+    names no image."""
+    lines = text.splitlines(keepends=True)
+    found = _compose_service(lines, service)
+    if found is None or not found[2]:
+        return None
+    block = lines[found[0]:found[1]]
+    key = re.compile(rf'''^ {{{_key_indent(block)}}}image:\s*["']?([^"'\s#]+)''')
+    for line in block[1:]:
+        matched = key.match(line)
+        if matched is not None:
+            reference = matched.group(1)
+            return reference if ':' in reference.rsplit('/', 1)[-1] else f'{reference}:latest'
+    return None
+
+
+def _sequence_item(line):
+    """The value of the YAML sequence item on `line` (`- <scalar>`): a plain
+    scalar without its trailing comment, or the text between single quotes
+    (a doubled quote read as one) or between double quotes."""
+    value = line.strip()[1:].strip()
+    if value[:1] == "'" and value.rfind("'") > 0:
+        return value[1:value.rfind("'")].replace("''", "'")
+    if value[:1] == '"' and value.rfind('"') > 0:
+        return value[1:value.rfind('"')]
+    return re.sub(r'\s+#.*$', '', value)
+
+
+def compose_with_volume(text, service, volume):
+    """The compose `text` with `volume` (a short-form volume, <host path>:
+    <container path>[:<mode>]) among the `volumes` of its service `service`:
+    appended to the items of the service's `volumes` list, at their
+    indentation, or as a `volumes` list of its own after the service's key
+    when the service has none; the item is written in single quotes. `text`
+    as it is when the list holds `volume` already. None when the compose has
+    no such service, or the service or its `volumes` is not written as a
+    block (a flow mapping, a flow sequence, an alias)."""
+    lines = text.splitlines(keepends=True)
+    found = _compose_service(lines, service)
+    if found is None or not found[2]:
+        return None
+    first, last, _ = found
+    block = lines[first:last]
+    key_indent = _key_indent(block)
+    quoted = "'" + volume.replace("'", "''") + "'"
+    groups = _key_groups(block, key_indent, ('volumes',))
+    if not groups:
+        at, added = 1, [f"{' ' * key_indent}volumes:\n", f"{' ' * (key_indent + 2)}- {quoted}\n"]
+    else:
+        start, at = groups[0]
+        if re.match(r'^ *volumes:\s*(#.*)?$', block[start]) is None:
+            return None
+        items = [line for line in block[start + 1:at] if line.lstrip().startswith('- ')]
+        item_indent = _indent(items[0]) if items else key_indent + 2
+        if volume in [_sequence_item(line) for line in items if _indent(line) == item_indent]:
+            return text
+        added = [f"{' ' * item_indent}- {quoted}\n"]
+    if not block[at - 1].endswith('\n'):
+        block[at - 1] += '\n'
+    block[at:at] = added
+    return ''.join(lines[:first] + block + lines[last:])
+
+
 # What the SCONE runtime prints once the enclave exists: the starter's line on
 # the enclave's creation (SCONE_LOG=DEBUG, which the composes set), and the
 # message with which the runtime applies the session's configuration after the
@@ -1135,13 +1241,23 @@ def scone_queues(cpus, legacy=False):
     return max(SCONE_QUEUES_MIN, min(SCONE_QUEUES_LEGACY_MAX if legacy else SCONE_QUEUES_MAX, 2 * int(cpus)))
 
 
+# The variables that carry the store's root credential, access key and secret
+# key, to the store's compose (docker/docker-compose-swift-stream.yml), in
+# the environment of that compose's runs alone (store_access.store_compose_env).
+STORE_ROOT_VARIABLES = ('ECLD_STORE_ROOT_USER', 'ECLD_STORE_ROOT_PASSWORD')
+
+
 def enclave_compose_env(cpus, legacy):
     """The environment of a docker-compose run on an enclave compose (an
-    order's or an integration test's): the process's own with
-    ETNY_SCONE_QUEUES at scone_queues(cpus, legacy). os.environ is left as it
-    is: one process serves networks of both PoX generations, each from its
-    own thread."""
-    return {**os.environ, 'ETNY_SCONE_QUEUES': str(scone_queues(cpus, legacy))}
+    order's or an integration test's): the process's own without the
+    STORE_ROOT_VARIABLES and with ETNY_SCONE_QUEUES at scone_queues(cpus,
+    legacy). docker-compose substitutes ${NAME} of a dApp's compose from
+    this environment, so a compose that names a STORE_ROOT_VARIABLES
+    variable gets an empty value. os.environ is left as it is: one process
+    serves networks of both PoX generations, each from its own thread."""
+    env = {name: value for name, value in os.environ.items() if name not in STORE_ROOT_VARIABLES}
+    env['ETNY_SCONE_QUEUES'] = str(scone_queues(cpus, legacy))
+    return env
 
 
 def resume_admits(terms, now):

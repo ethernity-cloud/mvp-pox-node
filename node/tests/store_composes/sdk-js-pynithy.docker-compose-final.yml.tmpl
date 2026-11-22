@@ -1,0 +1,83 @@
+# The compose a node runs for this dApp; its SCONE_* values match
+# docker-compose.yml.tmpl, which measured the securelock at publish. Tagged
+# lines are kept, untagged, only where they apply (cas/config.js
+# renderCompose): __CAS_ONLY__ serves CAS attestation, __NO_CAS_ONLY__ a
+# securelock that self-signs, and __SAFE_ONLY__ is the LAS, which every
+# network but an -unsafe one runs.
+version: '3.2'
+services:
+    las:  # __SAFE_ONLY__
+        container_name: las  # __SAFE_ONLY__
+        privileged: true  # __SAFE_ONLY__
+        image: localhost:5000/etny-las  # __SAFE_ONLY__
+        entrypoint: "/las_entrypoint.sh"  # __SAFE_ONLY__
+        # -a 0.0.0.0: without it the LAS binds dual-stack (:::18766) and cannot  # __SAFE_ONLY__
+        # allocate the socket on a host booted with ipv6.disable=1, so it  # __SAFE_ONLY__
+        # crash-loops and every task on that node times out with no  # __SAFE_ONLY__
+        # attestation. The enclaves reach it over IPv4 either way.  # __SAFE_ONLY__
+        command: "bash -c '/las_entrypoint.sh && /usr/local/bin/las -a 0.0.0.0 | tee /var/log/las.log'"  # __SAFE_ONLY__
+        restart: unless-stopped  # __SAFE_ONLY__
+        networks:  # __SAFE_ONLY__
+          - ethernity  # __SAFE_ONLY__
+        ports:  # __SAFE_ONLY__
+          - target: 18766  # __SAFE_ONLY__
+            published: 18766  # __SAFE_ONLY__
+            protocol: tcp  # __SAFE_ONLY__
+            mode: host  # __SAFE_ONLY__
+        healthcheck:  # __SAFE_ONLY__
+          test: ["CMD", "bash", "-c", "echo > /dev/tcp/127.0.0.1/18766"]  # __SAFE_ONLY__
+          interval: 5s  # __SAFE_ONLY__
+          timeout: 3s  # __SAFE_ONLY__
+          retries: 5  # __SAFE_ONLY__
+
+    etny-securelock:
+        container_name: etny-securelock
+        privileged: true
+        image: localhost:5000/etny-securelock
+        entrypoint: ""
+        command: [ "/usr/local/bin/python", "/etny-securelock/securelock.py" ]
+        environment:
+          - SCONE_CAS_ADDR=scone-cas.cf  # __CAS_ONLY__
+          - SCONE_LAS_ADDR=las  # __CAS_ONLY__
+          - SCONE_CONFIG_ID=__ENCLAVE_NAME_SECURELOCK__/application  # __CAS_ONLY__
+          - SCONE_HEAP=__MEMORY_TO_ALLOCATE__
+          # Enclave threads: twice the node's CPUs, at most the 64 TCS the
+          # image is signed with; the node agent exports ETNY_SCONE_QUEUES.
+          - SCONE_QUEUES=${ETNY_SCONE_QUEUES:-4}
+          - SCONE_STACK=4M
+          - SCONE_LOG=FATAL
+          - SCONE_ALLOW_DLOPEN=1
+          - SCONE_EXTENSIONS_PATH=/lib/libbinary-fs.so
+          - SCONE_ALPINE=1  # __NO_CAS_ONLY__
+          - SCONE_DEBUG=0  # __NO_CAS_ONLY__
+        restart: on-failure
+        networks:
+          - ethernity
+        depends_on:  # __SAFE_ONLY__
+          - las  # __SAFE_ONLY__
+
+    etny-trustedzone:
+        container_name: etny-trustedzone
+        privileged: true
+        image: localhost:5000/etny-trustedzone
+        entrypoint: ""
+        command: [ "/usr/local/bin/python", "/etny-trustedzone/trustedzone.py" ]
+        environment:
+          - SCONE_CAS_ADDR=scone-cas.cf  # __CAS_ONLY__
+          - SCONE_LAS_ADDR=las  # __CAS_ONLY__
+          - SCONE_CONFIG_ID=__ENCLAVE_NAME_TRUSTEDZONE__/application  # __CAS_ONLY__
+          - SCONE_HEAP=256M
+          - SCONE_QUEUES=${ETNY_SCONE_QUEUES:-4}
+          - SCONE_LOG=FATAL
+          - SCONE_ALLOW_DLOPEN=1
+          - SCONE_EXTENSIONS_PATH=/lib/libbinary-fs.so
+          - SCONE_ALPINE=1  # __NO_CAS_ONLY__
+          - SCONE_DEBUG=0  # __NO_CAS_ONLY__
+        restart: on-failure
+        networks:
+          - ethernity
+        depends_on:  # __SAFE_ONLY__
+          - las  # __SAFE_ONLY__
+networks:
+  ethernity:
+    external: true

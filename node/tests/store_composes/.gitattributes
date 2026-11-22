@@ -1,0 +1,4 @@
+# The composes are byte copies of the files the trustedzone repositories and
+# the JS SDK publish from, compared with MANIFEST.sha256: no line-ending
+# conversion on checkout.
+* -text

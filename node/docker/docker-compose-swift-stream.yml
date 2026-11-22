@@ -12,9 +12,13 @@ services:
       - "9000"
     ports:
       - "127.0.0.1:9000:9000"
+    # The node's root credential (store_access.root_credential), which the
+    # agent puts in the environment of each run of this compose. A run
+    # without the two variables fails: MinIO starts no server under its
+    # built-in root.
     environment:
-      MINIO_ROOT_USER: swiftstreamadmin
-      MINIO_ROOT_PASSWORD: swiftstreamadmin
+      MINIO_ROOT_USER: ${ECLD_STORE_ROOT_USER:?unset}
+      MINIO_ROOT_PASSWORD: ${ECLD_STORE_ROOT_PASSWORD:?unset}
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:9000/minio/health/live" ]
       interval: 30s

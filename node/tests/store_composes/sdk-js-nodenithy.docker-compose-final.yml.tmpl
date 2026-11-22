@@ -1,0 +1,82 @@
+# The compose a node runs for this dApp; its SCONE_* values match
+# docker-compose.yml.tmpl, which measured the securelock at publish. Tagged
+# lines are kept, untagged, only where they apply (cas/config.js
+# renderCompose): __CAS_ONLY__ serves CAS attestation, and __SAFE_ONLY__ is the
+# LAS, which every network but an -unsafe one runs.
+version: '3.2'
+services:
+  las:  # __SAFE_ONLY__
+    container_name: las  # __SAFE_ONLY__
+    privileged: true  # __SAFE_ONLY__
+    image: localhost:5000/etny-las  # __SAFE_ONLY__
+    entrypoint: "/las_entrypoint.sh"  # __SAFE_ONLY__
+    # -a 0.0.0.0: without it the LAS binds dual-stack (:::18766) and cannot  # __SAFE_ONLY__
+    # allocate the socket on a host booted with ipv6.disable=1, so it  # __SAFE_ONLY__
+    # crash-loops and every task on that node times out with no attestation.  # __SAFE_ONLY__
+    # The enclaves reach it over IPv4 either way.  # __SAFE_ONLY__
+    command: "/usr/local/bin/las -a 0.0.0.0"  # __SAFE_ONLY__
+    networks:  # __SAFE_ONLY__
+      - ethernity  # __SAFE_ONLY__
+    devices:  # __SAFE_ONLY__
+      - "/dev/sgx_enclave:/dev/sgx_enclave"  # __SAFE_ONLY__
+    restart: on-failure  # __SAFE_ONLY__
+    ports:  # __SAFE_ONLY__
+      - target: 18766  # __SAFE_ONLY__
+        published: 18766  # __SAFE_ONLY__
+        protocol: tcp  # __SAFE_ONLY__
+        mode: host  # __SAFE_ONLY__
+
+  etny-securelock:
+    container_name: etny-securelock
+    privileged: true
+    image: localhost:5000/etny-securelock
+    # No command: the image's ENTRYPOINT runs node with the flags the
+    # securelock was built and measured with (build.mjs NODE_FLAGS).
+    environment:
+      - SCONE_CAS_ADDR=scone-cas.cf  # __CAS_ONLY__
+      - SCONE_LAS_ADDR=las  # __CAS_ONLY__
+      - SCONE_CONFIG_ID=__ENCLAVE_NAME_SECURELOCK__/application  # __CAS_ONLY__
+      # Must match the --heap and --stack the securelock binary was signed with
+      # (build.mjs), otherwise SCONE recomputes MRENCLAVE at load and re-signs
+      # as debug. The heap is the build's MEMORY_TO_ALLOCATE (.env).
+      - SCONE_HEAP=__MEMORY_TO_ALLOCATE__
+      # Enclave threads: twice the node's CPUs, at most the 64 TCS the image
+      # is signed with; the node agent exports ETNY_SCONE_QUEUES to compose.
+      - SCONE_QUEUES=${ETNY_SCONE_QUEUES:-4}
+      - SCONE_STACK=4M
+      - SCONE_LOG=DEBUG
+      - SCONE_ALLOW_DLOPEN=1
+      - SCONE_EXTENSIONS_PATH=/lib/libbinary-fs.so
+    restart: on-failure
+    networks:
+      - ethernity
+    devices:
+      - "/dev/sgx_enclave:/dev/sgx_enclave"
+    depends_on:  # __SAFE_ONLY__
+      - las  # __SAFE_ONLY__
+
+  etny-trustedzone:
+    container_name: etny-trustedzone
+    privileged: true
+    image: localhost:5000/etny-trustedzone
+    # No command: the image's ENTRYPOINT runs node with the flags the
+    # trustedzone was built and measured with (etny-nodenithy Dockerfile.tmpl).
+    environment:
+      - SCONE_CAS_ADDR=scone-cas.cf  # __CAS_ONLY__
+      - SCONE_LAS_ADDR=las  # __CAS_ONLY__
+      - SCONE_CONFIG_ID=__ENCLAVE_NAME_TRUSTEDZONE__/application  # __CAS_ONLY__
+      - SCONE_HEAP=__TRUSTEDZONE_HEAP__
+      - SCONE_QUEUES=${ETNY_SCONE_QUEUES:-4}
+      - SCONE_LOG=DEBUG
+      - SCONE_ALLOW_DLOPEN=1
+      - SCONE_EXTENSIONS_PATH=/lib/libbinary-fs.so
+    restart: on-failure
+    networks:
+      - ethernity
+    devices:
+      - "/dev/sgx_enclave:/dev/sgx_enclave"
+    depends_on:  # __SAFE_ONLY__
+      - las  # __SAFE_ONLY__
+networks:
+  ethernity:
+    external: true

@@ -4,9 +4,11 @@ __run_integration_test), driven on an EtnyPoXNode built without __init__
 whose commands are recorded and not run: no docker, no chain. On a node with
 8 CPUs every docker-compose run on the compose (pull, down, up) gets the
 process's environment with ETNY_SCONE_QUEUES at 8 on a legacy PoX and at 16
-on PoX 1.2 (utils.enclave_compose_env); the swift-stream compose and the
-docker commands run in the process's own environment, which the agent leaves
-as it is."""
+on PoX 1.2 (utils.enclave_compose_env); the docker commands run in the
+process's own environment, which the agent leaves as it is. The store's
+compose is run by the store service (SwiftStreamService.compose_up), which
+alone gives a run the store's root credential, and by no command of the
+agent's own."""
 import importlib.util
 import logging
 import os
@@ -15,11 +17,15 @@ from types import SimpleNamespace
 
 import pytest
 
+import store_access
+from store_fakes import ENDPOINT, FakeStore, install, recorded_modes
+
 NODE = Path(__file__).resolve().parents[1]
 IMAGE = "etny-pynithy"
+BUCKET = "etny-pynithy-v3"
 TREE = "QmaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaA"
 TREE_COMPOSE = "QmbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbB"
-SWIFT_STREAM_UP = ["docker-compose", "-f", "../docker/docker-compose-swift-stream.yml", "up", "-d", "swift-stream"]
+ROOT = ("ecldroot0123456789ab", "0123456789abcdef0123456789abcdef01234567")
 # The docker-compose runs on an enclave compose whose images docker does not
 # hold, in order: the pull, the removal of the containers left, the services
 # but the securelock, the securelock, and the removal once the task is over.
@@ -84,8 +90,15 @@ def recorded_node(agent, monkeypatch, tmp_path, pox_is_12, order_id):
     the given PoX generation, working in `tmp_path`, whose commands are
     appended to `calls` as (args, env) and not run, env the Environment the
     command is given or None. COMPOSE is the compose of order `order_id`
-    there, and docker holds none of its images, so they are pulled."""
+    there, and docker holds none of its images, so they are pulled. The
+    node's store is a MinIO kept in memory (store_fakes) under ROOT; a run
+    of its compose through the store service is counted in
+    node.swift_stream_service.ups."""
     calls = []
+    store = FakeStore()
+    store.root = ROOT
+    install(monkeypatch, store, [store_access])
+    recorded_modes(monkeypatch)
 
     def run_subprocess(args, logger, env=None):
         calls.append((list(args), None if env is None else Environment(env)))
@@ -112,6 +125,12 @@ def recorded_node(agent, monkeypatch, tmp_path, pox_is_12, order_id):
     node._EtnyPoXNode__pox_is_12 = pox_is_12
     node._EtnyPoXNode__enclave_up = False
     node._EtnyPoXNode__images_held = lambda tags: False
+    ups = []
+    node.swift_stream_service = SimpleNamespace(
+        admin=store_access.StoreAdmin(ENDPOINT, *ROOT), credential_dir=str(tmp_path / "ecld-store"), ups=ups,
+        compose_up=lambda: ups.append("up"),
+        get_file_content=lambda bucket_name, object_name: (True, "written"),
+        delete_bucket=lambda bucket_name: None)
     return node, calls
 
 
@@ -146,7 +165,7 @@ def test_an_orders_compose_runs_carry_the_generations_count(agent, monkeypatch, 
     node, calls = recorded_node(agent, monkeypatch, tmp_path, pox_is_12, "74")
     node.order_docker_compose_file = compose_of("74")
     environment = Environment(os.environ)
-    node._EtnyPoXNode__start_enclave_environment(TREE)
+    node._EtnyPoXNode__start_enclave_environment(TREE, BUCKET)
     node._EtnyPoXNode__enclave_environment_down()
     assert_the_enclave_runs_alone_carry(calls, compose_of("74"), queues, environment)
 
@@ -163,12 +182,11 @@ def test_an_integration_tests_compose_runs_carry_the_generations_count(agent, mo
     node.build_prerequisites_integration_test = prerequisites
     node.wait_for_enclave_v2 = lambda bucket_name, object_name, timeout: True
     node.storage = SimpleNamespace(download_many=lambda hashes, attempts, delay: True)
-    node.swift_stream_service = SimpleNamespace(get_file_content=lambda bucket_name, object_name: (True, "written"),
-                                                delete_bucket=lambda bucket_name: None)
     node._EtnyPoXNode__network = "bloxberg_testnet" if pox_is_12 else "bloxberg_mainnet"
     node._EtnyPoXNode__trustedzones = {IMAGE: "dcap"}
     node._EtnyPoXNode__latest_trustedzone_image = lambda image: (TREE, TREE_COMPOSE)
     environment = Environment(os.environ)
     assert node._EtnyPoXNode__run_integration_test(IMAGE) == (TREE, "written", "written")
-    assert [call for call in calls if "swift-stream" in call[0]] == [(SWIFT_STREAM_UP, None)]
+    assert node.swift_stream_service.ups == ["up"]
+    assert [call for call in calls if "swift-stream" in call[0]] == []
     assert_the_enclave_runs_alone_carry(calls, compose_of("integration_test"), queues, environment)
