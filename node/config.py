@@ -207,6 +207,41 @@ def is_pox10_testnet(name: str) -> bool:
     return name.lower() in POX10_TESTNETS
 
 
+# The --network words that end in the generation of their network's PoX,
+# _pox10 or _pox20 (pox-smart-contract-litvm MAINNET-UPGRADE.md, decision
+# O18), each beside the name of the network it selects. The name selects the
+# network too, and the network's records are kept under it: the prefix of its
+# variables and arguments, its directory under node/, its key in the tables
+# of this file and in gas_profile_seed.json, its intake route. The testnet
+# copies of PoX 1.0 are named by their generation words (POX10_TESTNETS).
+# ethereum_sepolia and litvm_liteforge, which that decision gives a _pox20
+# word at their cut to PoX 2.0, their -unsafe twins and iotex_testnet have no
+# generation word.
+GENERATION_WORDS = {
+    "polygon_pox10": "polygon_mainnet",
+    "polygon_amoy_pox20": "polygon_amoy",
+    "polygon_amoy_unsafe_pox20": "polygon_amoy_unsafe",
+    "bloxberg_pox10": "bloxberg_mainnet",
+    "bloxberg_testnet_pox20": "bloxberg_testnet",
+    "bloxberg_testnet_unsafe_pox20": "bloxberg_testnet_unsafe",
+}
+
+
+def network_name(word: str) -> str:
+    """The name of the network a --network word selects: the name a
+    generation word stands beside in GENERATION_WORDS, any other word in
+    lower case."""
+    word = word.lower()
+    return GENERATION_WORDS.get(word, word)
+
+
+def generation_words_text(names: list) -> str:
+    """The generation words of the networks `names`, each with its network's
+    name, "word (name), ...", as the --network help and its refusal list
+    them; "none" when no network of `names` has one."""
+    return ', '.join(f"{word} ({name})" for word, name in GENERATION_WORDS.items() if name in names) or "none"
+
+
 def check_trustedzone_names(network_config) -> None:
     """An -unsafe network's trustedzones all end in -unsafe and no other
     network's does, so a CAS-less trustedzone runs only where it was chosen."""
@@ -520,7 +555,10 @@ def parse_networks(arguments: argparse.Namespace, parser: argparse.ArgumentParse
     CURRENT_NETWORKS = ["openbeta"]
     LEGACY_NETWORKS = ["bloxberg", "testnet", "polygon"]
 
-    lower_networks = [n.lower() for n in arguments.network]
+    # Each word as the name of the network it selects: a generation word
+    # (GENERATION_WORDS) as its network's name.
+    given = [n.lower() for n in arguments.network]
+    lower_networks = [network_name(n) for n in given]
     # Determine which networks to load
     if any(n in ALL_NETWORKS for n in lower_networks):
         # Every network but the -unsafe ones, which run only when named.
@@ -542,14 +580,22 @@ def parse_networks(arguments: argparse.Namespace, parser: argparse.ArgumentParse
         elif single_network == "polygon":
             selected_networks = ["polygon_mainnet"]
     else:
-        # Otherwise, load only the specified networks
-        selected_networks = [network.lower() for network in arguments.network]
+        # Otherwise, load only the specified networks. A name is loaded at
+        # each place it is given. A generation word loads its network unless
+        # the selection also gives that network's name or an earlier word
+        # loaded it.
+        selected_networks = []
+        for word, name in zip(given, lower_networks):
+            if word != name and (name in given or name in selected_networks):
+                continue
+            selected_networks.append(name)
         # Validate selected networks
         invalid_networks = set(selected_networks) - set(AVAILABLE_NETWORKS)
         if invalid_networks:
             parser.error(
                 f"Invalid network(s) specified: {', '.join(invalid_networks)}. "
-                f"Available networks are: {', '.join(AVAILABLE_NETWORKS)}."
+                f"Available networks are: {', '.join(AVAILABLE_NETWORKS)}. "
+                f"Generation words: {generation_words_text(AVAILABLE_NETWORKS)}."
            )
 
     networks = []
@@ -717,7 +763,8 @@ def parse_arguments(network_names: list) -> argparse.ArgumentParser:
     parser.add_argument(
         "-n",
         "--network",
-        help="Networks the node runs on. Specify multiple networks separated by space (e.g., polygon_mainnet polygon_amoy bloxberg_mainnet bloxberg_testnet iotex_testnet). If not specified, all available networks are loaded except the -unsafe ones (bloxberg_testnet_unsafe, litvm_liteforge_unsafe), which run trustedzones without a CAS and are loaded only when named. 'auto' also leaves out the testnet copies of PoX 1.0 (bloxberg_testnet_pox10, polygon_amoy_pox10), which are loaded when named or under 'all'.",
+        help="Networks the node runs on. Specify multiple networks separated by space (e.g., polygon_mainnet polygon_amoy bloxberg_mainnet bloxberg_testnet iotex_testnet). If not specified, all available networks are loaded except the -unsafe ones (bloxberg_testnet_unsafe, litvm_liteforge_unsafe), which run trustedzones without a CAS and are loaded only when named. 'auto' also leaves out the testnet copies of PoX 1.0 (bloxberg_testnet_pox10, polygon_amoy_pox10), which are loaded when named or under 'all'. A network is also named by the word that ends in the generation of its PoX: "
+             + generation_words_text(available_networks()) + ".",
         nargs='+',
         default=["all"],
         required=False

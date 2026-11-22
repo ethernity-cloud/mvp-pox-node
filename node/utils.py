@@ -975,6 +975,13 @@ def order_env(network_config, order_id, challenge, node_address, probe_first):
     return env
 
 
+def order_bucket_name(image_name: str, protocol: str) -> str:
+    """The object-store bucket of an order's enclaves, "<image name>-<protocol>"
+    from fields 2 and 0 of the request's image metadata: etny-pynithy-v3 for
+    a v3 request that names the trustedzone etny-pynithy."""
+    return f'{image_name}-{protocol}'
+
+
 # The protocol version a DP request's metadata2 names.
 DP_REQUEST_PROTOCOL = 'v3'
 # GFLOPS per CU, the contracts' GFLOPS_PER_CU; a DP request with gflops 0 is

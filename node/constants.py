@@ -18,6 +18,9 @@ INTEGRATION_TEST_RETRY_MAX_SECONDS = 6 * 3600
 # How often the idle loop reads the image registry for a newer trustedzone,
 # which makes the passed test of the older one stale.
 INTEGRATION_TEST_REGISTRY_CHECK_SECONDS = 300
+# The object-store bucket of an integration test. A trustedzone reads this
+# bucket's .env before that of an order's bucket (utils.order_bucket_name).
+INTEGRATION_BUCKET = 'etny-bucket-integration'
 
 # A capability record stands for CU_TTL_SECONDS from its t1 (the validators'
 # bound); the node re-measures CU_REMEASURE_MARGIN_SECONDS before that.

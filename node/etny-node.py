@@ -22,7 +22,7 @@ from web3 import middleware
 from web3.gas_strategies.time_based import fast_gas_price_strategy
 from web3.gas_strategies.rpc import rpc_gas_price_strategy
 
-from utils import scone_queues, enclave_compose_env, get_or_generate_uuid, run_subprocess, run_subprocess_status, environment_failure, record_enclave_image_tree, compose_images, compose_services, await_enclave_runtime, tree_image_tag, las_image, passed_las_tag, candidate_las_names, compose_service_block, las_start_lines, las_start_to_apply, compose_with_las_start, revert_reason, wallet_covers, insufficient_funds, transaction_known, placement_block_of, block_ranges, WALLET_GAS_TRANSACTIONS, retry, holds_within, pinned_within, FetchDeferrals, staging_plan, remaining_order_seconds, record_order_placement, order_placed_at, pending_approvals, record_pending_approval, forget_pending_approval, ORDER_STARTED_KEY, order_started_row, ORDER_GRACE_SECONDS, session_wallet_attestation, Storage, Cache, ListCache, ListCacheWithTimestamp, MergedOrdersCache, subprocess, get_node_geo, HardwareInfoProvider, parse_transaction_bytes_ut, looks_like_cid, canonical_cid, PEER_MULTIADDR, next_registered_image, enclave_failure, enclave_may_have_failed, docker_container_states, docker_container_log_tail, stale_integration_tests, integration_tests_due, runnable_trustedzones, image_trees, stale_image_trees, directory_size, remove_tree, removal_leftovers, integration_env, order_env, dp_terms, GFLOPS_PER_CU, tip_per_cu_hour_wei, dp_request_arguments, metadata_key, record_key, resume_admits, has_standing_dp_request, read_cursor, write_cursor, dp_request_disposition, bounded_cancel, do_request_verdict, refusal_cached, do_request_compare, resource_refusal_holds, ResourceRefusals, gas_with_headroom, placement_refusal_disposition, settlement_line, settlement_reward_wei, order_window, order_relay_ledger_path, ledger_rebuild, result_fields, result_send_decision, SESSION_WALLET_KEY, SESSION_OUTPUT_KEY
+from utils import order_bucket_name, scone_queues, enclave_compose_env, get_or_generate_uuid, run_subprocess, run_subprocess_status, environment_failure, record_enclave_image_tree, compose_images, compose_services, await_enclave_runtime, tree_image_tag, las_image, passed_las_tag, candidate_las_names, compose_service_block, las_start_lines, las_start_to_apply, compose_with_las_start, revert_reason, wallet_covers, insufficient_funds, transaction_known, placement_block_of, block_ranges, WALLET_GAS_TRANSACTIONS, retry, holds_within, pinned_within, FetchDeferrals, staging_plan, remaining_order_seconds, record_order_placement, order_placed_at, pending_approvals, record_pending_approval, forget_pending_approval, ORDER_STARTED_KEY, order_started_row, ORDER_GRACE_SECONDS, session_wallet_attestation, Storage, Cache, ListCache, ListCacheWithTimestamp, MergedOrdersCache, subprocess, get_node_geo, HardwareInfoProvider, parse_transaction_bytes_ut, looks_like_cid, canonical_cid, PEER_MULTIADDR, next_registered_image, enclave_failure, enclave_may_have_failed, docker_container_states, docker_container_log_tail, stale_integration_tests, integration_tests_due, runnable_trustedzones, image_trees, stale_image_trees, directory_size, remove_tree, removal_leftovers, integration_env, order_env, dp_terms, GFLOPS_PER_CU, tip_per_cu_hour_wei, dp_request_arguments, metadata_key, record_key, resume_admits, has_standing_dp_request, read_cursor, write_cursor, dp_request_disposition, bounded_cancel, do_request_verdict, refusal_cached, do_request_compare, resource_refusal_holds, ResourceRefusals, gas_with_headroom, placement_refusal_disposition, settlement_line, settlement_reward_wei, order_window, order_relay_ledger_path, ledger_rebuild, result_fields, result_send_decision, SESSION_WALLET_KEY, SESSION_OUTPUT_KEY
 import scone_image
 import pox20
 import capability
@@ -31,7 +31,7 @@ import gas_ledger
 import broker
 import replay
 import do_request_age
-from constants import INTEGRATION_TEST_SECONDS, INTEGRATION_TEST_RETRY_MIN_SECONDS, INTEGRATION_TEST_RETRY_MAX_SECONDS, INTEGRATION_TEST_REGISTRY_CHECK_SECONDS, RPC_REPLICA_LAG_BLOCKS, DP_TERMS_POLL_SECONDS, CANCEL_ATTEMPTS, RELAY_BATCH_MIN, ESR_LEDGER_CAP, RESULT_SEND_GRACE_SECONDS, FENCE_STAGE_SECONDS, FENCE_STAGE_TICKS, HANDOVER_REQUEST_TIMEOUT_SECONDS, CU_VERSION_MIN
+from constants import INTEGRATION_BUCKET, INTEGRATION_TEST_SECONDS, INTEGRATION_TEST_RETRY_MIN_SECONDS, INTEGRATION_TEST_RETRY_MAX_SECONDS, INTEGRATION_TEST_REGISTRY_CHECK_SECONDS, RPC_REPLICA_LAG_BLOCKS, DP_TERMS_POLL_SECONDS, CANCEL_ATTEMPTS, RELAY_BATCH_MIN, ESR_LEDGER_CAP, RESULT_SEND_GRACE_SECONDS, FENCE_STAGE_SECONDS, FENCE_STAGE_TICKS, HANDOVER_REQUEST_TIMEOUT_SECONDS, CU_VERSION_MIN
 from models import *
 from error_messages import errorMessages
 from swift_stream_service import SwiftStreamService
@@ -3430,7 +3430,7 @@ class EtnyPoXNode:
             docker_compose_file = f'{self.cache_config.base_path}/{docker_compose_hash}'
             challenge_file = f'{self.cache_config.base_path}/{challenge_hash}'
             challenge_content = self.read_file(challenge_file)
-            bucket_name = f'{enclave_image_name}-{v3}'
+            bucket_name = order_bucket_name(enclave_image_name, v3)
             logger.debug(f'Preparing prerequisites for {v3}')
             self.build_prerequisites_v3(bucket_name, order_id, payload_file, input_file,
                                         docker_compose_file, challenge_content)
@@ -4550,7 +4550,7 @@ class EtnyPoXNode:
         # bucket: the enclave reads state.<cid>.enc from the bucket, cannot
         # reach IPFS, and each order has a fresh bucket. Not for the
         # integration-test bucket: its payload reads no ESR state.
-        if self.__esr is not None and bucket_name != getattr(self, 'integration_bucket_name', 'etny-bucket-integration'):
+        if self.__esr is not None and bucket_name != getattr(self, 'integration_bucket_name', INTEGRATION_BUCKET):
             try:
                 self.stage_esr_state_for_read(bucket_name)
             except Exception as e:
@@ -5024,7 +5024,7 @@ class EtnyPoXNode:
         # The trustedzones read the integration bucket's .env before the
         # order's, so one left by an interrupted integration test would run
         # that test in place of this order.
-        self.swift_stream_service.delete_bucket('etny-bucket-integration')
+        self.swift_stream_service.delete_bucket(INTEGRATION_BUCKET)
         logger.debug('Creating new bucket.')
         self.order_folder = f'./orders/{order_id}/etny-order-{order_id}'
         self.create_folder_v1(self.order_folder)
@@ -6833,7 +6833,7 @@ class EtnyPoXNode:
             logger.warning(f'Integration test of {image}: the image registry holds no such image.')
             return None
         enclave_image_hash, docker_compose_hash = found
-        self.integration_bucket_name = 'etny-bucket-integration'
+        self.integration_bucket_name = INTEGRATION_BUCKET
         order_id = 'integration_test'
         integration_test_file = 'context_test.etny'
 
@@ -7620,12 +7620,14 @@ def handover_command(argv):
     """The `--handover --network <name> [--appoint <node>]` command: writes
     the request into node/<network>/handover.json, which the agent running
     that network reads at the next idle point of its order, and prints the
-    answer it writes back within HANDOVER_REQUEST_TIMEOUT_SECONDS. Exits 0
-    on an announcement, 1 on a refusal, 2 without an answer."""
+    answer it writes back within HANDOVER_REQUEST_TIMEOUT_SECONDS. <name>
+    is the network's name or its generation word (config.network_name).
+    Exits 0 on an announcement, 1 on a refusal, 2 without an answer."""
     arguments = broker.handover_command_arguments(argv)
-    network = arguments.network.lower()
+    network = config.network_name(arguments.network)
     if network not in config.available_networks():
-        print(f"unknown network {arguments.network!r}; one of: {', '.join(sorted(config.available_networks()))}")
+        print(f"unknown network {arguments.network!r}; one of: {', '.join(sorted(config.available_networks()))}; "
+              f"generation words: {config.generation_words_text(config.available_networks())}")
         return 2
     path = broker.handover_request_path(CacheConfig(network).base_path)
     broker.write_handover_request(path, arguments.appoint, time.time())

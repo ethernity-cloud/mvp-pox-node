@@ -159,7 +159,25 @@ $ ./etny-node-installer.sh
 
 ## Networks and platforms
 
-`-n`/`--network` names the networks the agent runs (`node/config.py`): `bloxberg_mainnet`, `bloxberg_testnet`, `polygon_mainnet`, `polygon_amoy`, `iotex_testnet`, `ethereum_sepolia`, `litvm_liteforge`, the `-unsafe` networks `bloxberg_testnet_unsafe`, `litvm_liteforge_unsafe` and `ethereum_sepolia_unsafe`, and the testnet copies of PoX 1.0 `bloxberg_testnet_pox10` and `polygon_amoy_pox10`. Without it, or with `all`, every network is loaded except the `-unsafe` ones, which are loaded only when named. `auto` (the installer's AUTO) also leaves out the testnet copies of PoX 1.0, which are loaded when named or under `all`.
+`-n`/`--network` names the networks the agent runs (`node/config.py`): `bloxberg_mainnet`, `bloxberg_testnet`, `polygon_mainnet`, `polygon_amoy`, `iotex_testnet`, `ethereum_sepolia`, `litvm_liteforge`, the `-unsafe` networks `bloxberg_testnet_unsafe`, `polygon_amoy_unsafe`, `litvm_liteforge_unsafe` and `ethereum_sepolia_unsafe`, and the testnet copies of PoX 1.0 `bloxberg_testnet_pox10` and `polygon_amoy_pox10`. Without it, or with `all`, every network is loaded except the `-unsafe` ones, which are loaded only when named. `auto` (the installer's AUTO) also leaves out the testnet copies of PoX 1.0, which are loaded when named or under `all`.
+
+A network whose PoX is 1.0 or 2.0 is also named by a word that ends in that generation, `_pox10` or `_pox20` (`config.GENERATION_WORDS`). The word selects the network its name selects, in any letter case. A word adds nothing when the selection also gives its network's name or an earlier word for it, so a network named by both is run once; a name is run at each place it is given:
+
+| Network | Name | Generation word |
+|---|---|---|
+| bloxberg mainnet, PoX 1.0 | `bloxberg_mainnet` | `bloxberg_pox10` |
+| Polygon mainnet, PoX 1.0 | `polygon_mainnet` | `polygon_pox10` |
+| bloxberg testnet, PoX 2.0 | `bloxberg_testnet` | `bloxberg_testnet_pox20` |
+| bloxberg testnet, PoX 2.0, `-unsafe` | `bloxberg_testnet_unsafe` | `bloxberg_testnet_unsafe_pox20` |
+| Polygon Amoy, PoX 2.0 | `polygon_amoy` | `polygon_amoy_pox20` |
+| Polygon Amoy, PoX 2.0, `-unsafe` | `polygon_amoy_unsafe` | `polygon_amoy_unsafe_pox20` |
+| bloxberg testnet's copy of PoX 1.0 | `bloxberg_testnet_pox10` | the name |
+| Polygon Amoy's copy of PoX 1.0 | `polygon_amoy_pox10` | the name |
+| IoTeX testnet | `iotex_testnet` | none |
+| Ethereum Sepolia | `ethereum_sepolia`, `ethereum_sepolia_unsafe` | none |
+| LitVM LiteForge | `litvm_liteforge`, `litvm_liteforge_unsafe` | none |
+
+A network's settings and files are kept under its name, whichever word selects it: `<NAME>_<FIELD>` in `node/.env` and in the operator's `config`, the argument `--<name>_<field>`, the directory `node/<name>/`, the intake route `/payload/<name>/` and the network of `--handover --network`, which takes either word. A variable or an argument under a generation word that is not a name sets nothing. The installer's list (`networks.ini`) ends each network's line with its generation word and writes the names into the `NETWORK` line of the node's `config`.
 
 A testnet comes in two kinds. `bloxberg_testnet`, `litvm_liteforge` and `ethereum_sepolia` run trustedzones provisioned by that chain's ethernity-cas validator set, which admits an enclave on a DCAP quote: the platform must produce one (requirement `dcap`, the default for a name in `<NETWORK>_TRUSTEDZONE_IMAGES`), and the set validates their orders in full, as on mainnet. `bloxberg_testnet_unsafe`, `litvm_liteforge_unsafe` and `ethereum_sepolia_unsafe` have the chain and contracts of the network they are named after and run only that network's `-unsafe` trustedzones (`etny-pynithy-testnet-unsafe`, `etny-nodenithy-testnet-unsafe`; `ecld-pynithy-litvm-testnet-unsafe`, `ecld-nodenithy-litvm-testnet-unsafe`; `ecld-pynithy-ethereum-sepolia-unsafe`, `ecld-nodenithy-ethereum-sepolia-unsafe`), which are debug-signed, self-sign their certificate from their measurement and contact no CAS: any platform with hardware SGX runs them (requirement `sgx`, written `name:sgx`), EPID-only and SGX1 with or without FLC included, and the validators judge their orders with the derived-signer check waived. Named together with the network it is named after, an `-unsafe` network joins it as one handle on their shared contract.
 
