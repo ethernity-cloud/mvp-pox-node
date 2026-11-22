@@ -3,10 +3,11 @@ store_access.await_live, bounded_http, list_outcome), against a MinIO kept in
 memory and a docker that records its commands (store_fakes): no docker and no
 store run. The first construction in a process draws or loads the root
 credential, runs the store's compose with it, waits for the store, has the
-root credential list the buckets (recreating a store under another root, and
-removing its data when the recreated one still refuses), sweeps and checks
-that the literal pair and MinIO's built-in root are no access keys; a failed
-start raises RuntimeError and is run again; a passed start is run once."""
+root credential list the buckets (recreating, once, a store under another
+root or not live, and failing with the store's data kept when the recreated
+one still does not list them), sweeps and checks that the literal pair and
+MinIO's built-in root are no access keys; a failed start raises RuntimeError
+and is run again; a passed start is run once."""
 import ast
 import logging
 import os
@@ -15,6 +16,7 @@ from pathlib import Path
 
 import pytest
 import urllib3
+import yaml
 from minio import Minio, MinioAdmin
 
 import store_access
@@ -25,26 +27,49 @@ from utils import STORE_ROOT_VARIABLES
 NODE = Path(__file__).resolve().parents[1]
 UP = ["up", "-d", "swift-stream"]
 FORCED = ["up", "-d", "--force-recreate", "swift-stream"]
-REMOVED = ["docker", "rm", "-f", "etny-swift-stream"]
-LIVE = ("http", "GET", f"http://{ENDPOINT}/minio/health/live")
+LIVE =("http", "GET", f"http://{ENDPOINT}/minio/health/live")
 LITERAL_PAIR = ("swiftstreamadmin", "swiftstreamadmin")
 BUILT_IN_PAIR = ("minioadmin", "minioadmin")
 # A root credential a node holds from an earlier process.
 HELD_ROOT = ("ecldroot0123456789ab", "0123456789abcdef0123456789abcdef01234567")
 
 
+def store_data_dir(network_dir):
+    """The directory the node's store compose file mounts on the store's
+    /data, for a process whose working directory is `network_dir`: the
+    compose file is at STORE_COMPOSE_FILE from there, and the host path of
+    the volume is relative to the compose file's directory."""
+    compose = yaml.safe_load((NODE / "docker" / "docker-compose-swift-stream.yml").read_text(encoding="utf-8"))
+    volumes = compose["services"][swift_stream_service.STORE_SERVICE]["volumes"]
+    sources = [volume[:-len(":/data")] for volume in volumes if volume.endswith(":/data")]
+    assert len(sources) == 1
+    return (network_dir / swift_stream_service.STORE_COMPOSE_FILE).resolve().parent / sources[0]
+
+
+def tree(directory):
+    """{path relative to `directory`: the bytes of the file, or None for a
+    directory} of every entry under `directory`."""
+    return {path.relative_to(directory).as_posix(): None if path.is_dir() else path.read_bytes()
+            for path in sorted(directory.rglob("*"))}
+
+
 class Rig:
     """A node for the store's start: `store` and `docker` (store_fakes) in
     the place of MinIO and of docker, the node's files under a scratch
-    directory, a process that has started no store, and a liveness wait
-    whose seconds are counted in `waited` and not slept."""
+    directory, the process in a network's working directory there, so that
+    `data_dir` is the store's data directory as its compose mounts it, a
+    process that has started no store, and a liveness wait whose seconds are
+    counted in `waited` and not slept."""
 
     def __init__(self, monkeypatch, tmp_path):
         self.store = FakeStore()
         self.docker = FakeDocker(self.store)
         self.root_file = tmp_path / "home" / "opt" / "etny" / "store-root.json"
         self.credential_dir = tmp_path / "ecld-store"
-        self.data_dir = tmp_path / "docker" / "etny-swift-stream-data"
+        network_dir = tmp_path / "node" / "bloxberg_testnet"
+        network_dir.mkdir(parents=True)
+        monkeypatch.chdir(network_dir)
+        self.data_dir = store_data_dir(network_dir)
         self.data_dir.mkdir(parents=True)
         self.waited = []
         self.restarts = []
@@ -75,7 +100,7 @@ class Rig:
 
     def construct(self):
         return swift_stream_service.SwiftStreamService(logging.getLogger("store"), ENDPOINT, self.root_file,
-                                                       credential_dir=self.credential_dir, data_dir=self.data_dir)
+                                                       credential_dir=self.credential_dir)
 
     def trace(self, since=0):
         """The store's events from index `since`, a run of the store's
@@ -262,59 +287,31 @@ def test_a_store_under_another_root_is_recreated_by_force(rig, caplog):
                         "container is recreated"]
 
 
-def test_a_recreated_store_that_still_refuses_loses_its_data_once(rig):
-    rig.store.root = LITERAL_PAIR
-    rig.docker.recreates_on_up = rig.docker.force_recreates = False
+@pytest.mark.parametrize("force_code", [0, 1])
+@pytest.mark.parametrize("cause, answer", [("another root", "S3Error InvalidAccessKeyId"), ("not live", "not live")])
+def test_a_store_that_does_not_list_after_the_forced_recreate_fails_the_start_and_keeps_its_data(
+        rig, cause, answer, force_code):
+    if cause == "another root":
+        rig.store.root = LITERAL_PAIR
+        rig.docker.recreates_on_up = rig.docker.force_recreates = False
+    else:
+        rig.store.live_when = lambda: False
+    rig.docker.force_code = force_code
     (rig.data_dir / ".minio.sys" / "config").mkdir(parents=True)
-    (rig.data_dir / ".minio.sys" / "config" / "iam").write_bytes(b"x")
+    (rig.data_dir / ".minio.sys" / "config" / "iam.json").write_bytes(b"users and policies")
     (rig.data_dir / "etny-pynithy-v3").mkdir()
-    (rig.data_dir / "file").write_bytes(b"x")
-    beside = rig.data_dir.parent / "docker-compose-swift-stream.yml"
-    beside.write_bytes(b"kept")
-    emptied_before_the_run = []
-    rig.docker.before = lambda args: emptied_before_the_run.append((args[-3:], sorted(os.listdir(rig.data_dir))))
-    rig.construct()
-    root = store_access.credential_in(rig.root_file.read_bytes())
-    assert rig.trace() == [("run", UP), LIVE, ("s3", "list_buckets", root[0]),
-                           ("run", FORCED), LIVE, ("s3", "list_buckets", root[0]),
-                           ("run", REMOVED), ("run", UP), LIVE, ("s3", "list_buckets", root[0])] + started(root)[3:]
-    held = [".minio.sys", "etny-pynithy-v3", "file"]
-    assert emptied_before_the_run == [(UP, held), (FORCED[1:], held), (REMOVED[1:], held), (UP, [])]
-    assert rig.data_dir.is_dir() and beside.read_bytes() == b"kept"
-    assert swift_stream_service._start.recreated
-
-
-def test_a_recreated_store_that_is_not_live_loses_its_data(rig):
-    rig.store.root = LITERAL_PAIR
-    (rig.data_dir / ".minio.sys").mkdir()
-    rig.store.live_when = lambda: not os.listdir(rig.data_dir)
-    rig.construct()
-    root = store_access.credential_in(rig.root_file.read_bytes())
-    assert rig.docker.compose_runs() == [UP, FORCED, UP]
-    assert [args for args, _ in rig.docker.runs if args[0] == "docker"] == [REMOVED]
-    assert rig.trace()[:2] == [("run", UP), LIVE] and rig.trace().count(LIVE) == 61 + 61 + 1
-    assert rig.waited == [1] * 120
-    assert os.listdir(rig.data_dir) == []
-    assert swift_stream_service._start.root == root
-
-
-@pytest.mark.parametrize("force_code, rm_code, commands", [
-    (1, 0, [UP, FORCED]),
-    (0, 1, [UP, FORCED, REMOVED]),
-])
-def test_no_data_is_removed_when_the_recreate_or_the_removal_failed(rig, force_code, rm_code, commands):
-    rig.store.root = LITERAL_PAIR
-    rig.docker.recreates_on_up = rig.docker.force_recreates = False
-    rig.docker.force_code, rig.docker.rm_code = force_code, rm_code
-    (rig.data_dir / ".minio.sys").mkdir()
-    with pytest.raises(RuntimeError) as failure:
-        rig.construct()
-    assert str(failure.value) == ("The store did not start: S3, the root credential is not answered "
-                                  "(S3Error InvalidAccessKeyId)")
-    assert [event[1] for event in rig.trace() if event[0] == "run"] == commands
-    assert os.listdir(rig.data_dir) == [".minio.sys"]
-    assert swift_stream_service._start.root is None
-    assert rig.store.admin_calls() == []
+    (rig.data_dir / "etny-pynithy-v3" / ".env").write_bytes(b"ETNY_MODE=TEST\n")
+    held = tree(rig.data_dir)
+    compose = ["docker-compose", "-f", swift_stream_service.STORE_COMPOSE_FILE]
+    for runs in ([UP, FORCED], [UP]):
+        mark = len(rig.docker.runs)
+        with pytest.raises(RuntimeError) as failure:
+            rig.construct()
+        assert str(failure.value) == f"The store did not start: S3, the root credential is not answered ({answer})"
+        assert tree(rig.data_dir) == held
+        assert [args for args, _ in rig.docker.runs[mark:]] == [compose + run for run in runs]
+        assert rig.store.admin_calls() == []
+        assert swift_stream_service._start.recreated and swift_stream_service._start.root is None
 
 
 def test_a_failed_start_is_run_again_without_a_second_forced_recreate(rig):
@@ -419,16 +416,14 @@ def test_a_store_that_never_comes_live_fails_the_start_and_the_next_construction
     with pytest.raises(RuntimeError) as failure:
         rig.construct()
     assert str(failure.value) == "The store did not start: S3, the root credential is not answered (not live)"
-    assert rig.docker.compose_runs() == [UP, FORCED, UP]
-    assert [args for args, _ in rig.docker.runs if args[0] == "docker"] == [REMOVED]
+    assert rig.docker.compose_runs() == [UP, FORCED]
+    assert rig.trace().count(LIVE) == 61 + 61 and rig.waited == [1] * 120
     assert rig.store.admin_calls() == []
-    # The next construction recreates nothing and removes nothing again.
-    (rig.data_dir / "written-since").write_bytes(b"x")
+    # The next construction recreates nothing.
     mark = len(rig.store.events)
     with pytest.raises(RuntimeError):
         rig.construct()
     assert [event[1] for event in rig.trace(mark) if event[0] == "run"] == [UP]
-    assert os.listdir(rig.data_dir) == ["written-since"]
     rig.store.live_when = lambda: True
     mark = len(rig.store.events)
     rig.construct()
@@ -438,7 +433,7 @@ def test_a_store_that_never_comes_live_fails_the_start_and_the_next_construction
 def test_no_secret_key_reaches_a_log_record_or_an_argument_list(rig, caplog):
     caplog.set_level(logging.DEBUG)
     rig.store.root = LITERAL_PAIR
-    rig.docker.recreates_on_up = rig.docker.force_recreates = False
+    rig.docker.recreates_on_up = False
     rig.store.users["ecldtz0123456789abcd"] = "d" * 40
     rig.store.secrets.add("d" * 40)
     rig.construct()
@@ -451,7 +446,7 @@ def test_no_secret_key_reaches_a_log_record_or_an_argument_list(rig, caplog):
     assert root[1] not in str(failure.value)
     assert_no_secret(rig.store, caplog.records, [args for args, _ in rig.docker.runs])
     assert not any(root[0] in record.getMessage() for record in caplog.records)
-    assert len(caplog.records) >= 3
+    assert len(caplog.records) >= 2
 
 
 def test_the_stores_compose_is_run_by_the_store_service_alone():
@@ -477,7 +472,6 @@ def test_the_stores_compose_is_run_by_the_store_service_alone():
     assert [node.value for node in ast.walk(service) if isinstance(node, ast.Constant)
             and isinstance(node.value, str) and "docker-compose" in node.value
             and node.value != swift_stream_service.STORE_COMPOSE_FILE and "\n" not in node.value] == ["docker-compose"]
-    assert swift_stream_service.STORE_DATA_DIR == NODE / "docker" / "etny-swift-stream-data"
 
 
 def test_a_replication_only_handle_constructs_no_store_service():

@@ -187,4 +187,4 @@ def test_the_key_arguments_are_accepted_and_reach_no_store_client():
     taken = [name for names in config.arguments.values() for name in names]
     assert "endpoint" in taken and "access_key" not in taken and "secret_key" not in taken
     parameters = list(inspect.signature(swift_stream_service.SwiftStreamService.__init__).parameters)
-    assert parameters == ["self", "logger", "endpoint", "root_filepath", "credential_dir", "data_dir"]
+    assert parameters == ["self", "logger", "endpoint", "root_filepath", "credential_dir"]

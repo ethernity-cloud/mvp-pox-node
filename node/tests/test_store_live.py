@@ -190,9 +190,18 @@ def test_a5_an_object_of_two_parts_goes_through_minio_pys_multipart_upload(stage
         staged.root.remove_object(bucket_name=B, object_name="result.txt")
 
 
-def test_n1_no_user_lists_the_buckets(staged):
-    for user in staged.make_users():
-        assert s3_code(lambda: of(user).list_buckets()) == "AccessDenied"
+def test_n1_a_user_lists_its_own_bucket_alone_and_is_refused_while_it_does_not_exist(staged):
+    staged.make_users()
+    for users, bucket in (((staged.T, staged.S, staged.L), B), ((staged.G,), I)):
+        for user in users:
+            # A client with a region, and the agent's, which has none.
+            for client in (of(user), store_access.s3_client(ENDPOINT, user.access_key, user.secret_key)):
+                assert [found.name for found in client.list_buckets()] == [bucket]
+        empty(staged.root, bucket)
+        for user in users:
+            for client in (of(user), store_access.s3_client(ENDPOINT, user.access_key, user.secret_key)):
+                assert s3_code(lambda: client.list_buckets()) == "AccessDenied"
+    assert staged.root.bucket_exists(bucket_name=X)
 
 
 def test_n2_no_user_reaches_another_bucket(staged):

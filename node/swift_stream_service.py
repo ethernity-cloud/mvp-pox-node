@@ -1,6 +1,5 @@
 from minio import Minio
 from minio.error import MinioException, S3Error
-from pathlib import Path
 from utils import run_subprocess_status
 import functools
 import os
@@ -10,14 +9,10 @@ import threading
 import time
 import urllib3
 
-# The store's compose file, relative to a network's working directory, the
-# service it defines and that service's container.
+# The store's compose file, relative to a network's working directory, and
+# the service it defines.
 STORE_COMPOSE_FILE = '../docker/docker-compose-swift-stream.yml'
 STORE_SERVICE = 'swift-stream'
-STORE_CONTAINER = 'etny-swift-stream'
-# The directory the store's compose mounts as the store's data: the
-# etny-swift-stream-data beside the compose file.
-STORE_DATA_DIR = Path(__file__).resolve().parent / 'docker' / 'etny-swift-stream-data'
 # The pairs a started store knows as no access key: the pair of the
 # literal-named user, which exists only while an order or a test with an
 # unlabelled image runs, and MinIO's built-in root.
@@ -30,8 +25,7 @@ class StoreStart:
     `lock` serializes the constructions. `root` is the node's root credential
     once a start has passed, None before. `recreated` says that the store's
     container was recreated by force, which is done at most once per
-    process, as is the removal of the store's data, which only follows
-    it."""
+    process."""
 
     def __init__(self):
         self.lock = threading.Lock()
@@ -79,8 +73,7 @@ class SwiftStreamService:
     credential (store_access.root_credential, kept in `root_filepath`), with
     the admin client (`admin`) and the directory of the enclaves' credential
     files (`credential_dir`) an order's users are made with
-    (store_access.prepare, store_access.sweep). `data_dir` is the directory
-    the store keeps its data in.
+    (store_access.prepare, store_access.sweep).
 
     The first construction in a process starts the store:
 
@@ -90,12 +83,9 @@ class SwiftStreamService:
         (store_access.await_live).
     S3  The root credential lists the store's buckets. If it does not, or
         the store is not live, the compose is run with --force-recreate,
-        once per process, and the store is asked again. If that run exited
-        0 and the store still does not answer, the container is removed
-        and, when that removal exited 0, every entry of `data_dir` with it;
-        the compose is run and the store asked again. Every order and every
-        test stages its bucket anew, so the store's data carry nothing from
-        one start to the next.
+        once per process, the store is waited for as in S2 and the root
+        credential lists the buckets again; if it still does not, the start
+        fails. The start removes nothing of the store's data.
     S4  store_access.sweep: no user of an earlier process is left.
     S5  The store knows neither of the REFUSED_PAIRS.
 
@@ -110,12 +100,10 @@ class SwiftStreamService:
     StoreClientError, which names its class alone (client_errors_named); an
     S3 error they do not retry is in the text or the value they return."""
 
-    def __init__(self, logger, endpoint: str, root_filepath, credential_dir=store_access.CREDENTIAL_DIR,
-                 data_dir=STORE_DATA_DIR):
+    def __init__(self, logger, endpoint: str, root_filepath, credential_dir=store_access.CREDENTIAL_DIR):
         self.endpoint = endpoint
         self.logger = logger
         self.credential_dir = str(credential_dir)
-        self.data_dir = str(data_dir)
 
         with _start.lock:
             if _start.root is None:
@@ -153,20 +141,6 @@ class SwiftStreamService:
             return 'not live'
         return store_access.list_outcome(store_access.s3_client(self.endpoint, *self._root))
 
-    def _reset_store(self, answer):
-        """Removes the store's container and, when that command exited 0,
-        every entry of `data_dir`, then runs the compose; returns
-        _root_answer of the store started on the emptied directory, or
-        `answer` when the container was not removed."""
-        self.logger.warning("The recreated store does not answer the node's root credential; its container and "
-                            "its data are removed")
-        code, _ = run_subprocess_status(['docker', 'rm', '-f', STORE_CONTAINER], self.logger)
-        if code != 0:
-            return answer
-        store_access.remove_entries(self.data_dir)
-        self.compose_up()
-        return self._root_answer()
-
     def _start_store(self, root_filepath):
         """S1 to S5 of the class's text. Raises RuntimeError naming the step
         that failed and the class of its error, and leaves _start.root None;
@@ -184,10 +158,8 @@ class SwiftStreamService:
                 _start.recreated = True
                 self.logger.warning(f"The store does not answer the node's root credential ({answer}); its "
                                     f"container is recreated")
-                recreated = self.compose_up(force_recreate=True) == 0
+                self.compose_up(force_recreate=True)
                 answer = self._root_answer()
-                if answer != store_access.LISTED and recreated:
-                    answer = self._reset_store(answer)
             if answer != store_access.LISTED:
                 raise StoreNotStarted(f"the root credential is not answered ({answer})")
             step = 'S4'

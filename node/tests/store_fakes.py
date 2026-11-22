@@ -190,19 +190,17 @@ class FakeDocker:
     run's environment; `up -d` of a store with a container puts it under
     that pair when `recreates_on_up`, and exits `up_code`, moving nothing
     when that is not 0; `--force-recreate` does when
-    `force_recreates`, and exits `force_code`; `docker rm -f` of the store's
-    container exits `rm_code` and, at 0, leaves the store without one. `docker
-    image inspect` prints `labels`[reference] as JSON and exits 0, or exits 1
-    for a reference `labels` lacks."""
+    `force_recreates`, and exits `force_code`. `docker image inspect` prints
+    `labels`[reference] as JSON and exits 0, or exits 1 for a reference
+    `labels` lacks."""
 
-    def __init__(self, store, recreates_on_up=True, force_recreates=True, force_code=0, rm_code=0, labels=None):
+    def __init__(self, store, recreates_on_up=True, force_recreates=True, force_code=0, labels=None):
         self.store = store
         self.runs = []
         self.recreates_on_up = recreates_on_up
         self.force_recreates = force_recreates
         self.up_code = 0
         self.force_code = force_code
-        self.rm_code = rm_code
         self.labels = labels or {}
         # Called with the arguments of each command before it is recorded.
         self.before = lambda args: None
@@ -222,10 +220,6 @@ class FakeDocker:
             if self.store.root is None or (forced and self.force_recreates) or (not forced and self.recreates_on_up):
                 self.store.root = pair
             return (self.force_code if forced else 0), ""
-        if args[:3] == ["docker", "rm", "-f"] and args[3] == "etny-swift-stream":
-            if self.rm_code == 0:
-                self.store.root = None
-            return self.rm_code, ""
         if args[:3] == ["docker", "image", "inspect"]:
             reference = args[-1]
             if reference not in self.labels:
