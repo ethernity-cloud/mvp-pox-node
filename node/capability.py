@@ -2,8 +2,9 @@
 WS-C, E1-E3, E8, E15, E40; tests/spec/capability-record.json): the two
 integration-bucket objects parsed, the record admitted, persisted per network
 in capability.json, expired, and the DP request's metadata3 and metadata4
-built from it (tests/spec/metadata-keys.md); the validators' cancel reasons
-and the RecordMissing hold a reason-9 cancel sets."""
+built from it (tests/spec/metadata-keys.md); the validators' cancel reasons,
+the RecordMissing hold a reason-9 cancel sets, and the enclave memory an
+offer states with the sizes a reason-10 cancel refused."""
 import json
 import os
 import re
@@ -43,9 +44,12 @@ SIG_RE = re.compile(r'^0x[0-9a-fA-F]{130}$')
 DER_HEX_RE = re.compile(r'^[0-9a-f]+$')
 
 # The reason codes of PoX.cancelDPRequestByValidators (ethernity-cas
-# capability.rs Reason), and whether the agent re-tests before it re-adds:
-# the faults of the record (1..6 and 8) and its absence (9) call for a new
-# record, the strike rule (7) for a new request alone.
+# capability.rs Reason; CasCapacity admits 1..10), and whether the agent
+# re-tests before it re-adds: the faults of the record (1..6 and 8) and its
+# absence (9) call for a new record, the strike rule (7) for a new request
+# alone, and an offer stating more enclave memory than its record shows (10,
+# D147) for a request with the enclave memory the record states
+# (enclave_memory_after_cancel).
 CANCEL_REASONS = {
     1: 'RecordSignatureInvalid',
     2: 'RecordNodeMismatch',
@@ -56,8 +60,20 @@ CANCEL_REASONS = {
     7: 'DeliveredBelowAttested',
     8: 'CuVersionBelowMinimum',
     9: 'RecordMissing',
+    10: 'EnclaveMemoryAboveRecord',
 }
 RETEST_REASONS = frozenset({1, 2, 3, 4, 5, 6, 8, 9})
+REASON_ENCLAVE_MEMORY_ABOVE_RECORD = 10
+# The enclave sizes an offer states, in GiB (D150): the probe of each size is
+# its own measurement.
+ENCLAVE_SIZES_GIB = (1, 2, 4, 8, 16, 32, 64)
+# The capability record's key of the enclave size its probe passed at
+# (encmem=, SLH 24.7).
+RECORD_ENCLAVE_MEMORY_KEY = 'encmem'
+# The broker_cursor.json keys of the enclave memory each DP request of the
+# node stated and of the sizes refused under each record (EnclaveMemoryBook).
+OFFER_ENCLAVE_MEMORY = 'offer_enclave_memory'
+ENCLAVE_MEMORY_REFUSED = 'enclave_memory_refused'
 # The reason of an offer that carries no capability record and is not passed
 # over (tests/spec/metadata-keys.md): its trustedzones= list names none, names
 # a trustedzone that can carry one (without the -unsafe suffix), or the
@@ -77,9 +93,99 @@ def cancel_reason_name(code):
 
 def cancel_disposition(code):
     """'retest' when the reason faults the record or its absence (1..6, 8 and
-    9: the test runs again before the next request), 'readd' otherwise (7,
-    and any code outside the table: the request alone is replaced)."""
-    return 'retest' if int(code) in RETEST_REASONS else 'readd'
+    9: the test runs again before the next request), 'memory' for an offer
+    that stated more enclave memory than its record (10: the next request
+    states the record's size, enclave_memory_after_cancel), 'readd'
+    otherwise (7, and any code outside the table: the request alone is
+    replaced)."""
+    if int(code) in RETEST_REASONS:
+        return 'retest'
+    if int(code) == REASON_ENCLAVE_MEMORY_ABOVE_RECORD:
+        return 'memory'
+    return 'readd'
+
+
+def record_enclave_memory(record):
+    """The enclave size in GiB a capability record states (its encmem=), a
+    listed size; None for a record that states none or another value."""
+    if not record:
+        return None
+    try:
+        size = int(record.get(RECORD_ENCLAVE_MEMORY_KEY))
+    except (TypeError, ValueError):
+        return None
+    return size if size in ENCLAVE_SIZES_GIB else None
+
+
+def enclave_memory_after_cancel(stated, record_size):
+    """What follows a cancel for reason 10 of an offer that stated `stated`
+    GiB under a record stating `record_size` (None: none): (size, rerun).
+    A record that states a size below the one refused gives that size, the
+    probe standing; a record that states none, or a size not below the one
+    refused, gives no size and the probe runs again (rerun), so that the
+    refused size is never stated again on that record."""
+    if record_size is not None and record_size < int(stated):
+        return record_size, False
+    return None, True
+
+
+def offer_enclave_memory(setting, record_size, refused=None):
+    """The enclave memory an offer states, in GiB (7.24, D146, D150): the
+    largest listed size at most the record's size (`record_size`), at most
+    the operator's `setting` when it is above 0, and below `refused`, the
+    size a reason-10 cancel refused under that record, when there is one; 0
+    for a record that states none."""
+    if record_size is None:
+        return 0
+    bound = int(record_size)
+    if int(setting) > 0:
+        bound = min(bound, int(setting))
+    if refused is not None:
+        bound = min(bound, int(refused) - 1)
+    sizes = [size for size in ENCLAVE_SIZES_GIB if size <= bound]
+    return sizes[-1] if sizes else 0
+
+
+class EnclaveMemoryBook:
+    """The enclave memory each DP request of the node stated
+    (OFFER_ENCLAVE_MEMORY, {request id: GiB}) and the sizes a reason-10
+    cancel refused under each capability record (ENCLAVE_MEMORY_REFUSED,
+    {record key: GiB}), kept in the network's broker_cursor.json beside the
+    other cursors (utils.read_cursor, utils.write_cursor), so a restart keeps
+    both. A request the book does not hold stated no enclave memory: no
+    agent before it stated one."""
+
+    def __init__(self, filepath):
+        self.filepath = str(filepath)
+
+    def __read(self, name):
+        value = read_cursor(self.filepath, name)
+        return dict(value) if isinstance(value, dict) else {}
+
+    def stated(self, request_id):
+        return int(self.__read(OFFER_ENCLAVE_MEMORY).get(str(int(request_id)), 0))
+
+    def record_stated(self, request_id, size):
+        stated = self.__read(OFFER_ENCLAVE_MEMORY)
+        stated[str(int(request_id))] = int(size)
+        write_cursor(self.filepath, OFFER_ENCLAVE_MEMORY, stated)
+
+    def refused(self, record_key):
+        """The size refused under the record `record_key`, None for none."""
+        if record_key is None:
+            return None
+        value = self.__read(ENCLAVE_MEMORY_REFUSED).get(str(record_key))
+        return int(value) if value is not None else None
+
+    def refuse(self, record_key, size):
+        """Records that `size` was refused under the record `record_key`; a
+        smaller refusal under the same record stands before a larger one."""
+        if record_key is None:
+            return
+        refused = self.__read(ENCLAVE_MEMORY_REFUSED)
+        before = refused.get(str(record_key))
+        refused[str(record_key)] = int(size) if before is None else min(int(before), int(size))
+        write_cursor(self.filepath, ENCLAVE_MEMORY_REFUSED, refused)
 
 
 def cancel_reaction(code, request_key):
@@ -87,11 +193,12 @@ def cancel_reaction(code, request_key):
     agent, from its reason `code` and `request_key`, the cusig the cancelled
     request carried (utils.record_key form, None for a request without a
     record): (hold, retest). hold: RecordMissing (9) sets the network's
-    RecordMissingHold. retest: a reason that faults the record
-    (cancel_disposition 'retest') on a request that carried one drops that
-    record (RecordStore.image_of `request_key`) and its integration test runs
-    again before the next request; a request without a record has none to
-    drop."""
+    RecordMissingHold; no other reason sets it. retest: a reason that
+    faults the record (cancel_disposition 'retest') on a request that
+    carried one drops that record (RecordStore.image_of `request_key`) and
+    its integration test runs again before the next request; a request
+    without a record has none to drop. Reason 10 is neither: its reaction
+    is enclave_memory_after_cancel's."""
     return int(code) == REASON_RECORD_MISSING, request_key is not None and cancel_disposition(code) == 'retest'
 
 

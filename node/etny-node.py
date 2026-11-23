@@ -544,6 +544,10 @@ class EtnyPoXNode:
         # hold's current state is logged (__dp_request_held).
         self.__record_missing_hold = capability.RecordMissingHold(self.cache_config.broker_cursor_filepath)
         self.__record_missing_hold_logged = False
+        # The enclave memory each DP request of this node stated and the
+        # sizes a reason-10 cancel refused, kept in broker_cursor.json
+        # (capability.EnclaveMemoryBook).
+        self.__enclave_memory = capability.EnclaveMemoryBook(self.cache_config.broker_cursor_filepath)
         # The gas this node's own transactions use, priced into its tip
         # (gas_profile.GasProfile), seeded for the network at its first start.
         self.__gas_profile = gas_profile.GasProfile.load(
@@ -3026,6 +3030,8 @@ class EtnyPoXNode:
         hold, retest = capability.cancel_reaction(reason, key)
         cancelled = (f"DP request {req} was cancelled by the validators: "
                      f"{capability.cancel_reason_name(reason)} ({reason})")
+        if capability.cancel_disposition(reason) == 'memory':
+            retest = self.__enclave_memory_refused(req, key, cancelled)
         if hold:
             self.__record_missing_hold.set(True)
         if retest:
@@ -3050,6 +3056,26 @@ class EtnyPoXNode:
             logger.warning(f"{cancelled}; a new request follows" if standing else cancelled)
         self.dpreq_cache.add(int(req))
         return standing
+
+    def __enclave_memory_refused(self, req, key, cancelled):
+        """The reaction to a cancel of DP request `req` for reason 10,
+        EnclaveMemoryAboveRecord (capability.enclave_memory_after_cancel): the
+        enclave memory the request stated (capability.EnclaveMemoryBook) is
+        refused under the record `key` it carried, so no later request states
+        it on that record; the next request states the size the record
+        states below it, and when the record states none, or none below it,
+        the record is dropped and its integration test, the probe, runs again
+        (the returned retest). The RecordMissing hold is not touched."""
+        stated = self.__enclave_memory.stated(req)
+        image = self.__record_store.image_of(key) if key is not None else None
+        entry = self.__record_store.get(image) if image is not None else None
+        record_size = capability.record_enclave_memory(entry.get('record') if entry else None)
+        size, rerun = capability.enclave_memory_after_cancel(stated, record_size)
+        self.__enclave_memory.refuse(key, stated)
+        if not rerun:
+            self.logger.warning(f"{cancelled}; it stated {stated} GiB of enclave memory, its record {record_size} "
+                                f"GiB: the next request states {size} GiB")
+        return rerun and key is not None
 
     def __dp_request_record_key(self, req):
         """The cusig of DP request `req`'s metadata4 (utils.metadata_key), the

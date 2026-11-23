@@ -232,7 +232,8 @@ def test_the_re_measure_is_due_a_margin_before_the_ttl():
 
 
 def test_the_reason_table_names_the_validators_codes():
-    assert [capability.cancel_reason_name(code) for code in range(1, 10)] == [
+    assert [capability.cancel_reason_name(code) for code in range(1, 11)] == [
         "RecordSignatureInvalid", "RecordNodeMismatch", "TimestampNotSeated", "RunTooLong",
-        "RecordExpired", "GflopsAboveMax", "DeliveredBelowAttested", "CuVersionBelowMinimum", "RecordMissing"]
-    assert capability.cancel_reason_name(10) == "Unknown(10)"
+        "RecordExpired", "GflopsAboveMax", "DeliveredBelowAttested", "CuVersionBelowMinimum", "RecordMissing",
+        "EnclaveMemoryAboveRecord"]
+    assert capability.cancel_reason_name(11) == "Unknown(11)"
