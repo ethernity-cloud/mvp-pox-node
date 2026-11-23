@@ -175,6 +175,10 @@ class NetworkConfig:
     # (<NETWORK>_MATCHING_PAGE_ENTRIES; 650 on bloxberg, 1,450 on LitVM,
     # 800 elsewhere: 4.7).
     matching_page_entries: int = 800
+    # How many blocks below the head the copy of the roll reads the logs and
+    # the requests, the replica lag of the network's RPC
+    # (<NETWORK>_MATCHING_LAG_BLOCKS; 1: bloxberg's measured lag, 4.7).
+    matching_lag_blocks: int = 1
     # The enclave memory in GiB the operator offers at most; 0: the size the
     # capability record states (<NETWORK>_ENCLAVE_MEMORY_GIB; 7.24, D146).
     enclave_memory_gib: int = 0

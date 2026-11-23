@@ -20,7 +20,6 @@ import pytest
 import matching
 import matching_node
 import matching_rules as rules
-from constants import RPC_REPLICA_LAG_BLOCKS
 
 SPEC = Path(__file__).parent / "spec" / "matching"
 RANKING = json.loads((SPEC / "ranking.json").read_text())
@@ -28,7 +27,9 @@ LOG = logging.getLogger("test")
 WALLET = "0x" + "33" * 20
 SETTINGS = matching_node.Settings(claim_ahead_blocks=2, claim_spread_nodes=8, claim_stand_limit=2,
                                   claim_hold_back=False, claim_marked_images=False, tip_keep_percent=10,
-                                  minimum_score_hold=True, beat_gas_allowance=690000, page_entries=3)
+                                  minimum_score_hold=True, beat_gas_allowance=690000, page_entries=3, lag_blocks=1)
+# The blocks the copy reads below the head.
+LAG = SETTINGS.lag_blocks
 
 
 def params(**overrides):
@@ -303,13 +304,13 @@ def test_the_copy_fed_from_the_logs_equals_a_rebuild_at_the_later_block(tmp_path
     chain.mine(40, 60)
     for n in NODES[:3]:
         chain.beat(n, 6000)
-    chain.mine(RPC_REPLICA_LAG_BLOCKS + 1, 5)
+    chain.mine(LAG + 1, 5)
     node.follow()
     fresh = node_on(chain, tmp_path)
     fresh.start()
     fresh._know_image(image)
     copies_equal(node.copy, fresh.copy)
-    assert node.copy.block == fresh.copy.block == chain.head - RPC_REPLICA_LAG_BLOCKS
+    assert node.copy.block == fresh.copy.block == chain.head - LAG
 
 
 def test_the_rebuild_reads_the_periods_an_open_round_can_find_and_no_older(tmp_path):
@@ -320,7 +321,7 @@ def test_the_rebuild_reads_the_periods_an_open_round_can_find_and_no_older(tmp_p
     chain.t += 3 * 86400
     chain.announce(NODES[0], 3)
     chain.beat(NODES[0], 1000)
-    chain.mine(RPC_REPLICA_LAG_BLOCKS + 1, 5)
+    chain.mine(LAG + 1, 5)
     node = node_on(chain, tmp_path)
     node.start()
     ordinals = [p.ordinal for p in node.copy.periods[matching.address_text(NODES[0])]]
@@ -340,7 +341,7 @@ def test_one_heartbeat_per_slot_from_the_nodes_offset(slot_seconds, tmp_path):
     offset = rules.beat_offset(ME, slot_seconds)
     chain = FakeChain(ME, slot_seconds=slot_seconds, head=900, t=41550 * slot_seconds + offset - 10)
     chain.announce(ME, 7)
-    chain.mine(RPC_REPLICA_LAG_BLOCKS + 1, 1)
+    chain.mine(LAG + 1, 1)
     node = node_on(chain, tmp_path)
     node.start()
     chain.t = 41550 * slot_seconds + offset - 1
@@ -361,7 +362,7 @@ def test_one_heartbeat_per_slot_from_the_nodes_offset(slot_seconds, tmp_path):
 def beat_node(tmp_path, **chain_state):
     chain = FakeChain(ME, slot_seconds=3600, head=900, t=41550 * 3600 + 1799)
     chain.announce(ME, 7)
-    chain.mine(RPC_REPLICA_LAG_BLOCKS + 1, 1)
+    chain.mine(LAG + 1, 1)
     for k, v in chain_state.items():
         setattr(chain, k, v)
     node = node_on(chain, tmp_path)
@@ -480,7 +481,7 @@ def example_one(tmp_path, me, settings=SETTINGS, read_block=1000, rounds=None):
     `me` one of its five, read at `read_block`."""
     case = next(c for c in RANKING["cases"] if c["name"] == "example-1")
     p = params(**{k: (int(v) if isinstance(v, str) else v) for k, v in case["parameterSet"].items()})
-    chain = FakeChain(me, slot_seconds=43200, head=read_block + RPC_REPLICA_LAG_BLOCKS, t=case["readTime"],
+    chain = FakeChain(me, slot_seconds=43200, head=read_block + LAG, t=case["readTime"],
                       parameter_sets=[p])
     slot = case["roll"]["slot"]
     for b in case["roll"]["bands"]:
@@ -630,7 +631,7 @@ def unmandated_chain(tmp_path, count, me_index, settings=SETTINGS):
     nodes = ["0x%040x" % (i + 1) for i in range(count)]
     me = nodes[me_index]
     p = params(leadBlocks=1)
-    chain = FakeChain(me, slot_seconds=3600, head=1000 + RPC_REPLICA_LAG_BLOCKS, t=3600 * 10 + 100,
+    chain = FakeChain(me, slot_seconds=3600, head=1000 + LAG, t=3600 * 10 + 100,
                       parameter_sets=[p])
     slot = 9
     chain.rolls[slot] = {24: [matching.RollEntry(n, 24010, 3600 * 9) for n in nodes]}
@@ -701,7 +702,7 @@ def test_two_standing_claims_ahead_hold_an_unmandated_node(tmp_path):
 def correction_node(tmp_path):
     chain = FakeChain(ME, slot_seconds=3600, head=2000, t=3600 * 500)
     chain.announce(ME, 7)
-    chain.mine(RPC_REPLICA_LAG_BLOCKS + 1, 5)
+    chain.mine(LAG + 1, 5)
     node = node_on(chain, tmp_path)
     node.start()
     return chain, node
@@ -715,7 +716,7 @@ def test_a_late_charge_whose_step_was_full_is_asked_back_once_an_hour(tmp_path):
     chain.gas[1903] = 9_500_000
     chain.log('Charged', doRequestId=9, round=0, node=ME, kind=1, mandateStep=2, passed=2, units=1096, taken=1096,
               scoreAfter=1000)
-    chain.mine(RPC_REPLICA_LAG_BLOCKS + 1, 5)
+    chain.mine(LAG + 1, 5)
     node.follow()
     assert node.correction_tick() == 'sent'
     entry = rules.correction_entry(1, request_id=9, rnd=0, step=2)
@@ -725,7 +726,7 @@ def test_a_late_charge_whose_step_was_full_is_asked_back_once_an_hour(tmp_path):
     chain.times[chain.head] = chain.t
     assert node.correction_tick() == 'sent'
     chain.log('Corrected', node=ME, entry=entry, unitsBack=548, scoreAfter=1548)
-    chain.mine(RPC_REPLICA_LAG_BLOCKS + 1, 5)
+    chain.mine(LAG + 1, 5)
     node.follow()
     chain.t += 3600
     chain.times[chain.head] = chain.t
@@ -741,7 +742,7 @@ def test_a_never_started_order_whose_last_two_minutes_were_full_is_asked_back(tm
         if end - 120 <= chain.block(n)['timestamp'] < end:
             chain.gas[n] = 9_900_000
     chain.log('OrderFailed', orderId=77, node=ME, kind=rules.FAIL_NEVER_STARTED, units=1918, scoreAfter=0)
-    chain.mine(RPC_REPLICA_LAG_BLOCKS + 1, 5)
+    chain.mine(LAG + 1, 5)
     node.follow()
     assert node.correction_tick() == 'sent'
     assert chain.sent[-1][1] == ([rules.correction_entry(2, order_id=77)],)
@@ -751,7 +752,7 @@ def test_a_failure_whose_window_was_not_full_is_not_asked(tmp_path):
     chain, node = correction_node(tmp_path)
     chain.times_of_orders[77] = (chain.t - 2000, chain.t - 2010, 0)
     chain.log('OrderFailed', orderId=77, node=ME, kind=rules.FAIL_NEVER_STARTED, units=1918, scoreAfter=0)
-    chain.mine(RPC_REPLICA_LAG_BLOCKS + 1, 5)
+    chain.mine(LAG + 1, 5)
     node.follow()
     assert node.correction_tick() == 'idle'
 
@@ -761,7 +762,7 @@ def test_a_ballot_that_writes_a_lower_count_adds_a_recount(tmp_path):
     chain.rounds[(9, 0)] = {'roundBlock': 1900}
     chain.log('Charged', doRequestId=9, round=0, node=ME, kind=1, mandateStep=3, passed=3, units=1644, taken=1644,
               scoreAfter=0)
-    chain.mine(RPC_REPLICA_LAG_BLOCKS + 1, 5)
+    chain.mine(LAG + 1, 5)
     node.follow()
     # The claim was mined in step 5 (block 1906); the ballot writes the
     # approved node's step 1, its claim in block 1902 of step 1: the count
@@ -770,7 +771,7 @@ def test_a_ballot_that_writes_a_lower_count_adds_a_recount(tmp_path):
     chain.fills[9] = int(NODES[0], 16) | (1902 << 160) | (0 << 208) | (1 << 216)
     chain.claim_words[(9, ME)] = ((1906 << 48) | (0 << 128), False)
     chain.log('ListJudged', doRequestId=9, round=0, listHash=b"\x00" * 32)
-    chain.mine(RPC_REPLICA_LAG_BLOCKS + 1, 5)
+    chain.mine(LAG + 1, 5)
     node.follow()
     chain.t += 3600
     chain.times[chain.head] = chain.t

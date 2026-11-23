@@ -13,7 +13,6 @@ from types import SimpleNamespace
 
 import matching
 import matching_rules as rules
-from constants import RPC_REPLICA_LAG_BLOCKS
 
 ZERO_IMAGE = b'\x00' * 31
 # The logs the copy of the roll follows, and those of the node's own
@@ -36,10 +35,11 @@ Claim = namedtuple('Claim', 'dp_request_id block time round state steps tip')
 # it is AVAILABLE and whether it has expired, its tip in the PoX, and
 # whether an order on it is placed and not started.
 Offer = namedtuple('Offer', 'dp_request_id available expired tip placed_unstarted')
-# The matching settings of one network (config.NetworkConfig).
+# The matching settings of one network (config.NetworkConfig); `lag_blocks`
+# is how far below the head the copy reads the logs and the requests.
 Settings = namedtuple('Settings', 'claim_ahead_blocks claim_spread_nodes claim_stand_limit claim_hold_back '
                                   'claim_marked_images tip_keep_percent minimum_score_hold beat_gas_allowance '
-                                  'page_entries')
+                                  'page_entries lag_blocks')
 
 
 def decode_claim(word):
@@ -338,11 +338,11 @@ class MatchingNode:
         self.tz_mask = mask
 
     def rebuild(self):
-        """The copy at block head - RPC_REPLICA_LAG_BLOCKS: the rolls of the
-        slots from the one before the oldest open request's to the current
-        one, each entry's node with its periods back to the newest one an
-        open round can find, and the skips of the images seen requested."""
-        head = self.chain.head_number() - RPC_REPLICA_LAG_BLOCKS
+        """The copy at block head - lag_blocks: the rolls of the slots from
+        the one before the oldest open request's to the current one, each
+        entry's node with its periods back to the newest one an open round
+        can find, and the skips of the images seen requested."""
+        head = self.chain.head_number() - int(self.settings.lag_blocks)
         t = self.chain.block(head)['timestamp']
         self.copy = matching.RollCopy()
         self.copy.params = self.chain.parameter_sets()
@@ -401,7 +401,7 @@ class MatchingNode:
 
     def follow(self):
         """Applies the Beat, Announced, Left and Skipped logs from the
-        copy's block to head - RPC_REPLICA_LAG_BLOCKS, then the node's own
+        copy's block to head - lag_blocks, then the node's own
         Charged, OrderFailed, Corrected and Banned logs and the ListJudged
         logs of the requests it holds a late charge on; a node a Beat names
         that the copy does not hold is read at the last block applied. The
@@ -409,7 +409,7 @@ class MatchingNode:
         read again when one was added."""
         if not self.synced:
             return
-        head = self.chain.head_number() - RPC_REPLICA_LAG_BLOCKS
+        head = self.chain.head_number() - int(self.settings.lag_blocks)
         if head <= self.copy.block:
             return
         start = self.copy.block + 1

@@ -6372,7 +6372,7 @@ class EtnyPoXNode:
             self.__network_config.claim_stand_limit, self.__network_config.claim_hold_back,
             self.__network_config.claim_marked_images, self.__network_config.tip_keep_percent,
             self.__network_config.minimum_score_hold, self.__network_config.beat_gas_allowance,
-            self.__network_config.matching_page_entries)
+            self.__network_config.matching_page_entries, self.__network_config.matching_lag_blocks)
         self.__matching = matching_node.MatchingNode(
             chain, self.__address, settings, logger, CacheConfig(self.__network).base_path / 'image_failures.json',
             terms_of=self.__matching_terms, order_end_of=self.__expiry_admitted_at)
