@@ -22,7 +22,7 @@ from web3 import middleware
 from web3.gas_strategies.time_based import fast_gas_price_strategy
 from web3.gas_strategies.rpc import rpc_gas_price_strategy
 
-from utils import order_bucket_name, scone_queues, enclave_compose_env, get_or_generate_uuid, run_subprocess, run_subprocess_status, environment_failure, record_enclave_image_tree, compose_images, compose_services, await_enclave_runtime, tree_image_tag, las_image, passed_las_tag, candidate_las_names, compose_service_block, las_start_lines, las_start_to_apply, compose_with_las_start, revert_reason, wallet_covers, insufficient_funds, transaction_known, placement_block_of, block_ranges, WALLET_GAS_TRANSACTIONS, retry, holds_within, pinned_within, FetchDeferrals, staging_plan, remaining_order_seconds, record_order_placement, order_placed_at, pending_approvals, record_pending_approval, forget_pending_approval, ORDER_STARTED_KEY, order_started_row, ORDER_GRACE_SECONDS, session_wallet_attestation, Storage, Cache, ListCache, ListCacheWithTimestamp, MergedOrdersCache, subprocess, get_node_geo, HardwareInfoProvider, parse_transaction_bytes_ut, looks_like_cid, canonical_cid, PEER_MULTIADDR, next_registered_image, enclave_failure, enclave_may_have_failed, docker_container_states, docker_container_log_tail, stale_integration_tests, integration_tests_due, runnable_trustedzones, image_trees, stale_image_trees, directory_size, remove_tree, removal_leftovers, integration_env, order_env, dp_terms, GFLOPS_PER_CU, tip_per_cu_hour_wei, dp_request_arguments, metadata_key, record_key, resume_admits, has_standing_dp_request, read_cursor, write_cursor, dp_request_disposition, bounded_cancel, do_request_verdict, refusal_cached, do_request_compare, resource_refusal_holds, ResourceRefusals, gas_with_headroom, placement_refusal_disposition, settlement_line, settlement_reward_wei, order_window, order_relay_ledger_path, ledger_rebuild, result_fields, result_send_decision, SESSION_WALLET_KEY, SESSION_OUTPUT_KEY
+from utils import order_bucket_name, scone_queues, enclave_compose_env, get_or_generate_uuid, run_subprocess, run_subprocess_status, environment_failure, record_enclave_image_tree, compose_images, compose_services, await_enclave_runtime, tree_image_tag, las_image, passed_las_tag, candidate_las_names, compose_service_block, las_start_lines, las_start_to_apply, compose_with_las_start, revert_reason, wallet_covers, insufficient_funds, transaction_known, placement_block_of, block_ranges, WALLET_GAS_TRANSACTIONS, retry, holds_within, pinned_within, FetchDeferrals, staging_plan, remaining_order_seconds, record_order_placement, order_placed_at, pending_approvals, record_pending_approval, forget_pending_approval, ORDER_STARTED_KEY, order_started_row, ORDER_GRACE_SECONDS, session_wallet_attestation, Storage, Cache, ListCache, ListCacheWithTimestamp, MergedOrdersCache, subprocess, get_node_geo, HardwareInfoProvider, parse_transaction_bytes_ut, looks_like_cid, canonical_cid, PEER_MULTIADDR, next_registered_image, enclave_failure, enclave_may_have_failed, docker_container_states, docker_container_log_tail, stale_integration_tests, integration_tests_due, runnable_trustedzones, image_trees, stale_image_trees, directory_size, remove_tree, removal_leftovers, integration_env, order_env, dp_terms, GFLOPS_PER_CU, tip_per_cu_hour_wei, dp_request_arguments, metadata_key, record_key, resume_admits, has_standing_dp_request, read_cursor, write_cursor, dp_request_disposition, bounded_cancel, do_request_verdict, refusal_cached, do_request_compare, resource_refusal_holds, ResourceRefusals, gas_with_headroom, placement_refusal_disposition, settlement_line, settlement_reward_wei, order_window, order_relay_ledger_path, ledger_rebuild, result_fields, result_end_fields, result_send_decision, SESSION_WALLET_KEY, SESSION_OUTPUT_KEY
 import scone_image
 import pox20
 import capability
@@ -31,6 +31,8 @@ import gas_ledger
 import broker
 import replay
 import do_request_age
+import matching_node
+import matching_rules
 from constants import INTEGRATION_BUCKET, INTEGRATION_TEST_SECONDS, INTEGRATION_TEST_RETRY_MIN_SECONDS, INTEGRATION_TEST_RETRY_MAX_SECONDS, INTEGRATION_TEST_REGISTRY_CHECK_SECONDS, RPC_REPLICA_LAG_BLOCKS, DP_TERMS_POLL_SECONDS, CANCEL_ATTEMPTS, RELAY_BATCH_MIN, ESR_LEDGER_CAP, RESULT_SEND_GRACE_SECONDS, FENCE_STAGE_SECONDS, FENCE_STAGE_TICKS, HANDOVER_REQUEST_TIMEOUT_SECONDS, CU_VERSION_MIN
 from models import *
 from error_messages import errorMessages
@@ -130,6 +132,11 @@ ESR_STAGING_MIN_FREE_GB = 1
 ORDER_APPROVAL_WINDOW_SECONDS = 60
 ORDER_APPROVAL_WINDOW_BLOCKS = 8
 ORDER_APPROVAL_MAX_SECONDS = 900
+# On a matching network: how often an order's enclave wait runs the
+# heartbeat (MATCHING-DESIGN.md 7.2), and how often a running integration
+# test looks for an approved order on the node's offer, which ends it (7.7).
+MATCHING_ORDER_TICK_SECONDS = 60
+MATCHING_TEST_POLL_SECONDS = 15
 # When this process started: an image tree extracted before it counts as last
 # used then (__remove_stale_image_trees).
 PROCESS_START = time.time()
@@ -247,6 +254,9 @@ class NetworkLoggerAdapter(logging.LoggerAdapter):
 
 class EtnyPoXNode:
     logger = None
+    # The network's PoX 2.0 matching (matching_node.MatchingNode), None on a
+    # network without it (__bind_matching).
+    __matching = None
 
     def close(self):
         """Close the HTTP sessions this handle opened.
@@ -548,6 +558,8 @@ class EtnyPoXNode:
         # sizes a reason-10 cancel refused, kept in broker_cursor.json
         # (capability.EnclaveMemoryBook).
         self.__enclave_memory = capability.EnclaveMemoryBook(self.cache_config.broker_cursor_filepath)
+        # The enclave memory the DP request being sent states (__dp_request_params).
+        self.__offer_enclave_memory_sent = 0
         # The gas this node's own transactions use, priced into its tip
         # (gas_profile.GasProfile), seeded for the network at its first start.
         self.__gas_profile = gas_profile.GasProfile.load(
@@ -636,6 +648,7 @@ class EtnyPoXNode:
         # nothing.
         if not self.__replication_only:
             self.__broker_start()
+            self.__start_matching()
 
 
         # Tracks when the pin cleanup last ran, so __maybe_clear_ipfs_cache can
@@ -2356,7 +2369,18 @@ class EtnyPoXNode:
         if gflops and self.__broker is not None:
             gflops = broker.bounded_gflops(gflops, self.__accepted_handover())
         tip = self.__current_tip(gflops) if self.__pox_is_20 else 0
-        return dp_request_arguments(not self.__pox_is_20, resources, self.__duration, self.__price, gflops, tip,
+        # On a network with matching the offer states the node's enclave
+        # memory above its GFLOPS (7.24, D146, D167): the largest listed size
+        # the record states, the operator's setting and a reason-10 refusal
+        # admit (capability.offer_enclave_memory), 0 for a record that states
+        # none.
+        argument = gflops
+        if self.__matching is not None:
+            self.__offer_enclave_memory_sent = capability.offer_enclave_memory(
+                self.__network_config.enclave_memory_gib, capability.record_enclave_memory(record),
+                self.__enclave_memory.refused(record_key(record)))
+            argument = matching_rules.gflops_argument(gflops, self.__offer_enclave_memory_sent)
+        return dp_request_arguments(not self.__pox_is_20, resources, self.__duration, self.__price, argument, tip,
                                     self.__uuid, capability.metadata3(self.__node_geo, record),
                                     self.__dp_metadata4(advertised))
 
@@ -2387,6 +2411,8 @@ class EtnyPoXNode:
         processed_logs = self.__etny.events._addDPRequestEV().process_receipt(receipt)
         self.__record_gas('dpRequest', receipt)
         self.__adopt_dp_request(processed_logs[0].args._rowNumber, receipt.blockNumber)
+        if self.__matching is not None:
+            self.__enclave_memory.record_stated(self.__dprequest, self.__offer_enclave_memory_sent)
         self.logger.info(f"DP Request {self.__dprequest} initialized. Unlocking the value of decentralization.")
 
     def __record_gas(self, kind, receipt):
@@ -2425,6 +2451,17 @@ class EtnyPoXNode:
         logger = self.logger
         try:
             tip = self.__current_tip(terms.gflops)
+            # On a network with matching the refresh keeps the open period's
+            # tip while a claim of the node can be approved or it holds an
+            # unanswered mandate, and while the tip computed is within
+            # tip_keep_percent of it (7.3); a changed tip is announced at the
+            # next tick.
+            if self.__matching is not None:
+                period = self.__matching.own_period()
+                period_tip = (period.tip if period is not None and period.to == 0
+                              and period.dp_request_id == int(req_id) else None)
+                tip = matching_rules.refresh_tip(tip, period_tip, self.__matching.standing_claim_or_mandate(),
+                                                 self.__network_config.tip_keep_percent)
             time.sleep(self.__network_config.rpc_delay / 1000)
             fn = self.__etny.functions.refreshDPRequest(int(req_id), int(tip))
             _hash = self.send_transaction(fn.build_transaction(self.get_transaction_build()))
@@ -2594,9 +2631,23 @@ class EtnyPoXNode:
         path = self.cache_config.farm_refusal_filepath
         if broker.farm_join_refused(path, invite, self.__broker.address):
             return
+        join = self.__broker.functions.joinFarm(self.__w3.to_checksum_address(farm), int(expires_at),
+                                                bytes.fromhex(signature[2:]))
+        # On a network with matching a node whose rewards wallet is named
+        # joins only once that wallet's approveFarm names the farm (D89,
+        # 7.13); the PoX answers no view of the approval, so the join is
+        # simulated, and a refusal waits for the approval and is not recorded.
+        payout = str(self.__etny.caller().payoutAddressOf(self.__address)) if self.__matching is not None else None
+        if payout is not None and not matching_rules.farm_join_ready(payout, self.__address, None, farm):
+            try:
+                join.call({'from': self.__address})
+            except exceptions.ContractLogicError as refusal:
+                self.logger.warning(f"The join of farm {farm} waits for the rewards wallet {payout} to send "
+                                    f"approveFarm({self.__address}, {farm}) on the PoX "
+                                    f"({revert_reason(refusal) or refusal})")
+                return
         try:
-            self.__broker_tx("joinFarm", self.__broker.functions.joinFarm(
-                self.__w3.to_checksum_address(farm), int(expires_at), bytes.fromhex(signature[2:])))
+            self.__broker_tx("joinFarm", join)
         except Exception as e:
             broker.record_farm_join_refused(path, invite, self.__broker.address, str(e))
             self.logger.error(f"The farm invitation of {self.__network} was refused by the broker ({e}); "
@@ -2606,8 +2657,10 @@ class EtnyPoXNode:
 
     def __set_farm_payout(self):
         """setPayoutAddress(farmRewardOf(farmOf(self))) on the PoX when the
-        node's farm has a reward address and the payout address differs."""
-        if self.__broker is None:
+        node's farm has a reward address and the payout address differs.
+        Nothing on a network with matching, whose PoX sets the farm's reward
+        address at the join (D89, 7.13)."""
+        if self.__broker is None or self.__matching is not None:
             return
         farm = str(self.__broker.caller().farmOf(self.__address))
         if farm.lower() == broker.ZERO_ADDRESS:
@@ -2893,8 +2946,12 @@ class EtnyPoXNode:
         the broker placed is approved at once and run under the task slot
         ('approve'); a PROCESSING one is run ('run'); a CANCELED one on an
         AVAILABLE request is the offer waiting for the next placement, its
-        orders-cache entry dropped ('offer'). True when an order was run."""
-        if not self.__pox_is_20 or self.__broker is None or not has_standing_dp_request(self.__dprequest):
+        orders-cache entry dropped ('offer'). True when an order was run. On
+        a network with matching the approval of the node's claim is such a
+        PROCESSING order: the node holds no task slot waiting for it and runs
+        it when it appears (7.7)."""
+        if (not self.__pox_is_20 or (self.__broker is None and self.__matching is None)
+                or not has_standing_dp_request(self.__dprequest)):
             return False
         logger = self.logger
         try:
@@ -3138,6 +3195,14 @@ class EtnyPoXNode:
         logger = self.logger
         if self.__dp_request_held():
             return
+        # The rewards wallet of <NETWORK>_PAYOUT_ADDRESS is named before the
+        # next offer while none is named (7.13, D34); not before a request
+        # sent behind an order's result, whose nonce is taken.
+        if self.__matching is not None and nonce is None:
+            try:
+                self.__matching.payout_tick(self.__network_config.payout_address)
+            except Exception as e:
+                logger.warning(f"The rewards wallet was not named ({e}); tried again before the next request")
         logger.info("Preparing transaction for new DP request")
         fn, _arguments = self.__dp_request_function()
         unicorn_txn = fn.build_transaction(self.get_transaction_build(existing_nonce=nonce))
@@ -3260,6 +3325,35 @@ class EtnyPoXNode:
             logger.warning(f"DP request {req} was not cancelled in {CANCEL_ATTEMPTS} attempts; abandoned")
             self.dpreq_cache.add(req)
         return outcome
+
+    def __fetch_order_objects(self, order_id, image_hashes, artefact_hashes):
+        """Downloads an order's image tree and compose, then its challenge,
+        payload and input. On a network with matching the node keeps trying
+        until fetchTrySeconds have passed since the order's approval in
+        chain time (7.14, D85: a closure sooner is charged whatever the
+        validators hold): after each attempt that fails it reads the
+        validators' IPFS nodes again and connects to each before the next.
+        False once the objects are not all held at the end of that time."""
+        def fetched():
+            return (self.storage.download_many(image_hashes, attempts=5, delay=3)
+                    and self.storage.download_many(artefact_hashes, attempts=5, delay=3, artefacts=True))
+        if fetched():
+            return True
+        params = self.__matching.params() if self.__matching is not None else None
+        if params is None:
+            return False
+        approved_at = int(self.__etny.caller().orderApprovedAt(int(order_id))) or int(time.time())
+        while not matching_rules.fetch_closure_due(self.__w3.eth.get_block('latest').timestamp, approved_at,
+                                                   params.fetchTrySeconds):
+            if stop_event.wait(5):
+                return False
+            self.__last_ipfs_peer_sync_at = 0
+            self.__maybe_sync_ipfs_peers()
+            if fetched():
+                return True
+        self.logger.info(f"Order {order_id}: its objects were not fetched {params.fetchTrySeconds} s after its "
+                         f"approval")
+        return False
 
     def ipfs_timeout_cancel(self, order_id):
         result = 'Error: cannot download files from IPFS'
@@ -3431,8 +3525,7 @@ class EtnyPoXNode:
 
             if self.process_order_data['process_order_retry_counter'] <= 10:
                 logger.info(f"Fetching task data for DO Request {order.do_req} from IPFS.")
-                if not (self.storage.download_many(image_hashes, attempts=5, delay=3)
-                        and self.storage.download_many(artefact_hashes, attempts=5, delay=3, artefacts=True)):
+                if not self.__fetch_order_objects(order_id, image_hashes, artefact_hashes):
                     logger.info("Cannot download data from IPFS, cancelling processing")
                     self.ipfs_timeout_cancel(order_id)
                     self.dpreq_cache.add(order.dp_req)
@@ -3658,8 +3751,10 @@ class EtnyPoXNode:
                 # verbatim on a recorded 2.0 order.
                 task_code = 0
                 attested = None
+                result_string = None
                 try:
-                    attested = result_fields(parse_transaction_bytes_ut(self.__contract_abi, transaction_data)["result"])
+                    result_string = parse_transaction_bytes_ut(self.__contract_abi, transaction_data)["result"]
+                    attested = result_fields(result_string)
                     task_code = attested.task_code
                 except Exception as ex:
                     logger.info(f"Unable to determine the result_code (return code) from transaction data ({ex})")
@@ -3668,6 +3763,7 @@ class EtnyPoXNode:
                 if sent:
                     logger.info("ZK proof added. Task integrity submitted for validation.")
                     self.calculate_reward()
+                    self.__matching_note_end(order_id, order.do_req, task_code, result_string)
 
                 if sent and int(task_code) == ResultStatus.EXECVE:
                     logger.info(f"Process EXECVE is still running")
@@ -4590,11 +4686,25 @@ class EtnyPoXNode:
         # DP_TERMS_POLL_SECONDS, the first one interval in: the idle tick read
         # the terms before this wait.
         last_terms_poll = time.time()
+        last_matching_poll = time.time()
         while time.time() < deadline:
             exists, msg = self.swift_stream_service.is_object_in_bucket(bucket_name, object_name)
             if exists:
                 logger.info('Enclave execution finished!')
                 return True
+            # On a network with matching the heartbeat runs through an order
+            # (MATCHING-DESIGN.md 7.2), and an approval of the node's claim
+            # ends an integration test, which would hold the task slot
+            # through the 15 minutes the order has to start (7.7).
+            if self.__matching is not None:
+                poll = MATCHING_ORDER_TICK_SECONDS if order_id is not None else MATCHING_TEST_POLL_SECONDS
+                if time.time() - last_matching_poll >= poll:
+                    last_matching_poll = time.time()
+                    if order_id is not None:
+                        self.__matching_tick(in_order=True)
+                    elif (bucket_name == getattr(self, 'integration_bucket_name', INTEGRATION_BUCKET)
+                          and self.__matching_order_appeared()):
+                        raise EnclaveFailed('an order on this node\'s offer was approved; the integration test ends')
             # An enclave container that will not finish the task ends the wait
             # (EnclaveFailed) instead of letting it run to the deadline. The
             # trustedzone exits once it has written the result, so the object
@@ -5586,6 +5696,32 @@ class EtnyPoXNode:
                     logger.debug(f"resource:requested/available| cpu:{doreq[i].cpu}/{req.cpu} memory:{doreq[i].memory}/{req.memory} storage:{doreq[i].storage}/{req.storage} bandwidth:{doreq[i].bandwidth}/{req.bandwidth}");
                     continue
 
+                # An unpinned request carries no node: the contract stores that
+                # as the zero address, and a client may leave the field empty.
+                # Both mean that any node may take it.
+                delegated_to = (metadata[i][4] or '').strip()
+                try:
+                    unpinned = delegated_to == '' or int(delegated_to, 16) == 0
+                except ValueError:
+                    unpinned = False
+
+                # On a network with matching an unpinned request served by
+                # claims is claimed and never placed (MATCHING-DESIGN.md 7.6):
+                # its price is tested on the round's stamp, not on the quote of
+                # the moment. A claim mined, or nothing left to do, caches the
+                # request; a request not served by claims is placed below.
+                if unpinned and self.__matching is not None:
+                    refusal = self.__trustedzone_refusal(metadata[i][1])
+                    if refusal:
+                        logger.info(f"Skipping DO Request {i}: {refusal}")
+                        self.doreq_cache.add(i)
+                        continue
+                    served = self.__matching_serve(i)
+                    if served in ('claimed', 'done'):
+                        self.doreq_cache.add(i)
+                    if served != 'placement':
+                        continue
+
                 # The price (utils.do_request_verdict): without a quote the
                 # legacy uint8 compare; with the pass's quote the request's
                 # recorded terms against the quote's price plus this node's
@@ -5611,16 +5747,6 @@ class EtnyPoXNode:
                         self.doreq_cache.add(i)
                     logger.debug(f"DO request {i}: {refusal.text}; skipping to next request")
                     continue
-
-
-                # An unpinned request carries no node: the contract stores that
-                # as the zero address, and a client may leave the field empty.
-                # Both mean that any node may take it.
-                delegated_to = (metadata[i][4] or '').strip()
-                try:
-                    unpinned = delegated_to == '' or int(delegated_to, 16) == 0
-                except ValueError:
-                    unpinned = False
 
                 if not unpinned and delegated_to.lower() != self.__address.lower():
                     logger.debug(f'Skipping DO Request: {i}. Request is delegated to a different Node.')
@@ -5661,6 +5787,11 @@ class EtnyPoXNode:
                 if refusal:
                     logger.info(f"Skipping DO Request {i}: {refusal}")
                     self.doreq_cache.add(i)
+                    continue
+
+                # A banned node places no order, a request pinned to it
+                # included: the placement would revert (7.12, D33).
+                if self.__matching is not None and self.__matching.is_banned():
                     continue
 
                 acquire_task_slot(self.__network)
@@ -6159,6 +6290,7 @@ class EtnyPoXNode:
         address = self.__etny.address
         self.__pox_is_20 = False
         self.__reader = self.__pricing = self.__broker = self.__token = None
+        self.__matching = None
         # (NETWORK_FEE_PERCENT, VALIDATOR_FEE_PERCENT) of a 2.0 contract, the
         # legacy DO requests' fee-inclusive compare; None on a replication-only
         # handle.
@@ -6198,8 +6330,221 @@ class EtnyPoXNode:
                         + ' '.join(f"{name}={value}" for name, value in named.items()) + fees)
             if self.__reader is None and not self.__replication_only:
                 logger.info(f"Protocol contract {address}: no reader; the DO requests are compared as on a legacy contract")
+            if not self.__replication_only and self.__pricing is not None:
+                self.__bind_matching()
         else:
             logger.info(f"Protocol contract {address}: pox=legacy")
+
+    def __bind_matching(self):
+        """Binds PoX 2.0 matching (MATCHING-DESIGN.md section 7) when the
+        pricing names a matching contract and the network's
+        match_reader_address names its reader: a matching_node.MatchingNode
+        over PoxMatching, the reader and the PoX, sending through
+        __matching_transact. A pricing that answers no matching() (one from
+        before matching), and the zero address, leave the network without
+        matching, served as today; a pointer without a configured reader is
+        logged and leaves it so too. The reads are tried ten times, three
+        seconds apart; past that the handle raises."""
+        logger = self.logger
+        pointer = self.__w3.eth.contract(address=self.__pricing.address, abi=matching_node.POINTER_ABI)
+        answered, address = retry(self.__matching_pointer, pointer, attempts=10, delay=3)
+        if not answered:
+            raise Exception(f"Pricing {self.__pricing.address}: the matching() read failed on the RPC")
+        if address is None or int(address, 16) == 0:
+            logger.info(f"Pricing {self.__pricing.address}: no matching contract; requests are placed as today")
+            return
+        reader_address = (self.__network_config.match_reader_address or '').strip()
+        if not reader_address:
+            logger.warning(f"Pricing {self.__pricing.address} names the matching contract {address}, and "
+                           f"{self.__network.upper()}_MATCH_READER_ADDRESS names no reader: requests are placed as "
+                           f"today and no heartbeat is sent to PoxMatching")
+            return
+        with open(config.matching_abi_filepath) as f:
+            matching_abi = f.read()
+        with open(config.match_reader_abi_filepath) as f:
+            reader_abi = f.read()
+        chain = matching_node.ChainAdapter(
+            self.__w3, self.__w3.eth.contract(address=self.__w3.to_checksum_address(address), abi=matching_abi),
+            self.__w3.eth.contract(address=self.__w3.to_checksum_address(reader_address), abi=reader_abi),
+            self.__etny, self.__address, self.__matching_transact, self.__network_config.logs_chunk_blocks)
+        settings = matching_node.Settings(
+            self.__network_config.claim_ahead_blocks, self.__network_config.claim_spread_nodes,
+            self.__network_config.claim_stand_limit, self.__network_config.claim_hold_back,
+            self.__network_config.claim_marked_images, self.__network_config.tip_keep_percent,
+            self.__network_config.minimum_score_hold, self.__network_config.beat_gas_allowance,
+            self.__network_config.matching_page_entries)
+        self.__matching = matching_node.MatchingNode(
+            chain, self.__address, settings, logger, CacheConfig(self.__network).base_path / 'image_failures.json',
+            terms_of=self.__matching_terms, order_end_of=self.__expiry_admitted_at)
+        # When the idle tick last ran the corrections, the skips and the proofs.
+        self.__matching_duties_at = 0.0
+        logger.info(f"Protocol contract {self.__etny.address}: matching={address} match_reader={reader_address}")
+
+    @staticmethod
+    def __matching_pointer(pointer):
+        """The pricing's matching() address, None for a pricing that has no
+        such function."""
+        try:
+            return pointer.functions.matching().call()
+        except pox20.FUNCTION_ABSENT:
+            return None
+
+    def __start_matching(self):
+        """Starts matching on a network that has it: the slot length, the
+        parameter sets, the template bits of the runnable trustedzones and the
+        copy of the roll (MatchingNode.start), tried ten times three seconds
+        apart; past that the handle raises."""
+        if self.__matching is None:
+            return
+        answered, _ = retry(self.__matching.start, sorted(self.__runnable_trustedzones()), attempts=10, delay=3)
+        if not answered:
+            raise Exception("PoX 2.0 matching: the copy of the roll was not built on the RPC")
+
+    def __matching_transact(self, fn, label, gas, full_streak):
+        """Sends the matching transaction `fn` from this node's wallet
+        (get_transaction_build) with the gas limit `gas` when given, at the
+        full-block price of 7.18 when `full_streak` blocks were full
+        (__full_block_fees), and awaits its receipt."""
+        opts = self.get_transaction_build()
+        if gas is not None:
+            opts['gas'] = int(gas)
+        if full_streak:
+            self.__full_block_fees(opts, full_streak)
+        txn = fn.build_transaction(opts)
+        _hash = self.send_transaction(txn)
+        self.logger.info(f"TXID {_hash} pending ({label})")
+        return self.__w3.eth.wait_for_transaction_receipt(_hash, timeout=RECEIPT_TIMEOUT_SECONDS)
+
+    def __full_block_fees(self, opts, streak):
+        """Raises the price of a transaction with a deadline while blocks are
+        full (matching_rules.full_block_price): doubled per full block up to
+        the network's max_fee_per_gas; a network with no fee ceiling is sent
+        at its price."""
+        ceiling = (self.__w3.to_wei(self.__network_config.max_fee_per_gas, self.__network_config.gas_price_measure)
+                   if self.__network_config.max_fee_per_gas else 0)
+        if 'gasPrice' in opts:
+            opts['gasPrice'] = matching_rules.full_block_price(opts['gasPrice'], streak, ceiling)
+            return
+        raised = matching_rules.full_block_price(opts['maxFeePerGas'], streak, ceiling)
+        opts['maxPriorityFeePerGas'] = min(raised, opts['maxPriorityFeePerGas'] * raised // opts['maxFeePerGas'])
+        opts['maxFeePerGas'] = raised
+
+    def __matching_terms(self, request_id):
+        """The terms of DO request `request_id` the ranking reads
+        (MatchingNode.request_of): its resources, its duration in seconds,
+        its maxGflops, its metadata1 and whether it was added with terms."""
+        time.sleep(self.__network_config.rpc_delay / 1000)
+        do_req = DORequest(self.__etny.caller()._getDORequest(int(request_id)))
+        v2 = DORequestV2(self.__reader.caller()._getDORequestV2(int(request_id))) if self.__reader is not None else None
+        metadata = self.__etny.caller()._getDORequestMetadata(int(request_id))
+        return {'cpu': do_req.cpu, 'memory': do_req.memory, 'storage': do_req.storage, 'bandwidth': do_req.bandwidth,
+                'duration': int(do_req.duration) * 3600, 'max_gflops': v2.max_gflops if v2 is not None else 0,
+                'metadata1': metadata[1], 'with_terms': v2 is not None and (v2.max_price or v2.reserved_price) != 0}
+
+    def __expiry_admitted_at(self, order_id, placed_at, terminated_at):
+        """The time from which expireOrder was admitted for `order_id`: one
+        pricing epoch after its termination, or after its end without one
+        (3.16, the window of a correction of kind 3)."""
+        order = Order(self.__etny.caller()._getOrder(int(order_id)))
+        hours = DORequest(self.__etny.caller()._getDORequest(order.do_req)).duration
+        epoch = int(self.__pricing.caller().params()[10])
+        return (terminated_at if terminated_at else placed_at + int(hours) * 3600) + epoch
+
+    def __matching_offer(self):
+        """The standing DP request as matching_node.Offer: AVAILABLE, expired
+        at the latest block's time, its tip, and whether an order on it is
+        PROCESSING with no start in the PoX; None without one."""
+        if not has_standing_dp_request(self.__dprequest):
+            return None
+        request = DPRequest(self.__etny.caller()._getDPRequest(self.__dprequest))
+        terms = dp_terms(self.__etny.caller().dpTerms(self.__dprequest))
+        now = self.__w3.eth.get_block('latest').timestamp
+        placed_unstarted = False
+        found, order_id = self.__etny.caller().orderOfDPRequest(int(self.__dprequest))
+        if found and Order(self.__etny.caller()._getOrder(int(order_id))).status == OrderStatus.PROCESSING:
+            placed_unstarted = int(self.__etny.caller().orderStartedAt(int(order_id))) == 0
+        return matching_node.Offer(int(self.__dprequest), request.status == RequestStatus.AVAILABLE,
+                                   now >= terms.expires_at, terms.tip, placed_unstarted)
+
+    def __matching_hold_reasons(self):
+        """Why the offer is held (7.8, 7.19): the task slot taken on another
+        network, a standing acceptance of a hand-over, the fee it would offer
+        near the fee ceiling, the score below the runner's default minimum."""
+        holder = get_task_running_on()
+        fee = ceiling = 0
+        if self.__network_config.eip1559 and self.__network_config.max_fee_per_gas:
+            measure = self.__network_config.gas_price_measure
+            fee = (int(self.__w3.eth.get_block('latest').baseFeePerGas * 1.1)
+                   + self.__w3.to_wei(self.__network_config.max_priority_fee_per_gas, measure))
+            ceiling = self.__w3.to_wei(self.__network_config.max_fee_per_gas, measure)
+        accepted = self.__broker is not None and self.__accepted_handover() is not None
+        return self.__matching.hold_reasons(holder is not None and holder != self.__network, accepted, fee, ceiling,
+                                            self.__network_config.fee_ceiling_pause_percent)
+
+    def __matching_tick(self, in_order=False):
+        """The idle tick of matching (7.2, 7.8, 7.15, 7.18, 7.21): the copy
+        follows the logs, the slot's heartbeat, the hold or the announce,
+        the correction list, the skips and the proofs; in an order's
+        enclave wait the copy and the heartbeat alone. A duty that raises is
+        logged and the next tick runs it again."""
+        matching = self.__matching
+        try:
+            matching.follow()
+            offer = self.__matching_offer()
+            reasons = [] if in_order else self.__matching_hold_reasons()
+            matching.heartbeat_tick(offer, bool(reasons), lambda: self.__refresh_for_beat(offer))
+            if in_order:
+                return
+            matching.hold_tick(offer, reasons)
+            if time.monotonic() - self.__matching_duties_at >= MATCHING_ORDER_TICK_SECONDS:
+                self.__matching_duties_at = time.monotonic()
+                matching.correction_tick()
+                matching.skip_tick()
+                matching.wide_tick()
+        except Exception as e:
+            self.logger.warning(f"Matching: the tick failed ({e}); next tick")
+
+    def __refresh_for_beat(self, offer):
+        """The refresh of an expired offer before the slot's heartbeat (7.2)."""
+        if offer is not None:
+            self.__refresh_dp_request(offer.dp_request_id, dp_terms(self.__etny.caller().dpTerms(offer.dp_request_id)))
+
+    def __matching_serve(self, request_id):
+        """What matching does with an unpinned DO request (7.6): 'placement'
+        when the request is not served by claims, the agent placing as
+        today; otherwise the claim's outcome, the request never placed by
+        the node."""
+        try:
+            return self.__matching.serve(request_id, self.__matching_terms(request_id), self.__matching_offer())
+        except Exception as e:
+            self.logger.warning(f"Matching: DO request {request_id} was not served ({e}); next pass")
+            return 'wait'
+
+    def __matching_order_appeared(self):
+        """Whether an order on the node's standing DP request is PROCESSING:
+        an approval of its claim, which ends a running integration test
+        (7.7)."""
+        if not has_standing_dp_request(self.__dprequest):
+            return False
+        found, order_id = self.__etny.caller().orderOfDPRequest(int(self.__dprequest))
+        return bool(found) and Order(self.__etny.caller()._getOrder(int(order_id))).status == OrderStatus.PROCESSING
+
+    def __matching_note_end(self, order_id, request_id, task_code, result_string):
+        """The end of an order of this node on a matching network (7.15,
+        7.21): its code with the class and the early timeout its signed
+        result states (utils.result_end_fields: a v6 result; an older result
+        states no class, and only 59 and 63 count) into the local list and
+        the proof queue."""
+        if self.__matching is None:
+            return
+        try:
+            code = int(task_code)
+            end = result_end_fields(result_string)
+            paid_class = end is not None and end[2] == 0
+            image, _ = self.__matching.chain.request_image(request_id)
+            self.__matching.note_order_end(order_id, request_id, image, code, paid_class, False)
+        except Exception as e:
+            self.logger.warning(f"Matching: the end of order {order_id} was not noted ({e})")
 
     def __read_fee_percents(self):
         """(NETWORK_FEE_PERCENT, VALIDATOR_FEE_PERCENT) of the 2.0 contract."""
@@ -7090,8 +7435,13 @@ class EtnyPoXNode:
             due = integration_tests_due(self.__integration_images, integration_test_passed, integration_test_remeasure,
                                         integration_test_retry, now)
         # Another network may have taken the slot during the registry reads;
-        # the loop does not wait on its order here, the next pass tests.
+        # the loop does not wait on its order here, the next pass tests. On a
+        # network with matching no test starts while a claim of the node can
+        # still be approved: the test holds the task slot for up to 900 s, the
+        # whole of the 15 minutes an approved order has to start (7.7, D81).
         if not due or get_task_running_on():
+            return
+        if self.__matching is not None and self.__matching.claim_approvable():
             return
         acquire_task_slot(self.__network)
         try:
@@ -7282,6 +7632,13 @@ class EtnyPoXNode:
 
     def __call_heart_beat(self):
         logger = self.logger
+
+        # A network with matching sends its one heartbeat to PoxMatching, once
+        # per slot of its slotSeconds at the node's offset, and none to
+        # ECHeartBeat (MATCHING-DESIGN.md 7.2, D20).
+        if self.__matching is not None:
+            self.__matching_tick()
+            return
 
         if self.__network == 'TESTNET':
             heartbeat_frequency = 1 * 60 * 60 - 60;

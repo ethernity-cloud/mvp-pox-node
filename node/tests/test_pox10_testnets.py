@@ -102,6 +102,12 @@ BLOCKS = {
         "ENCLAVE_FEE": "10",
     },
 }
+# The matching fields of a NetworkConfig, at their defaults on a copy: its
+# PoX 1.0 answers no pricingVersion(), so no matching is bound there.
+MATCHING_FIELDS = dict(
+    match_reader_address="", payout_address="", claim_ahead_blocks=0, claim_spread_nodes=8, claim_stand_limit=2,
+    claim_hold_back=False, claim_marked_images=False, tip_keep_percent=10, fee_ceiling_pause_percent=80,
+    minimum_score_hold=True, beat_gas_allowance=1200000, matching_page_entries=800, enclave_memory_gib=0)
 # The NetworkConfig config.parse_networks gives each copy from node/.env.
 LOADED = {
     "bloxberg_testnet_pox10": dict(
@@ -116,7 +122,7 @@ LOADED = {
         eip1559=False, middleware="POA", gas_price=2_000_000, gas_limit=2_000_000, max_priority_fee_per_gas=0,
         max_fee_per_gas=0, reward_type=1, network_fee=5, enclave_fee=10, esr_relay_gas_budget_wei=10**17,
         logs_chunk_blocks=9000, do_request_max_age_seconds=86400, tip_per_cu_hour_wei=0, accept_reserved=True,
-        farm_invite="", farm_accept=True),
+        farm_invite="", farm_accept=True, **MATCHING_FIELDS),
     "polygon_amoy_pox10": dict(
         name="polygon_amoy_pox10", network_type="MAINNET", rpc_url="https://polygon-amoy-bor-rpc.publicnode.com",
         rpc_delay=200, chain_id=80002, block_time=2,
@@ -129,7 +135,7 @@ LOADED = {
         eip1559=True, middleware="POA", gas_price=0, gas_limit=0, max_priority_fee_per_gas=32,
         max_fee_per_gas=500, reward_type=1, network_fee=5, enclave_fee=10, esr_relay_gas_budget_wei=10**17,
         logs_chunk_blocks=9000, do_request_max_age_seconds=86400, tip_per_cu_hour_wei=0, accept_reserved=True,
-        farm_invite="", farm_accept=True),
+        farm_invite="", farm_accept=True, **MATCHING_FIELDS),
 }
 # Each copy's mainnet, and the NetworkConfig fields in which the copy holds a
 # value of its own; in every other field it holds the mainnet's.

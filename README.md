@@ -329,6 +329,63 @@ it beside its gas.
 The agent's Python dependencies gain `cryptography` 3.4.8, which
 `dependency_manager` installs at start as it does the others.
 
+## PoX 2.0 matching (branch feature/matching)
+
+On a 2.0 PoX whose pricing answers a matching contract (`matching()`) and
+whose `<NETWORK>_MATCH_READER_ADDRESS` names that contract's PoxMatchReader,
+the agent serves the network as MATCHING-DESIGN.md section 7 states
+(`matching=... match_reader=...` in the log). A pricing with no `matching()`,
+the zero address, and a pointer with no reader configured leave the network
+as before, a PoX 1.0 network keeping its rotation.
+
+- It keeps a copy of the roll in memory only (`matching.py`), rebuilt at
+  every start by one paged scan and fed from PoxMatching's `Beat`,
+  `Announced`, `Left` and `Skipped` logs, and ranks itself on it with the rule
+  of `spec/matching.md` (copies in `node/tests/spec/matching/`).
+- It sends one heartbeat per slot of PoxMatching's `slotSeconds` (one an hour
+  on a testnet, two a day on a mainnet) at an offset its address gives, to
+  PoxMatching alone; the offer's refresh comes first when it has expired, an
+  announce is the slot's heartbeat when the node has no open period, and none
+  is sent between an order's placement and its `etny-sw` row or while the node
+  is banned. The heartbeat runs through an order's enclave wait too.
+- It announces its offer after an add and whenever it has no open period, and
+  again after a refresh that changed its tip; the refresh keeps the period's
+  tip while a claim can be approved or a mandate is unanswered. It pauses
+  while its task slot is taken on another network, its acceptance of a
+  hand-over stands, the fee it would offer reaches the ceiling's
+  `<NETWORK>_FEE_CEILING_PAUSE_PERCENT`, or the runners' default minimum is on
+  and its score is below 0.50.
+- On a request served by claims it sends `claim` with the round's stamp and
+  its step in every round, on a settled read the copy has read the logs to,
+  never placing the order itself; a mandated node sends its claim
+  `<NETWORK>_CLAIM_AHEAD_BLOCKS` plus one blocks before its step, one that is
+  not mandated after the mandates, a step per `<NETWORK>_CLAIM_SPREAD_NODES`
+  nodes ahead and while fewer than `<NETWORK>_CLAIM_STAND_LIMIT` approvable
+  claims ahead stand. A request not served by claims (`claims` off in its
+  parameter set) is placed as before. An approved claim's order is run when
+  it appears on the offer; no integration test starts while a claim can be
+  approved, and an approval ends a running one.
+- An order's objects are fetched for `fetchTrySeconds` (600) after its
+  approval before the order is closed as not fetchable, the validators' IPFS
+  nodes read and dialled again between attempts.
+- After each heartbeat it reads the late claims the heartbeat charged and its
+  failed orders, tests their windows' block headers, and asks for the
+  correction of full ones at most once an hour (`askCorrection`).
+- It keeps a local list of the images whose orders ended in 59 or 63, or in
+  20, 62 on the paid classes (`node/<network>/image_failures.json`), and skips
+  an image for 7 days after 3 such ends (`skipImage`); it proves three nodes
+  for such an end (`proveWide`).
+- `<NETWORK>_PAYOUT_ADDRESS` names the rewards wallet once, before the next
+  offer, while none is named; a wallet named otherwise is left to its own
+  `changePayoutAddress`. The farm step names no payout: the join sets it, and
+  a node with a named wallet joins once that wallet's `approveFarm` names the
+  farm.
+- The offer states the node's enclave memory above its GFLOPS: the size its
+  capability record's `encmem=` states, at most `<NETWORK>_ENCLAVE_MEMORY_GIB`
+  when set. A cancel with reason 10 (`EnclaveMemoryAboveRecord`) is never
+  followed by an offer stating the same size on that record; the next states
+  the record's size below it, or the record's integration test runs again.
+
 ## Mirror mode (REPLICATION_ONLY)
 
 `REPLICATION_ONLY=True` runs the agent as a mirror: no SGX, no DP requests, no

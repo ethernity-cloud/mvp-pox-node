@@ -17,7 +17,11 @@ def required_fields():
 def test_the_defaulted_fields_are_the_relay_budget_the_logs_chunk_the_do_request_age_and_the_phase_e_four():
     optional = [f.name for f in fields(config.NetworkConfig) if f.default is not MISSING]
     assert optional == ["esr_relay_gas_budget_wei", "logs_chunk_blocks", "do_request_max_age_seconds",
-                        "tip_per_cu_hour_wei", "accept_reserved", "farm_invite", "farm_accept"]
+                        "tip_per_cu_hour_wei", "accept_reserved", "farm_invite", "farm_accept",
+                        "match_reader_address", "payout_address", "claim_ahead_blocks", "claim_spread_nodes",
+                        "claim_stand_limit", "claim_hold_back", "claim_marked_images", "tip_keep_percent",
+                        "fee_ceiling_pause_percent", "minimum_score_hold", "beat_gas_allowance",
+                        "matching_page_entries", "enclave_memory_gib"]
 
 
 def test_a_network_without_the_variable_takes_the_global_default():

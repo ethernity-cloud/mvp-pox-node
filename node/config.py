@@ -75,8 +75,11 @@ do_request_max_age_seconds_default = int(os.environ.get('DO_REQUEST_MAX_AGE_SECO
 # variables are unset, {<PREFIX>: {field: value}}; parse_networks applies
 # them.
 network_field_defaults = {
-    "LITVM_LITEFORGE": {"logs_chunk_blocks": 3000},
-    "LITVM_LITEFORGE_UNSAFE": {"logs_chunk_blocks": 3000},
+    "LITVM_LITEFORGE": {"logs_chunk_blocks": 3000, "matching_page_entries": 1450},
+    "LITVM_LITEFORGE_UNSAFE": {"logs_chunk_blocks": 3000, "matching_page_entries": 1450},
+    "BLOXBERG_TESTNET": {"claim_ahead_blocks": 2, "beat_gas_allowance": 690000, "matching_page_entries": 650},
+    "BLOXBERG_TESTNET_UNSAFE": {"claim_ahead_blocks": 2, "beat_gas_allowance": 690000,
+                                "matching_page_entries": 650},
 }
 
 @dataclass(frozen=True)
@@ -131,6 +134,50 @@ class NetworkConfig:
     # Whether the node accepts the handovers its farm's members announce
     # (<NETWORK>_FARM_ACCEPT).
     farm_accept: bool = True
+    # PoX 2.0 matching (MATCHING-DESIGN.md section 7), on a network whose
+    # pricing names a matching contract: the address of the PoxMatchReader
+    # deployed for it (<NETWORK>_MATCH_READER_ADDRESS; empty: the network is
+    # served as one without matching).
+    match_reader_address: str = ''
+    # The wallet the node's earnings are paid to, named once while none is
+    # named (<NETWORK>_PAYOUT_ADDRESS; 7.13, D34); empty for none.
+    payout_address: str = ''
+    # A mandated node sends its claim once it has read the block
+    # claim_ahead_blocks + 1 blocks before its step's first block
+    # (<NETWORK>_CLAIM_AHEAD_BLOCKS; 2 on bloxberg, 0 elsewhere: 7.6).
+    claim_ahead_blocks: int = 0
+    # A node that is not mandated waits one step per claim_spread_nodes nodes
+    # ahead of it and sends nothing while claim_stand_limit approvable claims
+    # of nodes ahead stand (7.6); 0 switches either off.
+    claim_spread_nodes: int = 8
+    claim_stand_limit: int = 2
+    # A mandated node holds its claim while an approvable claim of a node
+    # mandated before it stands (<NETWORK>_CLAIM_HOLD_BACK; 7.6).
+    claim_hold_back: bool = False
+    # Whether the node claims requests whose image was marked likely broken
+    # at their add (<NETWORK>_CLAIM_MARKED_IMAGES; 7.15, D120).
+    claim_marked_images: bool = False
+    # The refresh keeps the open period's tip while the tip it computes is
+    # within this many percent of it (<NETWORK>_TIP_KEEP_PERCENT; 7.3).
+    tip_keep_percent: int = 10
+    # On an EIP-1559 network the node pauses once the fee it would offer
+    # reaches this many percent of max_fee_per_gas
+    # (<NETWORK>_FEE_CEILING_PAUSE_PERCENT; 7.8).
+    fee_ceiling_pause_percent: int = 80
+    # Whether the node holds its offer while the runner's default minimum is
+    # on and its score is below 5,000 (<NETWORK>_MINIMUM_SCORE_HOLD; 7.19).
+    minimum_score_hold: bool = True
+    # The gas a heartbeat is given above its estimate while late claims are
+    # pending, for the worst-case settlement (<NETWORK>_BEAT_GAS_ALLOWANCE;
+    # 690,000 on bloxberg, 1,200,000 elsewhere: 7.2, D176).
+    beat_gas_allowance: int = 1200000
+    # The roll entries one rollPeriodsOf page of the copy's rebuild reads
+    # (<NETWORK>_MATCHING_PAGE_ENTRIES; 650 on bloxberg, 1,450 on LitVM,
+    # 800 elsewhere: 4.7).
+    matching_page_entries: int = 800
+    # The enclave memory in GiB the operator offers at most; 0: the size the
+    # capability record states (<NETWORK>_ENCLAVE_MEMORY_GIB; 7.24, D146).
+    enclave_memory_gib: int = 0
 
 # Platform requirements a trustedzone names in <NETWORK>_TRUSTEDZONE_IMAGES:
 #   dcap  provisioned by a CAS, which admits the enclave on a DCAP quote: the
@@ -302,6 +349,11 @@ pricing_abi_filepath = base_path / 'pricing.abi'
 broker_abi_filepath = base_path / 'broker.abi'
 resolver_abi_filepath = base_path / 'resolver.abi'
 erc20_abi_filepath = base_path / 'erc20.abi'
+# PoX 2.0 matching's PoxMatching and PoxMatchReader, copied from
+# pox-smart-contract-litvm abi/IPoxMatching.json and abi/IPoxMatchReader.json
+# at c179773.
+matching_abi_filepath = base_path / 'matching.abi'
+match_reader_abi_filepath = base_path / 'match_reader.abi'
 # The first sample of each network's gas profile (gas_profile.load_seed).
 gas_profile_seed_filepath = base_path / 'gas_profile_seed.json'
 uuid_filepath = Path(expanduser("~")) / "opt/etny/node/UUID"

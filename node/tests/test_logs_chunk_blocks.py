@@ -79,7 +79,8 @@ def test_the_variable_sets_the_field(monkeypatch):
 @pytest.mark.parametrize("network", ["litvm_liteforge", "litvm_liteforge_unsafe"])
 def test_the_litvm_pair_takes_3000_without_the_variable(monkeypatch, network):
     assert load(monkeypatch, network).logs_chunk_blocks == 3000
-    assert config.network_field_defaults[network.upper()] == {"logs_chunk_blocks": 3000}
+    assert config.network_field_defaults[network.upper()] == {"logs_chunk_blocks": 3000,
+                                                               "matching_page_entries": 1450}
 
 
 def test_the_litvm_variable_overrides_the_pairs_default(monkeypatch):

@@ -1,0 +1,452 @@
+"""etny-node.py on a network with PoX 2.0 matching (MATCHING-DESIGN.md
+section 7) and without it. __bind_matching binds a MatchingNode only when
+the pricing names a matching contract and the network names its reader; a
+pricing with no matching() and the zero address leave the network as
+today. On a matching network the heartbeat goes to PoxMatching alone; an
+unpinned request served by claims is claimed and never placed, one that is
+not served by claims is placed as today (roll-out step 2), and a PoX 1.0
+network keeps the rotation; the offer states its enclave memory above its
+GFLOPS; the refresh keeps the period's tip while a claim stands; no
+integration test starts while a claim can be approved, and an approved
+order ends a running one; an order's objects are fetched for 10 minutes
+after its approval, the validators' nodes read again between attempts;
+the farm step names no payout and waits for the rewards wallet's approval."""
+import importlib.util
+import logging
+from pathlib import Path
+from types import SimpleNamespace
+
+import pytest
+from web3.exceptions import ContractLogicError
+
+import capability
+import matching
+import matching_node
+import test_do_request_age_intake as intake
+
+NODE = Path(__file__).resolve().parents[1]
+ADDRESS = intake.NODE_ADDRESS
+MATCHING = "0x" + "5a" * 20
+READER = "0x" + "5b" * 20
+
+
+@pytest.fixture(scope="module")
+def agent():
+    spec = importlib.util.spec_from_file_location("etny_node", NODE / "etny-node.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+class StubMatching:
+    """A MatchingNode as etny-node.py drives it: serve answers `served`; the
+    ticks are recorded."""
+
+    def __init__(self, served='claimed', approvable=False, standing=False, period=None, fetch_seconds=600,
+                 banned=False):
+        self.served = served
+        self.approvable = approvable
+        self.standing = standing
+        self.period = period
+        self.calls = []
+        self.fetch = fetch_seconds
+        self.banned = banned
+        self.chain = SimpleNamespace(request_image=lambda request_id: (b"\x6f" * 31, 0))
+
+    def serve(self, request_id, terms, offer):
+        self.calls.append(('serve', request_id))
+        return self.served
+
+    def follow(self):
+        self.calls.append(('follow',))
+
+    def heartbeat_tick(self, offer, holding, refresh):
+        self.calls.append(('heartbeat', holding))
+
+    def hold_tick(self, offer, reasons):
+        self.calls.append(('hold', tuple(reasons)))
+
+    def hold_reasons(self, *args):
+        return []
+
+    def correction_tick(self):
+        self.calls.append(('correction',))
+
+    def skip_tick(self):
+        self.calls.append(('skip',))
+
+    def wide_tick(self):
+        self.calls.append(('wide',))
+
+    def claim_approvable(self):
+        return self.approvable
+
+    def standing_claim_or_mandate(self):
+        return self.standing
+
+    def own_period(self):
+        return self.period
+
+    def is_banned(self):
+        return self.banned
+
+    def params(self):
+        return SimpleNamespace(fetchTrySeconds=self.fetch)
+
+    def payout_tick(self, setting):
+        self.calls.append(('payout', setting))
+
+
+def served_run(agent, monkeypatch, tmp_path, stub, chain, passes=None):
+    monkeypatch.setattr(agent.EtnyPoXNode, "_EtnyPoXNode__matching", stub)
+    monkeypatch.setattr(agent.EtnyPoXNode, "_EtnyPoXNode__matching_offer",
+                        lambda self: matching_node.Offer(intake.DP_REQUEST, True, False, 1, False))
+    monkeypatch.setattr(agent.EtnyPoXNode, "_EtnyPoXNode__matching_terms", lambda self, request_id: {})
+    return intake.run(agent, monkeypatch, tmp_path, chain, passes=passes)
+
+
+def test_a_request_served_by_claims_is_claimed_and_never_placed(agent, monkeypatch, tmp_path):
+    chain = intake.Chain([intake.NOW - intake.HOUR])
+    stub = StubMatching('claimed')
+    node = served_run(agent, monkeypatch, tmp_path, stub, chain, passes=3)
+    assert ('serve', 0) in stub.calls
+    assert intake.placed(chain) == []
+    assert node.doreq_cache.get(0) == 0
+    # The heartbeat went to PoxMatching: the matching tick ran, ECHeartBeat
+    # was never called.
+    assert ('follow',) in stub.calls and not any(e.startswith("logCall") for e in chain.events)
+
+
+def test_a_request_not_served_by_claims_is_placed_as_today(agent, monkeypatch, tmp_path):
+    chain = intake.Chain([intake.NOW - intake.HOUR])
+    stub = StubMatching('placement')
+    served_run(agent, monkeypatch, tmp_path, stub, chain)
+    assert stub.calls.count(('serve', 0)) == 1
+    assert intake.placed(chain) == [0]
+
+
+def test_a_request_that_waits_is_neither_placed_nor_cached(agent, monkeypatch, tmp_path):
+    chain = intake.Chain([intake.NOW - intake.HOUR])
+    stub = StubMatching('wait')
+    node = served_run(agent, monkeypatch, tmp_path, stub, chain, passes=3)
+    assert stub.calls.count(('serve', 0)) >= 2
+    assert intake.placed(chain) == []
+    assert node.doreq_cache.get(0) is None
+
+
+def test_a_pinned_request_is_placed_as_today_unless_the_node_is_banned(agent, monkeypatch, tmp_path):
+    chain = intake.Chain([intake.NOW - intake.HOUR], pinned=(0,))
+    stub = StubMatching('claimed')
+    served_run(agent, monkeypatch, tmp_path, stub, chain)
+    assert ('serve', 0) not in stub.calls
+    assert intake.placed(chain) == [0]
+    banned = tmp_path / "banned"
+    banned.mkdir()
+    chain = intake.Chain([intake.NOW - intake.HOUR], pinned=(0,))
+    served_run(agent, monkeypatch, banned, StubMatching('claimed', banned=True), chain, passes=3)
+    assert intake.placed(chain) == []
+
+
+def test_without_matching_the_rotation_places_as_today(agent, monkeypatch, tmp_path):
+    chain = intake.Chain([intake.NOW - intake.HOUR])
+    assert agent.EtnyPoXNode._EtnyPoXNode__matching is None
+    intake.run(agent, monkeypatch, tmp_path, chain)
+    assert intake.placed(chain) == [0]
+    assert "getNodesCount" in chain.events
+
+
+# ------------------------------------------------------------ the binding
+
+class Pointer:
+    def __init__(self, answer):
+        self.answer = answer
+
+    @property
+    def functions(self):
+        answer = self.answer
+
+        def call():
+            if isinstance(answer, Exception):
+                raise answer
+            return answer
+        return SimpleNamespace(matching=lambda: SimpleNamespace(call=call))
+
+
+def bound(agent, monkeypatch, pointer, reader=READER):
+    node = object.__new__(agent.EtnyPoXNode)
+    node.logger = logging.getLogger("test")
+    contracts = []
+
+    def contract(address, abi):
+        contracts.append(address)
+        return pointer if abi is matching_node.POINTER_ABI else SimpleNamespace(address=address, functions=None)
+    node._EtnyPoXNode__w3 = SimpleNamespace(eth=SimpleNamespace(contract=contract), to_checksum_address=lambda a: a)
+    node._EtnyPoXNode__pricing = SimpleNamespace(address="0x" + "20" * 20)
+    node._EtnyPoXNode__etny = SimpleNamespace(address="0x" + "21" * 20)
+    node._EtnyPoXNode__address = ADDRESS
+    node._EtnyPoXNode__network = "polygon_amoy"
+    network = intake.polygon_mainnet(monkeypatch)
+    node._EtnyPoXNode__network_config = network.__class__(**{**network.__dict__, "match_reader_address": reader})
+    monkeypatch.setattr(agent, "retry", lambda fn, *args, **kwargs: (True, fn(*args)))
+    node._EtnyPoXNode__bind_matching()
+    return node._EtnyPoXNode__matching
+
+
+def test_a_pricing_without_matching_leaves_the_network_as_today(agent, monkeypatch):
+    assert bound(agent, monkeypatch, Pointer("0x" + "00" * 20)) is None
+    assert bound(agent, monkeypatch, Pointer(ContractLogicError("execution reverted"))) is None
+
+
+def test_a_matching_pointer_without_a_reader_is_logged_and_unbound(agent, monkeypatch, caplog):
+    caplog.set_level(logging.WARNING)
+    assert bound(agent, monkeypatch, Pointer(MATCHING), reader="") is None
+    assert any("MATCH_READER_ADDRESS names no reader" in m for m in caplog.messages)
+
+
+def test_the_pointer_and_the_reader_bind_matching(agent, monkeypatch):
+    m = bound(agent, monkeypatch, Pointer(MATCHING))
+    assert isinstance(m, matching_node.MatchingNode)
+    assert m.chain.matching.address == MATCHING and m.chain.reader.address == READER
+    assert m.settings.claim_spread_nodes == 8 and m.settings.claim_stand_limit == 2
+
+
+# ------------------------------------------------------------- the offer
+
+def params_node(agent, monkeypatch, tmp_path, stub, record):
+    node = object.__new__(agent.EtnyPoXNode)
+    node.logger = logging.getLogger("test")
+    network = intake.polygon_mainnet(monkeypatch)
+    node._EtnyPoXNode__network_config = network.__class__(**{**network.__dict__, "enclave_memory_gib": 0})
+    node._EtnyPoXNode__matching = stub
+    node._EtnyPoXNode__enclave_memory = capability.EnclaveMemoryBook(tmp_path / "broker_cursor.json")
+    node._EtnyPoXNode__price = 1
+    node._EtnyPoXNode__bandwidth = 100
+    node._EtnyPoXNode__duration = 24
+    node._EtnyPoXNode__uuid = "uuid"
+    node._EtnyPoXNode__node_geo = "geo"
+    node._EtnyPoXNode__pox_is_20 = True
+    node._EtnyPoXNode__broker = None
+    monkeypatch.setattr(agent, "HardwareInfoProvider", SimpleNamespace(
+        get_number_of_cpus=lambda: 8, get_free_memory=lambda: 16, get_free_storage=lambda: 100))
+    monkeypatch.setattr(agent.EtnyPoXNode, "_EtnyPoXNode__advertised_record", lambda self: ("img", record))
+    monkeypatch.setattr(agent.EtnyPoXNode, "_EtnyPoXNode__current_tip", lambda self, gflops: 5)
+    monkeypatch.setattr(agent.EtnyPoXNode, "_EtnyPoXNode__dp_metadata4", lambda self, advertised: "m4")
+    monkeypatch.setattr(capability, "metadata3", lambda geo, record: "m3")
+    return node
+
+
+RECORD = {"gflops": 250, "cuv": 4, "t1": 1761724830, "sig_der_hex": "3065AB"}
+
+
+def test_the_offer_states_the_records_enclave_memory_above_its_gflops(agent, monkeypatch, tmp_path):
+    node = params_node(agent, monkeypatch, tmp_path, StubMatching(), {**RECORD, "encmem": "8"})
+    name, arguments = node._EtnyPoXNode__dp_request_params()
+    assert name == "addDPRequestV2" and arguments[5] == 250 | (8 << 16)
+    node._EtnyPoXNode__enclave_memory.refuse("3065ab", 8)
+    _, arguments = node._EtnyPoXNode__dp_request_params()
+    assert arguments[5] == 250 | (4 << 16)
+
+
+def test_a_record_stating_no_enclave_memory_offers_none(agent, monkeypatch, tmp_path):
+    node = params_node(agent, monkeypatch, tmp_path, StubMatching(), RECORD)
+    _, arguments = node._EtnyPoXNode__dp_request_params()
+    assert arguments[5] == 250
+
+
+def test_without_matching_the_offer_carries_the_gflops_alone(agent, monkeypatch, tmp_path):
+    node = params_node(agent, monkeypatch, tmp_path, None, {**RECORD, "encmem": "8"})
+    _, arguments = node._EtnyPoXNode__dp_request_params()
+    assert arguments[5] == 250
+
+
+# ------------------------------------------------------------ the refresh
+
+class RefreshPox:
+    def __init__(self):
+        self.tips = []
+
+    @property
+    def functions(self):
+        pox = self
+
+        def refresh(req_id, tip):
+            pox.tips.append(tip)
+            return SimpleNamespace(build_transaction=lambda fields: {})
+        return SimpleNamespace(refreshDPRequest=refresh)
+
+    def caller(self):
+        return SimpleNamespace(dpTerms=lambda req_id: (250, 7, True, 2_000_000_000, True))
+
+
+def refreshed_tip(agent, monkeypatch, stub, computed):
+    node = object.__new__(agent.EtnyPoXNode)
+    node.logger = logging.getLogger("test")
+    network = intake.polygon_mainnet(monkeypatch)
+    node._EtnyPoXNode__network_config = network
+    node._EtnyPoXNode__matching = stub
+    pox = RefreshPox()
+    node._EtnyPoXNode__etny = pox
+    node._EtnyPoXNode__w3 = SimpleNamespace(eth=SimpleNamespace(
+        wait_for_transaction_receipt=lambda h, timeout: SimpleNamespace(status=1)))
+    node.get_transaction_build = lambda: {}
+    node.send_transaction = lambda txn: "0xhash"
+    monkeypatch.setattr(agent.EtnyPoXNode, "_EtnyPoXNode__current_tip", lambda self, gflops: computed)
+    monkeypatch.setattr(agent, "time", SimpleNamespace(sleep=lambda s: None, time=lambda: 0))
+    node._EtnyPoXNode__refresh_dp_request(7, SimpleNamespace(gflops=250))
+    return pox.tips[0]
+
+
+def period(tip):
+    return matching.Period(0, 1, 0, 0, 0, 7, 4, 8, 40, 100, 250, 64, 1, tip, 0)
+
+
+def test_the_refresh_keeps_the_periods_tip_while_a_claim_stands(agent, monkeypatch):
+    assert refreshed_tip(agent, monkeypatch, StubMatching(standing=True, period=period(100)), 300) == 100
+    assert refreshed_tip(agent, monkeypatch, StubMatching(standing=False, period=period(100)), 300) == 300
+    assert refreshed_tip(agent, monkeypatch, StubMatching(standing=False, period=period(100)), 105) == 100
+    assert refreshed_tip(agent, monkeypatch, None, 300) == 300
+
+
+# ------------------------------------------------- the integration test
+
+def test_no_integration_test_starts_while_a_claim_can_be_approved(agent, monkeypatch):
+    node = object.__new__(agent.EtnyPoXNode)
+    node.logger = logging.getLogger("test")
+    node._EtnyPoXNode__last_registry_check_at = agent.time.monotonic()
+    node._EtnyPoXNode__integration_images = ["img"]
+    node._EtnyPoXNode__replication_only = False
+    monkeypatch.setattr(agent.config, "skip_integration_test", False)
+    taken = []
+    monkeypatch.setattr(agent, "integration_tests_due", lambda *args: ["img"])
+    monkeypatch.setattr(agent, "get_task_running_on", lambda: None)
+    monkeypatch.setattr(agent, "acquire_task_slot", lambda name: taken.append(name))
+    node._EtnyPoXNode__matching = StubMatching(approvable=True)
+    node._EtnyPoXNode__maybe_retry_integration_tests()
+    assert taken == []
+
+
+def test_an_approved_order_ends_a_running_integration_test(agent, monkeypatch):
+    node = object.__new__(agent.EtnyPoXNode)
+    node.logger = logging.getLogger("test")
+    clock = [1000.0]
+    monkeypatch.setattr(agent, "time", SimpleNamespace(time=lambda: clock[0], sleep=lambda s: clock.__setitem__(
+        0, clock[0] + s), monotonic=lambda: clock[0]))
+    node._EtnyPoXNode__esr = None
+    node._EtnyPoXNode__matching = StubMatching()
+    node.swift_stream_service = SimpleNamespace(is_object_in_bucket=lambda bucket, name: (False, ""))
+    monkeypatch.setattr(agent.EtnyPoXNode, "_EtnyPoXNode__enclave_failure", lambda self: None)
+    monkeypatch.setattr(agent.EtnyPoXNode, "_EtnyPoXNode__refresh_standing_dp_request", lambda self: None)
+    monkeypatch.setattr(agent.EtnyPoXNode, "_EtnyPoXNode__matching_order_appeared", lambda self: True)
+    with pytest.raises(agent.EnclaveFailed):
+        node.wait_for_enclave_v2(agent.INTEGRATION_BUCKET, "context_test.etny", 900)
+    assert clock[0] - 1000 < agent.MATCHING_TEST_POLL_SECONDS + 2
+
+
+# ------------------------------------------------------------ fetching
+
+def fetch_node(agent, monkeypatch, stub, outcomes, approved_at, head_times):
+    node = object.__new__(agent.EtnyPoXNode)
+    node.logger = logging.getLogger("test")
+    node._EtnyPoXNode__matching = stub
+    attempts = []
+
+    def download_many(hashes, attempts=5, delay=3, artefacts=False):
+        result = outcomes[min(len(attempts_made), len(outcomes) - 1)]
+        attempts_made.append(artefacts)
+        return result
+    attempts_made = attempts
+    node.storage = SimpleNamespace(download_many=download_many)
+    node._EtnyPoXNode__etny = SimpleNamespace(caller=lambda: SimpleNamespace(orderApprovedAt=lambda o: approved_at))
+    times = iter(head_times)
+    node._EtnyPoXNode__w3 = SimpleNamespace(eth=SimpleNamespace(
+        get_block=lambda tag: SimpleNamespace(timestamp=next(times))))
+    synced = []
+    monkeypatch.setattr(agent.EtnyPoXNode, "_EtnyPoXNode__maybe_sync_ipfs_peers", lambda self: synced.append(1))
+    monkeypatch.setattr(agent, "stop_event", SimpleNamespace(wait=lambda s: False))
+    return node, attempts, synced
+
+
+def test_an_order_is_fetched_for_ten_minutes_after_its_approval(agent, monkeypatch):
+    node, attempts, synced = fetch_node(agent, monkeypatch, StubMatching(), [False], 10_000,
+                                        [10_000 + t for t in (100, 300, 599, 600)])
+    assert node._EtnyPoXNode__fetch_order_objects(1, ["a"], ["b"]) is False
+    assert len(synced) == 3
+
+
+def test_a_fetch_that_lands_inside_the_ten_minutes_runs_the_order(agent, monkeypatch):
+    node, attempts, synced = fetch_node(agent, monkeypatch, StubMatching(), [False, False, True], 10_000,
+                                        [10_000 + t for t in (100, 300, 599)])
+    assert node._EtnyPoXNode__fetch_order_objects(1, ["a"], ["b"]) is True
+    assert len(synced) == 2
+
+
+def test_without_matching_a_failed_fetch_closes_at_once(agent, monkeypatch):
+    node, attempts, synced = fetch_node(agent, monkeypatch, None, [False], 10_000, [])
+    assert node._EtnyPoXNode__fetch_order_objects(1, ["a"], ["b"]) is False
+    assert synced == []
+
+
+# -------------------------------------------------------------- the farm
+
+class Farms:
+    def __init__(self, refuse):
+        self.refuse = refuse
+        self.joined = []
+
+    def caller(self):
+        return SimpleNamespace(farmOf=lambda node: "0x" + "00" * 20)
+
+    @property
+    def functions(self):
+        farms = self
+
+        def join(farm, expires_at, signature):
+            def call(fields):
+                if farms.refuse:
+                    raise ContractLogicError("execution reverted: farm not approved")
+            return SimpleNamespace(call=call, name='joinFarm')
+        return SimpleNamespace(joinFarm=join)
+
+
+FARM = "0x" + "44" * 20
+INVITE = f"{FARM}:1900000000:0x" + "ab" * 65
+
+
+def farm_node(agent, monkeypatch, tmp_path, stub, payout, refuse):
+    node = object.__new__(agent.EtnyPoXNode)
+    node.logger = logging.getLogger("test")
+    network = intake.polygon_mainnet(monkeypatch)
+    node._EtnyPoXNode__network_config = network.__class__(**{**network.__dict__, "farm_invite": INVITE})
+    node._EtnyPoXNode__network = "polygon_amoy"
+    node._EtnyPoXNode__matching = stub
+    node._EtnyPoXNode__address = ADDRESS
+    farms = Farms(refuse)
+    node._EtnyPoXNode__broker = farms
+    node._EtnyPoXNode__broker.address = "0x" + "55" * 20
+    node._EtnyPoXNode__etny = SimpleNamespace(caller=lambda: SimpleNamespace(payoutAddressOf=lambda n: payout))
+    node._EtnyPoXNode__w3 = SimpleNamespace(to_checksum_address=lambda a: a)
+    node.cache_config = SimpleNamespace(farm_refusal_filepath=tmp_path / "farm.json")
+    sent = []
+    node._EtnyPoXNode__broker_tx = lambda label, fn: sent.append(label)
+    return node, sent
+
+
+def test_a_node_with_a_named_wallet_waits_for_its_approval_before_joining(agent, monkeypatch, tmp_path):
+    node, sent = farm_node(agent, monkeypatch, tmp_path, StubMatching(), "0x" + "33" * 20, refuse=True)
+    node._EtnyPoXNode__join_farm_if_invited()
+    assert sent == [] and not (tmp_path / "farm.json").exists()
+    node, sent = farm_node(agent, monkeypatch, tmp_path, StubMatching(), "0x" + "33" * 20, refuse=False)
+    node._EtnyPoXNode__join_farm_if_invited()
+    assert sent == ["joinFarm"]
+
+
+def test_a_node_without_a_wallet_joins_on_its_own_key(agent, monkeypatch, tmp_path):
+    node, sent = farm_node(agent, monkeypatch, tmp_path, StubMatching(), ADDRESS, refuse=True)
+    node._EtnyPoXNode__join_farm_if_invited()
+    assert sent == ["joinFarm"]
+
+
+def test_the_farm_step_names_no_payout_on_a_matching_network(agent, monkeypatch, tmp_path):
+    node, sent = farm_node(agent, monkeypatch, tmp_path, StubMatching(), ADDRESS, refuse=False)
+    node._EtnyPoXNode__set_farm_payout()
+    assert sent == []
