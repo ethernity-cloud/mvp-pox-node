@@ -1,0 +1,2857 @@
+[
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "orderId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint8",
+        "name": "reason",
+        "type": "uint8"
+      }
+    ],
+    "name": "BanRefused",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "node",
+        "type": "address"
+      }
+    ],
+    "name": "BeatNotCounted",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "doRequestId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint8",
+        "name": "reason",
+        "type": "uint8"
+      }
+    ],
+    "name": "ClaimRefused",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "node",
+        "type": "address"
+      },
+      {
+        "internalType": "uint8",
+        "name": "reason",
+        "type": "uint8"
+      }
+    ],
+    "name": "CorrectionRefused",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "node",
+        "type": "address"
+      },
+      {
+        "internalType": "uint8",
+        "name": "reason",
+        "type": "uint8"
+      }
+    ],
+    "name": "ExpireRefused",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "node",
+        "type": "address"
+      },
+      {
+        "internalType": "uint32",
+        "name": "bannedUntil",
+        "type": "uint32"
+      }
+    ],
+    "name": "NodeBanned",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "orderId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint8",
+        "name": "reason",
+        "type": "uint8"
+      }
+    ],
+    "name": "NodeFaultRefused",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "orderId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint8",
+        "name": "reason",
+        "type": "uint8"
+      }
+    ],
+    "name": "NotAmbiguous",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "caller",
+        "type": "address"
+      }
+    ],
+    "name": "NotJudge",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "caller",
+        "type": "address"
+      }
+    ],
+    "name": "NotOwner",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "caller",
+        "type": "address"
+      }
+    ],
+    "name": "NotPricing",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "orderId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint8",
+        "name": "reason",
+        "type": "uint8"
+      }
+    ],
+    "name": "NotRunRefused",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "orderId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint8",
+        "name": "reason",
+        "type": "uint8"
+      }
+    ],
+    "name": "NotUnstarted",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "dpRequestId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint8",
+        "name": "reason",
+        "type": "uint8"
+      }
+    ],
+    "name": "OfferRefused",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "index",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint8",
+        "name": "reason",
+        "type": "uint8"
+      }
+    ],
+    "name": "ParameterSetRefused",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "node",
+        "type": "address"
+      }
+    ],
+    "name": "PauseRefused",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "orderId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint8",
+        "name": "reason",
+        "type": "uint8"
+      }
+    ],
+    "name": "PlacementRefused",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint8",
+        "name": "pointer",
+        "type": "uint8"
+      },
+      {
+        "internalType": "address",
+        "name": "value",
+        "type": "address"
+      }
+    ],
+    "name": "PointerRefused",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "doRequestId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint8",
+        "name": "reason",
+        "type": "uint8"
+      }
+    ],
+    "name": "RaiseRefused",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "doRequestId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint8",
+        "name": "round",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint8",
+        "name": "reason",
+        "type": "uint8"
+      }
+    ],
+    "name": "RecordRefused",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "orderId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint8",
+        "name": "reason",
+        "type": "uint8"
+      }
+    ],
+    "name": "RefundRefused",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes31",
+        "name": "imageKey",
+        "type": "bytes31"
+      },
+      {
+        "internalType": "uint8",
+        "name": "reason",
+        "type": "uint8"
+      }
+    ],
+    "name": "SkipRefused",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "nameHash",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "uint8",
+        "name": "reason",
+        "type": "uint8"
+      }
+    ],
+    "name": "TemplateRefused",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "orderId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint8",
+        "name": "reason",
+        "type": "uint8"
+      }
+    ],
+    "name": "WideRefused",
+    "type": "error"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "orderId",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint8",
+        "name": "code",
+        "type": "uint8"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint64",
+        "name": "paidUntil",
+        "type": "uint64"
+      },
+      {
+        "indexed": false,
+        "internalType": "bool",
+        "name": "wide",
+        "type": "bool"
+      }
+    ],
+    "name": "AmbiguousNoted",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "node",
+        "type": "address"
+      },
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "dpRequestId",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint32",
+        "name": "from",
+        "type": "uint32"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint8",
+        "name": "cpu",
+        "type": "uint8"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint8",
+        "name": "memGB",
+        "type": "uint8"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint8",
+        "name": "storageGB",
+        "type": "uint8"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint8",
+        "name": "bandwidth",
+        "type": "uint8"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint16",
+        "name": "gflops",
+        "type": "uint16"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "tipWei",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint16",
+        "name": "tzMask",
+        "type": "uint16"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint8",
+        "name": "enclaveMemoryGB",
+        "type": "uint8"
+      }
+    ],
+    "name": "Announced",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "doRequestId",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "node",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "orderId",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint8",
+        "name": "round",
+        "type": "uint8"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint8",
+        "name": "step",
+        "type": "uint8"
+      }
+    ],
+    "name": "Approved",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "node",
+        "type": "address"
+      },
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "orderId",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint32",
+        "name": "bannedUntil",
+        "type": "uint32"
+      }
+    ],
+    "name": "Banned",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "node",
+        "type": "address"
+      },
+      {
+        "indexed": true,
+        "internalType": "uint32",
+        "name": "slot",
+        "type": "uint32"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint16",
+        "name": "score",
+        "type": "uint16"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint8",
+        "name": "band",
+        "type": "uint8"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "index",
+        "type": "uint256"
+      }
+    ],
+    "name": "Beat",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "doRequestId",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint8",
+        "name": "round",
+        "type": "uint8"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "node",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint8",
+        "name": "reason",
+        "type": "uint8"
+      }
+    ],
+    "name": "ChargeSkipped",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "doRequestId",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint8",
+        "name": "round",
+        "type": "uint8"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "node",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint8",
+        "name": "kind",
+        "type": "uint8"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint8",
+        "name": "mandateStep",
+        "type": "uint8"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint8",
+        "name": "passed",
+        "type": "uint8"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint16",
+        "name": "units",
+        "type": "uint16"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint16",
+        "name": "taken",
+        "type": "uint16"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint16",
+        "name": "scoreAfter",
+        "type": "uint16"
+      }
+    ],
+    "name": "Charged",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "doRequestId",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "node",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "dpRequestId",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint8",
+        "name": "round",
+        "type": "uint8"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint8",
+        "name": "step",
+        "type": "uint8"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint48",
+        "name": "blockNumber",
+        "type": "uint48"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint24",
+        "name": "steps",
+        "type": "uint24"
+      }
+    ],
+    "name": "Claimed",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "node",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "entry",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint16",
+        "name": "unitsBack",
+        "type": "uint16"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint16",
+        "name": "scoreAfter",
+        "type": "uint16"
+      }
+    ],
+    "name": "Corrected",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "node",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256[]",
+        "name": "entries",
+        "type": "uint256[]"
+      }
+    ],
+    "name": "CorrectionAsked",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "uint32",
+        "name": "at",
+        "type": "uint32"
+      }
+    ],
+    "name": "FarmMinimumOn",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "bytes31",
+        "name": "imageKey",
+        "type": "bytes31"
+      },
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "orderId",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "bool",
+        "name": "failed",
+        "type": "bool"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint16",
+        "name": "s7",
+        "type": "uint16"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint16",
+        "name": "f7",
+        "type": "uint16"
+      },
+      {
+        "indexed": false,
+        "internalType": "bool",
+        "name": "marked",
+        "type": "bool"
+      }
+    ],
+    "name": "HealthCounted",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "node",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint8",
+        "name": "reason",
+        "type": "uint8"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint32",
+        "name": "at",
+        "type": "uint32"
+      }
+    ],
+    "name": "Left",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "doRequestId",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint8",
+        "name": "round",
+        "type": "uint8"
+      },
+      {
+        "indexed": false,
+        "internalType": "bytes32",
+        "name": "listHash",
+        "type": "bytes32"
+      }
+    ],
+    "name": "ListJudged",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "uint32",
+        "name": "at",
+        "type": "uint32"
+      }
+    ],
+    "name": "MinimumOn",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "orderId",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "node",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint8",
+        "name": "kind",
+        "type": "uint8"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint16",
+        "name": "units",
+        "type": "uint16"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint16",
+        "name": "scoreAfter",
+        "type": "uint16"
+      }
+    ],
+    "name": "OrderFailed",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "index",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint32",
+        "name": "effectAt",
+        "type": "uint32"
+      }
+    ],
+    "name": "ParametersAdded",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "doRequestId",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint8",
+        "name": "round",
+        "type": "uint8"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "node",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint16",
+        "name": "units",
+        "type": "uint16"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint16",
+        "name": "scoreAfter",
+        "type": "uint16"
+      }
+    ],
+    "name": "Recounted",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "doRequestId",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint8",
+        "name": "round",
+        "type": "uint8"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint48",
+        "name": "blockNumber",
+        "type": "uint48"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "bidWei",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "baseWei",
+        "type": "uint256"
+      }
+    ],
+    "name": "RoundOpened",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "node",
+        "type": "address"
+      },
+      {
+        "indexed": true,
+        "internalType": "bytes31",
+        "name": "imageKey",
+        "type": "bytes31"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint32",
+        "name": "at",
+        "type": "uint32"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint32",
+        "name": "until",
+        "type": "uint32"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint32",
+        "name": "prevAt",
+        "type": "uint32"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint32",
+        "name": "prevUntil",
+        "type": "uint32"
+      }
+    ],
+    "name": "Skipped",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "nameHash",
+        "type": "bytes32"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint8",
+        "name": "bit",
+        "type": "uint8"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint32",
+        "name": "at",
+        "type": "uint32"
+      }
+    ],
+    "name": "TemplateRegistered",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "orderId",
+        "type": "uint256"
+      }
+    ],
+    "name": "WideProven",
+    "type": "event"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "node",
+        "type": "address"
+      }
+    ],
+    "name": "accountOf",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "word",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address[]",
+        "name": "nodes",
+        "type": "address[]"
+      }
+    ],
+    "name": "accountsOfNodes",
+    "outputs": [
+      {
+        "internalType": "uint256[]",
+        "name": "words",
+        "type": "uint256[]"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "components": [
+          {
+            "internalType": "uint32",
+            "name": "effectAt",
+            "type": "uint32"
+          },
+          {
+            "internalType": "bool",
+            "name": "claims",
+            "type": "bool"
+          },
+          {
+            "internalType": "uint8",
+            "name": "fitPercent",
+            "type": "uint8"
+          },
+          {
+            "internalType": "uint8",
+            "name": "maxSteps",
+            "type": "uint8"
+          },
+          {
+            "internalType": "uint8",
+            "name": "maxRounds",
+            "type": "uint8"
+          },
+          {
+            "internalType": "uint8",
+            "name": "fullBlockPercent",
+            "type": "uint8"
+          },
+          {
+            "internalType": "uint8",
+            "name": "settleMax",
+            "type": "uint8"
+          },
+          {
+            "internalType": "uint8",
+            "name": "pendingMax",
+            "type": "uint8"
+          },
+          {
+            "internalType": "uint8",
+            "name": "correctionMaxEntries",
+            "type": "uint8"
+          },
+          {
+            "internalType": "uint16",
+            "name": "stepBlocks",
+            "type": "uint16"
+          },
+          {
+            "internalType": "uint16",
+            "name": "leadBlocks",
+            "type": "uint16"
+          },
+          {
+            "internalType": "uint16",
+            "name": "banSlots",
+            "type": "uint16"
+          },
+          {
+            "internalType": "uint16",
+            "name": "gain",
+            "type": "uint16"
+          },
+          {
+            "internalType": "uint16",
+            "name": "missUnits",
+            "type": "uint16"
+          },
+          {
+            "internalType": "uint16",
+            "name": "lateUnits",
+            "type": "uint16"
+          },
+          {
+            "internalType": "uint16",
+            "name": "bandWidth",
+            "type": "uint16"
+          },
+          {
+            "internalType": "uint32",
+            "name": "minListedSeconds",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "maxRequestAgeSeconds",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "startTimeoutSeconds",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "minPauseSeconds",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "servingGraceSeconds",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "correctionWindowSeconds",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "correctionAskSeconds",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "fullWindowSeconds",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "fetchTrySeconds",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "heldMarginSeconds",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint64",
+            "name": "nodeFaultCodes",
+            "type": "uint64"
+          },
+          {
+            "internalType": "uint64",
+            "name": "defaultFaultCodes",
+            "type": "uint64"
+          },
+          {
+            "internalType": "uint64",
+            "name": "ambiguousCodes",
+            "type": "uint64"
+          },
+          {
+            "internalType": "uint64",
+            "name": "runBilledCodes",
+            "type": "uint64"
+          }
+        ],
+        "internalType": "struct IPoxMatchingTypes.ParameterSet",
+        "name": "set",
+        "type": "tuple"
+      }
+    ],
+    "name": "addParameterSet",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "orderId",
+        "type": "uint256"
+      }
+    ],
+    "name": "ambiguousOf",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "word",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "dpRequestId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint16",
+        "name": "tzMask",
+        "type": "uint16"
+      }
+    ],
+    "name": "announce",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256[]",
+        "name": "entries",
+        "type": "uint256[]"
+      }
+    ],
+    "name": "askCorrection",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "orderId",
+        "type": "uint256"
+      }
+    ],
+    "name": "ban",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "beat",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "node",
+        "type": "address"
+      }
+    ],
+    "name": "beatCounts",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "doRequestId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint8",
+        "name": "round",
+        "type": "uint8"
+      },
+      {
+        "internalType": "address",
+        "name": "node",
+        "type": "address"
+      }
+    ],
+    "name": "chargeOf",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "word",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "node",
+        "type": "address"
+      },
+      {
+        "internalType": "uint32",
+        "name": "slot",
+        "type": "uint32"
+      }
+    ],
+    "name": "chargedInOf",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "word",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "doRequestId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "dpRequestId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "roundStamp",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "uint24",
+        "name": "steps",
+        "type": "uint24"
+      }
+    ],
+    "name": "claim",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "doRequestId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "from",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "count",
+        "type": "uint256"
+      }
+    ],
+    "name": "claimerSlice",
+    "outputs": [
+      {
+        "internalType": "address[]",
+        "name": "claimers",
+        "type": "address[]"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "doRequestId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "address[]",
+        "name": "nodes",
+        "type": "address[]"
+      }
+    ],
+    "name": "claimsOfNodes",
+    "outputs": [
+      {
+        "internalType": "uint256[]",
+        "name": "words",
+        "type": "uint256[]"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "claimsOn",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "node",
+        "type": "address"
+      },
+      {
+        "internalType": "uint256[]",
+        "name": "entries",
+        "type": "uint256[]"
+      },
+      {
+        "internalType": "uint256",
+        "name": "stand",
+        "type": "uint256"
+      }
+    ],
+    "name": "correct",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "ethStorage",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "node",
+        "type": "address"
+      }
+    ],
+    "name": "expire",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "orderId",
+        "type": "uint256"
+      }
+    ],
+    "name": "failureOf",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "word",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "farmMinimumOn",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "doRequestId",
+        "type": "uint256"
+      }
+    ],
+    "name": "fillOf",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "word",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes31",
+        "name": "image",
+        "type": "bytes31"
+      }
+    ],
+    "name": "healthOf",
+    "outputs": [
+      {
+        "internalType": "uint256[]",
+        "name": "words",
+        "type": "uint256[]"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes31",
+        "name": "image",
+        "type": "bytes31"
+      }
+    ],
+    "name": "imageHealth",
+    "outputs": [
+      {
+        "internalType": "uint16",
+        "name": "s7",
+        "type": "uint16"
+      },
+      {
+        "internalType": "uint16",
+        "name": "f7",
+        "type": "uint16"
+      },
+      {
+        "internalType": "uint8",
+        "name": "nodes",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint8",
+        "name": "owners",
+        "type": "uint8"
+      },
+      {
+        "internalType": "bool",
+        "name": "marked",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "imageRegistry",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "judge",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "doRequestId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint8",
+        "name": "round",
+        "type": "uint8"
+      }
+    ],
+    "name": "listHashOf",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "minimumOn",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "orderId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256[]",
+        "name": "hints",
+        "type": "uint256[]"
+      }
+    ],
+    "name": "nodeFault",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "node",
+        "type": "address"
+      }
+    ],
+    "name": "nodeStanding",
+    "outputs": [
+      {
+        "internalType": "uint16",
+        "name": "score",
+        "type": "uint16"
+      },
+      {
+        "internalType": "uint32",
+        "name": "beatAgeSlots",
+        "type": "uint32"
+      },
+      {
+        "internalType": "uint32",
+        "name": "bannedUntil",
+        "type": "uint32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "orderId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "bool",
+        "name": "startUnverified",
+        "type": "bool"
+      }
+    ],
+    "name": "notRun",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "orderId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256[]",
+        "name": "hints",
+        "type": "uint256[]"
+      }
+    ],
+    "name": "noteAmbiguous",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "orderId",
+        "type": "uint256"
+      }
+    ],
+    "name": "noteRefund",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "doRequestId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "bidWei",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "baseWei",
+        "type": "uint256"
+      }
+    ],
+    "name": "onBidRaised",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "dpRequestId",
+        "type": "uint256"
+      }
+    ],
+    "name": "onOfferRemoved",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "orderId",
+        "type": "uint256"
+      }
+    ],
+    "name": "onOrderClosed",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "orderId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "doRequestId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "dpRequestId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint8",
+        "name": "path",
+        "type": "uint8"
+      }
+    ],
+    "name": "onOrderPlaced",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "orderId",
+        "type": "uint256"
+      }
+    ],
+    "name": "onOrderRejected",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "orderId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint32",
+        "name": "billedGflops",
+        "type": "uint32"
+      },
+      {
+        "internalType": "uint16",
+        "name": "billedHours",
+        "type": "uint16"
+      }
+    ],
+    "name": "onOrderSettled",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "orderId",
+        "type": "uint256"
+      }
+    ],
+    "name": "onOrderUnstarted",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "doRequestId",
+        "type": "uint256"
+      }
+    ],
+    "name": "onRequestAdded",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "owner",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "node",
+        "type": "address"
+      }
+    ],
+    "name": "paidWorkOf",
+    "outputs": [
+      {
+        "internalType": "uint32",
+        "name": "cuHours",
+        "type": "uint32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address[]",
+        "name": "nodes",
+        "type": "address[]"
+      }
+    ],
+    "name": "paidWorkOfNodes",
+    "outputs": [
+      {
+        "internalType": "uint256[]",
+        "name": "cuHours",
+        "type": "uint256[]"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "index",
+        "type": "uint256"
+      }
+    ],
+    "name": "parameterSet",
+    "outputs": [
+      {
+        "components": [
+          {
+            "internalType": "uint32",
+            "name": "effectAt",
+            "type": "uint32"
+          },
+          {
+            "internalType": "bool",
+            "name": "claims",
+            "type": "bool"
+          },
+          {
+            "internalType": "uint8",
+            "name": "fitPercent",
+            "type": "uint8"
+          },
+          {
+            "internalType": "uint8",
+            "name": "maxSteps",
+            "type": "uint8"
+          },
+          {
+            "internalType": "uint8",
+            "name": "maxRounds",
+            "type": "uint8"
+          },
+          {
+            "internalType": "uint8",
+            "name": "fullBlockPercent",
+            "type": "uint8"
+          },
+          {
+            "internalType": "uint8",
+            "name": "settleMax",
+            "type": "uint8"
+          },
+          {
+            "internalType": "uint8",
+            "name": "pendingMax",
+            "type": "uint8"
+          },
+          {
+            "internalType": "uint8",
+            "name": "correctionMaxEntries",
+            "type": "uint8"
+          },
+          {
+            "internalType": "uint16",
+            "name": "stepBlocks",
+            "type": "uint16"
+          },
+          {
+            "internalType": "uint16",
+            "name": "leadBlocks",
+            "type": "uint16"
+          },
+          {
+            "internalType": "uint16",
+            "name": "banSlots",
+            "type": "uint16"
+          },
+          {
+            "internalType": "uint16",
+            "name": "gain",
+            "type": "uint16"
+          },
+          {
+            "internalType": "uint16",
+            "name": "missUnits",
+            "type": "uint16"
+          },
+          {
+            "internalType": "uint16",
+            "name": "lateUnits",
+            "type": "uint16"
+          },
+          {
+            "internalType": "uint16",
+            "name": "bandWidth",
+            "type": "uint16"
+          },
+          {
+            "internalType": "uint32",
+            "name": "minListedSeconds",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "maxRequestAgeSeconds",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "startTimeoutSeconds",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "minPauseSeconds",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "servingGraceSeconds",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "correctionWindowSeconds",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "correctionAskSeconds",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "fullWindowSeconds",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "fetchTrySeconds",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "heldMarginSeconds",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint64",
+            "name": "nodeFaultCodes",
+            "type": "uint64"
+          },
+          {
+            "internalType": "uint64",
+            "name": "defaultFaultCodes",
+            "type": "uint64"
+          },
+          {
+            "internalType": "uint64",
+            "name": "ambiguousCodes",
+            "type": "uint64"
+          },
+          {
+            "internalType": "uint64",
+            "name": "runBilledCodes",
+            "type": "uint64"
+          }
+        ],
+        "internalType": "struct IPoxMatchingTypes.ParameterSet",
+        "name": "",
+        "type": "tuple"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "parameterSetCount",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "pause",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "node",
+        "type": "address"
+      },
+      {
+        "internalType": "uint256",
+        "name": "from",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "count",
+        "type": "uint256"
+      }
+    ],
+    "name": "pendingOf",
+    "outputs": [
+      {
+        "internalType": "uint256[]",
+        "name": "doRequestIds",
+        "type": "uint256[]"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "node",
+        "type": "address"
+      },
+      {
+        "internalType": "uint256",
+        "name": "ordinal",
+        "type": "uint256"
+      }
+    ],
+    "name": "periodAt",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "first",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "second",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address[]",
+        "name": "nodes",
+        "type": "address[]"
+      }
+    ],
+    "name": "periodsOf",
+    "outputs": [
+      {
+        "internalType": "uint256[]",
+        "name": "words",
+        "type": "uint256[]"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "pox",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "predecessor",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "pricing",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "orderId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256[]",
+        "name": "hints",
+        "type": "uint256[]"
+      }
+    ],
+    "name": "proveWide",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "doRequestId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint8",
+        "name": "round",
+        "type": "uint8"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "roundStamp",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "listHash",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "address",
+        "name": "approvedNode",
+        "type": "address"
+      },
+      {
+        "internalType": "uint8",
+        "name": "approvedStep",
+        "type": "uint8"
+      },
+      {
+        "internalType": "address[]",
+        "name": "nodes",
+        "type": "address[]"
+      },
+      {
+        "internalType": "uint8[]",
+        "name": "steps",
+        "type": "uint8[]"
+      },
+      {
+        "internalType": "uint8[]",
+        "name": "uncounted",
+        "type": "uint8[]"
+      },
+      {
+        "internalType": "uint256[]",
+        "name": "hints",
+        "type": "uint256[]"
+      }
+    ],
+    "name": "recordMisses",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "node",
+        "type": "address"
+      }
+    ],
+    "name": "recordOf",
+    "outputs": [
+      {
+        "internalType": "uint24",
+        "name": "beats",
+        "type": "uint24"
+      },
+      {
+        "internalType": "uint24",
+        "name": "claims",
+        "type": "uint24"
+      },
+      {
+        "internalType": "uint24",
+        "name": "lates",
+        "type": "uint24"
+      },
+      {
+        "internalType": "uint24",
+        "name": "misses",
+        "type": "uint24"
+      },
+      {
+        "internalType": "uint24",
+        "name": "failures",
+        "type": "uint24"
+      },
+      {
+        "internalType": "uint24",
+        "name": "pending",
+        "type": "uint24"
+      },
+      {
+        "internalType": "uint32",
+        "name": "lastFailureSlot",
+        "type": "uint32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "string",
+        "name": "name",
+        "type": "string"
+      },
+      {
+        "internalType": "bool",
+        "name": "marked",
+        "type": "bool"
+      },
+      {
+        "internalType": "uint16[5]",
+        "name": "constants",
+        "type": "uint16[5]"
+      },
+      {
+        "internalType": "string",
+        "name": "provider",
+        "type": "string"
+      }
+    ],
+    "name": "registerTemplate",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "string",
+        "name": "imageCid",
+        "type": "string"
+      },
+      {
+        "internalType": "bool",
+        "name": "marked",
+        "type": "bool"
+      }
+    ],
+    "name": "registryMarks",
+    "outputs": [
+      {
+        "internalType": "uint8",
+        "name": "flags",
+        "type": "uint8"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "doRequestId",
+        "type": "uint256"
+      }
+    ],
+    "name": "requestImageOf",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "word",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "doRequestId",
+        "type": "uint256"
+      }
+    ],
+    "name": "requestOf",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "record",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "price",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint32",
+        "name": "slot",
+        "type": "uint32"
+      }
+    ],
+    "name": "rollLengths",
+    "outputs": [
+      {
+        "internalType": "uint32[50]",
+        "name": "lengths",
+        "type": "uint32[50]"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint32",
+        "name": "slot",
+        "type": "uint32"
+      },
+      {
+        "internalType": "uint8",
+        "name": "band",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint256",
+        "name": "from",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "count",
+        "type": "uint256"
+      },
+      {
+        "internalType": "bytes31",
+        "name": "imageKey",
+        "type": "bytes31"
+      }
+    ],
+    "name": "rollPeriodsOf",
+    "outputs": [
+      {
+        "internalType": "uint256[]",
+        "name": "words",
+        "type": "uint256[]"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint32",
+        "name": "slot",
+        "type": "uint32"
+      },
+      {
+        "internalType": "uint8",
+        "name": "band",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint256",
+        "name": "from",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "count",
+        "type": "uint256"
+      }
+    ],
+    "name": "rollSlice",
+    "outputs": [
+      {
+        "internalType": "uint256[]",
+        "name": "entries",
+        "type": "uint256[]"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "doRequestId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint8",
+        "name": "round",
+        "type": "uint8"
+      }
+    ],
+    "name": "roundOf",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "price",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "stamp",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "sameSecondBlocks",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "node",
+        "type": "address"
+      }
+    ],
+    "name": "servingOf",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "word",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "imageRegistry",
+        "type": "address"
+      }
+    ],
+    "name": "setImageRegistry",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "judge",
+        "type": "address"
+      }
+    ],
+    "name": "setJudge",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "pricing",
+        "type": "address"
+      }
+    ],
+    "name": "setPricing",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes31",
+        "name": "imageKey",
+        "type": "bytes31"
+      },
+      {
+        "internalType": "uint32",
+        "name": "until",
+        "type": "uint32"
+      },
+      {
+        "internalType": "uint256[3]",
+        "name": "orderIds",
+        "type": "uint256[3]"
+      }
+    ],
+    "name": "skipImage",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "node",
+        "type": "address"
+      },
+      {
+        "internalType": "bytes31",
+        "name": "imageKey",
+        "type": "bytes31"
+      }
+    ],
+    "name": "skipOf",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "word",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "slotSeconds",
+    "outputs": [
+      {
+        "internalType": "uint32",
+        "name": "",
+        "type": "uint32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "node",
+        "type": "address"
+      },
+      {
+        "internalType": "uint256",
+        "name": "orderId",
+        "type": "uint256"
+      }
+    ],
+    "name": "strike",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "nameHash",
+        "type": "bytes32"
+      }
+    ],
+    "name": "templateOf",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "word",
+        "type": "uint256"
+      },
+      {
+        "internalType": "string",
+        "name": "provider",
+        "type": "string"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  }
+]

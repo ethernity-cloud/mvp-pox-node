@@ -1,0 +1,1022 @@
+[
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "doRequestId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint8",
+        "name": "round",
+        "type": "uint8"
+      }
+    ],
+    "name": "RoundRefused",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint32",
+        "name": "slot",
+        "type": "uint32"
+      }
+    ],
+    "name": "bandLengths",
+    "outputs": [
+      {
+        "internalType": "uint32[50]",
+        "name": "lengths",
+        "type": "uint32[50]"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "doRequestId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint16",
+        "name": "minScore",
+        "type": "uint16"
+      },
+      {
+        "internalType": "uint8",
+        "name": "fromBand",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint256",
+        "name": "from",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "count",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "carry",
+        "type": "uint256"
+      }
+    ],
+    "name": "bidQuote",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "roundStamp",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "uint32",
+        "name": "counted",
+        "type": "uint32"
+      },
+      {
+        "internalType": "uint32",
+        "name": "canClaimNow",
+        "type": "uint32"
+      },
+      {
+        "internalType": "uint256",
+        "name": "minBidWei",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "baseNowWei",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "bidWei",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "addedEscrowWei",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint8",
+        "name": "nextBand",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint256",
+        "name": "nextFrom",
+        "type": "uint256"
+      },
+      {
+        "internalType": "bool",
+        "name": "done",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint8",
+        "name": "cpu",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint8",
+        "name": "memGB",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint8",
+        "name": "storageGB",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint8",
+        "name": "bandwidth",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint16",
+        "name": "hoursWanted",
+        "type": "uint16"
+      },
+      {
+        "internalType": "uint16",
+        "name": "needGflops",
+        "type": "uint16"
+      },
+      {
+        "internalType": "uint16",
+        "name": "ceilGflops",
+        "type": "uint16"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "templateHash",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "uint16",
+        "name": "minScore",
+        "type": "uint16"
+      },
+      {
+        "internalType": "uint8",
+        "name": "fromBand",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint256",
+        "name": "from",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "count",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "carry",
+        "type": "uint256"
+      }
+    ],
+    "name": "bidQuoteFor",
+    "outputs": [
+      {
+        "internalType": "uint32",
+        "name": "counted",
+        "type": "uint32"
+      },
+      {
+        "internalType": "uint256",
+        "name": "minBidWei",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "baseNowWei",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint8",
+        "name": "nextBand",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint256",
+        "name": "nextFrom",
+        "type": "uint256"
+      },
+      {
+        "internalType": "bool",
+        "name": "done",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "doRequestId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint8",
+        "name": "round",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint8",
+        "name": "fromBand",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint256",
+        "name": "from",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "count",
+        "type": "uint256"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "h",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "uint8",
+        "name": "matchFound",
+        "type": "uint8"
+      },
+      {
+        "internalType": "bool",
+        "name": "beyond",
+        "type": "bool"
+      }
+    ],
+    "name": "candidates",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "roundStamp",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "uint256[]",
+        "name": "eligible",
+        "type": "uint256[]"
+      },
+      {
+        "internalType": "uint256[]",
+        "name": "tips",
+        "type": "uint256[]"
+      },
+      {
+        "internalType": "uint32[]",
+        "name": "indexes",
+        "type": "uint32[]"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "hOut",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "uint8",
+        "name": "matchFoundOut",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint8",
+        "name": "nextBand",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint256",
+        "name": "nextFrom",
+        "type": "uint256"
+      },
+      {
+        "internalType": "bool",
+        "name": "done",
+        "type": "bool"
+      },
+      {
+        "internalType": "bool",
+        "name": "settled",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "doRequestId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "from",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "count",
+        "type": "uint256"
+      }
+    ],
+    "name": "claimersOf",
+    "outputs": [
+      {
+        "internalType": "address[]",
+        "name": "nodes",
+        "type": "address[]"
+      },
+      {
+        "internalType": "uint256[]",
+        "name": "claims",
+        "type": "uint256[]"
+      },
+      {
+        "internalType": "bool[]",
+        "name": "approvable",
+        "type": "bool[]"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "doRequestId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "address[]",
+        "name": "nodes",
+        "type": "address[]"
+      }
+    ],
+    "name": "claimsOf",
+    "outputs": [
+      {
+        "internalType": "uint256[]",
+        "name": "claims",
+        "type": "uint256[]"
+      },
+      {
+        "internalType": "bool[]",
+        "name": "approvable",
+        "type": "bool[]"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "doRequestId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint8",
+        "name": "round",
+        "type": "uint8"
+      }
+    ],
+    "name": "mandateOutcomes",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "roundStamp",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "address[]",
+        "name": "mandated",
+        "type": "address[]"
+      },
+      {
+        "internalType": "uint8[]",
+        "name": "outcomes",
+        "type": "uint8[]"
+      },
+      {
+        "internalType": "uint32[]",
+        "name": "passed",
+        "type": "uint32[]"
+      },
+      {
+        "internalType": "uint8[]",
+        "name": "stated",
+        "type": "uint8[]"
+      },
+      {
+        "internalType": "address[]",
+        "name": "falseNodes",
+        "type": "address[]"
+      },
+      {
+        "internalType": "uint8[]",
+        "name": "realSteps",
+        "type": "uint8[]"
+      },
+      {
+        "internalType": "bool",
+        "name": "judgeable",
+        "type": "bool"
+      },
+      {
+        "internalType": "bool",
+        "name": "complete",
+        "type": "bool"
+      },
+      {
+        "internalType": "bool",
+        "name": "settled",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "node",
+        "type": "address"
+      },
+      {
+        "internalType": "uint256",
+        "name": "fromRequestId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "count",
+        "type": "uint256"
+      }
+    ],
+    "name": "mandatesOfNode",
+    "outputs": [
+      {
+        "internalType": "uint32",
+        "name": "answered",
+        "type": "uint32"
+      },
+      {
+        "internalType": "uint32",
+        "name": "late",
+        "type": "uint32"
+      },
+      {
+        "internalType": "uint32",
+        "name": "absent",
+        "type": "uint32"
+      },
+      {
+        "internalType": "uint32",
+        "name": "excused",
+        "type": "uint32"
+      },
+      {
+        "internalType": "uint32",
+        "name": "notReached",
+        "type": "uint32"
+      },
+      {
+        "internalType": "uint256",
+        "name": "nextRequestId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "bool",
+        "name": "complete",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "doRequestId",
+        "type": "uint256"
+      }
+    ],
+    "name": "requestInfo",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "claims",
+        "type": "bool"
+      },
+      {
+        "internalType": "bool",
+        "name": "ranked",
+        "type": "bool"
+      },
+      {
+        "internalType": "bool",
+        "name": "imageMarked",
+        "type": "bool"
+      },
+      {
+        "internalType": "bool",
+        "name": "settled",
+        "type": "bool"
+      },
+      {
+        "internalType": "bool",
+        "name": "isFinal",
+        "type": "bool"
+      },
+      {
+        "internalType": "uint8",
+        "name": "round",
+        "type": "uint8"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "roundStamp",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "seed",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "uint48",
+        "name": "roundBlock",
+        "type": "uint48"
+      },
+      {
+        "internalType": "uint32",
+        "name": "roundTime",
+        "type": "uint32"
+      },
+      {
+        "internalType": "uint32",
+        "name": "createdAt",
+        "type": "uint32"
+      },
+      {
+        "internalType": "uint32",
+        "name": "rollSlot",
+        "type": "uint32"
+      },
+      {
+        "internalType": "uint256",
+        "name": "bidWei",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "baseWei",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint32",
+        "name": "stepNow",
+        "type": "uint32"
+      },
+      {
+        "internalType": "uint32",
+        "name": "closedStep",
+        "type": "uint32"
+      },
+      {
+        "internalType": "uint8",
+        "name": "lastOpenStep",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint8",
+        "name": "filledStep",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint16",
+        "name": "claimCount",
+        "type": "uint16"
+      },
+      {
+        "internalType": "bool",
+        "name": "claimedInRound",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint32",
+        "name": "slot",
+        "type": "uint32"
+      },
+      {
+        "internalType": "uint8",
+        "name": "fromBand",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint256",
+        "name": "from",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "count",
+        "type": "uint256"
+      }
+    ],
+    "name": "rollPage",
+    "outputs": [
+      {
+        "internalType": "uint256[]",
+        "name": "entries",
+        "type": "uint256[]"
+      },
+      {
+        "internalType": "uint8",
+        "name": "nextBand",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint256",
+        "name": "nextFrom",
+        "type": "uint256"
+      },
+      {
+        "internalType": "bool",
+        "name": "done",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "doRequestId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint8",
+        "name": "round",
+        "type": "uint8"
+      }
+    ],
+    "name": "roundAt",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "roundStamp",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "uint48",
+        "name": "roundBlock",
+        "type": "uint48"
+      },
+      {
+        "internalType": "uint32",
+        "name": "roundTime",
+        "type": "uint32"
+      },
+      {
+        "internalType": "uint256",
+        "name": "bidWei",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "baseWei",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint8",
+        "name": "lastOpenStep",
+        "type": "uint8"
+      },
+      {
+        "internalType": "bool",
+        "name": "closed",
+        "type": "bool"
+      },
+      {
+        "internalType": "bool",
+        "name": "judged",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "scanMax",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "doRequestId",
+        "type": "uint256"
+      }
+    ],
+    "name": "scheduleOf",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "roundStamp",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "uint8",
+        "name": "round",
+        "type": "uint8"
+      },
+      {
+        "internalType": "address[]",
+        "name": "mandated",
+        "type": "address[]"
+      },
+      {
+        "internalType": "uint256[]",
+        "name": "claims",
+        "type": "uint256[]"
+      },
+      {
+        "internalType": "bool[]",
+        "name": "approvable",
+        "type": "bool[]"
+      },
+      {
+        "internalType": "bool[]",
+        "name": "canClaim",
+        "type": "bool[]"
+      },
+      {
+        "internalType": "uint16",
+        "name": "matching",
+        "type": "uint16"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "listHash",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "uint8",
+        "name": "stopBand",
+        "type": "uint8"
+      },
+      {
+        "internalType": "bool",
+        "name": "complete",
+        "type": "bool"
+      },
+      {
+        "internalType": "bool",
+        "name": "settled",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "doRequestId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint8",
+        "name": "fromBand",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint256",
+        "name": "from",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "count",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256[7]",
+        "name": "carry",
+        "type": "uint256[7]"
+      }
+    ],
+    "name": "tierScore",
+    "outputs": [
+      {
+        "internalType": "uint16",
+        "name": "score",
+        "type": "uint16"
+      },
+      {
+        "internalType": "uint256[7]",
+        "name": "carryOut",
+        "type": "uint256[7]"
+      },
+      {
+        "internalType": "uint8",
+        "name": "nextBand",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint256",
+        "name": "nextFrom",
+        "type": "uint256"
+      },
+      {
+        "internalType": "bool",
+        "name": "done",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "doRequestId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint8",
+        "name": "round",
+        "type": "uint8"
+      },
+      {
+        "internalType": "address",
+        "name": "node",
+        "type": "address"
+      },
+      {
+        "internalType": "uint8",
+        "name": "band",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint256",
+        "name": "index",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint8",
+        "name": "fromBand",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint256",
+        "name": "from",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "count",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "carry",
+        "type": "uint256"
+      }
+    ],
+    "name": "turnOf",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "roundStamp",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "bool",
+        "name": "eligible",
+        "type": "bool"
+      },
+      {
+        "internalType": "bool",
+        "name": "fit",
+        "type": "bool"
+      },
+      {
+        "internalType": "bool",
+        "name": "matches",
+        "type": "bool"
+      },
+      {
+        "internalType": "uint32",
+        "name": "matchAbove",
+        "type": "uint32"
+      },
+      {
+        "internalType": "uint16",
+        "name": "fitBefore",
+        "type": "uint16"
+      },
+      {
+        "internalType": "uint16",
+        "name": "restBefore",
+        "type": "uint16"
+      },
+      {
+        "internalType": "uint16",
+        "name": "fitInBand",
+        "type": "uint16"
+      },
+      {
+        "internalType": "uint16",
+        "name": "restInBand",
+        "type": "uint16"
+      },
+      {
+        "internalType": "bool",
+        "name": "done",
+        "type": "bool"
+      },
+      {
+        "internalType": "uint8",
+        "name": "mandateStep",
+        "type": "uint8"
+      },
+      {
+        "internalType": "bool",
+        "name": "excused",
+        "type": "bool"
+      },
+      {
+        "internalType": "uint256",
+        "name": "carryOut",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint8",
+        "name": "nextBand",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint256",
+        "name": "nextFrom",
+        "type": "uint256"
+      },
+      {
+        "internalType": "bool",
+        "name": "settled",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  }
+]
