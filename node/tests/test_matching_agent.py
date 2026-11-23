@@ -212,13 +212,23 @@ def test_the_pointer_and_the_reader_bind_matching(agent, monkeypatch):
 
 # ------------------------------------------------------------- the offer
 
-def params_node(agent, monkeypatch, tmp_path, stub, record):
+GIB = 2**30
+
+
+def params_node(agent, monkeypatch, tmp_path, stub, record, memory=(64 * GIB, 60 * GIB),
+                storage=(200 * GIB, 150 * GIB)):
+    """A node whose host has `memory` (total, MemAvailable) and `storage`
+    (total, free) bytes and the free figures of today's offer, 16 GB and
+    100 GB, advertising `record`."""
     node = object.__new__(agent.EtnyPoXNode)
     node.logger = logging.getLogger("test")
     network = intake.polygon_mainnet(monkeypatch)
     node._EtnyPoXNode__network_config = network.__class__(**{**network.__dict__, "enclave_memory_gib": 0})
     node._EtnyPoXNode__matching = stub
-    node._EtnyPoXNode__enclave_memory = capability.EnclaveMemoryBook(tmp_path / "broker_cursor.json")
+    node._EtnyPoXNode__enclave_memory = capability.enclave_memory_book(tmp_path / "broker_cursor.json")
+    node._EtnyPoXNode__offer_storage = capability.storage_book(tmp_path / "broker_cursor.json")
+    node.cache_config = SimpleNamespace(base_path=tmp_path)
+    node.storage = SimpleNamespace(peer_id=lambda: "peer")
     node._EtnyPoXNode__price = 1
     node._EtnyPoXNode__bandwidth = 100
     node._EtnyPoXNode__duration = 24
@@ -227,18 +237,21 @@ def params_node(agent, monkeypatch, tmp_path, stub, record):
     node._EtnyPoXNode__pox_is_20 = True
     node._EtnyPoXNode__broker = None
     monkeypatch.setattr(agent, "HardwareInfoProvider", SimpleNamespace(
-        get_number_of_cpus=lambda: 8, get_free_memory=lambda: 16, get_free_storage=lambda: 100))
+        get_number_of_cpus=lambda: 8, get_free_memory=lambda: 16, get_free_storage=lambda: 100,
+        get_total_memory_bytes=lambda: memory[0], get_available_memory_bytes=lambda: memory[1],
+        get_storage_bytes=lambda path: storage))
     monkeypatch.setattr(agent.EtnyPoXNode, "_EtnyPoXNode__advertised_record", lambda self: ("img", record))
+    monkeypatch.setattr(agent.EtnyPoXNode, "_EtnyPoXNode__runnable_trustedzones", lambda self: {"img"})
     monkeypatch.setattr(agent.EtnyPoXNode, "_EtnyPoXNode__current_tip", lambda self, gflops: 5)
-    monkeypatch.setattr(agent.EtnyPoXNode, "_EtnyPoXNode__dp_metadata4", lambda self, advertised: "m4")
     monkeypatch.setattr(capability, "metadata3", lambda geo, record: "m3")
     return node
 
 
-RECORD = {"gflops": 250, "cuv": 4, "t1": 1761724830, "sig_der_hex": "3065AB"}
+RECORD = {"gflops": 250, "cuv": 4, "t1": 1761724830, "sig_der_hex": "3065AB", "heap": "2G", "workers": 4}
+BENCH = {**RECORD, "encmem": "32", "custorage": "120"}
 
 
-def test_the_offer_states_the_records_enclave_memory_above_its_gflops(agent, monkeypatch, tmp_path):
+def test_the_offer_states_the_largest_bench_size_its_record_passed_above_its_gflops(agent, monkeypatch, tmp_path):
     node = params_node(agent, monkeypatch, tmp_path, StubMatching(), {**RECORD, "encmem": "8"})
     name, arguments = node._EtnyPoXNode__dp_request_params()
     assert name == "addDPRequestV2" and arguments[5] == 250 | (8 << 16)
@@ -247,16 +260,52 @@ def test_the_offer_states_the_records_enclave_memory_above_its_gflops(agent, mon
     assert arguments[5] == 250 | (4 << 16)
 
 
-def test_a_record_stating_no_enclave_memory_offers_none(agent, monkeypatch, tmp_path):
+def test_the_offer_states_the_reserved_figures_at_most_the_bench_records_readings(agent, monkeypatch, tmp_path):
+    # 64 GiB of memory, 60 available: 60 GiB; 200 GiB of storage, 150 free:
+    # 150 GiB; the record read 32 GiB allocated and 120 GiB of storage.
+    node = params_node(agent, monkeypatch, tmp_path, StubMatching(), BENCH)
+    _, arguments = node._EtnyPoXNode__dp_request_params()
+    assert arguments[:4] == [8, 32, 120, 100]
+    assert arguments[5] == 250 | (32 << 16)
+    # The DP request carries the record with both readings in metadata4.
+    assert arguments[10].endswith(";encmem=32;custorage=120")
+    node = params_node(agent, monkeypatch, tmp_path, StubMatching(), {**BENCH, "encmem": "64", "custorage": "190"},
+                       storage=(200 * GIB, 195 * GIB))
+    _, arguments = node._EtnyPoXNode__dp_request_params()
+    # memory min(64 - 1, 60) = 60, the record's 64 above it; storage
+    # min(200 - 20, 195) = 180, the record's 190 above it.
+    assert arguments[:4] == [8, 60, 180, 100]
+    assert arguments[5] == 250 | (32 << 16)
+
+
+def test_a_reason_11_refusal_keeps_the_storage_below_it(agent, monkeypatch, tmp_path):
+    node = params_node(agent, monkeypatch, tmp_path, StubMatching(), BENCH, storage=(200 * GIB, 195 * GIB))
+    node._EtnyPoXNode__offer_storage.refuse("3065ab", 120)
+    _, arguments = node._EtnyPoXNode__dp_request_params()
+    assert arguments[2] == 119
+
+
+def test_a_record_stating_no_bench_readings_offers_no_enclave_memory(agent, monkeypatch, tmp_path):
     node = params_node(agent, monkeypatch, tmp_path, StubMatching(), RECORD)
     _, arguments = node._EtnyPoXNode__dp_request_params()
+    assert arguments[:4] == [8, 60, 150, 100]
     assert arguments[5] == 250
+    assert "encmem=" not in arguments[10] and "custorage=" not in arguments[10]
 
 
-def test_without_matching_the_offer_carries_the_gflops_alone(agent, monkeypatch, tmp_path):
-    node = params_node(agent, monkeypatch, tmp_path, None, {**RECORD, "encmem": "8"})
+def test_without_matching_the_offer_is_todays(agent, monkeypatch, tmp_path):
+    node = params_node(agent, monkeypatch, tmp_path, None, BENCH)
     _, arguments = node._EtnyPoXNode__dp_request_params()
+    assert arguments[:4] == [8, 16, 100, 100]
     assert arguments[5] == 250
+
+
+def test_no_offer_is_posted_while_a_figure_is_below_one_gb(agent, monkeypatch, tmp_path):
+    node = params_node(agent, monkeypatch, tmp_path, StubMatching(), BENCH, storage=(15 * GIB, 15 * GIB))
+    assert node._EtnyPoXNode__dp_request_held() is True
+    node = params_node(agent, monkeypatch, tmp_path, StubMatching(), BENCH)
+    node._EtnyPoXNode__record_missing_hold = SimpleNamespace(disposition=lambda advertised, runnable: 'post')
+    assert node._EtnyPoXNode__dp_request_held() is False
 
 
 # ------------------------------------------------------------ the refresh

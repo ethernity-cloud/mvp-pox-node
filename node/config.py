@@ -535,6 +535,14 @@ enclave_image_trees_kept = int(os.environ.get('ENCLAVE_IMAGE_TREES_KEPT', 5))
 # 105 s to reach its application, against 5.9 s and 18 s alone.
 enclave_start_stagger_seconds = float(os.environ.get('ENCLAVE_START_STAGGER_SECONDS', 90))
 
+# On a network with PoX 2.0 matching the offer states the host's total
+# memory less the larger of OFFER_MEMORY_RESERVE_GIB and the memory in use,
+# and the total storage of the filesystem the tasks are staged on less the
+# larger of OFFER_STORAGE_RESERVE_GIB and the space in use (offer_shape.py;
+# MATCHING-DESIGN.md 7.4).
+offer_memory_reserve_gib = int(os.environ.get('OFFER_MEMORY_RESERVE_GIB', 1))
+offer_storage_reserve_gib = int(os.environ.get('OFFER_STORAGE_RESERVE_GIB', 20))
+
 # logger
 logger = logging.getLogger("ETNY NODE")
 handler = logging.handlers.RotatingFileHandler('/var/log/etny-node.log', maxBytes=2048000, backupCount=5)

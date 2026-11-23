@@ -19,6 +19,7 @@ from eth_keys import keys
 from eth_keys.exceptions import BadSignature
 from eth_utils import keccak
 
+import offer_shape
 from constants import BENCHMARK_MAX_SECONDS, CU_MAX_GFLOPS, CU_REMEASURE_MARGIN_SECONDS, CU_TTL_SECONDS, CU_VERSION_MIN
 from utils import DP_STARTED_ROW_CAPABILITY, UNSAFE_TRUSTEDZONE_SUFFIX, read_cursor, record_key, write_cursor
 
@@ -44,12 +45,12 @@ SIG_RE = re.compile(r'^0x[0-9a-fA-F]{130}$')
 DER_HEX_RE = re.compile(r'^[0-9a-f]+$')
 
 # The reason codes of PoX.cancelDPRequestByValidators (ethernity-cas
-# capability.rs Reason; CasCapacity admits 1..10), and whether the agent
+# capability.rs Reason; CasCapacity admits 1..11), and whether the agent
 # re-tests before it re-adds: the faults of the record (1..6 and 8) and its
 # absence (9) call for a new record, the strike rule (7) for a new request
-# alone, and an offer stating more enclave memory than its record shows (10,
-# D147) for a request with the enclave memory the record states
-# (enclave_memory_after_cancel).
+# alone, and an offer stating more enclave memory (10, D147) or more storage
+# (11) than the bench record in its DP request shows for a request with the
+# figure the record states (figure_after_cancel).
 CANCEL_REASONS = {
     1: 'RecordSignatureInvalid',
     2: 'RecordNodeMismatch',
@@ -61,19 +62,27 @@ CANCEL_REASONS = {
     8: 'CuVersionBelowMinimum',
     9: 'RecordMissing',
     10: 'EnclaveMemoryAboveRecord',
+    11: 'StorageAboveRecord',
 }
 RETEST_REASONS = frozenset({1, 2, 3, 4, 5, 6, 8, 9})
 REASON_ENCLAVE_MEMORY_ABOVE_RECORD = 10
+REASON_STORAGE_ABOVE_RECORD = 11
 # The enclave sizes an offer states, in GiB (D150): the probe of each size is
 # its own measurement.
 ENCLAVE_SIZES_GIB = (1, 2, 4, 8, 16, 32, 64)
-# The capability record's key of the enclave size its probe passed at
-# (encmem=, SLH 24.7).
+# The capability record's key of the enclave size its probe passed at, the
+# memory the bench allocated and touched (encmem=, SLH 24.7), and of the
+# storage reading the bench signs beside it (custorage=, GiB); both travel in
+# the DP request's metadata4 beside the record's cu keys.
 RECORD_ENCLAVE_MEMORY_KEY = 'encmem'
-# The broker_cursor.json keys of the enclave memory each DP request of the
-# node stated and of the sizes refused under each record (EnclaveMemoryBook).
+RECORD_STORAGE_KEY = 'custorage'
+# The broker_cursor.json keys of the enclave memory and the storage each DP
+# request of the node stated, and of the figures refused under each record
+# (OfferFigureBook).
 OFFER_ENCLAVE_MEMORY = 'offer_enclave_memory'
 ENCLAVE_MEMORY_REFUSED = 'enclave_memory_refused'
+OFFER_STORAGE = 'offer_storage'
+STORAGE_REFUSED = 'storage_refused'
 # The reason of an offer that carries no capability record and is not passed
 # over (tests/spec/metadata-keys.md): its trustedzones= list names none, names
 # a trustedzone that can carry one (without the -unsafe suffix), or the
@@ -94,14 +103,16 @@ def cancel_reason_name(code):
 def cancel_disposition(code):
     """'retest' when the reason faults the record or its absence (1..6, 8 and
     9: the test runs again before the next request), 'memory' for an offer
-    that stated more enclave memory than its record (10: the next request
-    states the record's size, enclave_memory_after_cancel), 'readd'
-    otherwise (7, and any code outside the table: the request alone is
-    replaced)."""
+    that stated more enclave memory than its record (10) and 'storage' for
+    one that stated more storage (11): the next request states the record's
+    figure (figure_after_cancel); 'readd' otherwise (7, and any code outside
+    the table: the request alone is replaced)."""
     if int(code) in RETEST_REASONS:
         return 'retest'
     if int(code) == REASON_ENCLAVE_MEMORY_ABOVE_RECORD:
         return 'memory'
+    if int(code) == REASON_STORAGE_ABOVE_RECORD:
+        return 'storage'
     return 'readd'
 
 
@@ -117,24 +128,40 @@ def record_enclave_memory(record):
     return size if size in ENCLAVE_SIZES_GIB else None
 
 
-def enclave_memory_after_cancel(stated, record_size):
-    """What follows a cancel for reason 10 of an offer that stated `stated`
-    GiB under a record stating `record_size` (None: none): (size, rerun).
-    A record that states a size below the one refused gives that size, the
-    probe standing; a record that states none, or a size not below the one
-    refused, gives no size and the probe runs again (rerun), so that the
-    refused size is never stated again on that record."""
-    if record_size is not None and record_size < int(stated):
-        return record_size, False
+def record_storage(record):
+    """The storage in GiB a capability record's bench read (its custorage=),
+    None for a record that carries none or another value."""
+    if not record:
+        return None
+    try:
+        storage = int(record.get(RECORD_STORAGE_KEY))
+    except (TypeError, ValueError):
+        return None
+    return storage if storage >= 0 else None
+
+
+def figure_after_cancel(stated, record_figure):
+    """What follows a cancel for reason 10 (enclave memory) or 11 (storage)
+    of an offer that stated `stated` GiB under a record whose bench reading
+    is `record_figure` (None: none): (figure, rerun). A reading below the
+    refused figure gives it, the bench standing; a record with no reading,
+    or one not below the refused figure, gives none and the bench runs again
+    (rerun), so that the refused figure is never stated again on that
+    record."""
+    if record_figure is not None and record_figure < int(stated):
+        return record_figure, False
     return None, True
 
 
-def offer_enclave_memory(setting, record_size, refused=None):
+def offer_enclave_memory(setting, record_size, refused, memory):
     """The enclave memory an offer states, in GiB (7.24, D146, D150): the
-    largest listed size at most the record's size (`record_size`), at most
-    the operator's `setting` when it is above 0, and below `refused`, the
-    size a reason-10 cancel refused under that record, when there is one; 0
-    for a record that states none."""
+    largest of the sizes the node is benchmarked at, the listed sizes at or
+    below its offer's memory figure `memory` (offer_shape.bench_sizes), whose
+    signed bench record passed: at most the size the record states
+    (`record_size`, its encmem=), at most the operator's `setting` when it is
+    above 0, and below `refused`, the size a reason-10 cancel refused under
+    that record, when there is one (None for none); 0 for a record that
+    states none."""
     if record_size is None:
         return 0
     bound = int(record_size)
@@ -142,50 +169,65 @@ def offer_enclave_memory(setting, record_size, refused=None):
         bound = min(bound, int(setting))
     if refused is not None:
         bound = min(bound, int(refused) - 1)
-    sizes = [size for size in ENCLAVE_SIZES_GIB if size <= bound]
+    sizes = [size for size in offer_shape.bench_sizes(memory, ENCLAVE_SIZES_GIB) if size <= bound]
     return sizes[-1] if sizes else 0
 
 
-class EnclaveMemoryBook:
-    """The enclave memory each DP request of the node stated
-    (OFFER_ENCLAVE_MEMORY, {request id: GiB}) and the sizes a reason-10
-    cancel refused under each capability record (ENCLAVE_MEMORY_REFUSED,
-    {record key: GiB}), kept in the network's broker_cursor.json beside the
-    other cursors (utils.read_cursor, utils.write_cursor), so a restart keeps
-    both. A request the book does not hold stated no enclave memory: no
-    agent before it stated one."""
+class OfferFigureBook:
+    """One figure of the node's offers that a bench record bounds, kept in
+    the network's broker_cursor.json beside the other cursors
+    (utils.read_cursor, utils.write_cursor), so a restart keeps it: the
+    figure each DP request of the node stated (under `stated_key`, {request
+    id: GiB}) and the figure a cancel refused under each capability record
+    (under `refused_key`, {record key: GiB}). A request the book does not
+    hold stated 0: no agent before it stated the figure. enclave_memory_book
+    and storage_book are the two the agent keeps."""
 
-    def __init__(self, filepath):
+    def __init__(self, filepath, stated_key, refused_key):
         self.filepath = str(filepath)
+        self.stated_key = stated_key
+        self.refused_key = refused_key
 
     def __read(self, name):
         value = read_cursor(self.filepath, name)
         return dict(value) if isinstance(value, dict) else {}
 
     def stated(self, request_id):
-        return int(self.__read(OFFER_ENCLAVE_MEMORY).get(str(int(request_id)), 0))
+        return int(self.__read(self.stated_key).get(str(int(request_id)), 0))
 
-    def record_stated(self, request_id, size):
-        stated = self.__read(OFFER_ENCLAVE_MEMORY)
-        stated[str(int(request_id))] = int(size)
-        write_cursor(self.filepath, OFFER_ENCLAVE_MEMORY, stated)
+    def record_stated(self, request_id, figure):
+        stated = self.__read(self.stated_key)
+        stated[str(int(request_id))] = int(figure)
+        write_cursor(self.filepath, self.stated_key, stated)
 
     def refused(self, record_key):
-        """The size refused under the record `record_key`, None for none."""
+        """The figure refused under the record `record_key`, None for none."""
         if record_key is None:
             return None
-        value = self.__read(ENCLAVE_MEMORY_REFUSED).get(str(record_key))
+        value = self.__read(self.refused_key).get(str(record_key))
         return int(value) if value is not None else None
 
-    def refuse(self, record_key, size):
-        """Records that `size` was refused under the record `record_key`; a
+    def refuse(self, record_key, figure):
+        """Records that `figure` was refused under the record `record_key`; a
         smaller refusal under the same record stands before a larger one."""
         if record_key is None:
             return
-        refused = self.__read(ENCLAVE_MEMORY_REFUSED)
+        refused = self.__read(self.refused_key)
         before = refused.get(str(record_key))
-        refused[str(record_key)] = int(size) if before is None else min(int(before), int(size))
-        write_cursor(self.filepath, ENCLAVE_MEMORY_REFUSED, refused)
+        refused[str(record_key)] = int(figure) if before is None else min(int(before), int(figure))
+        write_cursor(self.filepath, self.refused_key, refused)
+
+
+def enclave_memory_book(filepath):
+    """The enclave memory each DP request stated and the sizes reason 10
+    refused (OFFER_ENCLAVE_MEMORY, ENCLAVE_MEMORY_REFUSED)."""
+    return OfferFigureBook(filepath, OFFER_ENCLAVE_MEMORY, ENCLAVE_MEMORY_REFUSED)
+
+
+def storage_book(filepath):
+    """The storage each DP request stated and the figures reason 11 refused
+    (OFFER_STORAGE, STORAGE_REFUSED)."""
+    return OfferFigureBook(filepath, OFFER_STORAGE, STORAGE_REFUSED)
 
 
 def cancel_reaction(code, request_key):
@@ -197,8 +239,8 @@ def cancel_reaction(code, request_key):
     faults the record (cancel_disposition 'retest') on a request that
     carried one drops that record (RecordStore.image_of `request_key`) and
     its integration test runs again before the next request; a request
-    without a record has none to drop. Reason 10 is neither: its reaction
-    is enclave_memory_after_cancel's."""
+    without a record has none to drop. Reasons 10 and 11 are neither: their
+    reaction is figure_after_cancel's."""
     return int(code) == REASON_RECORD_MISSING, request_key is not None and cancel_disposition(code) == 'retest'
 
 
@@ -593,10 +635,12 @@ class RecordStore:
 def metadata4(trustedzones_runnable, record_image, peer_id, record):
     """A DP request's metadata4: trustedzones=<names>;ipfs=<peer id>;startrow=v1
     and, with `record`, the six cu keys (cugflops = the record's gflops, cuv,
-    cuat = t1, cusig = the DER hex without 0x, cuheap, cuworkers).
-    `record_image` is listed first (the validators verify cusig under the
-    first name's certificates) and the other runnable names sorted after it;
-    without a record the names are sorted."""
+    cuat = t1, cusig = the DER hex without 0x, cuheap, cuworkers), then the
+    bench's two readings when the record carries them, encmem= (the enclave
+    size it allocated) and custorage= (the storage it read). `record_image`
+    is listed first (the validators verify cusig under the first name's
+    certificates) and the other runnable names sorted after it; without a
+    record the names are sorted."""
     names = sorted(trustedzones_runnable)
     if record is not None and record_image in names:
         names.remove(record_image)
@@ -605,8 +649,13 @@ def metadata4(trustedzones_runnable, record_image, peer_id, record):
     if record is None:
         return value
     sig = record['sig_der_hex'][2:] if record['sig_der_hex'].lower().startswith('0x') else record['sig_der_hex']
-    return (f"{value};cugflops={record['gflops']};cuv={record['cuv']};cuat={record['t1']};cusig={sig.lower()}"
-            f";cuheap={record['heap']};cuworkers={record['workers']}")
+    value = (f"{value};cugflops={record['gflops']};cuv={record['cuv']};cuat={record['t1']};cusig={sig.lower()}"
+             f";cuheap={record['heap']};cuworkers={record['workers']}")
+    if record_enclave_memory(record) is not None:
+        value += f";{RECORD_ENCLAVE_MEMORY_KEY}={record_enclave_memory(record)}"
+    if record_storage(record) is not None:
+        value += f";{RECORD_STORAGE_KEY}={record_storage(record)}"
+    return value
 
 
 def metadata3(geo, record):

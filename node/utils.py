@@ -3594,6 +3594,19 @@ class HardwareInfoProvider:
     @staticmethod
     def get_free_storage():
         return psutil.disk_usage("/")[2] // (2 ** 30) # in GB
+    @staticmethod
+    def get_total_memory_bytes():
+        return psutil.virtual_memory().total
+    @staticmethod
+    def get_available_memory_bytes():
+        """MemAvailable: what the kernel estimates can be allocated without
+        swapping."""
+        return psutil.virtual_memory().available
+    @staticmethod
+    def get_storage_bytes(path):
+        """(total, free) bytes of the filesystem holding `path`."""
+        usage = psutil.disk_usage(str(path))
+        return usage.total, usage.free
 def parse_transaction_bytes_ut(contract_abi, bytes_input):
     import rlp
     from rlp.sedes import big_endian_int, Binary, binary

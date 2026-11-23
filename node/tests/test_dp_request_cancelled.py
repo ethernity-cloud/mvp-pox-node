@@ -1,10 +1,10 @@
 """capability.cancel_reason_name / cancel_disposition (PHASE-E-PLAN.md E15,
-C.5): the reason table of cancelDPRequestByValidators 1..10, 're-test then
+C.5): the reason table of cancelDPRequestByValidators 1..11, 're-test then
 re-add' for the record's faults 1..6 and 8 and for 9, each applied to a
 request that carried a record (capability.cancel_reaction,
-test_record_missing_hold.py), 'memory' for 10, EnclaveMemoryAboveRecord
-(test_enclave_memory_cancel.py), and 're-add' for the strike reason 7 and
-any code outside the table."""
+test_record_missing_hold.py), 'memory' for 10, EnclaveMemoryAboveRecord,
+and 'storage' for 11, StorageAboveRecord (test_enclave_memory_cancel.py),
+and 're-add' for the strike reason 7 and any code outside the table."""
 import pytest
 
 import capability
@@ -21,6 +21,7 @@ import capability
     (8, "CuVersionBelowMinimum"),
     (9, "RecordMissing"),
     (10, "EnclaveMemoryAboveRecord"),
+    (11, "StorageAboveRecord"),
 ])
 def test_the_reason_table(code, name):
     assert capability.cancel_reason_name(code) == name
@@ -57,8 +58,16 @@ def test_an_enclave_memory_above_the_record_is_reason_10_and_neither_holds_nor_r
     assert capability.cancel_reaction(10, None) == (False, False)
 
 
+def test_a_storage_above_the_record_is_reason_11_and_neither_holds_nor_re_tests_by_itself():
+    assert capability.REASON_STORAGE_ABOVE_RECORD == 11
+    assert capability.cancel_disposition(11) == "storage"
+    assert 11 not in capability.RETEST_REASONS
+    assert capability.cancel_reaction(11, "3065ab") == (False, False)
+    assert capability.cancel_reaction(11, None) == (False, False)
+
+
 def test_a_code_outside_the_table_re_adds_without_a_re_test():
     assert capability.cancel_disposition(0) == "readd"
-    assert capability.cancel_disposition(11) == "readd"
+    assert capability.cancel_disposition(12) == "readd"
     assert capability.cancel_reason_name(0) == "Unknown(0)"
-    assert capability.cancel_reason_name(11) == "Unknown(11)"
+    assert capability.cancel_reason_name(12) == "Unknown(12)"

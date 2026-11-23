@@ -133,7 +133,7 @@ the `uint8` the validators carry in `voteCancel` and the PoX in
 `DPRequestCancelled` (ethernity-cas
 `capability.rs` `Reason`; PRICING-DESIGN.md section 9). Reasons 1 to 8
 are judged on an offer that carries `cugflops`, reason 9 on one that does
-not, reason 10 on an offer that states an enclave memory:
+not, reasons 10 and 11 on an offer whose DP request carries a bench record:
 
 | code | reason | check |
 |---|---|---|
@@ -146,7 +146,8 @@ not, reason 10 on an offer that states an enclave memory:
 | 7 | `DeliveredBelowAttested` | the node's window holds `CU_STRIKES` strikes (a probe delivered below 80 % of the attested gflops) |
 | 8 | `CuVersionBelowMinimum` | `cuv` below `CU_VERSION_MIN` (4); checked after the `GflopsAboveMax` check |
 | 9 | `RecordMissing` | the offer carries no `cugflops` and is not passed over: its `trustedzones=` list names none, names a trustedzone that can carry a record (one without the `-unsafe` suffix), or the network admits no `-unsafe` trustedzone |
-| 10 | `EnclaveMemoryAboveRecord` | the offer states more enclave memory than its capability record shows (D147) |
+| 10 | `EnclaveMemoryAboveRecord` | the offer states more enclave memory than the signed bench record in its DP request shows (`encmem=`, D147) |
+| 11 | `StorageAboveRecord` | the offer states more storage than the signed bench record in its DP request shows (`custorage=`) |
 
 `cun`, `cuheap` and `cuworkers` carry the three fields of the line that no
 other key or chain state holds (the run nonce and the `heap=;workers=`

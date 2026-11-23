@@ -163,6 +163,7 @@ def test_the_hold_re_tests_a_dcap_pass_without_a_record(tmp_path):
     (7, "3065ab", (False, False)),
     (7, None, (False, False)),
     (10, "3065ab", (False, False)),
+    (11, "3065ab", (False, False)),
 ])
 def test_the_cancel_reaction_follows_the_record_the_cancelled_request_carried(code, key, reaction):
     assert capability.cancel_reaction(code, key) == reaction

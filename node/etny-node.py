@@ -33,6 +33,7 @@ import replay
 import do_request_age
 import matching_node
 import matching_rules
+import offer_shape
 from constants import INTEGRATION_BUCKET, INTEGRATION_TEST_SECONDS, INTEGRATION_TEST_RETRY_MIN_SECONDS, INTEGRATION_TEST_RETRY_MAX_SECONDS, INTEGRATION_TEST_REGISTRY_CHECK_SECONDS, RPC_REPLICA_LAG_BLOCKS, DP_TERMS_POLL_SECONDS, CANCEL_ATTEMPTS, RELAY_BATCH_MIN, ESR_LEDGER_CAP, RESULT_SEND_GRACE_SECONDS, FENCE_STAGE_SECONDS, FENCE_STAGE_TICKS, HANDOVER_REQUEST_TIMEOUT_SECONDS, CU_VERSION_MIN
 from models import *
 from error_messages import errorMessages
@@ -257,6 +258,9 @@ class EtnyPoXNode:
     # The network's PoX 2.0 matching (matching_node.MatchingNode), None on a
     # network without it (__bind_matching).
     __matching = None
+    # The offer figures last logged as below what the PoX admits
+    # (__dp_request_held), None while they are not.
+    __offer_figures_logged = None
 
     def close(self):
         """Close the HTTP sessions this handle opened.
@@ -554,12 +558,15 @@ class EtnyPoXNode:
         # hold's current state is logged (__dp_request_held).
         self.__record_missing_hold = capability.RecordMissingHold(self.cache_config.broker_cursor_filepath)
         self.__record_missing_hold_logged = False
-        # The enclave memory each DP request of this node stated and the
-        # sizes a reason-10 cancel refused, kept in broker_cursor.json
-        # (capability.EnclaveMemoryBook).
-        self.__enclave_memory = capability.EnclaveMemoryBook(self.cache_config.broker_cursor_filepath)
-        # The enclave memory the DP request being sent states (__dp_request_params).
+        # The enclave memory and the storage each DP request of this node
+        # stated and the figures a reason-10 or reason-11 cancel refused, kept
+        # in broker_cursor.json (capability.OfferFigureBook).
+        self.__enclave_memory = capability.enclave_memory_book(self.cache_config.broker_cursor_filepath)
+        self.__offer_storage = capability.storage_book(self.cache_config.broker_cursor_filepath)
+        # The enclave memory and the storage the DP request being sent states
+        # (__dp_request_params).
         self.__offer_enclave_memory_sent = 0
+        self.__offer_storage_sent = 0
         # The gas this node's own transactions use, priced into its tip
         # (gas_profile.GasProfile), seeded for the network at its first start.
         self.__gas_profile = gas_profile.GasProfile.load(
@@ -2363,6 +2370,13 @@ class EtnyPoXNode:
         record = advertised[1] if advertised else None
         resources = (self._limited_arg(self.__number_of_cpus), self._limited_arg(self.__free_memory),
                      self._limited_arg(self.__free_storage), self._limited_arg(self.__bandwidth))
+        # On a network with matching the memory and the storage are the
+        # host's totals less their reserves, at most what the bench's record
+        # shows (__offer_figures, 7.4).
+        figures = self.__offer_figures(record) if self.__matching is not None else None
+        if figures is not None:
+            resources = (resources[0], figures.memory_gib, figures.storage_gib, resources[3])
+            self.__offer_storage_sent = figures.storage_gib
         gflops = int(record['gflops']) if record is not None else 0
         # While this node's acceptance of a handover stands, its offer is at
         # most the predecessor's gflops (broker.bounded_gflops).
@@ -2375,14 +2389,32 @@ class EtnyPoXNode:
         # admit (capability.offer_enclave_memory), 0 for a record that states
         # none.
         argument = gflops
-        if self.__matching is not None:
+        if figures is not None:
             self.__offer_enclave_memory_sent = capability.offer_enclave_memory(
                 self.__network_config.enclave_memory_gib, capability.record_enclave_memory(record),
-                self.__enclave_memory.refused(record_key(record)))
+                self.__enclave_memory.refused(record_key(record)), figures.memory_gib)
             argument = matching_rules.gflops_argument(gflops, self.__offer_enclave_memory_sent)
         return dp_request_arguments(not self.__pox_is_20, resources, self.__duration, self.__price, argument, tip,
                                     self.__uuid, capability.metadata3(self.__node_geo, record),
                                     self.__dp_metadata4(advertised))
+
+    def __offer_figures(self, record):
+        """The memory and storage of the offer on a network with matching
+        (offer_shape, 7.4): the host's total memory less the larger of
+        config.offer_memory_reserve_gib and the memory in use (MemAvailable),
+        the total storage of the network's working filesystem less the larger
+        of config.offer_storage_reserve_gib and the space in use, each at
+        most the reading the bench's signed record `record` carries
+        (capability.record_enclave_memory, capability.record_storage), which
+        travels in the request's metadata4, the storage below a figure
+        reason 11 refused under that record."""
+        total_storage, free_storage = HardwareInfoProvider.get_storage_bytes(self.cache_config.base_path)
+        shape = offer_shape.offer_shape(HardwareInfoProvider.get_total_memory_bytes(),
+                                        HardwareInfoProvider.get_available_memory_bytes(),
+                                        config.offer_memory_reserve_gib, total_storage, free_storage,
+                                        config.offer_storage_reserve_gib)
+        return offer_shape.bounded(shape, capability.record_enclave_memory(record), capability.record_storage(record),
+                                   self.__offer_storage.refused(record_key(record)))
 
     def __dp_request_function(self):
         """The bound contract call adding this node's DP request
@@ -2413,6 +2445,7 @@ class EtnyPoXNode:
         self.__adopt_dp_request(processed_logs[0].args._rowNumber, receipt.blockNumber)
         if self.__matching is not None:
             self.__enclave_memory.record_stated(self.__dprequest, self.__offer_enclave_memory_sent)
+            self.__offer_storage.record_stated(self.__dprequest, self.__offer_storage_sent)
         self.logger.info(f"DP Request {self.__dprequest} initialized. Unlocking the value of decentralization.")
 
     def __record_gas(self, kind, receipt):
@@ -3087,8 +3120,8 @@ class EtnyPoXNode:
         hold, retest = capability.cancel_reaction(reason, key)
         cancelled = (f"DP request {req} was cancelled by the validators: "
                      f"{capability.cancel_reason_name(reason)} ({reason})")
-        if capability.cancel_disposition(reason) == 'memory':
-            retest = self.__enclave_memory_refused(req, key, cancelled)
+        if capability.cancel_disposition(reason) in ('memory', 'storage'):
+            retest = self.__figure_refused(capability.cancel_disposition(reason), req, key, cancelled)
         if hold:
             self.__record_missing_hold.set(True)
         if retest:
@@ -3114,24 +3147,27 @@ class EtnyPoXNode:
         self.dpreq_cache.add(int(req))
         return standing
 
-    def __enclave_memory_refused(self, req, key, cancelled):
+    def __figure_refused(self, figure, req, key, cancelled):
         """The reaction to a cancel of DP request `req` for reason 10,
-        EnclaveMemoryAboveRecord (capability.enclave_memory_after_cancel): the
-        enclave memory the request stated (capability.EnclaveMemoryBook) is
+        EnclaveMemoryAboveRecord (`figure` 'memory'), or 11,
+        StorageAboveRecord ('storage'), by capability.figure_after_cancel:
+        the figure the request stated (capability.OfferFigureBook) is
         refused under the record `key` it carried, so no later request states
-        it on that record; the next request states the size the record
-        states below it, and when the record states none, or none below it,
-        the record is dropped and its integration test, the probe, runs again
-        (the returned retest). The RecordMissing hold is not touched."""
-        stated = self.__enclave_memory.stated(req)
+        it on that record; the next request states the record's reading below
+        it, and when the record carries none, or none below it, the record is
+        dropped and its integration test, the bench, runs again (the returned
+        retest). The RecordMissing hold is not touched."""
+        book = self.__enclave_memory if figure == 'memory' else self.__offer_storage
+        reading = capability.record_enclave_memory if figure == 'memory' else capability.record_storage
+        stated = book.stated(req)
         image = self.__record_store.image_of(key) if key is not None else None
         entry = self.__record_store.get(image) if image is not None else None
-        record_size = capability.record_enclave_memory(entry.get('record') if entry else None)
-        size, rerun = capability.enclave_memory_after_cancel(stated, record_size)
-        self.__enclave_memory.refuse(key, stated)
+        record_figure = reading(entry.get('record') if entry else None)
+        next_figure, rerun = capability.figure_after_cancel(stated, record_figure)
+        book.refuse(key, stated)
         if not rerun:
-            self.logger.warning(f"{cancelled}; it stated {stated} GiB of enclave memory, its record {record_size} "
-                                f"GiB: the next request states {size} GiB")
+            self.logger.warning(f"{cancelled}; it stated {stated} GiB of {figure}, its record {record_figure} GiB: "
+                                f"the next request states {next_figure} GiB")
         return rerun and key is not None
 
     def __dp_request_record_key(self, req):
@@ -3150,9 +3186,25 @@ class EtnyPoXNode:
         the request's trustedzones= list names no trustedzone or one that can
         carry a record (capability.RecordMissingHold.disposition 'hold'). An
         advertised record clears the hold ('clear'), and the request carries
-        it. The hold and its clearing are each logged once per change."""
+        it. The hold and its clearing are each logged once per change. On a
+        network with matching it posts none either while the offer's memory or
+        storage figure (__offer_figures) is below the 1 GB the PoX admits,
+        logged once per figure."""
         if not self.__pox_is_20:
             return False
+        if self.__matching is not None:
+            advertised = self.__advertised_record()
+            figures = self.__offer_figures(advertised[1] if advertised else None)
+            short = min(figures) < offer_shape.OFFER_RESOURCE_MIN
+            if short and self.__offer_figures_logged != figures:
+                self.logger.warning(f"No DP request is posted on this network: the offer's memory is "
+                                    f"{figures.memory_gib} GB and its storage {figures.storage_gib} GB, after the "
+                                    f"reserves of {config.offer_memory_reserve_gib} GiB and "
+                                    f"{config.offer_storage_reserve_gib} GiB and the bench record's readings; "
+                                    f"the PoX admits 1 GB at least")
+            self.__offer_figures_logged = figures if short else None
+            if short:
+                return True
         disposition = self.__record_missing_hold.disposition(self.__advertised_record(),
                                                              self.__runnable_trustedzones())
         if disposition == 'clear':

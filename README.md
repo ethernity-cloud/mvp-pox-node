@@ -380,11 +380,20 @@ as before, a PoX 1.0 network keeping its rotation.
   `changePayoutAddress`. The farm step names no payout: the join sets it, and
   a node with a named wallet joins once that wallet's `approveFarm` names the
   farm.
-- The offer states the node's enclave memory above its GFLOPS: the size its
-  capability record's `encmem=` states, at most `<NETWORK>_ENCLAVE_MEMORY_GIB`
-  when set. A cancel with reason 10 (`EnclaveMemoryAboveRecord`) is never
-  followed by an offer stating the same size on that record; the next states
-  the record's size below it, or the record's integration test runs again.
+- The offer's memory is the host's total less the larger of
+  `OFFER_MEMORY_RESERVE_GIB` (1) and the memory in use, MemAvailable; its
+  storage the total of the node's working filesystem less the larger of
+  `OFFER_STORAGE_RESERVE_GIB` (20) and the space in use; each at most the
+  reading of the signed bench record the DP request carries in its metadata4
+  (`encmem=`, the memory the bench allocated, and `custorage=`, the storage it
+  read). Below 1 GB of either no DP request is posted.
+- The offer states the node's enclave memory above its GFLOPS: the largest
+  listed size at or below its memory figure whose bench record passed, the
+  record's `encmem=`, at most `<NETWORK>_ENCLAVE_MEMORY_GIB` when set. A cancel
+  with reason 10 (`EnclaveMemoryAboveRecord`) or 11 (`StorageAboveRecord`) is
+  never followed by an offer stating the same figure on that record; the next
+  states the record's reading below it, or the record's integration test, the
+  bench, runs again.
 
 ## Mirror mode (REPLICATION_ONLY)
 
