@@ -235,6 +235,35 @@
         "type": "uint256"
       },
       {
+        "internalType": "address[]",
+        "name": "nodes",
+        "type": "address[]"
+      }
+    ],
+    "name": "canClaimOf",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "roundStamp",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "bool[]",
+        "name": "canClaim",
+        "type": "bool[]"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "doRequestId",
+        "type": "uint256"
+      },
+      {
         "internalType": "uint8",
         "name": "round",
         "type": "uint8"
@@ -288,9 +317,9 @@
         "type": "uint256[]"
       },
       {
-        "internalType": "uint32[]",
-        "name": "indexes",
-        "type": "uint32[]"
+        "internalType": "uint40[]",
+        "name": "places",
+        "type": "uint40[]"
       },
       {
         "internalType": "bytes32",
@@ -389,6 +418,75 @@
         "internalType": "bool[]",
         "name": "approvable",
         "type": "bool[]"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint16",
+        "name": "hoursWanted",
+        "type": "uint16"
+      },
+      {
+        "internalType": "uint256",
+        "name": "maxPricePerCuHourWei",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint32",
+        "name": "maxGflops",
+        "type": "uint32"
+      },
+      {
+        "internalType": "uint16",
+        "name": "relaysPerHour",
+        "type": "uint16"
+      },
+      {
+        "internalType": "uint256",
+        "name": "gasLevel",
+        "type": "uint256"
+      },
+      {
+        "internalType": "string",
+        "name": "metadata1",
+        "type": "string"
+      }
+    ],
+    "name": "escrowFor",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "escrowWei",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "workWei",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "chainFeeWei",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint16",
+        "name": "escrowGflops",
+        "type": "uint16"
+      },
+      {
+        "internalType": "uint8",
+        "name": "trustedZoneFee",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint8",
+        "name": "secureLockFee",
+        "type": "uint8"
       }
     ],
     "stateMutability": "view",
@@ -631,6 +729,11 @@
         "internalType": "bool",
         "name": "claimedInRound",
         "type": "bool"
+      },
+      {
+        "internalType": "uint16",
+        "name": "parameterSet",
+        "type": "uint16"
       }
     ],
     "stateMutability": "view",

@@ -224,7 +224,7 @@ page(fromBand, from, count, h, matchFound):
     e = roll[band][i]; i += 1; read += 1
     if e is eligible:  h = keccak256(h, e.node, flags);
                        if e.match and matchFound < maxSteps: matchFound += 1;  return e's word and tip
-  return eligible words, tips, indexes, hOut = h, matchFoundOut = matchFound,
+  return eligible words, tips, places (band << 32 | index), hOut = h, matchFoundOut = matchFound,
          nextBand = band, nextFrom = i, done
 ```
 

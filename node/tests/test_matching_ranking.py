@@ -1,10 +1,11 @@
 """matching (MATCHING-DESIGN.md 4.4, 4.5, 7.5; D183): the ranking rule on a
 copy of the roll, against the shared fixtures of pox-smart-contract-litvm
-spec/ at c179773. spec/ranking.json holds, per ranking case, the inputs the
+spec/ at 7611a81. spec/ranking.json holds, per ranking case, the inputs the
 copy holds and the reader's answers on them (candidates read from the top
-of the roll and on with `beyond`, each roll node's turnOf in one page): the
-port's answers on those inputs, rendered as the generator renders the
-reader's, equal them. spec/matching-rank.json holds the reference rule's
+of the roll and on with `beyond`, each eligible entry with the band and the
+index of its place, and each roll node's turnOf in one page): the port's
+answers on those inputs, rendered as the generator renders the reader's,
+equal them. spec/matching-rank.json holds the reference rule's
 results on each case's own inputs: the seed, the round's stamp, the
 template bit, the image key, the list hash, the matching count, the stop
 band, the mandated sequence, each listed node's mandate and first allowed
@@ -20,7 +21,7 @@ import matching
 
 SPEC = Path(__file__).parent / "spec" / "matching"
 SOURCE = Path(__file__).resolve().parents[3] / "pox-smart-contract-litvm"
-SOURCE_COMMIT = "c179773"
+SOURCE_COMMIT = "7611a81"
 COPIES = ["ranking.json", "matching-rank.json", "matching.md", "result-fields.json"]
 RANKING = json.loads((SPEC / "ranking.json").read_text())
 RANK = json.loads((SPEC / "matching-rank.json").read_text())
@@ -99,11 +100,13 @@ def ranking_inputs(case):
 
 
 def render_read(read, settled):
-    """A ListRead as spec/make/ranking.js renders the reader's candidates."""
+    """A ListRead as spec/make/ranking.js renders the reader's candidates:
+    each eligible entry's place, band << 32 | index, as its band and its
+    index."""
     return {
         "eligible": [{"node": e.node, "score": e.score, "fit": e.fit, "match": e.match,
-                      "listedOrdinal": e.listed_ordinal, "dpRequestId": e.dp_request_id, "index": e.index,
-                      "tipWei": str(e.tip)} for e in read.eligible],
+                      "listedOrdinal": e.listed_ordinal, "dpRequestId": e.dp_request_id, "band": e.band,
+                      "index": e.index, "tipWei": str(e.tip)} for e in read.eligible],
         "listHash": "0x" + read.list_hash.hex(),
         "matchFound": read.match_found,
         "nextBand": read.next_band,
@@ -179,7 +182,9 @@ def rank_inputs(case):
     spec/matching-rank.json ranking case, the request assembled as the
     agent assembles it: the seed from the seed stamp, the need from the
     maxGflops argument, the template bit from the templates registered
-    before the add, the image key from metadata1."""
+    before the add, the image key from metadata1, the parameter set the
+    index requestInfo's parameterSet answers (the reference's
+    parameterSetIndex)."""
     q = case["request"]
     e = case["expected"]
     params = params_of(case["parameterSets"][e["parameterSetIndex"]])
@@ -219,7 +224,6 @@ def test_the_requests_values_are_the_references(name):
     assert request.tz == e["tz"]
     assert (request.need, request.ceil, request.hours, request.g) == (e["needGflops"], e["ceilGflops"], e["hours"],
                                                                      e["G"])
-    assert copy.parameters_for(q["createdAt"]) == request.params
     stamp = matching.round_stamp(q["id"], bytes.fromhex(q["seedStamp"][2:]), rnd.number, rnd.block, rnd.time,
                                  rnd.bid, rnd.base)
     assert "0x" + stamp.hex() == e["roundStamp"]

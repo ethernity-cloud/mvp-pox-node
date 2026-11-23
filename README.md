@@ -331,12 +331,12 @@ The agent's Python dependencies gain `cryptography` 3.4.8, which
 
 ## PoX 2.0 matching (branch feature/matching)
 
-On a 2.0 PoX whose pricing answers a matching contract (`matching()`) and
-whose `<NETWORK>_MATCH_READER_ADDRESS` names that contract's PoxMatchReader,
-the agent serves the network as MATCHING-DESIGN.md section 7 states
-(`matching=... match_reader=...` in the log). A pricing with no `matching()`,
-the zero address, and a pointer with no reader configured leave the network
-as before, a PoX 1.0 network keeping its rotation.
+On a 2.0 PoX whose pricing answers a matching contract (`matching()`) whose
+`reader()` names its PoxMatchReader, the agent serves the network as
+MATCHING-DESIGN.md section 7 states (`matching=... match_reader=...` in the
+log). A pricing with no `matching()`, the zero address, and a matching
+contract whose `reader()` is the zero address (not written by its owner yet)
+leave the network as before, a PoX 1.0 network keeping its rotation.
 
 - It keeps a copy of the roll in memory only (`matching.py`), rebuilt at
   every start by one paged scan and fed from PoxMatching's `Beat`,
@@ -361,7 +361,9 @@ as before, a PoX 1.0 network keeping its rotation.
   `<NETWORK>_CLAIM_AHEAD_BLOCKS` plus one blocks before its step, one that is
   not mandated after the mandates, a step per `<NETWORK>_CLAIM_SPREAD_NODES`
   nodes ahead and while fewer than `<NETWORK>_CLAIM_STAND_LIMIT` approvable
-  claims ahead stand. A request not served by claims (`claims` off in its
+  claims ahead stand. A request takes the parameter set `requestInfo`'s
+  `parameterSet` names, and none is claimed while that is 256 (no set in force
+  for it). A request not served by claims (`claims` off in its
   parameter set) is placed as before. An approved claim's order is run when
   it appears on the offer; no integration test starts while a claim can be
   approved, and an approval ends a running one.
@@ -372,9 +374,10 @@ as before, a PoX 1.0 network keeping its rotation.
   failed orders, tests their windows' block headers, and asks for the
   correction of full ones at most once an hour (`askCorrection`).
 - It keeps a local list of the images whose orders ended in 59 or 63, or in
-  20, 62 on the paid classes (`node/<network>/image_failures.json`), and skips
-  an image for 7 days after 3 such ends (`skipImage`); it proves three nodes
-  for such an end (`proveWide`).
+  20, 62 or a 33 that PoxMatching's `early33` judges a timeout before its time
+  on the paid classes (`node/<network>/image_failures.json`), and skips an
+  image for 7 days after 3 such ends (`skipImage`); it proves three nodes for
+  an end in 20, 33, 59, 62 or 63 (`proveWide`).
 - `<NETWORK>_PAYOUT_ADDRESS` names the rewards wallet once, before the next
   offer, while none is named; a wallet named otherwise is left to its own
   `changePayoutAddress`. The farm step names no payout: the join sets it, and

@@ -7,8 +7,10 @@ as the heartbeat, its retries and its gas limit; the announce after a tip
 change and the pause of a hold; the claim on a settled read with the
 round's stamp and the steps of every round, sent ahead by a mandated node,
 under 7.6's rule by a node that is not mandated, after a heartbeat when the
-pending list is full, never while banned or on a request marked at its
-add; the corrections of full blocks and the recount; the skip of an image,
+pending list is full, never while banned, on a request marked at its add or
+on one whose parameter set (requestInfo's parameterSet) the copy does not
+hold; the corrections of full blocks and the recount; the skip of an
+image, a 33 on a paid class counted once PoxMatching's early33 judges it,
 the proof of three nodes and the rewards wallet."""
 import json
 import logging
@@ -17,6 +19,7 @@ from types import SimpleNamespace
 
 import pytest
 
+import config
 import matching
 import matching_node
 import matching_rules as rules
@@ -90,6 +93,9 @@ class FakeChain:
         self.payout = self.me
         self.times_of_orders = {}
         self.ambiguous_words = {}
+        self.result_times = {}
+        self.early_orders = set()
+        self.judged_at = []
         self.simulate_refusal = set()
         self.estimates = 80000
 
@@ -190,6 +196,14 @@ class FakeChain:
     def ambiguous(self, order_id):
         return self.ambiguous_words.get(order_id, 0)
 
+    def early33(self, order_id, block):
+        self.judged_at.append(block)
+        return order_id in self.early_orders
+
+    def result_at(self, order_id, block):
+        self.judged_at.append(block)
+        return self.result_times.get(order_id, 0)
+
     def payout_of(self):
         return self.payout
 
@@ -278,6 +292,17 @@ def copies_equal(a, b):
     assert {n: [p._replace(chain_first=0) for p in ps] for n, ps in a.periods.items()} == \
         {n: [p._replace(chain_first=0) for p in ps] for n, ps in b.periods.items()}
     assert {k: v for k, v in a.skips.items() if v is not None} == {k: v for k, v in b.skips.items() if v is not None}
+
+
+def test_the_adapter_names_every_output_of_request_info_in_the_abis_order():
+    abi = json.loads(Path(config.match_reader_abi_filepath).read_text())
+    names = [o["name"] for e in abi if e.get("name") == "requestInfo" for o in e["outputs"]]
+    answer = tuple(range(len(names)))
+    adapter = object.__new__(matching_node.ChainAdapter)
+    adapter.reader = SimpleNamespace(functions=SimpleNamespace(
+        requestInfo=lambda request_id: SimpleNamespace(call=lambda **kwargs: answer)))
+    assert adapter.request_info(1, None) == dict(zip(names, answer))
+    assert names[-1] == "parameterSet" and len(names) == 21
 
 
 # ------------------------------------------------------------- the copy
@@ -503,7 +528,7 @@ def example_one(tmp_path, me, settings=SETTINGS, read_block=1000, rounds=None):
                 'roundBlock': r["block"], 'roundTime': r["time"], 'createdAt': q["createdAt"],
                 'rollSlot': slot, 'bidWei': r["bid"], 'baseWei': r["base"],
                 'stepNow': matching.step_at(block, r["block"], p), 'closedStep': 0, 'lastOpenStep': 0,
-                'filledStep': 0, 'claimCount': 0, 'claimedInRound': False}
+                'filledStep': 0, 'claimCount': 0, 'claimedInRound': False, 'parameterSet': 0}
     chain.requests[301] = info
     for i, r in enumerate(rnds[:-1]):
         chain.rounds[(301, i)] = {'roundStamp': b"\x01" * 32, 'roundBlock': r["block"], 'roundTime': r["time"],
@@ -553,6 +578,28 @@ def test_no_claim_on_a_read_that_is_not_settled(tmp_path):
     chain, node, terms, own = example_one(tmp_path, N1)
     base = chain.requests[301]
     chain.requests[301] = lambda block: {**base(block), 'settled': False}
+    assert node.serve(301, terms, own) == 'wait'
+    assert chain.sent == []
+
+
+def test_the_request_takes_the_parameter_set_request_info_names(tmp_path):
+    # A second set in effect before the request's createdAt: requestInfo's
+    # parameterSet, not the createdAt rule, chooses the set.
+    chain, node, terms, own = example_one(tmp_path, N1)
+    info = chain.requests[301](node.copy.block)
+    later = node.copy.params[0]._replace(effectAt=info['createdAt'] - 1, maxSteps=3)
+    node.copy.params = node.copy.params + [later]
+    assert node.request_of(301, info, terms).params == node.copy.params[0]
+    assert node.request_of(301, {**info, 'parameterSet': 1}, terms).params == later
+
+
+@pytest.mark.parametrize("index", [256, 1])
+def test_no_claim_on_a_parameter_set_the_copy_does_not_hold(tmp_path, index):
+    # 256: no set is in force for the request; 1: a set the copy has not read.
+    chain, node, terms, own = example_one(tmp_path, N1)
+    base = chain.requests[301]
+    chain.requests[301] = lambda block: {**base(block), 'parameterSet': index}
+    assert node.request_of(301, chain.requests[301](node.copy.block), terms) is None
     assert node.serve(301, terms, own) == 'wait'
     assert chain.sent == []
 
@@ -644,7 +691,7 @@ def unmandated_chain(tmp_path, count, me_index, settings=SETTINGS):
                 'round': 0, 'roundStamp': b"\x5a" * 32, 'seed': seed, 'roundBlock': 1000, 'roundTime': 3600 * 10,
                 'createdAt': 3600 * 10, 'rollSlot': slot, 'bidWei': 10**18, 'baseWei': 5 * 10**17,
                 'stepNow': matching.step_at(block, 1000, p), 'closedStep': 0, 'lastOpenStep': 0, 'filledStep': 0,
-                'claimCount': 0, 'claimedInRound': False}
+                'claimCount': 0, 'claimedInRound': False, 'parameterSet': 0}
     chain.requests[5] = info
     node = node_on(chain, tmp_path, settings, address=me)
     node.slot_seconds = 3600
@@ -785,7 +832,7 @@ def test_three_counted_ends_send_the_skip_of_the_image(tmp_path):
     chain, node = correction_node(tmp_path)
     image = b"\x6f" * 31
     for order_id, code in ((1, 59), (2, 63), (3, 59)):
-        node.note_order_end(order_id, 9, image, code, False, False)
+        node.note_order_end(order_id, 9, image, code, False)
     now = node.now()
     assert node.skip_tick() == 1
     name, args, _, _ = chain.sent[-1]
@@ -798,8 +845,49 @@ def test_a_skip_the_contract_refuses_is_not_sent(tmp_path):
     chain, node = correction_node(tmp_path)
     chain.simulate_refusal.add('skipImage')
     for order_id in (1, 2, 3):
-        node.note_order_end(order_id, 9, b"\x6f" * 31, 59, False, False)
+        node.note_order_end(order_id, 9, b"\x6f" * 31, 59, False)
     assert node.skip_tick() == 0 and chain.sent == []
+
+
+def test_a_33_on_a_paid_class_counts_once_early33_judges_it_a_timeout_before_its_time(tmp_path):
+    chain, node = correction_node(tmp_path)
+    image = b"\x6f" * 31
+    noted = node.now()
+    for order_id in (1, 2):
+        node.note_order_end(order_id, 9, image, 33, True)
+    node.note_order_end(3, 9, image, 33, False)
+    assert node.failures.ends == {} and set(node.early_pending) == {1, 2}
+    # Order 2's result is early; order 1's result the PoX does not answer
+    # yet, so it is read again at the next tick.
+    chain.result_times[2] = noted
+    chain.early_orders.add(2)
+    node.skip_tick()
+    assert set(node.early_pending) == {1}
+    assert node.failures.ends == {image.hex(): [[2, noted]]}
+    # Both reads are answered at the block the copy has read the logs to.
+    assert set(chain.judged_at) == {node.copy.block}
+    # Answered and not early: dropped, not counted.
+    chain.result_times[1] = noted
+    node.skip_tick()
+    assert node.early_pending == {} and node.failures.ends == {image.hex(): [[2, noted]]}
+    # Two more early 33s make three counted ends: the skip is sent.
+    for order_id in (4, 5):
+        chain.result_times[order_id] = chain.t
+        chain.early_orders.add(order_id)
+        node.note_order_end(order_id, 9, image, 33, True)
+    assert node.skip_tick() == 1
+    assert chain.sent[-1][0] == 'skipImage' and chain.sent[-1][1][2] == [2, 4, 5]
+    # Every 33 is queued for its proof of three nodes.
+    assert {1, 2, 3, 4, 5} <= set(node.wide_pending)
+
+
+def test_a_33_whose_result_is_not_answered_in_seven_days_is_dropped(tmp_path):
+    chain, node = correction_node(tmp_path)
+    node.note_order_end(1, 9, b"\x6f" * 31, 33, True)
+    chain.t += 7 * 86400
+    chain.times[chain.head] = chain.t
+    node.skip_tick()
+    assert node.early_pending == {} and node.failures.ends == {}
 
 
 def test_the_rewards_wallet_is_named_once_and_never_changed(tmp_path):
@@ -818,7 +906,7 @@ def test_an_order_end_of_the_image_health_is_proven_wide_once_its_record_admits_
     chain, node, terms, own = example_one(tmp_path, N1)
     node.terms_of = lambda request_id: terms
     chain.fills[301] = int(N1, 16)
-    node.note_order_end(55, 301, b"\x6f" * 31, 62, True, False)
+    node.note_order_end(55, 301, b"\x6f" * 31, 62, True)
     chain.simulate_refusal.add('proveWide')
     node.wide_tick()
     assert chain.sent == []

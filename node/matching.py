@@ -277,7 +277,8 @@ class RollCopy:
     `rolls` {slot: [entries of band 0, ..., entries of band 49]};
     `periods` {node: [Period by ordinal]}, every period of the node from its
     first one the copy holds; `skips` {(node, image key): Skip}; `params`
-    the parameter sets in the array's order; `templates` {template key:
+    the parameter sets in the array's order, the index requestInfo's
+    parameterSet names; `templates` {template key:
     (bit, registeredAt)}. `block` is the last block whose logs the copy has
     applied; a node's periods and skips fetched at a block are not changed
     by logs of that block or earlier (`node_block`)."""
@@ -414,14 +415,6 @@ class RollCopy:
 
     def skip(self, node, image):
         return self.skips.get((address_text(node), bytes(image)))
-
-    def parameters_for(self, created_at):
-        """The parameter set of a request added at `created_at`: the last of
-        the array whose effectAt is below it (4.1); None when none is."""
-        for params in reversed(self.params):
-            if params.effectAt < created_at:
-                return params
-        return None
 
     def template_bit(self, key, created_at):
         """1 << the bit of template `key` when it was registered before

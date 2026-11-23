@@ -1,8 +1,9 @@
 """etny-node.py on a network with PoX 2.0 matching (MATCHING-DESIGN.md
 section 7) and without it. __bind_matching binds a MatchingNode only when
-the pricing names a matching contract and the network names its reader; a
-pricing with no matching() and the zero address leave the network as
-today. On a matching network the heartbeat goes to PoxMatching alone; an
+the pricing names a matching contract and that contract's reader() names
+its PoxMatchReader; a pricing with no matching(), the zero address and a
+reader() of zero leave the network as today. On a matching network the
+heartbeat goes to PoxMatching alone; an
 unpinned request served by claims is claimed and never placed, one that is
 not served by claims is placed as today (roll-out step 2), and a PoX 1.0
 network keeps the rotation; the offer states its enclave memory above its
@@ -157,9 +158,14 @@ def test_without_matching_the_rotation_places_as_today(agent, monkeypatch, tmp_p
 
 # ------------------------------------------------------------ the binding
 
-class Pointer:
-    def __init__(self, answer):
+class View:
+    """A contract at `address` whose view `name` answers `answer`, or raises
+    it when it is an exception."""
+
+    def __init__(self, name, answer, address=None):
+        self.name = name
         self.answer = answer
+        self.address = address
 
     @property
     def functions(self):
@@ -169,44 +175,48 @@ class Pointer:
             if isinstance(answer, Exception):
                 raise answer
             return answer
-        return SimpleNamespace(matching=lambda: SimpleNamespace(call=call))
+        return SimpleNamespace(**{self.name: lambda: SimpleNamespace(call=call)})
 
 
 def bound(agent, monkeypatch, pointer, reader=READER):
+    """The MatchingNode __bind_matching binds when the pricing's matching()
+    answers `pointer` and PoxMatching's reader() answers `reader`."""
     node = object.__new__(agent.EtnyPoXNode)
     node.logger = logging.getLogger("test")
-    contracts = []
 
     def contract(address, abi):
-        contracts.append(address)
-        return pointer if abi is matching_node.POINTER_ABI else SimpleNamespace(address=address, functions=None)
+        if abi is matching_node.POINTER_ABI:
+            return View("matching", pointer)
+        if address == MATCHING:
+            return View("reader", reader, address)
+        return SimpleNamespace(address=address, functions=None)
     node._EtnyPoXNode__w3 = SimpleNamespace(eth=SimpleNamespace(contract=contract), to_checksum_address=lambda a: a)
     node._EtnyPoXNode__pricing = SimpleNamespace(address="0x" + "20" * 20)
     node._EtnyPoXNode__etny = SimpleNamespace(address="0x" + "21" * 20)
     node._EtnyPoXNode__address = ADDRESS
     node._EtnyPoXNode__network = "polygon_amoy"
-    network = intake.polygon_mainnet(monkeypatch)
-    node._EtnyPoXNode__network_config = network.__class__(**{**network.__dict__, "match_reader_address": reader})
+    node._EtnyPoXNode__network_config = intake.polygon_mainnet(monkeypatch)
     monkeypatch.setattr(agent, "retry", lambda fn, *args, **kwargs: (True, fn(*args)))
     node._EtnyPoXNode__bind_matching()
     return node._EtnyPoXNode__matching
 
 
 def test_a_pricing_without_matching_leaves_the_network_as_today(agent, monkeypatch):
-    assert bound(agent, monkeypatch, Pointer("0x" + "00" * 20)) is None
-    assert bound(agent, monkeypatch, Pointer(ContractLogicError("execution reverted"))) is None
+    assert bound(agent, monkeypatch, "0x" + "00" * 20) is None
+    assert bound(agent, monkeypatch, ContractLogicError("execution reverted")) is None
 
 
-def test_a_matching_pointer_without_a_reader_is_logged_and_unbound(agent, monkeypatch, caplog):
+def test_a_matching_contract_whose_reader_is_not_written_is_logged_and_unbound(agent, monkeypatch, caplog):
     caplog.set_level(logging.WARNING)
-    assert bound(agent, monkeypatch, Pointer(MATCHING), reader="") is None
-    assert any("MATCH_READER_ADDRESS names no reader" in m for m in caplog.messages)
+    assert bound(agent, monkeypatch, MATCHING, reader="0x" + "00" * 20) is None
+    assert any("whose reader() names no reader" in m for m in caplog.messages)
 
 
-def test_the_pointer_and_the_reader_bind_matching(agent, monkeypatch):
-    m = bound(agent, monkeypatch, Pointer(MATCHING))
+def test_the_pointer_and_the_reader_on_chain_bind_matching(agent, monkeypatch):
+    m = bound(agent, monkeypatch, MATCHING)
     assert isinstance(m, matching_node.MatchingNode)
     assert m.chain.matching.address == MATCHING and m.chain.reader.address == READER
+    assert "match_reader_address" not in agent.config.NetworkConfig.__dataclass_fields__
     assert m.settings.claim_spread_nodes == 8 and m.settings.claim_stand_limit == 2
 
 

@@ -184,7 +184,7 @@ class ChainAdapter:
     def request_info(self, request_id, block):
         names = ('claims', 'ranked', 'imageMarked', 'settled', 'isFinal', 'round', 'roundStamp', 'seed',
                  'roundBlock', 'roundTime', 'createdAt', 'rollSlot', 'bidWei', 'baseWei', 'stepNow', 'closedStep',
-                 'lastOpenStep', 'filledStep', 'claimCount', 'claimedInRound')
+                 'lastOpenStep', 'filledStep', 'claimCount', 'claimedInRound', 'parameterSet')
         return dict(zip(names, self.reader.functions.requestInfo(int(request_id)).call(**self._at(block))))
 
     def round_at(self, request_id, number, block):
@@ -217,6 +217,17 @@ class ChainAdapter:
 
     def ambiguous(self, order_id):
         return int(self.matching.functions.ambiguousOf(int(order_id)).call())
+
+    def early33(self, order_id, block):
+        """PoxMatching's early33: whether a code 33 in the order's stored
+        result is a timeout before its time on its request's marked
+        template."""
+        return bool(self.matching.functions.early33(int(order_id)).call(**self._at(block)))
+
+    def result_at(self, order_id, block):
+        """The time of the order's result in the PoX, 0 while it has none."""
+        at, _ = self.pox.functions.orderResultAt(int(order_id)).call(**self._at(block))
+        return int(at)
 
     def payout_of(self):
         return self.pox.functions.payoutAddressOf(self.address).call()
@@ -303,6 +314,9 @@ class MatchingNode:
         self.corrections = rules.CorrectionBook()
         self.late_records = set()
         self.wide_pending = {}
+        # The node's ends in code 33 on a paid class, {order id: (image key
+        # hex, time noted)}, until PoxMatching's early33 judges them.
+        self.early_pending = {}
         self.failures = rules.ImageFailureList(failure_list_path)
         self.ban_logged = None
         self.hold_logged = None
@@ -614,7 +628,9 @@ class MatchingNode:
         `info` and its `terms` (cpu, memory, storage, bandwidth, duration,
         max_gflops, metadata1), read once: the need from maxGflops, G from
         the PoX's stamp, the template bit, the image key PoxMatching
-        recorded. None when no parameter set was in force at its add."""
+        recorded; its parameter set the one requestInfo's parameterSet
+        names. None when no set is in force for it (parameterSet 256) or the
+        copy does not hold the set named."""
         cached = self.terms.get(request_id)
         if cached is None:
             need, ceil = matching.need_gflops(terms['max_gflops'])
@@ -629,9 +645,10 @@ class MatchingNode:
             self.terms[request_id] = cached
         need, ceil, g, image, key = cached
         created_at = int(info['createdAt'])
-        params = self.copy.parameters_for(created_at)
-        if params is None:
+        index = int(info['parameterSet'])
+        if index >= len(self.copy.params):
             return None
+        params = self.copy.params[index]
         return matching.Request(int(request_id), bytes(info['seed']), int(terms['cpu']), int(terms['memory']),
                                 int(terms['storage']), int(terms['bandwidth']), need, ceil,
                                 int(terms['duration']) // 3600, g, self.copy.template_bit(key, created_at), image,
@@ -925,19 +942,45 @@ class MatchingNode:
 
     # ------------------------------------------------- the image list
 
-    def note_order_end(self, order_id, request_id, image, code, paid_class, early_timeout):
+    def note_order_end(self, order_id, request_id, image, code, paid_class):
         """An end of one of the node's orders (7.15, 7.21): counted in the
-        local list when the image likely caused it; a 20, 33, 59, 62 or 63 is
-        queued for its proof of three nodes."""
+        local list when the image likely caused it, a 33 on a paid class once
+        PoxMatching's early33 judges it a timeout before its time
+        (_judge_early_ends); a 20, 33, 59, 62 or 63 is queued for its proof
+        of three nodes."""
         now = self.now()
-        self.failures.note(bytes(image).hex(), order_id, code, paid_class, early_timeout, now)
+        image = bytes(image).hex()
+        if int(code) == 33 and paid_class:
+            self.early_pending[int(order_id)] = (image, now)
+        else:
+            self.failures.note(image, order_id, code, paid_class, False, now)
         if int(code) in (20, 33, 59, 62, 63):
             self.wide_pending[int(order_id)] = (int(request_id), now + rules.LOCAL_LIST_WINDOW_SECONDS)
 
+    def _judge_early_ends(self, now):
+        """Counts in the local list, at the time it was noted, each pending
+        33 whose result PoxMatching's early33 judges a timeout before its
+        time (7.15, D153), both reads answered at the block the copy has
+        read the logs to. One whose result the PoX does not answer at that
+        block is read again at the next tick; one noted 7 days or more
+        before `now` is dropped."""
+        block = self.copy.block
+        for order_id, (image, at) in list(self.early_pending.items()):
+            if at + rules.LOCAL_LIST_WINDOW_SECONDS <= now:
+                del self.early_pending[order_id]
+                continue
+            if block is None or self.chain.result_at(order_id, block) == 0:
+                continue
+            if self.chain.early33(order_id, block):
+                self.failures.note(image, order_id, 33, True, True, at)
+            del self.early_pending[order_id]
+
     def skip_tick(self):
         """skipImage for each image of the local list with 3 counted ends in
-        7 days (7.15, D161), simulated before it is sent."""
+        7 days (7.15, D161), simulated before it is sent, after the pending
+        33s are judged."""
         now = self.now()
+        self._judge_early_ends(now)
         sent = 0
         for image in list(self.failures.ends):
             due = self.failures.skip_due(image, now)

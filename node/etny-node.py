@@ -6389,14 +6389,15 @@ class EtnyPoXNode:
 
     def __bind_matching(self):
         """Binds PoX 2.0 matching (MATCHING-DESIGN.md section 7) when the
-        pricing names a matching contract and the network's
-        match_reader_address names its reader: a matching_node.MatchingNode
-        over PoxMatching, the reader and the PoX, sending through
-        __matching_transact. A pricing that answers no matching() (one from
-        before matching), and the zero address, leave the network without
-        matching, served as today; a pointer without a configured reader is
-        logged and leaves it so too. The reads are tried ten times, three
-        seconds apart; past that the handle raises."""
+        pricing names a matching contract and that contract's reader() names
+        its PoxMatchReader: a matching_node.MatchingNode over PoxMatching,
+        the reader and the PoX, sending through __matching_transact. A
+        pricing that answers no matching() (one from before matching), and
+        the zero address, leave the network without matching, served as
+        today; a matching contract whose reader() is the zero address (its
+        owner has not written it) is logged and leaves it so too. Each read
+        is tried ten times, three seconds apart; past that the handle
+        raises."""
         logger = self.logger
         pointer = self.__w3.eth.contract(address=self.__pricing.address, abi=matching_node.POINTER_ABI)
         answered, address = retry(self.__matching_pointer, pointer, attempts=10, delay=3)
@@ -6405,18 +6406,20 @@ class EtnyPoXNode:
         if address is None or int(address, 16) == 0:
             logger.info(f"Pricing {self.__pricing.address}: no matching contract; requests are placed as today")
             return
-        reader_address = (self.__network_config.match_reader_address or '').strip()
-        if not reader_address:
-            logger.warning(f"Pricing {self.__pricing.address} names the matching contract {address}, and "
-                           f"{self.__network.upper()}_MATCH_READER_ADDRESS names no reader: requests are placed as "
-                           f"today and no heartbeat is sent to PoxMatching")
-            return
         with open(config.matching_abi_filepath) as f:
             matching_abi = f.read()
         with open(config.match_reader_abi_filepath) as f:
             reader_abi = f.read()
+        matching_contract = self.__w3.eth.contract(address=self.__w3.to_checksum_address(address), abi=matching_abi)
+        answered, reader_address = retry(matching_contract.functions.reader().call, attempts=10, delay=3)
+        if not answered:
+            raise Exception(f"PoxMatching {address}: the reader() read failed on the RPC")
+        if int(reader_address, 16) == 0:
+            logger.warning(f"Pricing {self.__pricing.address} names the matching contract {address}, whose reader() "
+                           f"names no reader: requests are placed as today and no heartbeat is sent to PoxMatching")
+            return
         chain = matching_node.ChainAdapter(
-            self.__w3, self.__w3.eth.contract(address=self.__w3.to_checksum_address(address), abi=matching_abi),
+            self.__w3, matching_contract,
             self.__w3.eth.contract(address=self.__w3.to_checksum_address(reader_address), abi=reader_abi),
             self.__etny, self.__address, self.__matching_transact, self.__network_config.logs_chunk_blocks)
         settings = matching_node.Settings(
@@ -6583,10 +6586,10 @@ class EtnyPoXNode:
 
     def __matching_note_end(self, order_id, request_id, task_code, result_string):
         """The end of an order of this node on a matching network (7.15,
-        7.21): its code with the class and the early timeout its signed
-        result states (utils.result_end_fields: a v6 result; an older result
-        states no class, and only 59 and 63 count) into the local list and
-        the proof queue."""
+        7.21): its code with the class its signed result states
+        (utils.result_end_fields: a v6 result; an older result states no
+        class, and only 59 and 63 count) into the local list, a 33 on a paid
+        class once PoxMatching's early33 judges it, and the proof queue."""
         if self.__matching is None:
             return
         try:
@@ -6594,7 +6597,7 @@ class EtnyPoXNode:
             end = result_end_fields(result_string)
             paid_class = end is not None and end[2] == 0
             image, _ = self.__matching.chain.request_image(request_id)
-            self.__matching.note_order_end(order_id, request_id, image, code, paid_class, False)
+            self.__matching.note_order_end(order_id, request_id, image, code, paid_class)
         except Exception as e:
             self.logger.warning(f"Matching: the end of order {order_id} was not noted ({e})")
 

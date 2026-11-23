@@ -135,10 +135,8 @@ class NetworkConfig:
     # (<NETWORK>_FARM_ACCEPT).
     farm_accept: bool = True
     # PoX 2.0 matching (MATCHING-DESIGN.md section 7), on a network whose
-    # pricing names a matching contract: the address of the PoxMatchReader
-    # deployed for it (<NETWORK>_MATCH_READER_ADDRESS; empty: the network is
-    # served as one without matching).
-    match_reader_address: str = ''
+    # pricing names a matching contract whose reader() names its
+    # PoxMatchReader: the settings below.
     # The wallet the node's earnings are paid to, named once while none is
     # named (<NETWORK>_PAYOUT_ADDRESS; 7.13, D34); empty for none.
     payout_address: str = ''
@@ -355,7 +353,7 @@ resolver_abi_filepath = base_path / 'resolver.abi'
 erc20_abi_filepath = base_path / 'erc20.abi'
 # PoX 2.0 matching's PoxMatching and PoxMatchReader, copied from
 # pox-smart-contract-litvm abi/IPoxMatching.json and abi/IPoxMatchReader.json
-# at c179773.
+# at 7611a81.
 matching_abi_filepath = base_path / 'matching.abi'
 match_reader_abi_filepath = base_path / 'match_reader.abi'
 # The first sample of each network's gas profile (gas_profile.load_seed).

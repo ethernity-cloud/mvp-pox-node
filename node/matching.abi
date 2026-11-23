@@ -1550,6 +1550,25 @@
     "type": "function"
   },
   {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "orderId",
+        "type": "uint256"
+      }
+    ],
+    "name": "early33",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
     "inputs": [],
     "name": "ethStorage",
     "outputs": [
@@ -2359,6 +2378,19 @@
     "type": "function"
   },
   {
+    "inputs": [],
+    "name": "reader",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
     "inputs": [
       {
         "internalType": "uint256",
@@ -2748,6 +2780,19 @@
       }
     ],
     "name": "setPricing",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "reader",
+        "type": "address"
+      }
+    ],
+    "name": "setReader",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
