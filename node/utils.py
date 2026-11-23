@@ -1380,6 +1380,10 @@ def ledger_rebuild(contents):
 # code (1), the ESR root (4) and ledger CID (6), and on v5 the relayed commit
 # count (12) and their gas (14), which _addResultToOrderV2 takes.
 RESULT_V5_FIELDS = 15
+# A v6 result carries fields 15 landedAt, 16 ranUntil and 17 slClass after
+# the fifteen of v5, each a plain unsigned decimal (D175, D182).
+RESULT_V6_FIELDS = 18
+RESULT_FIELD_DECIMAL = re.compile(r'0|[1-9][0-9]*', re.ASCII)
 ESR_COMMITS_PREFIX = 'etny-esr-commits='
 ESR_GAS_PREFIX = 'etny-esr-gas='
 ESR_COMMITS_MAX = 65535
@@ -1399,14 +1403,40 @@ def _strict_decimal(text, prefix, max_digits, max_value=None):
     return value
 
 
+def result_end_fields(result_string):
+    """(landedAt, ranUntil, slClass) of a result string carrying the three
+    fields after the fifteen of v5 (pox-smart-contract-litvm spec/matching.md
+    section 17; spec/matching/result-fields.json): fields 15, 16 and 17, each
+    "0" or a digit 1 to 9 followed by digits, at most 2^64 - 1 and the class
+    0 (custom) or 1 (default); None for a string of fewer than eighteen
+    fields or one of the three not in that form. Field 0 is not read, and
+    nothing after the eighteenth colon."""
+    parts = str(result_string or '').split(':')
+    if len(parts) < RESULT_V6_FIELDS:
+        return None
+    values = []
+    for text, bound in zip(parts[15:18], (2**64 - 1, 2**64 - 1, 1)):
+        if not RESULT_FIELD_DECIMAL.fullmatch(text) or int(text) > bound:
+            return None
+        values.append(int(text))
+    return tuple(values)
+
+
 def result_fields(result_string):
     """The fields of the trustedzone's result string (spec/result-v5.json):
-    a v5 string of fifteen fields yields its esrCommits (etny-esr-commits=,
-    a decimal at most 65535) and esrGas (etny-esr-gas=, a decimal of at most
-    78 digits) parsed strictly; a v3 or v4 string yields 0 and 0 for them.
-    Raises ValueError for any other string."""
+    a v5 string of fifteen fields, and a v6 string of eighteen or more
+    (result_end_fields), yields its esrCommits (etny-esr-commits=, a decimal
+    at most 65535) and esrGas (etny-esr-gas=, a decimal of at most 78 digits)
+    parsed strictly; a v3 or v4 string yields 0 and 0 for them. Raises
+    ValueError for any other string."""
     parts = str(result_string or '').strip().split(':')
     version = parts[0]
+    if version == 'v6':
+        if len(parts) < RESULT_V6_FIELDS:
+            raise ValueError(f"a v6 result has at least {RESULT_V6_FIELDS} fields, not {len(parts)}")
+        return ResultFields('v6', parts[1], parts[4], parts[6],
+                            _strict_decimal(parts[12], ESR_COMMITS_PREFIX, len(str(ESR_COMMITS_MAX)), ESR_COMMITS_MAX),
+                            _strict_decimal(parts[14], ESR_GAS_PREFIX, ESR_GAS_MAX_DIGITS))
     if version == 'v5':
         if len(parts) != RESULT_V5_FIELDS:
             raise ValueError(f"a v5 result has {RESULT_V5_FIELDS} fields, not {len(parts)}")

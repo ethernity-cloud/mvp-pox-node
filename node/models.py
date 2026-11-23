@@ -69,6 +69,8 @@ class OrderStatus:
     CANCELLED = 3
 
 class ResultStatus:
+    """The task codes of the trustedzones' signed results (MATCHING-DESIGN.md
+    3.19; SECURELOCK-HARDENING-SPEC.md 7): field 1 of the result string."""
     SUCCESS = 0
     SYSTEM_ERROR = 1
     KEY_ERROR = 2
@@ -78,3 +80,28 @@ class ResultStatus:
     PAYLOAD_CHECKSUM_ERROR = 6
     INPUT_CHECKSUM_ERROR = 7
     EXECVE = 8
+    SIGNATURE_ERROR = 20
+    CONFIG_ERROR = 32
+    EXECUTION_TIMEOUT = 33
+    SECURITY_VIOLATION = 35
+    ESR_RELAY_TIMEOUT = 37
+    SESSION_RELAY_FAULT = 39
+    CAS_ATTESTATION_FAULT = 40
+    TERMINATED = 43
+    TRUSTEDZONE_FAILURE = 44
+    PAYLOAD_DELIVERY_FAULT = 45
+    INPUT_DELIVERY_FAULT = 46
+    CHAIN_UNAVAILABLE = 47
+    NETWORK_UNAVAILABLE = 59
+    PAYLOAD_CRASHED = 60
+    CONTENT_TOO_LARGE = 61
+    SECURELOCK_SILENT = 62
+    PAYLOAD_LOST = 63
+
+    @staticmethod
+    def name_of(code):
+        """The name of a task code, 'CODE_<n>' for one the table does not hold."""
+        for name, value in vars(ResultStatus).items():
+            if name.isupper() and value == int(code):
+                return name
+        return f"CODE_{int(code)}"
