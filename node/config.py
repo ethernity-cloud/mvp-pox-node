@@ -337,7 +337,11 @@ base_path = Path(__file__).parent
 
 # The PoX ABI is the 2.0 union (pox-smart-contract-litvm
 # abi/EthernityImplementationV2_2_0.json): the 1.0/1.1 entries are a subset
-# of it, so one file binds a legacy and a 2.0 contract alike.
+# of it, so one file binds a legacy and a 2.0 contract alike. It holds both
+# signatures of addDPRequestV2, the uint32 gflops of the PoX whose VERSION()
+# is "1.2" and the uint40 gflops of the one whose VERSION() is "2.0", with
+# doStamp's three outputs, farmJoinOf and farmApprovalOf of the latter, from
+# abi/IEthernityCloudV2.json at 52e36e0 (utils.dp_request_arguments).
 abi_filepath = base_path / 'docker/pox.abi'
 image_registry_abi_filepath = base_path / 'image_registry.abi'
 heart_beat_abi_filepath = base_path / 'heart_beat.abi'
@@ -353,7 +357,7 @@ resolver_abi_filepath = base_path / 'resolver.abi'
 erc20_abi_filepath = base_path / 'erc20.abi'
 # PoX 2.0 matching's PoxMatching and PoxMatchReader, copied from
 # pox-smart-contract-litvm abi/IPoxMatching.json and abi/IPoxMatchReader.json
-# at 7611a81.
+# at 52e36e0.
 matching_abi_filepath = base_path / 'matching.abi'
 match_reader_abi_filepath = base_path / 'match_reader.abi'
 # The first sample of each network's gas profile (gas_profile.load_seed).

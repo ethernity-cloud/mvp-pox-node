@@ -152,6 +152,17 @@
         "type": "address"
       }
     ],
+    "name": "NotPendingOwner",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "caller",
+        "type": "address"
+      }
+    ],
     "name": "NotPricing",
     "type": "error"
   },
@@ -462,6 +473,12 @@
         "internalType": "uint8",
         "name": "enclaveMemoryGB",
         "type": "uint8"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint16",
+        "name": "epcUnits",
+        "type": "uint16"
       }
     ],
     "name": "Announced",
@@ -917,6 +934,44 @@
     "anonymous": false,
     "inputs": [
       {
+        "indexed": true,
+        "internalType": "address",
+        "name": "previousOwner",
+        "type": "address"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "newOwner",
+        "type": "address"
+      }
+    ],
+    "name": "OwnershipTransferStarted",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "previousOwner",
+        "type": "address"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "newOwner",
+        "type": "address"
+      }
+    ],
+    "name": "OwnershipTransferred",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
         "indexed": false,
         "internalType": "uint256",
         "name": "index",
@@ -930,6 +985,25 @@
       }
     ],
     "name": "ParametersAdded",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "index",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint32",
+        "name": "effectAt",
+        "type": "uint32"
+      }
+    ],
+    "name": "ParametersReplaced",
     "type": "event"
   },
   {
@@ -1086,6 +1160,37 @@
     ],
     "name": "WideProven",
     "type": "event"
+  },
+  {
+    "inputs": [],
+    "name": "acceptOwnership",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "node",
+        "type": "address"
+      }
+    ],
+    "name": "accountInChain",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "word",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint32",
+        "name": "lastFailureSlot",
+        "type": "uint32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
   },
   {
     "inputs": [
@@ -2273,6 +2378,19 @@
     "type": "function"
   },
   {
+    "inputs": [],
+    "name": "pendingOwner",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
     "inputs": [
       {
         "internalType": "address",
@@ -2547,6 +2665,171 @@
       }
     ],
     "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "components": [
+          {
+            "internalType": "uint32",
+            "name": "effectAt",
+            "type": "uint32"
+          },
+          {
+            "internalType": "bool",
+            "name": "claims",
+            "type": "bool"
+          },
+          {
+            "internalType": "uint8",
+            "name": "fitPercent",
+            "type": "uint8"
+          },
+          {
+            "internalType": "uint8",
+            "name": "maxSteps",
+            "type": "uint8"
+          },
+          {
+            "internalType": "uint8",
+            "name": "maxRounds",
+            "type": "uint8"
+          },
+          {
+            "internalType": "uint8",
+            "name": "fullBlockPercent",
+            "type": "uint8"
+          },
+          {
+            "internalType": "uint8",
+            "name": "settleMax",
+            "type": "uint8"
+          },
+          {
+            "internalType": "uint8",
+            "name": "pendingMax",
+            "type": "uint8"
+          },
+          {
+            "internalType": "uint8",
+            "name": "correctionMaxEntries",
+            "type": "uint8"
+          },
+          {
+            "internalType": "uint16",
+            "name": "stepBlocks",
+            "type": "uint16"
+          },
+          {
+            "internalType": "uint16",
+            "name": "leadBlocks",
+            "type": "uint16"
+          },
+          {
+            "internalType": "uint16",
+            "name": "banSlots",
+            "type": "uint16"
+          },
+          {
+            "internalType": "uint16",
+            "name": "gain",
+            "type": "uint16"
+          },
+          {
+            "internalType": "uint16",
+            "name": "missUnits",
+            "type": "uint16"
+          },
+          {
+            "internalType": "uint16",
+            "name": "lateUnits",
+            "type": "uint16"
+          },
+          {
+            "internalType": "uint16",
+            "name": "bandWidth",
+            "type": "uint16"
+          },
+          {
+            "internalType": "uint32",
+            "name": "minListedSeconds",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "maxRequestAgeSeconds",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "startTimeoutSeconds",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "minPauseSeconds",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "servingGraceSeconds",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "correctionWindowSeconds",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "correctionAskSeconds",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "fullWindowSeconds",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "fetchTrySeconds",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "heldMarginSeconds",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint64",
+            "name": "nodeFaultCodes",
+            "type": "uint64"
+          },
+          {
+            "internalType": "uint64",
+            "name": "defaultFaultCodes",
+            "type": "uint64"
+          },
+          {
+            "internalType": "uint64",
+            "name": "ambiguousCodes",
+            "type": "uint64"
+          },
+          {
+            "internalType": "uint64",
+            "name": "runBilledCodes",
+            "type": "uint64"
+          }
+        ],
+        "internalType": "struct IPoxMatchingTypes.ParameterSet",
+        "name": "set",
+        "type": "tuple"
+      }
+    ],
+    "name": "replaceParameterSet",
+    "outputs": [],
+    "stateMutability": "nonpayable",
     "type": "function"
   },
   {
@@ -2897,6 +3180,19 @@
       }
     ],
     "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "newOwner",
+        "type": "address"
+      }
+    ],
+    "name": "transferOwnership",
+    "outputs": [],
+    "stateMutability": "nonpayable",
     "type": "function"
   }
 ]

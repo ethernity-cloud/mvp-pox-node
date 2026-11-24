@@ -20,14 +20,18 @@ ZERO_IMAGE = b'\x00' * 31
 COPY_EVENTS = ('Beat', 'Announced', 'Left', 'Skipped')
 OWN_EVENTS = ('Charged', 'OrderFailed', 'Corrected', 'Banned')
 JUDGED_EVENTS = ('ListJudged',)
-# The pricing's matching pointer and the PoX's price stamp of a request
-# (IPoxPricing.matching, IEthernityCloudV2.doStamp), which the agent's
-# pricing and PoX ABIs do not carry.
+# The pricing's matching pointer (IPoxPricing.matching), which the agent's
+# pricing ABI does not carry, and the price stamp of a request as a PoX whose
+# VERSION() is "1.2" answers it: two values. The PoX whose VERSION() is "2.0"
+# answers a third, the request's minimum EPC, under the union ABI's doStamp
+# (pox20.EPC_VERSION); a decode of that answer under two outputs drops the
+# third value without an error, so the decode follows the version.
 POINTER_ABI = [{"type": "function", "name": "matching", "stateMutability": "view", "inputs": [],
                 "outputs": [{"name": "", "type": "address"}]}]
-STAMP_ABI = [{"type": "function", "name": "doStamp", "stateMutability": "view",
-              "inputs": [{"name": "id", "type": "uint256"}],
-              "outputs": [{"name": "basePriceWei", "type": "uint128"}, {"name": "escrowGflops", "type": "uint16"}]}]
+STAMP_ABI_TWO_VALUES = [{"type": "function", "name": "doStamp", "stateMutability": "view",
+                         "inputs": [{"name": "id", "type": "uint256"}],
+                         "outputs": [{"name": "basePriceWei", "type": "uint128"},
+                                     {"name": "escrowGflops", "type": "uint16"}]}]
 # The claim word a reader answers (PoxMatchingState.Claim): its offer, block,
 # time, round, state and stated steps, and the tip it was admitted at.
 Claim = namedtuple('Claim', 'dp_request_id block time round state steps tip')
@@ -76,16 +80,19 @@ def mined(receipt):
 
 class ChainAdapter:
     """PoxMatching (`matching_contract`), PoxMatchReader (`reader`) and the
-    PoX (`pox`) as the driver reads them, a call answered at `block` when one
-    is named. The node's transactions go through `transact(fn, label, gas,
-    full_streak)`, the agent's sender, which answers the receipt."""
+    PoX (`pox`, under the union ABI) as the driver reads them, a call
+    answered at `block` when one is named; `epc_forms` whether the PoX's
+    VERSION() names the EPC forms (pox20.takes_epc_forms). The node's
+    transactions go through `transact(fn, label, gas, full_streak)`, the
+    agent's sender, which answers the receipt."""
 
-    def __init__(self, w3, matching_contract, reader, pox, address, transact, logs_chunk_blocks):
+    def __init__(self, w3, matching_contract, reader, pox, address, transact, logs_chunk_blocks, epc_forms):
         self.w3 = w3
         self.matching = matching_contract
         self.reader = reader
         self.pox = pox
-        self.stamps = w3.eth.contract(address=pox.address, abi=STAMP_ABI)
+        self.epc_forms = bool(epc_forms)
+        self.stamps = pox if self.epc_forms else w3.eth.contract(address=pox.address, abi=STAMP_ABI_TWO_VALUES)
         self.address = address
         self.transact = transact
         self.logs_chunk_blocks = int(logs_chunk_blocks)
@@ -197,8 +204,15 @@ class ChainAdapter:
         return matching.uint(word & (2**248 - 1), 31), word >> 248
 
     def stamp(self, request_id):
-        base, g = self.stamps.functions.doStamp(int(request_id)).call()
-        return int(base), int(g)
+        """(basePriceWei, escrowGflops, epcUnits) of the PoX's doStamp:
+        three values where the PoX takes the EPC forms, two elsewhere, whose
+        requests state no minimum EPC (0)."""
+        answer = self.stamps.functions.doStamp(int(request_id)).call()
+        if self.epc_forms:
+            base, g, epc = answer
+            return int(base), int(g), int(epc)
+        base, g = answer
+        return int(base), int(g), 0
 
     def claimers(self, request_id):
         nodes, claims, approvable = self.reader.functions.claimersOf(int(request_id), 0, 2**16).call()
@@ -444,7 +458,7 @@ class MatchingNode:
             elif log.event == 'Announced':
                 self.copy.on_announced(a['node'], a['dpRequestId'], a['from'], a['cpu'], a['memGB'], a['storageGB'],
                                        a['bandwidth'], a['gflops'], a['tipWei'], a['tzMask'], a['enclaveMemoryGB'],
-                                       log.blockNumber)
+                                       a['epcUnits'], log.blockNumber)
             elif log.event == 'Left':
                 self.copy.on_left(a['node'], a['reason'], a['at'], log.blockNumber)
             elif log.event == 'Skipped':
@@ -626,24 +640,24 @@ class MatchingNode:
     def request_of(self, request_id, info, terms):
         """matching.Request of DO request `request_id` from its requestInfo
         `info` and its `terms` (cpu, memory, storage, bandwidth, duration,
-        max_gflops, metadata1), read once: the need from maxGflops, G from
-        the PoX's stamp, the template bit, the image key PoxMatching
-        recorded; its parameter set the one requestInfo's parameterSet
-        names. None when no set is in force for it (parameterSet 256) or the
-        copy does not hold the set named."""
+        max_gflops, metadata1), read once: the need from maxGflops, G and the
+        minimum EPC from the PoX's stamp, the template bit, the image key
+        PoxMatching recorded; its parameter set the one requestInfo's
+        parameterSet names. None when no set is in force for it
+        (parameterSet 256) or the copy does not hold the set named."""
         cached = self.terms.get(request_id)
         if cached is None:
             need, ceil = matching.need_gflops(terms['max_gflops'])
-            _, g = self.chain.stamp(request_id)
+            _, g, epc = self.chain.stamp(request_id)
             image, _ = self.chain.request_image(request_id)
             key = matching.template_key(terms['metadata1'])
             if key not in self.copy.templates:
                 found = self.chain.template(key)
                 if found is not None:
                     self.copy.templates[key] = found
-            cached = (need, ceil, g, image, key)
+            cached = (need, ceil, g, epc, image, key)
             self.terms[request_id] = cached
-        need, ceil, g, image, key = cached
+        need, ceil, g, epc, image, key = cached
         created_at = int(info['createdAt'])
         index = int(info['parameterSet'])
         if index >= len(self.copy.params):
@@ -652,7 +666,7 @@ class MatchingNode:
         return matching.Request(int(request_id), bytes(info['seed']), int(terms['cpu']), int(terms['memory']),
                                 int(terms['storage']), int(terms['bandwidth']), need, ceil,
                                 int(terms['duration']) // 3600, g, self.copy.template_bit(key, created_at), image,
-                                bool(info['ranked']), params)
+                                bool(info['ranked']), params, epc)
 
     def rounds_of(self, request_id, info):
         rounds = []
@@ -719,7 +733,7 @@ class MatchingNode:
         if any(matching.roll_slot(r, self.slot_seconds) not in self.copy.rolls for r in rounds):
             return 'wait'
         current = rounds[-1]
-        if not matching.covers(request, period, full=False) or period.enclave_memory < request.mem:
+        if not matching.covers(request, period, with_template=False):
             return 'wait'
         if terms.get('with_terms', True) and not matching.matches(request, current.base + period.tip, period.gflops,
                                                                   current.bid):

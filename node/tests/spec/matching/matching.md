@@ -10,7 +10,8 @@ them with an implementation of its own. Section numbers in parentheses are
 MATCHING-DESIGN.md's; "line N" is a line of that file. Section 16 lists every
 point where the design is silent or ambiguous and the reading this
 specification takes. Section 17 pins the form of the three result fields
-after v5 that PoxMatching decodes, with its vectors in `result-fields.json`.
+after v5 that PoxMatching decodes and the grammar of the stored result that
+carries them, with its vectors in `result-fields.json`.
 Section 18 states the inputs a node's copy of the roll holds and where it
 takes them, with the reader's answers on them in `ranking.json`.
 
@@ -21,7 +22,10 @@ takes them, with the reader's answers on them in `ranking.json`.
 - Widths: block numbers `uint48`; times `uint32` seconds; slots `uint32`;
   scores `uint16` in units of 0.0001 (0 to 50,000); GFLOPS `uint16` (100 per
   CU); cpu, memory GB, storage GB, bandwidth `uint8`; enclave memory GiB
-  `uint8`; bids, bases and tips in wei per CU-hour, `uint128` once stored;
+  `uint8`; EPC `uint16` in units of 64 MiB (1 to 65,535 units, 64 MiB to
+  4 TiB less 64 MiB; 0 for an offer that states none and for a request that
+  states no minimum, section 16 item 33); bids, bases and tips in wei per
+  CU-hour, `uint128` once stored;
   prices `base + tip` below 2^129; the two price products of the match and
   every product of the quote on 256 bits; the fit products on at least 64 bits.
 - A hash is keccak256 over `abi.encodePacked` of the listed types, each type
@@ -82,6 +86,35 @@ and in all four: `claims` true, `fitPercent` 20, `maxSteps` 8, `maxRounds` 5,
 passed, line 1372), `ambiguousCodes` bit 47, `runBilledCodes` bits 59 and 63.
 Single cases change one field (`claims` off, `maxSteps` 2, `leadBlocks` 0).
 
+**The owner's writes of the sets.** `addParameterSet` appends a set and
+refuses it (`ParameterSetRefused(index, reason)`, `index` the place it would
+take) for: 1 an `effectAt` below the block's time; 2 an `effectAt` at or
+below that of the set before it; 3 a 257th set; 4 a `maxSteps` of 0 or above
+14; 5 a `maxRounds` above 5; 6 a `stepBlocks` or a `bandWidth` of 0; 7 a
+`settleMax` of 0; 8 a `startTimeoutSeconds` of 0. `replaceParameterSet` puts
+a set in the place of the last one while that one's `effectAt` is above the
+block's time, under the same tests at that place, and emits
+`ParametersReplaced(index, effectAt)`; it is refused with reason 9, and the
+number of sets as `index`, when there is no set or the last one's `effectAt`
+is at or below the block's time. A set whose `effectAt` is above the block's
+time is no request's and is not in force (a request's set has `effectAt <
+T0`), so a replacement changes no request's set and no set in force; a reader
+that holds a set by its index reads it again at `ParametersReplaced`. Only
+the last set is replaced. The owner is changed in two steps:
+`transferOwnership(newOwner)` names the owner to be (`pendingOwner()`,
+`OwnershipTransferStarted`), who becomes the owner with `acceptOwnership()`
+(`OwnershipTransferred`); the owner stays until then, and naming the zero
+address withdraws the transfer.
+
+**While no set is in force** (before the first set's `effectAt`) no request
+has a set, so there is no claim, approval, ballot or charge of a request.
+`strike` returns without effect and records nothing, so that the vote that
+calls it does not revert; the strike is not recorded later. `ban`, `correct`
+and `askCorrection` revert with `ParameterSetRefused(0, 0)`, and so does
+`announce`; a `beat` reverts with it on the order leg and with
+`BeatNotCounted` otherwise (no period is open): no node sends a heartbeat
+before the first set is in force.
+
 **The reader's deployment constant and the pages** (MATCHING-DESIGN.md 4.7,
 section 5; build step 8). `scanMax`, the roll entries one list read of
 `scheduleOf` and `mandateOutcomes` reads at most, is fixed at the reader's
@@ -110,8 +143,8 @@ specification.
 | eligible word | `uint160(node) << 96 \| uint16(score) << 80 \| fit << 73 \| match << 72 \| uint24(listedOrdinal) << 48 \| uint48(dpRequestId)` (section 16, item 20) | word |
 | ballot hint | `uint8(band) << 80 \| uint32(rollIndex) << 48 \| uint24(listedOrdinal) << 24 \| uint24(stepOrdinal)` (line 736) | word |
 | claim `steps` | `uint24`; round `r` in bits `4r` to `4r + 3` (3.9) | 3 |
-| V2 add `maxGflops` | `uint32`: required CU in GFLOPS in bits 16 to 31, the GFLOPS ceiling in bits 0 to 15 (line 443) | 4 |
-| V2 offer `gflops` | GFLOPS in bits 0 to 15, enclave memory in GiB in bits 16 to 23 (D167) | |
+| V2 add `maxGflops` | `uint48`: the minimum EPC in units of 64 MiB in bits 32 to 47 (D191), required CU in GFLOPS in bits 16 to 31, the GFLOPS ceiling in bits 0 to 15 (line 443) | 6 |
+| V2 offer `gflops` | `uint40`: GFLOPS in bits 0 to 15, enclave memory in GiB in bits 16 to 23 (D167), EPC in units of 64 MiB in bits 24 to 39 (D191) | 5 |
 | correction entry | `kind << 248`; kinds 1 and 6 `\| uint48(doRequestId) << 16 \| uint8(round) << 8 \| uint8(step)`; kinds 2 to 4 `\| uint48(orderId)`; kind 5 `\| uint32(slot)` (section 16, item 27) | word |
 | template key | `keccak256(bytes(name))`, name = field 2 of metadata1 | 32 |
 | image key | `bytes31(keccak256(bytes(field 1 of metadata1)))`: the first 31 bytes (section 16, item 3) | 31 |
@@ -122,9 +155,12 @@ Every case of the `ranking` group carries `seedPreimage` and
 ## 4. The inputs of a request and its rounds (4.2)
 
 - `T0` = `createdAt`, `B0` = `createdBlock`, `seedStamp`, `id`.
-- `ceil = maxGflops % 65536`, `needStated = maxGflops / 65536`;
+- `ceil = maxGflops % 65536`, `needStated = (maxGflops / 65536) % 65536`;
   `need = needStated` when it is not 0, else `ceil` when `0 < ceil < 100`,
-  else 100 (D38).
+  else 100 (D38). `epc = maxGflops / 2^32`, the request's minimum EPC in
+  units of 64 MiB, 0 for none (D191); the PoX's `doTerms` answers the low 32
+  bits of the word and `doStamp` the EPC, which PoxMatching copies with the
+  request's record.
 - `hours = durationSec / 3600`; `G = escrowGflops` (the ceiling when one is
   stated, the pricing's `gflopsMaxDefault` at the add otherwise).
 - The template: `name` = field 2 of metadata1, split at `:` within its first
@@ -132,7 +168,9 @@ Every case of the `ranking` group carries `seedPreimage` and
   is registered with `registeredAt < T0`, else 0.
 - Round 0 is `(B0, T0, maxPrice, basePriceWei)`; round `r >= 1` is the
   raise's `(block, time, bid, base)`. `bid = min(bid, 2^128 - 1)`;
-  `base` as stored. A raise does not change `seed`.
+  `base` as stored. The PoX refuses a V2 add, a reserved add and a raise
+  whose bid is above 2^128 - 1 (`price invalid`), so the bound changes no
+  bid the PoX holds. A raise does not change `seed`.
 
 ## 5. Whether the request is ranked (4.3)
 
@@ -152,6 +190,25 @@ such a request has no schedule, as a superseded one, and its add stands; it
 is marked at the add as well when the image's health marks it, as with no
 image registry. Any of the three bits gives no schedule.
 
+A request with no schedule whose set has `claims` on, neither pinned nor
+reserved, is served by claims all the same: a claim on it states 0 and is
+approved by its data owner's placement. The first approval marks a request
+of one instance filled. A request of several instances (the legacy add
+alone makes one: up to 10 instances, no raise, so round 0 only) is never
+marked filled (section 12, item 17: "filled" and "still open" have no single
+meaning for it): it takes claims and approvals, one approval a claim, while
+the PoX holds it AVAILABLE, that is until every instance is booked, and it
+is at most `maxRequestAgeSeconds` old; `Approved` is emitted for each
+approval and the fill record holds the last one. An order is "of a claim's
+approval" when its node's claim on its request is APPROVED (a node has one
+claim on a request and a claim is approved once): `expireUnstarted`,
+`notRun`, `nodeFault` and `noteRefund` test that, on every request, and not
+the fill record's node. The health count (`counted`) and the proof of three
+serving nodes read the fill record, so on a request of several instances
+they hold for the order of the last approval alone; an order whose fill
+record holds step 0, which the approval of a claim that states 0 leaves on
+a request with no schedule (no ballot writes a step there), is not counted.
+
 ## 6. The list of a round (4.4)
 
 ```
@@ -164,13 +221,14 @@ for band = 49 down to 0, for each entry e of roll[rollSlot][band] in stored orde
              p.storageGB >= storageGB (storage); p.bandwidth >= bandwidth (bandwidth);
              p.gflops >= need (belowNeed); ceil == 0 or p.gflops <= ceil (aboveCeiling);
              p.tzMask & tz != 0 (template); p.enclaveMemoryGB >= memGB (enclaveMemory);
-             not skipped (skipped)
+             p.epcUnits >= epc (epc); not skipped (skipped)
   skipped  = ( skip.until > T and skip.at + minListedSeconds <= T )
           or ( skip.prevUntil > T and skip.prevAt + minListedSeconds <= T )
              (the node's skip of the request's image; none -> false)
   fit      = p.gflops * 100 <= need * (100 + fitPercent)
          and p.memGB * 100 <= memGB * (100 + fitPercent) + 99
          and p.storageGB * 100 <= storageGB * (100 + fitPercent) + 99
+         and ( epc == 0 or p.epcUnits * 100 <= epc * (100 + fitPercent) + 99 )
   price    = base + p.tip
   match    = price <= bid  and  price * p.gflops * hours / 100 <= bid * G * hours / 100
   key      = uint256(keccak256(seed, e.node))
@@ -180,7 +238,10 @@ order: band descending, then key ascending, then address ascending; position = 1
 The band of an entry is the band of the roll array it stands in, which is
 `min(49, score / 1000)` of its score. The ordinal of `p` is `listedOrdinal`.
 An entry that fails is `notEligible` with its reason; an eligible entry that
-does not match stays on the list (it is allowed, never mandated).
+does not match stays on the list (it is allowed, never mandated). The fit
+tests the GFLOPS, the memory, the storage and, on a request that states a
+minimum EPC, the EPC (D198); the EPC is a count of whole 64 MiB units and
+is rounded up as the memory and the storage are (section 16, item 33).
 
 ## 7. The schedule (4.5)
 
@@ -250,7 +311,10 @@ needBid = price                                       if p.gflops <= G
         = max( price, ceil( 100 * w / (G * hours) ) )  otherwise
 minBidWei = min( carry, every counted needBid );  carry 0 is read as none;
             type(uint256).max when nothing is counted
-canClaimNow = counted nodes whose period matches at the current round's bid and base (section 6)
+takesClaims = `claims` on in the request's set  and  status AVAILABLE  and  not pinned, reserved or filled
+              and  readTime <= T0 + maxRequestAgeSeconds
+canClaimNow = 0 when not takesClaims;  else the counted nodes whose period matches at the current
+              round's bid and base (section 6), every counted node for a request added without terms
 sendBidWei  = max( minBidWei, bid + 1 )
 workWei     = bid * G * hours / 100;   workAfterRaiseWei = sendBidWei * G * hours / 100
 ```
@@ -259,7 +323,7 @@ workWei     = bid * G * hours / 100;   workAfterRaiseWei = sendBidWei * G * hour
 `needGflops` and `ceilGflops`, `hours = hoursWanted`, `G = ceilGflops` when
 stated else `gflopsMaxDefault`, `tz` from the template keyed by
 `templateHash` with `registeredAt < readTime`, `memGB` as the enclave memory
-need, no skip test. The work part `workWei` is the escrow's `W` (3.15);
+need, `epcUnits` as the minimum EPC (0 for none), no skip test. The work part `workWei` is the escrow's `W` (3.15);
 `addedEscrowWei` adds the pricing's fees and is not in the fixture.
 
 ## 10. The miss predicate (4.8)
@@ -273,7 +337,10 @@ of a node's LATE record for the round, present only when a record exists)
 and `blocks` (every existing block above `B` with `gasUsed` and `gasLimit`;
 a number missing is a block that does not exist). The approval's round is the
 request's last round; `fill = (node, claimBlock = its claim's block, round,
-step = stated(claim, round))`. With `step` on round `r`'s clock:
+step = stated(claim, round))`. The approval ends the approved node's period
+BUSY in its block; a case states that end in `periods` where it changes an
+answer, which is when the approval is mined in the block of its claim. With
+`step` on round `r`'s clock:
 
 ```
 stated(c, x)  = (c.steps >> 4x) & 15 for x <= c.round, 0 above it
@@ -295,9 +362,24 @@ per mandated node n, s = mandateStep(n), c = its claim or none:
   real   = 0 if c and ended and f.toBlock <= c.block;  s otherwise
 per claimer n with c.round >= r:  d = stated(c, r);  real = the mandated node's real, 0 when not mandated
   late(x)  = 0 if x == 0;  E(x) as E above with x for s;  0 if E(x) <= x;  min(missUnits, lateUnits * (E(x) - x))
-  isFalse  = late(real) > late(d)  or  (n is the fill's node, fill.round == r and d != real)
+  isFalse  = late(real) > late(d)  or  (n is the fill's node, fill.round == r, d != real and d != aj)
   recount  = not isFalse and a LATE record exists and recordedLate < late(d)
 ```
+
+**The approved claim's statement.** The approval of a claim ends the approved
+node's period BUSY in the approval's block. An approval mined in the block
+number of the claim it takes (the usual case where one block number holds
+several of the chain's blocks, as on LitVM) gives that end `f.toBlock ==
+c.block`, which reads as an excuse: `real` is 0 for a node that claimed from
+`f` while it was open and stated its list step. Block numbers do not order a
+claim and a period's end of one block, so the approved claim states a true
+place when it states its real step or its list step `aj`, and a false one
+only when it states neither (`approval-in-claim-block` and its two
+variants). The ballot's `approvedStep` writes `aj` into the fill record in
+either case. A claimer that holds no mandate has `real` 0 and `late(0)` 0,
+so its statement is false only on the approved claim: the false statements
+of a round are among its mandated nodes and the fill's node
+(`approved-not-mandated-states-step`).
 
 **mandateOutcomes** (`outcomes`, codes of line 1574): 0 when `K < s`; else 4
 when `ended` and (no claim, or `f.toBlock <= c.block`); else 1 when the claim
@@ -305,7 +387,12 @@ is of an earlier round, or of round `r` with `step(c.block) <= s`; else 0
 when `E <= s`; else 2 with a claim, 3 without. `passed` is `E - s` for
 outcomes 2 and 3, else 0. `stated` is `stated(c, r)`, 255 without a claim.
 `falseNodes` and `realSteps`: the claimers with `isFalse`, in ascending real
-step, then address.
+step, then address. The view reads the claims of the mandated nodes and of
+the fill's node and no list of claimers: one call answers a round whatever
+the number of its claimers, from at most `scanMax` roll entries, and
+`complete` is false only when the round's list holds more entries than that
+down to its stop band. A caller then reads the list in pages with
+`candidates` (section 8) and applies this section to it.
 
 **The ballot** (`recordMisses`): none when the request is not judgeable, or
 when it has no entry and round `r` was not filled or `fill.step == aj`.
@@ -326,9 +413,13 @@ their entries. `slot(id) = createdAt / slotSeconds`; `step_r` is `step` on
 round `r`'s clock. State: per node `score`, `pending` (request ids),
 `settleAt`, `beats`, `lates`, `misses`, `failures`, `bannedUntil`,
 `firstBeatSlot`, `lastBeatSlot`, `lastFailureSlot`, `lastAskAt`; per node and
-slot `chargedIn = {sum, taken}`; per (request, round, node) a charge record
+slot `chargedIn = {sum, taken, failures}` (`failures`: the node's failed
+orders charged in the slot and not corrected); per (request, round, node) a
+charge record
 `{kind LATE|MISS|FALSE, step, passed (at most 255), units, at, undone}`; per
-order a failure record `{kind, slot, at, units, corrected}`; per request
+order a failure record `{kind, slot, at, units, corrected, charged}`
+(`charged`: its charge was added to the slot's sum; `units`: what the cap
+and the score let it take); per request
 `status`, `filled`, `judged`, its rounds with `lastOpenSteps`, the fill
 record; `minimumOnAt`, `farmMinOnAt`.
 
@@ -347,7 +438,8 @@ claim(n, id, block, time, steps), rc = the current round:
            above maxSteps (steps) | a claim of n exists (claimed) | pending and |pending| >= pendingMax (pendingFull)
   pending  = (stated(rc) != 0 and step_rc(block) > stated(rc)) or stated(r) != 0 for an r < rc
   lastOpenSteps[rc] = max(.., min(step_rc(block), maxSteps + 1));  claimedInRound; append id when pending
-approve(n, id, block): filled; fill = (n, claim block, rc, stated(claim, rc)); lastOpenSteps[rc] as a claim
+approve(n, id, block): the claim APPROVED; filled (a request of one instance: section 5);
+                       fill = (n, claim block, rc, stated(claim, rc)); lastOpenSteps[rc] as a claim
 raise(id, block, time): refused filled | age | rounds == maxRounds | claimedInRound and step_rc(block) <= maxSteps;
                        lastOpenSteps[rc] as a claim; a new round (block, time)
 cancel(id): status CANCELED (refused when filled)
@@ -374,7 +466,9 @@ recordMisses(id, r, approvedStep, entries, time): refused CANCELED and not judge
                E = min(K, step_r(fill.claimBlock) + 1) when fill.round == r and 0 < fill.step < x; passed = (E - x) - uncounted;
                skipped when a record exists, uncounted > min(E, maxSteps + 1) - x or passed < 1;
                else MISS record, apply(missUnits), misses += 1, the period ends MISS
-    a claim, the contract's isFalse (late() of section 10 on the fill record as it now stands):
+    a claim mined in a round before r: skipped (it answers the round)
+    a claim, the contract's isFalse (late() of section 10 on the fill record as it now stands; the
+               approved claim's statement is false when it is neither x nor fill.step, which holds approvedStep):
                skipped when a MISS or FALSE record exists;
                old = the LATE record's units or 0; FALSE record; apply(missUnits - old); misses += 1;
                lates -= 1 when old > 0; the period ends MISS when x != 0
@@ -391,17 +485,19 @@ askCorrection(n, time, entries): refused more than correctionMaxEntries (entries
     kind 1 (id, r, q): a LATE record k; k.step <= q < k.step + k.passed; q <= maxSteps; q - k.step <= 7;
                        bit q - k.step of k.undone clear; taken of slot(id) > 0; time <= k.at + correctionWindowSeconds
     kinds 2, 3, 4 (orderId): a failure of n of kind NEVER_STARTED, EXPIRED, NODE_FAULT with code 37 or 39;
-                       units > 0; not corrected; time <= at + correctionWindowSeconds
+                       charged (its charge is in its slot's sum, whatever the cap let it take); not corrected;
+                       time <= at + correctionWindowSeconds
     kind 5 (slot s):   end = (s + 1) * slotSeconds; end <= time <= end + correctionWindowSeconds; s > firstBeatSlot;
-                       lastBeatSlot != s; not corrected; a period of n open at end
+                       lastBeatSlot != s; bannedUntil < end; not corrected; a period of n open at end
     kind 6 (id, r):    a LATE record: recount downward at once, not listed
 correct(n, entries, stand, time): each entry i with bit i set that is still admitted:
     kind 1:  undone |= 1 << (q - k.step); units = lessUndone(k.passed, undone);
              giveBack(k.units - units, k.at); k.units = units; lates -= 1 when units == 0
-    kinds 2 to 4: corrected; giveBack(missUnits, f.slot, f.at); failures -= 1; lastFailureSlot = 0 when it is f.slot
+    kinds 2 to 4: corrected; giveBack(missUnits, f.slot, f.at); failures -= 1; chargedIn[f.slot].failures -= 1;
+             lastFailureSlot = 0 when it is f.slot and chargedIn[f.slot].failures is 0
     kind 5:  corrected; score = min(50,000, score + gain)
 fail(n, orderId, kind, id): apply(n, slot(id), missUnits) (a STRIKE: the slot of its time); the record's units =
-  what apply took; failures += 1; lastFailureSlot = that slot
+  what apply took; charged; failures += 1; chargedIn[slot].failures += 1; lastFailureSlot = that slot
 ban(n, time): score = 0; bannedUntil = time + banSlots * slotSeconds; pending emptied; settleAt = 0
 ```
 
@@ -451,14 +547,24 @@ from: `keccak256("matching-rank node <label>")`, its last 20 bytes), `groups`
 | `windows` | `kind`, `parameters`, `end` or `fromBlock`/`toBlock`, `blocks` | `inWindow`, `full` |
 | `sequences` | `setup`, `ops` | `steps` (`result`, `after`), `final` |
 | `approvals` | `setup`, `readBlock`, `claims`, `nodes`, `minimumOn`, `developerMinScore`, `slotNow`, `recentFailureSlots` | `closedStep`, `approve`, `rule`, `inTime` or `wait` |
-| `quotes` | `setup`, `readTime`, `baseNowWei`, `minScore`, `carry`, `currentScores`, `terms`, `gflopsMaxDefault` | section 9 |
+| `quotes` | `setup`, `readTime`, `baseNowWei`, `minScore`, `carry`, `currentScores`, `status` (the request's status at the read, AVAILABLE when absent), `terms`, `gflopsMaxDefault` | section 9 |
 
 The design's worked examples are the cases `example-1` (3.8 Example 1, and
 `example-1-bid-0.95`, `example-1-bid-0.65` for its lower bids, and the
 `ex1-*` charges and approvals for its table of what happens), `example-2`,
 `example-3` with `example-3-one-band`, and `raise-round-0`, `raise-round-1`
 with `quote-raise-example` (3.15). The design states no enclave memory for
-them; every node of them offers 64 GiB.
+them; every node of them offers 64 GiB. EPC (D191): a period states its
+`epcUnits` and its `gflopsArg` carries them in bits 24 to 39; a request's
+`maxGflopsArg` carries its minimum in bits 32 to 47 and `expected.epcUnits`
+gives it. Every period states none (0) and every request states no minimum
+but in `epc-below-at-above` (a minimum of 2 units against offers of 0, 1, 2,
+3 and 65,535 units: 2 and 3 fit, 65,535 does not), `epc-any` (the same
+offers, no minimum: all fit), `epc-fit-bound` (a minimum of 10 units against
+offers of 10 and 12 units, which fit, and 13, which does not and is
+mandated after them although its key stands first) and `epc-fit-any` (the
+same offers, no minimum: all fit, mandated in key order), and in the quotes
+on the first two (`quote-epc`, `quote-for-terms-epc`).
 
 ## 15. Gas and widths the fixture pins
 
@@ -475,10 +581,10 @@ specification and the fixture take.
 
 1. **Hash encoding.** The design writes `abi.encodePacked` for the round
    stamp (line 1358), the seed (1387), the key (1410) and the list hash
-   (1455). The provisional code computes the stamp and the seed with
-   `abi.encode` (PoxMatchingState.sol `_stampOf`; PoxMatchReader.sol
-   `requestInfo`, `roundAt`). The design binds: `abi.encodePacked`; the
-   provisional code differs.
+   (1455). The design binds, `abi.encodePacked` and not `abi.encode`, and
+   the code computes all four with it (PoxMatchingState.sol `_stampOf`;
+   PoxMatchReaderBase.sol the seed, the round's stamp, the key and the list
+   hash).
 2. **The seed stamp's bytes.** "The first 22 bytes of blockhash(block.number
    - 1)" (line 415) is `bytes22(blockhash(...))`, the high-order bytes.
 3. **The image key.** `keccak256(field 1 of metadata1)` (line 1864) stored in
@@ -508,7 +614,11 @@ specification and the fixture take.
 9. **Excused or answered.** A node whose period ended in its step after its
    in-time claim (the approved node's period ends BUSY at the approval) has
    `ended` and no charge; its outcome is answered when its claim was mined
-   before `f` ended, excused otherwise (lines 1678, 1702).
+   before `f` ended, excused otherwise (lines 1678, 1702). "Before" is read
+   on block numbers: an end in the claim's block (`f.toBlock == c.block`,
+   an approval mined in the block of its claim) gives the outcome excused
+   (4) and `real` 0, and the approved node's statement of its list step is
+   true all the same (section 10, "The approved claim's statement").
 10. **`approvedNode` of a round filled by a node without a mandate.** Lines
     735 and 1689-1690 make it zero; line 1701 has the contract check that
     `approvedNode` is the fill record's node. Contradiction: `approvedNode` is
@@ -526,16 +636,26 @@ specification and the fixture take.
     `f.units` (line 1898); `giveBack` lowers the sum of the charges (lines
     1765-1771), which holds the full 1,918, and line 702 "takes its units off.
     The difference leaves the sum". Contradiction: the sum is lowered by
-    `missUnits`; `f.units > 0` stays the admission test. With a late charge
-    in the same slot, `f.units` would leave 548 taken after both are undone
-    (`correction-under-cap`).
+    `missUnits`. With a late charge in the same slot, `f.units` would leave
+    548 taken after both are undone (`correction-under-cap`). The admission
+    test is that the failure was charged, its charge added to the slot's sum
+    (the record's `charged`), and not `f.units > 0` (line 1995): a failure
+    that took nothing because an earlier charge of the slot had taken the
+    cap is corrected like any other, and what the cap let be taken goes
+    back whichever charge took it (3.12; `two-failures-one-slot-both-corrected`).
+    A failure with no charge (on a request marked at its add, or the
+    never-started record before the not-run ballot charges it) is skipped.
+    `lastFailureSlot` is cleared when it names the corrected failure's slot
+    and that slot holds no other uncorrected charged failure of the node
+    (`chargedIn.failures`; `two-failures-one-slot-one-stands`).
 14. **The cap counts the sum.** `apply` (lines 1759-1763, 1912) caps the sum of
-    the charges; the provisional `_take` (PoxMatchingState.sol) caps the units
-    taken, which differs once the score's floor stopped a charge
-    (`score-floor-and-cap`). The design binds.
+    the charges, and PoxMatchingState.sol `_apply` does; a cap on the units
+    taken differs once the score's floor stopped a charge
+    (`score-floor-and-cap`).
 15. **The slot of a failed order.** The cap of a failed order counts in the
     request's slot (line 715; `notRun`, line 1804); a strike in the slot of its
-    record (line 1793). The provisional `_fail` uses the current slot.
+    record (line 1793). PoxMatchingState.sol `_failOrder` takes the request's
+    slot and PoxMatchingJudged.sol `strike` the slot of the block's time.
 16. **The records a recount writes.** A raised record takes `at = time` (line
     1788). A record lowered to 0 units decrements `lates`, as a kind 1
     correction does (line 1897), and a record raised from 0 units increments
@@ -549,10 +669,9 @@ specification and the fixture take.
 18. **The page's cursor.** Line 1461 ends a read at the end of the stop band or
     of the roll. A page walks past exhausted and empty bands before it checks
     `count`, so the cursor is always an unread entry or the end, and the page
-    that reads the last entry reports `done`. The provisional `rollPage`
-    reports `done` only on a page that reaches band 0's end inside its loop
-    and leaves the cursor on an empty band after a page that ends at a band's
-    end.
+    that reads the last entry reports `done`. PoxMatchReader.sol `rollPage`
+    and PoxMatchReaderBase.sol `_scan` (the pages of `candidates` and
+    `turnOf`) walk that way.
 19. **`beyond`.** The carried `h` and `matchFound` (bounded by `maxSteps`, line
     1461) do not tell a page that starts inside a band below `stopBand` that
     it is below it (lines 1492-1495). The fixture holds no `beyond` page. The
@@ -567,20 +686,35 @@ specification and the fixture take.
 22. **`bidQuote`'s first carry.** "The lower of carry and what this page
     found" (line 1545) with the other views' "zero for the first page" (lines
     1490, 1528): carry 0 is read as none.
-23. **`canClaimNow`** counts the counted nodes that pass the claim's price test
-    at the current round; the claim's "no claim yet" test is not applied, since
-    rule 4 speaks of nodes that "can claim" and "have claimed" (line 600).
+23. **`canClaimNow`** counts the counted nodes that could claim at the read:
+    none unless the request takes claims then (`takesClaims` of section 9:
+    its set has `claims` on, the storage holds it AVAILABLE, it is neither
+    pinned, reserved nor filled, and it is at most `maxRequestAgeSeconds`
+    old), else those that pass the claim's price test at the current round,
+    which a request added without terms does not have (3.11). The claim's
+    "no claim yet" test is not applied, since rule 4 speaks of nodes that
+    "can claim" and "have claimed" (line 600). Each `bidQuote` case states
+    `takesClaims`: `quote-open-request` (five nodes can claim) against
+    `quote-claims-off`, `quote-pinned-request` and `quote-cancelled-request`
+    (the same five counted at the same lowest bid, none can claim). The
+    fixture holds no quote of a filled or a reserved request, of one past
+    its age or of one added without terms.
 24. **`bidQuoteFor`'s template and memory** (lines 1553-1558, 1613): the
     template registered before the block of the call, `memGB` the enclave
-    memory need, the need rule of 4.2 on `needGflops`, no skip test (no image
-    argument).
+    memory need, `epcUnits` the minimum EPC, the need rule of 4.2 on
+    `needGflops`, no skip test (no image argument).
 25. **The window of kinds 2, 3 and 5** ("the blocks whose time lies in the last
     fullWindowSeconds before", lines 689-692): `end - fullWindowSeconds <=
     timestamp < end`.
 26. **Kind 5's admission.** Line 697 requires that a heartbeat at the slot's
     end would have counted; the pseudo-code (lines 1886-1887) omits it. The
     fixture applies it as "a period of the node was open at the slot's end";
-    the serving-order leg is not in the fixture.
+    the serving-order leg is not in the fixture. A slot that did not end
+    after the end of the node's ban (`bannedUntil >= end`: a ban in force
+    through the slot, or recorded since it) is skipped, at the ask and at
+    the vote: the gain is not added to a score a ban has set to 0 (line 730,
+    "not at all when a ban has set it to 0 since the charge";
+    `heartbeat-correction-after-ban`).
 27. **The correction entry word** is the provisional code's
     (PoxMatchingJudged.sol `correct`); the design names an entry's kind and
     record (line 697) and no layout.
@@ -612,6 +746,98 @@ specification and the fixture take.
     floor of 0 the carried charge takes that gain (`bound-carry-floor`).
     `bound-one-a-heartbeat` and `bound-two-a-heartbeat` show the bound on
     bloxberg's set and on Amoy's.
+33. **The EPC** (D191: both requests carry an EPC size, the bench proves the
+    node's). The design gives it no unit or width. The reading: one unit is
+    64 MiB and the field is `uint16`, the 16 free bits of the offer record's
+    first slot (1 to 65,535 units: 64 MiB to 4 TiB less 64 MiB). An offer
+    states at most the whole units of the EPC its bench record proves,
+    `floor(<MiB> / 64)` of the record's `epc=<MiB>` (spec/metadata-keys.md,
+    reason 12). On an offer 0 states none and covers no request that states
+    a minimum; on a request 0 states no minimum and every offer covers it.
+    The filter tests `p.epcUnits >= epc` after the enclave memory. The fit
+    tests the EPC as it tests the memory and the storage (D198: the EPC
+    within 20% of the need, so that a node of a large EPC is not mandated
+    first on a request of a small one):
+    `p.epcUnits * 100 <= epc * (100 + fitPercent) + 99`, at most 1.2 x the
+    minimum rounded up to a whole unit (1 unit: up to 2; 2: 3; 10: 12;
+    1,024: 1,229). A request that states no minimum (`epc` 0) leaves the EPC
+    out of its fit, which is then that of a request without the EPC; an
+    offer that states none covers only such a request. The price match and
+    the quote's arithmetic do not test the EPC.
+34. **The proof that three nodes could serve a request** (`proveWide`, and
+    the `hints` of `noteAmbiguous` and `nodeFault`; 3.7, 3.19, D120). Each
+    of three hints names a roll entry of the approval's round and a listed
+    period, of three different nodes, and each is tested as a member of
+    that round's list is (section 6): the period is the node's newest with
+    `from + minListedSeconds <= T`, open at `T`, passes the filter with the
+    template (`p.tzMask & tz != 0`, `tz` of section 4) and the skip, and
+    matches the round's bid and base. No ballot stands behind this proof,
+    so PoxMatching tests the template itself, where a ballot's hint leaves
+    it to the quorum. On a request with `tz = 0` (a template not registered
+    before the add) no node declares the template and no proof holds:
+    `WideRefused` reason 3.
+35. **One failure record per order.** An order holds one failure record
+    (`failureOf`). The call that records it first, `strike`, `noteRefund`,
+    the hook of `expireUnstarted`, `nodeFault`, `notRun` or `ban`, makes each
+    later one refuse the order (`NodeFaultRefused` reason 7, `NotRunRefused`
+    2, `BanRefused` 3, `RefundRefused` 3, `NotUnstarted` 3) or return
+    without effect (`strike`, and `noteRefund` from the judge); `notRun`
+    alone charges the never-started record `expireUnstarted` left
+    uncharged. A strike recorded first is therefore followed by no ban, node
+    fault or not-run charge of that order. The design names, for the ban,
+    only an order "already charged as a node fault" and, for the node fault,
+    "an order it was banned for" (6.1): the wider rule is PoxMatching's, and
+    it is open with the owner.
+36. **`lastFailureSlot`** is the slot of the last failed order's charge: the
+    slot of its request's add (`createdAt / slotSeconds`, item 15), a
+    strike's the slot of its record. A later failure writes it whatever its
+    slot, so the value can move to an earlier slot, and an order's failure
+    recorded `recentFailureSlots` slots or more after its request's add is
+    at no time recent for the runner's rule (item 28). A correction clears
+    it by the rule of item 13.
+37. **`counted` before and after the ballot.** `counted` (D120) reads the
+    fill record's step, which is the approved claim's own statement until
+    the round's ballot writes the list's step into it (`approvedStep`,
+    section 11). An order settled, or a node fault counted, before the
+    ballot is counted on the statement, one after it on the list's step, so
+    S and F of an image depend on which comes first.
+38. **One ballot per round.** `recordMisses` records one ballot for a request
+    and round (`RecordRefused` reason 4 for a second): an entry the call
+    skips and an upward recount it does not name are not sent again. A
+    downward recount stays open to the node (kind 6).
+39. **A skip's two entries.** A skip holds its entry in force and one
+    previous entry; a new skip drops the previous one, refused while that
+    one ended less than 48 hours before (`SkipRefused` reason 7).
+    `recordMisses` and the proof of item 34 have no time limit: a hint for a
+    round whose time lies inside an entry already dropped reads the node as
+    not skipped at that round.
+40. **Paid work** is each PoxMatching's own count: a successor neither
+    copies it nor reads it through the chain of predecessors, where it
+    copies a node's account (MATCHING-DESIGN.md 6.1 names the account, not
+    the paid work). `paidWorkOf` of a successor starts at 0 for every node,
+    and with it the floor of paid work the tier reads.
+41. **The minimum EPC a runner states** (D200: 64 MiB on every request it
+    adds, and the dApp's recorded need when that is larger). The design
+    names the record, "with its image in ECImageRegistryV4 at publish", and
+    neither its place nor its width. The reading: ECImageRegistryV4 holds
+    it as a word of its own beside the image's records, in the unit and the
+    width of item 33 (`uint16` units of 64 MiB), and
+    `imageEpcUnits(ipfsHash)` answers it: 0 for a securelock image with none
+    recorded and for a hash the securelock table does not hold. The wallet
+    that registered the image writes it once, while it owns the image's
+    name: `setImageEpcUnits(ipfsHash, epcUnits)`, 1 to 65,535 units, with
+    `ImageEpcSet(ipfsHash, epcUnits)`; `ImageEpcRefused(ipfsHash, reason)`
+    refuses it for 1 a hash outside the securelock table or a sender that
+    is not that wallet, 2 a need recorded already, 3 a need of 0 units.
+    `setImageRecords` and `imageRecords` keep their eight words. A dApp
+    whose work fits one unit records none. A runner states, in bits 32 to
+    47 of the V2 add's `maxGflops` (section 3),
+    `max(1, imageEpcUnits(image), client)`: `image` is field 1 of the
+    request's metadata1 and `client` the client's own figure in whole units
+    of 64 MiB, 0 when it gives none. No contract reads the record or tests
+    a request's minimum against it: a request added with a minimum of 0 (a
+    reserved order, a legacy add) stays one that every offer's EPC covers
+    (item 33).
 
 ## 17. The result fields after v5 (3.19; SECURELOCK-HARDENING-SPEC.md 13.4)
 
@@ -662,6 +888,62 @@ default-class rules of `nodeFault` do not apply to it, and `noteAmbiguous`
 refuses it (`NotAmbiguous`, reason 4). The task code is read whatever fields
 15 to 17 hold.
 
+**The stored result.** The node adds the trustedzone's signed transaction to
+its order with `_addResultToOrder(orderId, stored)`, inside one string.
+PoxMatching's decoder and the validators' members read that string by one
+grammar, the form both trustedzones write into `transaction.txt` and the
+node agent copies between `v3:` and the result's CID:
+
+```
+stored = "v3:" "0x" 1*( hexdig hexdig ) [ ":" rest ]
+hexdig = "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9"
+       | "a" | "b" | "c" | "d" | "e" | "f"
+rest   = any bytes (the result's CID); not read
+```
+
+The string is read as its bytes stand: nothing is trimmed, skipped or
+folded. The hex run begins after `0x` and ends at the next colon or at the
+end of the string; it holds an even count of digits and at most 4,096
+bytes. A string that does not begin `v3:` is no v3 result (`notV3`). One
+that begins `v3:` and leaves the grammar carries no transaction
+(`noTransaction`): white space anywhere before the second colon, the prefix
+written `0X` or left out, a digit `A` to `F`, an odd count of digits, a run
+of more than 4,096 bytes, or bytes that are not the transaction below.
+
+The run is the legacy transaction the trustedzone signed, in canonical RLP:
+
+- one list that is all of the bytes, of nine items none of which is a list:
+  nonce, gasPrice, gasLimit, to, value, data, v, r, s;
+- every length in its shortest form: the short form below 56 bytes, the long
+  form from 56 on with no leading zero byte; a single byte below `0x80` is
+  written as itself and never as a one-byte string (`0x81` and the byte);
+- `to` is empty or 20 bytes; v, r and s are read as big-endian integers of
+  at most 8, 32 and 32 bytes (a leading zero byte inside those bounds is
+  read as part of the integer);
+- v is 27 or 28, or 35 and above (EIP-155: the chain id is `(v - 35) / 2`
+  and the parity `(v - 35) % 2`); s is at most half the order of secp256k1;
+- the signature recovers a signer over keccak256 of the RLP list of items 0
+  to 5 as their bytes stand in the transaction, followed for EIP-155 by the
+  chain id, an empty item and an empty item;
+- `data` is exactly the call `_addResultToOrder(uint256,string)`: the
+  selector `0x14e9f384`, the order id (below 2^64), the offset `0x40`, the
+  string's length and its bytes padded with zero bytes to a whole word, and
+  nothing after them; the string is valid UTF-8.
+
+The grammar reads that a signature recovers, not whose it is: the members
+compare the signer with the order's task wallet, the transaction's `to` with
+the PoX and its chain id with the network's. For an order, the reading
+answers `decoded` with the task code, the run of digits that is field 1 of
+the result string (at most 2^64 - 1); `noCode` when field 1 is not a run of
+digits; `otherOrder` when the call names another order. PoxMatching acts on
+it as follows: `nodeFault` needs `decoded` (`NodeFaultRefused` reason 3 for
+`notV3`, 4 for `noTransaction` and `noCode`, 5 for `otherOrder`); `notRun`
+needs `notV3` or `noTransaction`, a result with no enclave transaction
+(`NotRunRefused` reason 4 otherwise); `noteAmbiguous` needs `decoded` with
+the three fields above. A node that stores a result outside the grammar has
+stored no enclave transaction, whatever its bytes resemble: its order is
+charged as one closed with no result of the enclave.
+
 **The vectors.** `result-fields.json` (`make/result-fields.js`, the reference
 implementation) holds results whose three fields are read (`accepted`, with
 the code and the decoded values; times as decimal strings) and results whose
@@ -674,6 +956,21 @@ anything, `0x` included); `notDigit` (any other byte than `0` to `9`, a
 non-ASCII digit included); `aboveMax`. `absent`, with no field, is a result
 of fewer than eighteen fields. The test names are the fixture's labels; the
 decoder answers only whether the three fields are read.
+
+`stored` holds the vectors of the stored result's grammar, each with the form
+of its bytes and what `readStored` of `make/result-fields.js`, the reference
+implementation of the grammar, reads from it for the fixture's order:
+`expected.status` (`decoded`, `notV3`, `noTransaction`, `otherOrder` or
+`noCode`), `transaction` (whether the bytes carry a transaction: every
+status but `notV3` and `noTransaction`) and, for a transaction, its order id
+and its signer, with the task code when decoded. `canonical` and
+`canonical-pre-eip155` are the two forms the trustedzones write (EIP-155,
+and v 27 or 28); `no-rest`, `empty-rest`, `rest-not-read`, `length-bound`
+(4,096 bytes), `v-leading-zero-byte` and `other-signer` are the other forms
+that carry a transaction. `space-before-hex`, `one-byte-string-v` and
+`upper-case-prefix` carry none, as do the other white space, prefix,
+digit, length, RLP, signature and calldata forms of the group.
+`storedGrammar` states the rule in the fixture's own words.
 
 ## 18. A node's copy of the roll it ranks on (4.7, 7.5, 7.6; O92, D183)
 
@@ -695,10 +992,10 @@ node a refused or a late claim.
 | input | fixed in the closed roll (`rollPage`, `rollSlice`) or at its write | the event when it is written |
 |---|---|---|
 | the roll entry: node, score, band, index, beat time | a closed slot's roll never changes | `Beat(node, slot, score, band, index)`; the beat time is the block's |
-| the period: `from`, offer, cpu, memory, storage, bandwidth, GFLOPS, tip, template mask, enclave memory | written once at the announce | `Announced(node, dpRequestId, from, cpu, memGB, storageGB, bandwidth, gflops, tipWei, tzMask, enclaveMemoryGB)`; the ordinal is the node's previous period's plus one, 0 for its first |
+| the period: `from`, offer, cpu, memory, storage, bandwidth, GFLOPS, tip, template mask, enclave memory, EPC | written once at the announce | `Announced(node, dpRequestId, from, cpu, memGB, storageGB, bandwidth, gflops, tipWei, tzMask, enclaveMemoryGB, epcUnits)`; the ordinal is the node's previous period's plus one, 0 for its first |
 | the period's end: `to`, the reason, `toBlock` | written once | `Left(node, reason, at)`; `toBlock` is the block's number (a replacement, a pause, a placement, an offer's removal, an expiry, a missed mandate, a ban) |
 | a skip: `at`, `until`, `prevAt`, `prevUntil` | changed by `skipImage` alone | `Skipped(node, imageKey, at, until, prevAt, prevUntil)`, the skip as the call leaves it |
-| the parameter set of the request | written once (`parameterSet(index)`) | `ParametersAdded(index, effectAt)` |
+| the parameter set of the request | fixed once it is a request's: only a set whose `effectAt` is above the block's time is replaced (section 2), and a request's set has `effectAt < T0` (`parameterSet(index)`) | `ParametersAdded(index, effectAt)`; `ParametersReplaced(index, effectAt)` for a set not yet in force |
 | the template's bit and registration | written once (`templateOf`) | `TemplateRegistered(nameHash, bit, at)` |
 | the key | `keccak256(seed, node)` of the request's seed (section 3) | none: computed |
 

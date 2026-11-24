@@ -2396,7 +2396,7 @@ class EtnyPoXNode:
             argument = matching_rules.gflops_argument(gflops, self.__offer_enclave_memory_sent)
         return dp_request_arguments(not self.__pox_is_20, resources, self.__duration, self.__price, argument, tip,
                                     self.__uuid, capability.metadata3(self.__node_geo, record),
-                                    self.__dp_metadata4(advertised))
+                                    self.__dp_metadata4(advertised), epc_forms=self.__pox_epc_forms)
 
     def __offer_figures(self, record):
         """The memory and storage of the offer on a network with matching
@@ -2417,10 +2417,11 @@ class EtnyPoXNode:
                                    self.__offer_storage.refused(record_key(record)))
 
     def __dp_request_function(self):
-        """The bound contract call adding this node's DP request
-        (__dp_request_params)."""
-        name, arguments = self.__dp_request_params()
-        return getattr(self.__etny.functions, name)(*arguments), arguments
+        """The bound contract call adding this node's DP request, by the
+        signature __dp_request_params names: the union ABI holds both V2
+        adds under one name."""
+        signature, arguments = self.__dp_request_params()
+        return self.__etny.get_function_by_signature(signature)(*arguments), arguments
 
     def __adopt_dp_request(self, req_id, block):
         """Makes `req_id` this node's current DP request. Without a
@@ -6337,10 +6338,14 @@ class EtnyPoXNode:
         new handle). A replication-only handle makes the probe and the
         address reads (its intake and its template replication read the
         broker), reads no fee percents (it judges no DO request) and sends
-        nothing."""
+        nothing. A 2.0 PoX's VERSION() is read once (pox20.pox_version): the
+        add form of the DP request and doStamp's arity follow it
+        (pox20.takes_epc_forms)."""
         logger = self.logger
         address = self.__etny.address
         self.__pox_is_20 = False
+        self.__pox_version = ''
+        self.__pox_epc_forms = False
         self.__reader = self.__pricing = self.__broker = self.__token = None
         self.__matching = None
         # (NETWORK_FEE_PERCENT, VALIDATOR_FEE_PERCENT) of a 2.0 contract, the
@@ -6358,11 +6363,17 @@ class EtnyPoXNode:
                     abis[name] = f.read()
             step = 'readerAddress, pricingAddress, reservationBrokerAddress and token reads'
             answered, handles = retry(pox20.chain_handles, self.__etny, self.__w3, abis, attempts=10, delay=3)
+            if answered:
+                step = 'VERSION read'
+                answered, version = retry(pox20.pox_version, self.__etny.functions.VERSION().call, attempts=10,
+                                          delay=3)
             if answered and not self.__replication_only:
                 step = 'NETWORK_FEE_PERCENT and VALIDATOR_FEE_PERCENT reads'
                 answered, percents = retry(self.__read_fee_percents, attempts=10, delay=3)
             if answered:
                 self.__pox_is_20 = True
+                self.__pox_version = version
+                self.__pox_epc_forms = pox20.takes_epc_forms(version)
                 self.__reader = handles['reader']
                 self.__pricing = handles['pricing']
                 self.__broker = handles['broker']
@@ -6378,7 +6389,7 @@ class EtnyPoXNode:
                       ('broker', self.__broker), ('token', self.__token)) if handle is not None}
             fees = (f" fees=network {self.__fee_percents[0]}% validator {self.__fee_percents[1]}%"
                     if self.__fee_percents is not None else "")
-            logger.info(f"Protocol contract {address}: pox=2.0 "
+            logger.info(f"Protocol contract {address}: pox=2.0 version={self.__pox_version or 'none'} "
                         + ' '.join(f"{name}={value}" for name, value in named.items()) + fees)
             if self.__reader is None and not self.__replication_only:
                 logger.info(f"Protocol contract {address}: no reader; the DO requests are compared as on a legacy contract")
@@ -6421,7 +6432,8 @@ class EtnyPoXNode:
         chain = matching_node.ChainAdapter(
             self.__w3, matching_contract,
             self.__w3.eth.contract(address=self.__w3.to_checksum_address(reader_address), abi=reader_abi),
-            self.__etny, self.__address, self.__matching_transact, self.__network_config.logs_chunk_blocks)
+            self.__etny, self.__address, self.__matching_transact, self.__network_config.logs_chunk_blocks,
+            self.__pox_epc_forms)
         settings = matching_node.Settings(
             self.__network_config.claim_ahead_blocks, self.__network_config.claim_spread_nodes,
             self.__network_config.claim_stand_limit, self.__network_config.claim_hold_back,

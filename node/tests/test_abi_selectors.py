@@ -35,6 +35,11 @@ CALLS = {
         "_cancelDPRequest(uint256)",
         "_addDPRequest(uint8,uint8,uint8,uint8,uint16,uint8,string,string,string,string)",
         "addDPRequestV2(uint8,uint8,uint8,uint8,uint16,uint32,uint256,string,string,string,string)",
+        "addDPRequestV2(uint8,uint8,uint8,uint8,uint16,uint40,uint256,string,string,string,string)",
+        "VERSION()",
+        "doStamp(uint256)",
+        "farmJoinOf(address)",
+        "farmApprovalOf(address,address)",
         "_addMetadataToDPRequest(uint256,string,string)",
         "_addMetadataToDPRequestBatch(uint256,string[],string[])",
         "orderPlacedAt(uint256)",
@@ -180,6 +185,17 @@ def cases(table, kind):
 def test_the_bundled_abi_carries_the_signature(path, sig, kind):
     width = 32 if kind == "event" else 4
     assert keccak(text=sig)[:width] in selectors(path, kind), f"{Path(path).name} lacks {sig}"
+
+
+def test_the_union_holds_both_v2_dp_adds_and_the_three_value_stamp():
+    """The V2 DP add of a PoX whose VERSION() is "1.2" (uint32 gflops,
+    0x6e01d461) and of one whose VERSION() is "2.0" (uint40, 0x72a6bda7,
+    pox-smart-contract-litvm 52e36e0), and doStamp's three outputs."""
+    found = selectors(config.abi_filepath, "function")
+    assert found[bytes.fromhex("6e01d461")].split(",")[5] == "uint32"
+    assert found[bytes.fromhex("72a6bda7")].split(",")[5] == "uint40"
+    stamp = next(e for e in load(config.abi_filepath) if e.get("name") == "doStamp")
+    assert [o["type"] for o in stamp["outputs"]] == ["uint128", "uint16", "uint16"]
 
 
 def test_the_order_terms_outputs_are_in_the_readers_order():

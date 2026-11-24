@@ -1,6 +1,8 @@
-"""matching (MATCHING-DESIGN.md 4.4, 4.5, 7.5; D183): the ranking rule on a
-copy of the roll, against the shared fixtures of pox-smart-contract-litvm
-spec/ at 7611a81. spec/ranking.json holds, per ranking case, the inputs the
+"""matching (MATCHING-DESIGN.md 4.4, 4.5, 7.5; D183, D191, D198): the ranking
+rule on a copy of the roll, the EPC filter and fit included, against the
+shared fixtures of pox-smart-contract-litvm spec/ at 52e36e0 (ranking.json
+871f3429, matching-rank.json 830791e8, matching.md 91b54a7f, result-fields.json
+081e702b). spec/ranking.json holds, per ranking case, the inputs the
 copy holds and the reader's answers on them (candidates read from the top
 of the roll and on with `beyond`, each eligible entry with the band and the
 index of its place, and each roll node's turnOf in one page): the port's
@@ -21,7 +23,7 @@ import matching
 
 SPEC = Path(__file__).parent / "spec" / "matching"
 SOURCE = Path(__file__).resolve().parents[3] / "pox-smart-contract-litvm"
-SOURCE_COMMIT = "7611a81"
+SOURCE_COMMIT = "52e36e0"
 COPIES = ["ranking.json", "matching-rank.json", "matching.md", "result-fields.json"]
 RANKING = json.loads((SPEC / "ranking.json").read_text())
 RANK = json.loads((SPEC / "matching-rank.json").read_text())
@@ -71,7 +73,7 @@ def params_of(entry):
 def period_of(p):
     return matching.Period(p["ordinal"], p["from"], p["to"], p["toBlock"], p["endReason"], p["dpRequestId"],
                            p["cpu"], p["memGB"], p["storageGB"], p["bandwidth"], p["gflops"], p["enclaveMemoryGB"],
-                           p["tzMask"], int(p["tipWei"]), p.get("chainFirst", p["ordinal"]))
+                           p["tzMask"], int(p["tipWei"]), p.get("chainFirst", p["ordinal"]), p["epcUnits"])
 
 
 def copy_of(case, image):
@@ -93,7 +95,7 @@ def ranking_inputs(case):
     image = bytes.fromhex(q["imageKey"][2:])
     request = matching.Request(q["id"], bytes.fromhex(q["seed"][2:]), q["cpu"], q["memGB"], q["storageGB"],
                                q["bandwidth"], q["needGflops"], q["ceilGflops"], q["hours"], q["G"], q["tz"], image,
-                               q["ranked"], params)
+                               q["ranked"], params, q["epcUnits"])
     r = case["rounds"][q["round"]]
     rnd = matching.Round(r["round"], r["block"], r["time"], int(r["bidWei"]), int(r["baseWei"]))
     return copy_of(case, image), request, rnd, case["deployment"]["slotSeconds"]
@@ -140,7 +142,8 @@ def ranking_case(name):
 
 def test_the_vectors_hold_every_ranking_case_of_the_reference():
     assert CASES == [c["name"] for c in RANK["ranking"]]
-    assert len(CASES) == RANKING["groups"]["cases"] == 37
+    assert len(CASES) == RANKING["groups"]["cases"] == 41
+    assert {"epc-below-at-above", "epc-any", "epc-fit-bound", "epc-fit-any"} <= set(CASES)
 
 
 @pytest.mark.parametrize("name", CASES)
@@ -181,10 +184,11 @@ def rank_inputs(case):
     """(copy, request, round, slotSeconds, expected) of a
     spec/matching-rank.json ranking case, the request assembled as the
     agent assembles it: the seed from the seed stamp, the need from the
-    maxGflops argument, the template bit from the templates registered
-    before the add, the image key from metadata1, the parameter set the
-    index requestInfo's parameterSet answers (the reference's
-    parameterSetIndex)."""
+    maxGflops argument, the minimum EPC as doStamp's third value answers it
+    (bits 32 to 47 of the argument, which the PoX records at the add), the
+    template bit from the templates registered before the add, the image
+    key from metadata1, the parameter set the index requestInfo's
+    parameterSet answers (the reference's parameterSetIndex)."""
     q = case["request"]
     e = case["expected"]
     params = params_of(case["parameterSets"][e["parameterSetIndex"]])
@@ -200,7 +204,8 @@ def rank_inputs(case):
     seed = matching.seed_of(bytes.fromhex(q["seedStamp"][2:]), q["id"])
     tz = copy.template_bit(matching.template_key(q["metadata1"]), q["createdAt"])
     request = matching.Request(q["id"], seed, q["cpu"], q["memGB"], q["storageGB"], q["bandwidth"], need, ceil,
-                               q["durationSec"] // 3600, q["escrowGflops"], tz, image, e["ranked"], params)
+                               q["durationSec"] // 3600, q["escrowGflops"], tz, image, e["ranked"], params,
+                               (q["maxGflopsArg"] >> 32) & 0xFFFF)
     r = case["rounds"][case["round"]]
     rnd = matching.Round(r["round"], r["block"], r["time"], min(int(r["bidWei"]), matching.UINT128_MAX),
                          int(r["baseWei"]))
@@ -222,8 +227,8 @@ def test_the_requests_values_are_the_references(name):
     assert "0x" + request.seed.hex() == e["seed"]
     assert "0x" + request.image.hex() == e["imageKey"]
     assert request.tz == e["tz"]
-    assert (request.need, request.ceil, request.hours, request.g) == (e["needGflops"], e["ceilGflops"], e["hours"],
-                                                                     e["G"])
+    assert (request.need, request.ceil, request.hours, request.g, request.epc) == (
+        e["needGflops"], e["ceilGflops"], e["hours"], e["G"], e["epcUnits"])
     stamp = matching.round_stamp(q["id"], bytes.fromhex(q["seedStamp"][2:]), rnd.number, rnd.block, rnd.time,
                                  rnd.bid, rnd.base)
     assert "0x" + stamp.hex() == e["roundStamp"]
@@ -281,10 +286,10 @@ def test_the_word_decoders_read_the_contracts_layouts():
     packs them (spec/make/ranking.js reads the same bits)."""
     first = (1795001000 | (1795002000 << 32) | (1234 << 64) | (501 << 112) | (250 << 160) | (4 << 176) | (8 << 184)
              | (40 << 192) | (100 << 200) | (3 << 208) | (6 << 224) | (7 << 232))
-    second = (200000000000000000 | (5 << 128) | (64 << 152))
+    second = (200000000000000000 | (5 << 128) | (64 << 152) | (65535 << 160))
     p = matching.decode_period(7, first, second)
     assert p == matching.Period(7, 1795001000, 1795002000, 1234, 6, 501, 4, 8, 40, 100, 250, 64, 3,
-                                200000000000000000, 5)
+                                200000000000000000, 5, 65535)
     assert matching.period_ordinal(first) == 7
     assert matching.decode_skip(0) is None
     assert matching.decode_skip(10 | (20 << 32) | (30 << 64) | (40 << 96)) == matching.Skip(10, 20, 30, 40)

@@ -51,17 +51,22 @@ PARAMETER_FIELDS = (
     'nodeFaultCodes', 'defaultFaultCodes', 'ambiguousCodes', 'runBilledCodes')
 Parameters = namedtuple('Parameters', PARAMETER_FIELDS)
 
-# A period of a node (PoxMatchingState.Period): `start` is its `from`.
+# A period of a node (PoxMatchingState.Period): `start` is its `from`;
+# `epc_units` its EPC in units of 64 MiB, 0 for an offer that states none
+# (spec/matching.md section 16 item 33).
 Period = namedtuple('Period', 'ordinal start to to_block end_reason dp_request_id cpu mem storage bandwidth gflops '
-                              'enclave_memory tz_mask tip chain_first')
+                              'enclave_memory tz_mask tip chain_first epc_units', defaults=(0,))
 Skip = namedtuple('Skip', 'at until prev_at prev_until')
 RollEntry = namedtuple('RollEntry', 'node score beat_time')
 
 # A request as the ranking reads it (spec/matching.md section 4): `need` the
 # GFLOPS it requires, `ceil` its ceiling (0: none), `g` the GFLOPS its escrow
 # is sized for, `tz` its template's bit (0: not registered before its add),
-# `image` its 31-byte image key, `ranked` whether it has a schedule (4.3).
-Request = namedtuple('Request', 'id seed cpu mem storage bandwidth need ceil hours g tz image ranked params')
+# `image` its 31-byte image key, `ranked` whether it has a schedule (4.3),
+# `epc` its minimum EPC in units of 64 MiB (0: any), the third value of the
+# PoX's doStamp.
+Request = namedtuple('Request', 'id seed cpu mem storage bandwidth need ceil hours g tz image ranked params epc',
+                     defaults=(0,))
 # A round of a request: its number, the block and time that opened it, its
 # bid and its base, in wei per CU-hour.
 Round = namedtuple('Round', 'number block time bid base')
@@ -148,8 +153,9 @@ def image_key(metadata1):
 
 def need_gflops(max_gflops):
     """(need, ceil) of a V2 add's maxGflops argument (4.2, D38): the ceiling
-    in its low 16 bits, the required GFLOPS in its high 16; a request that
-    states none requires its ceiling when that is below 100, else 100."""
+    in its bits 0 to 15, the required GFLOPS in its bits 16 to 31; a request
+    that states none requires its ceiling when that is below 100, else
+    100."""
     ceil = int(max_gflops) & UINT16_MAX
     need = (int(max_gflops) >> 16) & UINT16_MAX
     if need == 0:
@@ -193,21 +199,27 @@ def matches(request, price, gflops, bid):
     return price <= bid and price * gflops * request.hours // 100 <= bid * request.g * request.hours // 100
 
 
-def covers(request, period, full=True):
-    """Whether `period` covers the request: cpu, memory, storage, bandwidth,
-    the required GFLOPS and the ceiling, and with `full` the template and the
-    enclave memory need (3.7, D146)."""
+def covers(request, period, with_template=True):
+    """Whether `period` covers the request as the claim's cover does: cpu,
+    memory, storage, bandwidth, the required GFLOPS and the ceiling, the
+    enclave memory need (3.7, D146) and the minimum EPC (D191); with
+    `with_template` also the template, as the list's filter does
+    (PoxMatchReaderBase._covers)."""
     return (period.cpu >= request.cpu and period.mem >= request.mem and period.storage >= request.storage
             and period.bandwidth >= request.bandwidth and period.gflops >= request.need
             and (request.ceil == 0 or period.gflops <= request.ceil)
-            and (not full or ((period.tz_mask & request.tz) != 0 and period.enclave_memory >= request.mem)))
+            and period.enclave_memory >= request.mem and period.epc_units >= request.epc
+            and (not with_template or (period.tz_mask & request.tz) != 0))
 
 
 def fits(request, period, params):
-    """The 20% fit rule of 3.7 on CU, memory and storage."""
+    """The 20% fit rule of 3.7 on CU, memory and storage, and on a request
+    that states a minimum EPC on the EPC, each rounded up to a whole unit
+    (D198; spec/matching.md section 16 item 33)."""
     widen = 100 + params.fitPercent
     return (period.gflops * 100 <= request.need * widen and period.mem * 100 <= request.mem * widen + 99
-            and period.storage * 100 <= request.storage * widen + 99)
+            and period.storage * 100 <= request.storage * widen + 99
+            and (request.epc == 0 or period.epc_units * 100 <= request.epc * widen + 99))
 
 
 def skipped(skip, t, min_listed):
@@ -246,6 +258,7 @@ def decode_period(ordinal, first, second):
         tip=second & UINT128_MAX,
         chain_first=(second >> 128) & (2**24 - 1),
         enclave_memory=(second >> 152) & 255,
+        epc_units=(second >> 160) & UINT16_MAX,
     )
 
 
@@ -348,10 +361,11 @@ class RollCopy:
             entries.append(RollEntry(address_text(node), int(score), int(beat_time)))
 
     def on_announced(self, node, dp_request_id, start, cpu, mem, storage, bandwidth, gflops, tip, tz_mask,
-                     enclave_memory, block=None):
+                     enclave_memory, epc_units, block=None):
         """An Announced log of a node whose periods the copy holds: a new
-        period, its ordinal the previous one's plus one. An open period it
-        replaces ended by the Left log before it."""
+        period, its ordinal the previous one's plus one, with the offer's
+        EPC units. An open period it replaces ended by the Left log before
+        it."""
         node = address_text(node)
         if node not in self.periods or not self.__fresh(node, block):
             return
@@ -361,7 +375,8 @@ class RollCopy:
         if periods and periods[-1].end_reason == END_REPLACED and periods[-1].to == start:
             chain_first = periods[-1].chain_first
         periods.append(Period(ordinal, int(start), 0, 0, 0, int(dp_request_id), int(cpu), int(mem), int(storage),
-                              int(bandwidth), int(gflops), int(enclave_memory), int(tz_mask), int(tip), chain_first))
+                              int(bandwidth), int(gflops), int(enclave_memory), int(tz_mask), int(tip), chain_first,
+                              int(epc_units)))
 
     def on_left(self, node, reason, at, block):
         """A Left log: the node's open period ended for `reason` at time `at`
@@ -440,13 +455,13 @@ def listed_period(copy, node, t, min_listed):
 def evaluate(copy, request, rnd, node, score, band, index):
     """The entry (node, score) of `band` at `index` on the list of round
     `rnd` (4.4; PoxMatchReaderBase._evaluate): an Eligible when the node's
-    listed period is open at T, covers the request with its template and
-    enclave memory and holds no skip of the request's image in force at T;
-    None otherwise."""
+    listed period is open at T, covers the request with its template,
+    enclave memory and EPC and holds no skip of the request's image in force
+    at T; None otherwise."""
     params = request.params
     t = rnd.time
     period = listed_period(copy, node, t, params.minListedSeconds)
-    if period is None or (period.to != 0 and period.to <= t) or not covers(request, period, True):
+    if period is None or (period.to != 0 and period.to <= t) or not covers(request, period):
         return None
     if skipped(copy.skip(node, request.image), t, params.minListedSeconds):
         return None

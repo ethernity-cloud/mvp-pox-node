@@ -24,6 +24,7 @@ import capability
 import matching
 import matching_node
 import test_do_request_age_intake as intake
+import utils
 
 NODE = Path(__file__).resolve().parents[1]
 ADDRESS = intake.NODE_ADDRESS
@@ -196,6 +197,7 @@ def bound(agent, monkeypatch, pointer, reader=READER):
     node._EtnyPoXNode__address = ADDRESS
     node._EtnyPoXNode__network = "polygon_amoy"
     node._EtnyPoXNode__network_config = intake.polygon_mainnet(monkeypatch)
+    node._EtnyPoXNode__pox_epc_forms = True
     monkeypatch.setattr(agent, "retry", lambda fn, *args, **kwargs: (True, fn(*args)))
     node._EtnyPoXNode__bind_matching()
     return node._EtnyPoXNode__matching
@@ -216,6 +218,9 @@ def test_the_pointer_and_the_reader_on_chain_bind_matching(agent, monkeypatch):
     m = bound(agent, monkeypatch, MATCHING)
     assert isinstance(m, matching_node.MatchingNode)
     assert m.chain.matching.address == MATCHING and m.chain.reader.address == READER
+    # The PoX's VERSION() names the EPC forms: doStamp is read through the
+    # PoX's own handle, the union ABI's three outputs.
+    assert m.chain.epc_forms is True and m.chain.stamps is m.chain.pox
     assert "match_reader_address" not in agent.config.NetworkConfig.__dataclass_fields__
     assert m.settings.claim_spread_nodes == 8 and m.settings.claim_stand_limit == 2
 
@@ -245,6 +250,7 @@ def params_node(agent, monkeypatch, tmp_path, stub, record, memory=(64 * GIB, 60
     node._EtnyPoXNode__uuid = "uuid"
     node._EtnyPoXNode__node_geo = "geo"
     node._EtnyPoXNode__pox_is_20 = True
+    node._EtnyPoXNode__pox_epc_forms = True
     node._EtnyPoXNode__broker = None
     monkeypatch.setattr(agent, "HardwareInfoProvider", SimpleNamespace(
         get_number_of_cpus=lambda: 8, get_free_memory=lambda: 16, get_free_storage=lambda: 100,
@@ -264,10 +270,50 @@ BENCH = {**RECORD, "encmem": "32", "custorage": "120"}
 def test_the_offer_states_the_largest_bench_size_its_record_passed_above_its_gflops(agent, monkeypatch, tmp_path):
     node = params_node(agent, monkeypatch, tmp_path, StubMatching(), {**RECORD, "encmem": "8"})
     name, arguments = node._EtnyPoXNode__dp_request_params()
-    assert name == "addDPRequestV2" and arguments[5] == 250 | (8 << 16)
+    assert name == utils.DP_ADD_V2_EPC and arguments[5] == 250 | (8 << 16)
     node._EtnyPoXNode__enclave_memory.refuse("3065ab", 8)
     _, arguments = node._EtnyPoXNode__dp_request_params()
     assert arguments[5] == 250 | (4 << 16)
+
+
+@pytest.mark.parametrize("epc_forms, wanted", [(True, utils.DP_ADD_V2_EPC), (False, utils.DP_ADD_V2)])
+def test_the_dp_add_is_bound_by_the_signature_the_poxs_version_names(agent, monkeypatch, tmp_path, epc_forms,
+                                                                       wanted):
+    node = params_node(agent, monkeypatch, tmp_path, StubMatching(), {**RECORD, "encmem": "8"})
+    node._EtnyPoXNode__pox_epc_forms = epc_forms
+    bound_to = []
+    node._EtnyPoXNode__etny = SimpleNamespace(
+        get_function_by_signature=lambda signature: (lambda *args: bound_to.append(signature) or signature))
+    fn, arguments = node._EtnyPoXNode__dp_request_function()
+    assert fn == wanted and bound_to == [wanted]
+    assert arguments[5] == 250 | (8 << 16)
+
+
+def answering(value):
+    """A contract function whose call() answers `value`, or raises it."""
+    def call():
+        if isinstance(value, Exception):
+            raise value
+        return value
+    return lambda: SimpleNamespace(call=call)
+
+
+@pytest.mark.parametrize("version, epc_forms", [
+    ("2.0", True), ("1.2", False), (ContractLogicError("execution reverted"), False)])
+def test_the_poxs_version_names_the_form_of_its_adds(agent, monkeypatch, version, epc_forms):
+    node = object.__new__(agent.EtnyPoXNode)
+    node.logger = logging.getLogger("test")
+    node._EtnyPoXNode__replication_only = False
+    node._EtnyPoXNode__w3 = None
+    node._EtnyPoXNode__etny = SimpleNamespace(address="0x" + "21" * 20, functions=SimpleNamespace(
+        pricingVersion=answering(2), VERSION=answering(version)))
+    monkeypatch.setattr(agent, "retry", lambda fn, *args, **kwargs: (True, fn(*args)))
+    monkeypatch.setattr(agent.pox20, "chain_handles",
+                        lambda pox, w3, abis: {"reader": None, "pricing": None, "broker": None, "token": None})
+    monkeypatch.setattr(agent.EtnyPoXNode, "_EtnyPoXNode__read_fee_percents", lambda self: (5, 5))
+    node._EtnyPoXNode__bind_pox_generation()
+    assert node._EtnyPoXNode__pox_is_20 is True
+    assert node._EtnyPoXNode__pox_epc_forms is epc_forms
 
 
 def test_the_offer_states_the_reserved_figures_at_most_the_bench_records_readings(agent, monkeypatch, tmp_path):

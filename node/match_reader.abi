@@ -161,6 +161,11 @@
         "type": "uint16"
       },
       {
+        "internalType": "uint16",
+        "name": "epcUnits",
+        "type": "uint16"
+      },
+      {
         "internalType": "bytes32",
         "name": "templateHash",
         "type": "bytes32"
@@ -436,9 +441,9 @@
         "type": "uint256"
       },
       {
-        "internalType": "uint32",
+        "internalType": "uint48",
         "name": "maxGflops",
-        "type": "uint32"
+        "type": "uint48"
       },
       {
         "internalType": "uint16",

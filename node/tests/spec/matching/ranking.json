@@ -4,7 +4,7 @@
   "specification": "spec/matching.md section 18",
   "source": "matching-rank.json ranking",
   "groups": {
-    "cases": 37
+    "cases": 41
   },
   "cases": [
     {
@@ -66,6 +66,7 @@
         "bandwidth": 10,
         "needGflops": 250,
         "ceilGflops": 400,
+        "epcUnits": 0,
         "hours": 1,
         "G": 400,
         "tz": 1,
@@ -136,6 +137,7 @@
             "bandwidth": 100,
             "gflops": 260,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "100000000000000000"
           }
@@ -154,6 +156,7 @@
             "bandwidth": 100,
             "gflops": 250,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "200000000000000000"
           }
@@ -172,6 +175,7 @@
             "bandwidth": 100,
             "gflops": 300,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "400000000000000000"
           }
@@ -190,6 +194,7 @@
             "bandwidth": 100,
             "gflops": 400,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "300000000000000000"
           }
@@ -208,6 +213,7 @@
             "bandwidth": 100,
             "gflops": 390,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "500000000000000000"
           }
@@ -438,6 +444,7 @@
         "bandwidth": 10,
         "needGflops": 250,
         "ceilGflops": 400,
+        "epcUnits": 0,
         "hours": 1,
         "G": 400,
         "tz": 1,
@@ -508,6 +515,7 @@
             "bandwidth": 100,
             "gflops": 260,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "100000000000000000"
           }
@@ -526,6 +534,7 @@
             "bandwidth": 100,
             "gflops": 250,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "200000000000000000"
           }
@@ -544,6 +553,7 @@
             "bandwidth": 100,
             "gflops": 300,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "400000000000000000"
           }
@@ -562,6 +572,7 @@
             "bandwidth": 100,
             "gflops": 400,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "300000000000000000"
           }
@@ -580,6 +591,7 @@
             "bandwidth": 100,
             "gflops": 390,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "500000000000000000"
           }
@@ -810,6 +822,7 @@
         "bandwidth": 10,
         "needGflops": 250,
         "ceilGflops": 400,
+        "epcUnits": 0,
         "hours": 1,
         "G": 400,
         "tz": 1,
@@ -880,6 +893,7 @@
             "bandwidth": 100,
             "gflops": 260,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "100000000000000000"
           }
@@ -898,6 +912,7 @@
             "bandwidth": 100,
             "gflops": 250,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "200000000000000000"
           }
@@ -916,6 +931,7 @@
             "bandwidth": 100,
             "gflops": 300,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "400000000000000000"
           }
@@ -934,6 +950,7 @@
             "bandwidth": 100,
             "gflops": 400,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "300000000000000000"
           }
@@ -952,6 +969,7 @@
             "bandwidth": 100,
             "gflops": 390,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "500000000000000000"
           }
@@ -1182,6 +1200,7 @@
         "bandwidth": 10,
         "needGflops": 250,
         "ceilGflops": 400,
+        "epcUnits": 0,
         "hours": 1,
         "G": 400,
         "tz": 1,
@@ -1267,6 +1286,7 @@
             "bandwidth": 100,
             "gflops": 300,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "400000000000000000"
           }
@@ -1285,6 +1305,7 @@
             "bandwidth": 100,
             "gflops": 400,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "300000000000000000"
           }
@@ -1303,6 +1324,7 @@
             "bandwidth": 100,
             "gflops": 250,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "200000000000000000"
           }
@@ -1321,6 +1343,7 @@
             "bandwidth": 100,
             "gflops": 390,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "500000000000000000"
           }
@@ -1339,6 +1362,7 @@
             "bandwidth": 100,
             "gflops": 260,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "100000000000000000"
           }
@@ -1569,6 +1593,7 @@
         "bandwidth": 10,
         "needGflops": 250,
         "ceilGflops": 400,
+        "epcUnits": 0,
         "hours": 1,
         "G": 400,
         "tz": 1,
@@ -1632,6 +1657,7 @@
             "bandwidth": 100,
             "gflops": 400,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "300000000000000000"
           }
@@ -1650,6 +1676,7 @@
             "bandwidth": 100,
             "gflops": 390,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "500000000000000000"
           }
@@ -1668,6 +1695,7 @@
             "bandwidth": 100,
             "gflops": 250,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "200000000000000000"
           }
@@ -1838,6 +1866,7 @@
         "bandwidth": 10,
         "needGflops": 250,
         "ceilGflops": 400,
+        "epcUnits": 0,
         "hours": 1,
         "G": 400,
         "tz": 1,
@@ -1896,6 +1925,7 @@
             "bandwidth": 100,
             "gflops": 400,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "300000000000000000"
           }
@@ -1914,6 +1944,7 @@
             "bandwidth": 100,
             "gflops": 390,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "500000000000000000"
           }
@@ -1932,6 +1963,7 @@
             "bandwidth": 100,
             "gflops": 250,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "200000000000000000"
           }
@@ -2102,6 +2134,7 @@
         "bandwidth": 10,
         "needGflops": 250,
         "ceilGflops": 400,
+        "epcUnits": 0,
         "hours": 1,
         "G": 400,
         "tz": 1,
@@ -2172,6 +2205,7 @@
             "bandwidth": 100,
             "gflops": 260,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "100000000000000000"
           }
@@ -2190,6 +2224,7 @@
             "bandwidth": 100,
             "gflops": 250,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "200000000000000000"
           }
@@ -2208,6 +2243,7 @@
             "bandwidth": 100,
             "gflops": 300,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "400000000000000000"
           }
@@ -2226,6 +2262,7 @@
             "bandwidth": 100,
             "gflops": 400,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "300000000000000000"
           }
@@ -2244,6 +2281,7 @@
             "bandwidth": 100,
             "gflops": 390,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "500000000000000000"
           }
@@ -2474,6 +2512,7 @@
         "bandwidth": 10,
         "needGflops": 250,
         "ceilGflops": 400,
+        "epcUnits": 0,
         "hours": 1,
         "G": 400,
         "tz": 1,
@@ -2552,6 +2591,7 @@
             "bandwidth": 100,
             "gflops": 260,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "100000000000000000"
           }
@@ -2570,6 +2610,7 @@
             "bandwidth": 100,
             "gflops": 250,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "200000000000000000"
           }
@@ -2588,6 +2629,7 @@
             "bandwidth": 100,
             "gflops": 300,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "400000000000000000"
           }
@@ -2606,6 +2648,7 @@
             "bandwidth": 100,
             "gflops": 400,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "300000000000000000"
           }
@@ -2624,6 +2667,7 @@
             "bandwidth": 100,
             "gflops": 390,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "500000000000000000"
           }
@@ -2854,6 +2898,7 @@
         "bandwidth": 10,
         "needGflops": 250,
         "ceilGflops": 400,
+        "epcUnits": 0,
         "hours": 1,
         "G": 400,
         "tz": 1,
@@ -2934,6 +2979,7 @@
             "bandwidth": 100,
             "gflops": 250,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "200000000000000000"
           }
@@ -2952,6 +2998,7 @@
             "bandwidth": 100,
             "gflops": 250,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "200000000000000000"
           }
@@ -2970,6 +3017,7 @@
             "bandwidth": 100,
             "gflops": 250,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "200000000000000000"
           }
@@ -2988,6 +3036,7 @@
             "bandwidth": 100,
             "gflops": 250,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "200000000000000000"
           }
@@ -3006,6 +3055,7 @@
             "bandwidth": 100,
             "gflops": 250,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "200000000000000000"
           }
@@ -3236,6 +3286,7 @@
         "bandwidth": 10,
         "needGflops": 250,
         "ceilGflops": 400,
+        "epcUnits": 0,
         "hours": 1,
         "G": 400,
         "tz": 1,
@@ -3329,6 +3380,7 @@
         "bandwidth": 10,
         "needGflops": 250,
         "ceilGflops": 400,
+        "epcUnits": 0,
         "hours": 1,
         "G": 400,
         "tz": 1,
@@ -3445,6 +3497,7 @@
             "bandwidth": 100,
             "gflops": 251,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "100000000000000000"
           }
@@ -3463,6 +3516,7 @@
             "bandwidth": 100,
             "gflops": 252,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "100000000000000000"
           }
@@ -3481,6 +3535,7 @@
             "bandwidth": 100,
             "gflops": 253,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "100000000000000000"
           }
@@ -3499,6 +3554,7 @@
             "bandwidth": 100,
             "gflops": 254,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "100000000000000000"
           }
@@ -3517,6 +3573,7 @@
             "bandwidth": 100,
             "gflops": 255,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "100000000000000000"
           }
@@ -3535,6 +3592,7 @@
             "bandwidth": 100,
             "gflops": 256,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "100000000000000000"
           }
@@ -3553,6 +3611,7 @@
             "bandwidth": 100,
             "gflops": 257,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "100000000000000000"
           }
@@ -3571,6 +3630,7 @@
             "bandwidth": 100,
             "gflops": 258,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "100000000000000000"
           }
@@ -3589,6 +3649,7 @@
             "bandwidth": 100,
             "gflops": 259,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "100000000000000000"
           }
@@ -3607,6 +3668,7 @@
             "bandwidth": 100,
             "gflops": 260,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "100000000000000000"
           }
@@ -3625,6 +3687,7 @@
             "bandwidth": 100,
             "gflops": 261,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "100000000000000000"
           }
@@ -4045,6 +4108,7 @@
         "bandwidth": 10,
         "needGflops": 250,
         "ceilGflops": 400,
+        "epcUnits": 0,
         "hours": 1,
         "G": 400,
         "tz": 1,
@@ -4115,6 +4179,7 @@
             "bandwidth": 100,
             "gflops": 250,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "200000000000000000"
           }
@@ -4133,6 +4198,7 @@
             "bandwidth": 100,
             "gflops": 400,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "300000000000000000"
           }
@@ -4151,6 +4217,7 @@
             "bandwidth": 100,
             "gflops": 260,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "100000000000000000"
           }
@@ -4169,6 +4236,7 @@
             "bandwidth": 100,
             "gflops": 390,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "500000000000000000"
           }
@@ -4187,6 +4255,7 @@
             "bandwidth": 100,
             "gflops": 300,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "400000000000000000"
           }
@@ -4417,6 +4486,7 @@
         "bandwidth": 1,
         "needGflops": 100,
         "ceilGflops": 0,
+        "epcUnits": 0,
         "hours": 1,
         "G": 200,
         "tz": 1,
@@ -4481,6 +4551,7 @@
             "bandwidth": 100,
             "gflops": 150,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "400000000000000000"
           }
@@ -4499,6 +4570,7 @@
             "bandwidth": 100,
             "gflops": 150,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "400000000000000001"
           }
@@ -4517,6 +4589,7 @@
             "bandwidth": 100,
             "gflops": 300,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "100000000000000000"
           }
@@ -4535,6 +4608,7 @@
             "bandwidth": 100,
             "gflops": 300,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "60000000000000000"
           }
@@ -4735,6 +4809,7 @@
         "bandwidth": 1,
         "needGflops": 100,
         "ceilGflops": 0,
+        "epcUnits": 0,
         "hours": 7,
         "G": 65535,
         "tz": 1,
@@ -4787,6 +4862,7 @@
             "bandwidth": 100,
             "gflops": 65535,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "340282366920938463462774607431768211455"
           }
@@ -4805,6 +4881,7 @@
             "bandwidth": 100,
             "gflops": 65535,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "340282366920938463462774607431768211456"
           }
@@ -4945,6 +5022,7 @@
         "bandwidth": 10,
         "needGflops": 250,
         "ceilGflops": 400,
+        "epcUnits": 0,
         "hours": 1,
         "G": 400,
         "tz": 1,
@@ -5015,6 +5093,7 @@
             "bandwidth": 100,
             "gflops": 260,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "100000000000000000"
           }
@@ -5033,6 +5112,7 @@
             "bandwidth": 100,
             "gflops": 250,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "200000000000000000"
           }
@@ -5051,6 +5131,7 @@
             "bandwidth": 100,
             "gflops": 300,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "400000000000000000"
           }
@@ -5069,6 +5150,7 @@
             "bandwidth": 100,
             "gflops": 400,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "300000000000000000"
           }
@@ -5087,6 +5169,7 @@
             "bandwidth": 100,
             "gflops": 390,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "500000000000000000"
           }
@@ -5317,6 +5400,7 @@
         "bandwidth": 10,
         "needGflops": 250,
         "ceilGflops": 400,
+        "epcUnits": 0,
         "hours": 1,
         "G": 400,
         "tz": 1,
@@ -5387,6 +5471,7 @@
             "bandwidth": 100,
             "gflops": 260,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "100000000000000000"
           }
@@ -5405,6 +5490,7 @@
             "bandwidth": 100,
             "gflops": 250,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "200000000000000000"
           }
@@ -5423,6 +5509,7 @@
             "bandwidth": 100,
             "gflops": 300,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "400000000000000000"
           }
@@ -5441,6 +5528,7 @@
             "bandwidth": 100,
             "gflops": 400,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "300000000000000000"
           }
@@ -5459,6 +5547,7 @@
             "bandwidth": 100,
             "gflops": 390,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "500000000000000000"
           }
@@ -5698,6 +5787,7 @@
         "bandwidth": 10,
         "needGflops": 250,
         "ceilGflops": 400,
+        "epcUnits": 0,
         "hours": 1,
         "G": 400,
         "tz": 0,
@@ -5768,6 +5858,7 @@
             "bandwidth": 100,
             "gflops": 260,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "100000000000000000"
           }
@@ -5786,6 +5877,7 @@
             "bandwidth": 100,
             "gflops": 250,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "200000000000000000"
           }
@@ -5804,6 +5896,7 @@
             "bandwidth": 100,
             "gflops": 300,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "400000000000000000"
           }
@@ -5822,6 +5915,7 @@
             "bandwidth": 100,
             "gflops": 400,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "300000000000000000"
           }
@@ -5840,6 +5934,7 @@
             "bandwidth": 100,
             "gflops": 390,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "500000000000000000"
           }
@@ -6014,6 +6109,7 @@
         "bandwidth": 10,
         "needGflops": 250,
         "ceilGflops": 400,
+        "epcUnits": 0,
         "hours": 1,
         "G": 400,
         "tz": 1,
@@ -6066,6 +6162,7 @@
             "bandwidth": 100,
             "gflops": 250,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "200000000000000000"
           }
@@ -6084,6 +6181,7 @@
             "bandwidth": 100,
             "gflops": 400,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "300000000000000000"
           }
@@ -6224,6 +6322,7 @@
         "bandwidth": 10,
         "needGflops": 250,
         "ceilGflops": 400,
+        "epcUnits": 0,
         "hours": 1,
         "G": 400,
         "tz": 1,
@@ -6276,6 +6375,7 @@
             "bandwidth": 100,
             "gflops": 250,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "200000000000000000"
           }
@@ -6294,6 +6394,7 @@
             "bandwidth": 100,
             "gflops": 400,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "300000000000000000"
           }
@@ -6423,6 +6524,7 @@
         "bandwidth": 10,
         "needGflops": 250,
         "ceilGflops": 400,
+        "epcUnits": 0,
         "hours": 1,
         "G": 400,
         "tz": 1,
@@ -6493,6 +6595,7 @@
             "bandwidth": 100,
             "gflops": 260,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "100000000000000000"
           }
@@ -6511,6 +6614,7 @@
             "bandwidth": 100,
             "gflops": 250,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "200000000000000000"
           }
@@ -6529,6 +6633,7 @@
             "bandwidth": 100,
             "gflops": 300,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "400000000000000000"
           }
@@ -6547,6 +6652,7 @@
             "bandwidth": 100,
             "gflops": 400,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "300000000000000000"
           }
@@ -6565,6 +6671,7 @@
             "bandwidth": 100,
             "gflops": 390,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "500000000000000000"
           }
@@ -6739,6 +6846,7 @@
         "bandwidth": 10,
         "needGflops": 250,
         "ceilGflops": 400,
+        "epcUnits": 0,
         "hours": 1,
         "G": 400,
         "tz": 1,
@@ -6809,6 +6917,7 @@
             "bandwidth": 100,
             "gflops": 260,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "100000000000000000"
           }
@@ -6827,6 +6936,7 @@
             "bandwidth": 100,
             "gflops": 250,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "200000000000000000"
           }
@@ -6845,6 +6955,7 @@
             "bandwidth": 100,
             "gflops": 300,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "400000000000000000"
           }
@@ -6863,6 +6974,7 @@
             "bandwidth": 100,
             "gflops": 400,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "300000000000000000"
           }
@@ -6881,6 +6993,7 @@
             "bandwidth": 100,
             "gflops": 390,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "500000000000000000"
           }
@@ -7055,6 +7168,7 @@
         "bandwidth": 10,
         "needGflops": 250,
         "ceilGflops": 400,
+        "epcUnits": 0,
         "hours": 1,
         "G": 400,
         "tz": 1,
@@ -7125,6 +7239,7 @@
             "bandwidth": 100,
             "gflops": 260,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "100000000000000000"
           }
@@ -7143,6 +7258,7 @@
             "bandwidth": 100,
             "gflops": 250,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "200000000000000000"
           }
@@ -7161,6 +7277,7 @@
             "bandwidth": 100,
             "gflops": 300,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "400000000000000000"
           }
@@ -7179,6 +7296,7 @@
             "bandwidth": 100,
             "gflops": 400,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "300000000000000000"
           }
@@ -7197,6 +7315,7 @@
             "bandwidth": 100,
             "gflops": 390,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "500000000000000000"
           }
@@ -7371,6 +7490,7 @@
         "bandwidth": 10,
         "needGflops": 250,
         "ceilGflops": 400,
+        "epcUnits": 0,
         "hours": 1,
         "G": 400,
         "tz": 1,
@@ -7441,6 +7561,7 @@
             "bandwidth": 100,
             "gflops": 260,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "100000000000000000"
           }
@@ -7459,6 +7580,7 @@
             "bandwidth": 100,
             "gflops": 250,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "200000000000000000"
           }
@@ -7477,6 +7599,7 @@
             "bandwidth": 100,
             "gflops": 300,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "400000000000000000"
           }
@@ -7495,6 +7618,7 @@
             "bandwidth": 100,
             "gflops": 400,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "300000000000000000"
           }
@@ -7513,6 +7637,7 @@
             "bandwidth": 100,
             "gflops": 390,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "500000000000000000"
           }
@@ -7687,6 +7812,7 @@
         "bandwidth": 10,
         "needGflops": 250,
         "ceilGflops": 400,
+        "epcUnits": 0,
         "hours": 1,
         "G": 400,
         "tz": 1,
@@ -7757,6 +7883,7 @@
             "bandwidth": 100,
             "gflops": 260,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "100000000000000000"
           }
@@ -7775,6 +7902,7 @@
             "bandwidth": 100,
             "gflops": 250,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "200000000000000000"
           }
@@ -7793,6 +7921,7 @@
             "bandwidth": 100,
             "gflops": 300,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "400000000000000000"
           }
@@ -7811,6 +7940,7 @@
             "bandwidth": 100,
             "gflops": 400,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "300000000000000000"
           }
@@ -7829,6 +7959,7 @@
             "bandwidth": 100,
             "gflops": 390,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "500000000000000000"
           }
@@ -8059,6 +8190,7 @@
         "bandwidth": 1,
         "needGflops": 100,
         "ceilGflops": 0,
+        "epcUnits": 0,
         "hours": 1,
         "G": 200,
         "tz": 1,
@@ -8129,6 +8261,7 @@
             "bandwidth": 100,
             "gflops": 90,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "100000000000000000"
           }
@@ -8147,6 +8280,7 @@
             "bandwidth": 100,
             "gflops": 100,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "100000000000000000"
           }
@@ -8165,6 +8299,7 @@
             "bandwidth": 100,
             "gflops": 120,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "100000000000000000"
           }
@@ -8183,6 +8318,7 @@
             "bandwidth": 100,
             "gflops": 121,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "100000000000000000"
           }
@@ -8201,6 +8337,7 @@
             "bandwidth": 100,
             "gflops": 300,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "100000000000000000"
           }
@@ -8420,6 +8557,7 @@
         "bandwidth": 1,
         "needGflops": 100,
         "ceilGflops": 250,
+        "epcUnits": 0,
         "hours": 1,
         "G": 250,
         "tz": 1,
@@ -8490,6 +8628,7 @@
             "bandwidth": 100,
             "gflops": 90,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "100000000000000000"
           }
@@ -8508,6 +8647,7 @@
             "bandwidth": 100,
             "gflops": 100,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "100000000000000000"
           }
@@ -8526,6 +8666,7 @@
             "bandwidth": 100,
             "gflops": 120,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "100000000000000000"
           }
@@ -8544,6 +8685,7 @@
             "bandwidth": 100,
             "gflops": 121,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "100000000000000000"
           }
@@ -8562,6 +8704,7 @@
             "bandwidth": 100,
             "gflops": 300,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "100000000000000000"
           }
@@ -8770,6 +8913,7 @@
         "bandwidth": 1,
         "needGflops": 90,
         "ceilGflops": 90,
+        "epcUnits": 0,
         "hours": 1,
         "G": 90,
         "tz": 1,
@@ -8840,6 +8984,7 @@
             "bandwidth": 100,
             "gflops": 90,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "100000000000000000"
           }
@@ -8858,6 +9003,7 @@
             "bandwidth": 100,
             "gflops": 100,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "100000000000000000"
           }
@@ -8876,6 +9022,7 @@
             "bandwidth": 100,
             "gflops": 120,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "100000000000000000"
           }
@@ -8894,6 +9041,7 @@
             "bandwidth": 100,
             "gflops": 121,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "100000000000000000"
           }
@@ -8912,6 +9060,7 @@
             "bandwidth": 100,
             "gflops": 300,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "100000000000000000"
           }
@@ -9098,6 +9247,7 @@
         "bandwidth": 10,
         "needGflops": 250,
         "ceilGflops": 400,
+        "epcUnits": 0,
         "hours": 1,
         "G": 400,
         "tz": 1,
@@ -9222,6 +9372,7 @@
             "bandwidth": 10,
             "gflops": 250,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "200000000000000000"
           }
@@ -9240,6 +9391,7 @@
             "bandwidth": 10,
             "gflops": 250,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "200000000000000000"
           }
@@ -9258,6 +9410,7 @@
             "bandwidth": 10,
             "gflops": 250,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "200000000000000000"
           }
@@ -9276,6 +9429,7 @@
             "bandwidth": 10,
             "gflops": 250,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "200000000000000000"
           }
@@ -9294,6 +9448,7 @@
             "bandwidth": 9,
             "gflops": 250,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "200000000000000000"
           }
@@ -9312,6 +9467,7 @@
             "bandwidth": 10,
             "gflops": 249,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "200000000000000000"
           }
@@ -9330,6 +9486,7 @@
             "bandwidth": 10,
             "gflops": 401,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "200000000000000000"
           }
@@ -9348,6 +9505,7 @@
             "bandwidth": 10,
             "gflops": 250,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 2,
             "tipWei": "200000000000000000"
           }
@@ -9366,6 +9524,7 @@
             "bandwidth": 10,
             "gflops": 250,
             "enclaveMemoryGB": 4,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "200000000000000000"
           }
@@ -9384,6 +9543,7 @@
             "bandwidth": 10,
             "gflops": 250,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "200000000000000000"
           }
@@ -9402,6 +9562,7 @@
             "bandwidth": 10,
             "gflops": 250,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "200000000000000000"
           }
@@ -9420,6 +9581,7 @@
             "bandwidth": 10,
             "gflops": 250,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "200000000000000000"
           }
@@ -9438,6 +9600,7 @@
             "bandwidth": 10,
             "gflops": 250,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "200000000000000000"
           }
@@ -9456,6 +9619,7 @@
             "bandwidth": 10,
             "gflops": 250,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "200000000000000000"
           }
@@ -9790,6 +9954,1276 @@
       ]
     },
     {
+      "name": "epc-below-at-above",
+      "design": "D191 filter: a request whose minimum EPC is 2 units (128 MiB); the offers that state none (0) and 1 unit fail (epc), those of 2, 3 and 65,535 units (4 TiB less 64 MiB) are eligible; 3.7 fit (D198): those of 2 and 3 units fit (2 x 1.2 rounded up is 3), that of 65,535 units does not",
+      "deployment": {
+        "slotSeconds": 43200,
+        "sameSecondBlocks": false
+      },
+      "parameterSet": {
+        "effectAt": 1794921800,
+        "claims": true,
+        "fitPercent": 20,
+        "maxSteps": 8,
+        "maxRounds": 5,
+        "fullBlockPercent": 90,
+        "settleMax": 4,
+        "pendingMax": 16,
+        "correctionMaxEntries": 16,
+        "stepBlocks": 1,
+        "leadBlocks": 1,
+        "banSlots": 60,
+        "gain": 137,
+        "missUnits": 1918,
+        "lateUnits": 548,
+        "bandWidth": 1000,
+        "minListedSeconds": 60,
+        "maxRequestAgeSeconds": 86400,
+        "startTimeoutSeconds": 900,
+        "minPauseSeconds": 3600,
+        "servingGraceSeconds": 3600,
+        "correctionWindowSeconds": 86400,
+        "correctionAskSeconds": 3600,
+        "fullWindowSeconds": 120,
+        "fetchTrySeconds": 600,
+        "heldMarginSeconds": 300,
+        "nodeFaultCodes": "1649267441664",
+        "defaultFaultCodes": "0",
+        "ambiguousCodes": "140737488355328",
+        "runBilledCodes": "9799832789158199296"
+      },
+      "readBlock": 1001,
+      "readTime": 1795008231,
+      "request": {
+        "id": 370,
+        "claims": true,
+        "ranked": true,
+        "imageMarked": false,
+        "settled": true,
+        "round": 0,
+        "seed": "0x3bd28ab78a709184a43c9ff302908e95e7fc96a23277875519993fd145d2686d",
+        "createdAt": 1795008200,
+        "rollSlot": 41550,
+        "stepNow": 0,
+        "closedStep": 0,
+        "cpu": 4,
+        "memGB": 8,
+        "storageGB": 40,
+        "bandwidth": 10,
+        "needGflops": 250,
+        "ceilGflops": 400,
+        "epcUnits": 2,
+        "hours": 1,
+        "G": 400,
+        "tz": 1,
+        "imageKey": "0x6fe966ab74ebfbb5ddc4c3967e2723fb421fd33b2f2c041f246637305baa21"
+      },
+      "rounds": [
+        {
+          "round": 0,
+          "block": 1000,
+          "time": 1795008200,
+          "bidWei": "1200000000000000000",
+          "baseWei": "600000000000000000",
+          "closed": false
+        }
+      ],
+      "roll": {
+        "slot": 41550,
+        "bands": [
+          {
+            "band": 18,
+            "entries": [
+              {
+                "index": 0,
+                "node": "0x72cd878e9681f01641becd1cdefd601b4c6f9bb9",
+                "score": 18100,
+                "beatTime": 1794960618
+              },
+              {
+                "index": 1,
+                "node": "0x28daea40c102c996ff46e4b3f6326f3abe11ddde",
+                "score": 18200,
+                "beatTime": 1794960678
+              },
+              {
+                "index": 2,
+                "node": "0x5007cd3b870f4bc6764415ea0e2af49263d68938",
+                "score": 18300,
+                "beatTime": 1794960738
+              },
+              {
+                "index": 3,
+                "node": "0xc3b750b0dc319b8f0ceeaa6a64960d1926fa9968",
+                "score": 18400,
+                "beatTime": 1794960798
+              },
+              {
+                "index": 4,
+                "node": "0x75846a2a80265adc0d5a745d090c5357968c46a8",
+                "score": 18500,
+                "beatTime": 1794960858
+              }
+            ]
+          }
+        ]
+      },
+      "periods": {
+        "0x72cd878e9681f01641becd1cdefd601b4c6f9bb9": [
+          {
+            "ordinal": 0,
+            "from": 1794960618,
+            "to": 0,
+            "toBlock": 0,
+            "endReason": 0,
+            "dpRequestId": 980,
+            "cpu": 4,
+            "memGB": 8,
+            "storageGB": 40,
+            "bandwidth": 10,
+            "gflops": 250,
+            "enclaveMemoryGB": 64,
+            "epcUnits": 0,
+            "tzMask": 1,
+            "tipWei": "200000000000000000"
+          }
+        ],
+        "0x28daea40c102c996ff46e4b3f6326f3abe11ddde": [
+          {
+            "ordinal": 0,
+            "from": 1794960678,
+            "to": 0,
+            "toBlock": 0,
+            "endReason": 0,
+            "dpRequestId": 981,
+            "cpu": 4,
+            "memGB": 8,
+            "storageGB": 40,
+            "bandwidth": 10,
+            "gflops": 250,
+            "enclaveMemoryGB": 64,
+            "epcUnits": 1,
+            "tzMask": 1,
+            "tipWei": "200000000000000000"
+          }
+        ],
+        "0x5007cd3b870f4bc6764415ea0e2af49263d68938": [
+          {
+            "ordinal": 0,
+            "from": 1794960738,
+            "to": 0,
+            "toBlock": 0,
+            "endReason": 0,
+            "dpRequestId": 982,
+            "cpu": 4,
+            "memGB": 8,
+            "storageGB": 40,
+            "bandwidth": 10,
+            "gflops": 250,
+            "enclaveMemoryGB": 64,
+            "epcUnits": 2,
+            "tzMask": 1,
+            "tipWei": "200000000000000000"
+          }
+        ],
+        "0xc3b750b0dc319b8f0ceeaa6a64960d1926fa9968": [
+          {
+            "ordinal": 0,
+            "from": 1794960798,
+            "to": 0,
+            "toBlock": 0,
+            "endReason": 0,
+            "dpRequestId": 983,
+            "cpu": 4,
+            "memGB": 8,
+            "storageGB": 40,
+            "bandwidth": 10,
+            "gflops": 250,
+            "enclaveMemoryGB": 64,
+            "epcUnits": 3,
+            "tzMask": 1,
+            "tipWei": "200000000000000000"
+          }
+        ],
+        "0x75846a2a80265adc0d5a745d090c5357968c46a8": [
+          {
+            "ordinal": 0,
+            "from": 1794960858,
+            "to": 0,
+            "toBlock": 0,
+            "endReason": 0,
+            "dpRequestId": 984,
+            "cpu": 4,
+            "memGB": 8,
+            "storageGB": 40,
+            "bandwidth": 10,
+            "gflops": 250,
+            "enclaveMemoryGB": 64,
+            "epcUnits": 65535,
+            "tzMask": 1,
+            "tipWei": "200000000000000000"
+          }
+        ]
+      },
+      "skips": {},
+      "candidates": {
+        "read": {
+          "eligible": [
+            {
+              "node": "0x5007cd3b870f4bc6764415ea0e2af49263d68938",
+              "score": 18300,
+              "fit": true,
+              "match": true,
+              "listedOrdinal": 0,
+              "dpRequestId": 982,
+              "band": 18,
+              "index": 2,
+              "tipWei": "200000000000000000"
+            },
+            {
+              "node": "0xc3b750b0dc319b8f0ceeaa6a64960d1926fa9968",
+              "score": 18400,
+              "fit": true,
+              "match": true,
+              "listedOrdinal": 0,
+              "dpRequestId": 983,
+              "band": 18,
+              "index": 3,
+              "tipWei": "200000000000000000"
+            },
+            {
+              "node": "0x75846a2a80265adc0d5a745d090c5357968c46a8",
+              "score": 18500,
+              "fit": false,
+              "match": true,
+              "listedOrdinal": 0,
+              "dpRequestId": 984,
+              "band": 18,
+              "index": 4,
+              "tipWei": "200000000000000000"
+            }
+          ],
+          "listHash": "0x2238528f11e97406b14841579cfe23083246901dff6f416ac246a36bcade6874",
+          "matchFound": 3,
+          "nextBand": 0,
+          "nextFrom": 0,
+          "done": true,
+          "settled": true
+        }
+      },
+      "turns": [
+        {
+          "node": "0x72cd878e9681f01641becd1cdefd601b4c6f9bb9",
+          "band": 18,
+          "index": 0,
+          "eligible": false,
+          "fit": false,
+          "matches": false,
+          "matchAbove": 0,
+          "fitBefore": 0,
+          "restBefore": 0,
+          "fitInBand": 0,
+          "restInBand": 0,
+          "done": true,
+          "mandateStep": 0,
+          "excused": false,
+          "nextBand": 49,
+          "nextFrom": 0,
+          "settled": true
+        },
+        {
+          "node": "0x28daea40c102c996ff46e4b3f6326f3abe11ddde",
+          "band": 18,
+          "index": 1,
+          "eligible": false,
+          "fit": false,
+          "matches": false,
+          "matchAbove": 0,
+          "fitBefore": 0,
+          "restBefore": 0,
+          "fitInBand": 0,
+          "restInBand": 0,
+          "done": true,
+          "mandateStep": 0,
+          "excused": false,
+          "nextBand": 49,
+          "nextFrom": 0,
+          "settled": true
+        },
+        {
+          "node": "0x5007cd3b870f4bc6764415ea0e2af49263d68938",
+          "band": 18,
+          "index": 2,
+          "eligible": true,
+          "fit": true,
+          "matches": true,
+          "matchAbove": 0,
+          "fitBefore": 0,
+          "restBefore": 1,
+          "fitInBand": 2,
+          "restInBand": 1,
+          "done": true,
+          "mandateStep": 1,
+          "excused": false,
+          "nextBand": 18,
+          "nextFrom": 5,
+          "settled": true
+        },
+        {
+          "node": "0xc3b750b0dc319b8f0ceeaa6a64960d1926fa9968",
+          "band": 18,
+          "index": 3,
+          "eligible": true,
+          "fit": true,
+          "matches": true,
+          "matchAbove": 0,
+          "fitBefore": 1,
+          "restBefore": 1,
+          "fitInBand": 2,
+          "restInBand": 1,
+          "done": true,
+          "mandateStep": 2,
+          "excused": false,
+          "nextBand": 18,
+          "nextFrom": 5,
+          "settled": true
+        },
+        {
+          "node": "0x75846a2a80265adc0d5a745d090c5357968c46a8",
+          "band": 18,
+          "index": 4,
+          "eligible": true,
+          "fit": false,
+          "matches": true,
+          "matchAbove": 0,
+          "fitBefore": 0,
+          "restBefore": 0,
+          "fitInBand": 2,
+          "restInBand": 1,
+          "done": true,
+          "mandateStep": 3,
+          "excused": false,
+          "nextBand": 18,
+          "nextFrom": 5,
+          "settled": true
+        }
+      ]
+    },
+    {
+      "name": "epc-any",
+      "design": "D191: a request that states no minimum EPC (0: any); every offer is eligible, the one that states none among them; 3.7 (D198): the EPC is not in its fit, and every offer fits",
+      "deployment": {
+        "slotSeconds": 43200,
+        "sameSecondBlocks": false
+      },
+      "parameterSet": {
+        "effectAt": 1794921800,
+        "claims": true,
+        "fitPercent": 20,
+        "maxSteps": 8,
+        "maxRounds": 5,
+        "fullBlockPercent": 90,
+        "settleMax": 4,
+        "pendingMax": 16,
+        "correctionMaxEntries": 16,
+        "stepBlocks": 1,
+        "leadBlocks": 1,
+        "banSlots": 60,
+        "gain": 137,
+        "missUnits": 1918,
+        "lateUnits": 548,
+        "bandWidth": 1000,
+        "minListedSeconds": 60,
+        "maxRequestAgeSeconds": 86400,
+        "startTimeoutSeconds": 900,
+        "minPauseSeconds": 3600,
+        "servingGraceSeconds": 3600,
+        "correctionWindowSeconds": 86400,
+        "correctionAskSeconds": 3600,
+        "fullWindowSeconds": 120,
+        "fetchTrySeconds": 600,
+        "heldMarginSeconds": 300,
+        "nodeFaultCodes": "1649267441664",
+        "defaultFaultCodes": "0",
+        "ambiguousCodes": "140737488355328",
+        "runBilledCodes": "9799832789158199296"
+      },
+      "readBlock": 1001,
+      "readTime": 1795008231,
+      "request": {
+        "id": 371,
+        "claims": true,
+        "ranked": true,
+        "imageMarked": false,
+        "settled": true,
+        "round": 0,
+        "seed": "0xa0198715707eef36bf0b4c5556a47da70aa7072ca08b66ef8fc9f156d24f1edc",
+        "createdAt": 1795008200,
+        "rollSlot": 41550,
+        "stepNow": 0,
+        "closedStep": 0,
+        "cpu": 4,
+        "memGB": 8,
+        "storageGB": 40,
+        "bandwidth": 10,
+        "needGflops": 250,
+        "ceilGflops": 400,
+        "epcUnits": 0,
+        "hours": 1,
+        "G": 400,
+        "tz": 1,
+        "imageKey": "0x6fe966ab74ebfbb5ddc4c3967e2723fb421fd33b2f2c041f246637305baa21"
+      },
+      "rounds": [
+        {
+          "round": 0,
+          "block": 1000,
+          "time": 1795008200,
+          "bidWei": "1200000000000000000",
+          "baseWei": "600000000000000000",
+          "closed": false
+        }
+      ],
+      "roll": {
+        "slot": 41550,
+        "bands": [
+          {
+            "band": 18,
+            "entries": [
+              {
+                "index": 0,
+                "node": "0x72cd878e9681f01641becd1cdefd601b4c6f9bb9",
+                "score": 18100,
+                "beatTime": 1794960618
+              },
+              {
+                "index": 1,
+                "node": "0x28daea40c102c996ff46e4b3f6326f3abe11ddde",
+                "score": 18200,
+                "beatTime": 1794960678
+              },
+              {
+                "index": 2,
+                "node": "0x5007cd3b870f4bc6764415ea0e2af49263d68938",
+                "score": 18300,
+                "beatTime": 1794960738
+              },
+              {
+                "index": 3,
+                "node": "0xc3b750b0dc319b8f0ceeaa6a64960d1926fa9968",
+                "score": 18400,
+                "beatTime": 1794960798
+              },
+              {
+                "index": 4,
+                "node": "0x75846a2a80265adc0d5a745d090c5357968c46a8",
+                "score": 18500,
+                "beatTime": 1794960858
+              }
+            ]
+          }
+        ]
+      },
+      "periods": {
+        "0x72cd878e9681f01641becd1cdefd601b4c6f9bb9": [
+          {
+            "ordinal": 0,
+            "from": 1794960618,
+            "to": 0,
+            "toBlock": 0,
+            "endReason": 0,
+            "dpRequestId": 980,
+            "cpu": 4,
+            "memGB": 8,
+            "storageGB": 40,
+            "bandwidth": 10,
+            "gflops": 250,
+            "enclaveMemoryGB": 64,
+            "epcUnits": 0,
+            "tzMask": 1,
+            "tipWei": "200000000000000000"
+          }
+        ],
+        "0x28daea40c102c996ff46e4b3f6326f3abe11ddde": [
+          {
+            "ordinal": 0,
+            "from": 1794960678,
+            "to": 0,
+            "toBlock": 0,
+            "endReason": 0,
+            "dpRequestId": 981,
+            "cpu": 4,
+            "memGB": 8,
+            "storageGB": 40,
+            "bandwidth": 10,
+            "gflops": 250,
+            "enclaveMemoryGB": 64,
+            "epcUnits": 1,
+            "tzMask": 1,
+            "tipWei": "200000000000000000"
+          }
+        ],
+        "0x5007cd3b870f4bc6764415ea0e2af49263d68938": [
+          {
+            "ordinal": 0,
+            "from": 1794960738,
+            "to": 0,
+            "toBlock": 0,
+            "endReason": 0,
+            "dpRequestId": 982,
+            "cpu": 4,
+            "memGB": 8,
+            "storageGB": 40,
+            "bandwidth": 10,
+            "gflops": 250,
+            "enclaveMemoryGB": 64,
+            "epcUnits": 2,
+            "tzMask": 1,
+            "tipWei": "200000000000000000"
+          }
+        ],
+        "0xc3b750b0dc319b8f0ceeaa6a64960d1926fa9968": [
+          {
+            "ordinal": 0,
+            "from": 1794960798,
+            "to": 0,
+            "toBlock": 0,
+            "endReason": 0,
+            "dpRequestId": 983,
+            "cpu": 4,
+            "memGB": 8,
+            "storageGB": 40,
+            "bandwidth": 10,
+            "gflops": 250,
+            "enclaveMemoryGB": 64,
+            "epcUnits": 3,
+            "tzMask": 1,
+            "tipWei": "200000000000000000"
+          }
+        ],
+        "0x75846a2a80265adc0d5a745d090c5357968c46a8": [
+          {
+            "ordinal": 0,
+            "from": 1794960858,
+            "to": 0,
+            "toBlock": 0,
+            "endReason": 0,
+            "dpRequestId": 984,
+            "cpu": 4,
+            "memGB": 8,
+            "storageGB": 40,
+            "bandwidth": 10,
+            "gflops": 250,
+            "enclaveMemoryGB": 64,
+            "epcUnits": 65535,
+            "tzMask": 1,
+            "tipWei": "200000000000000000"
+          }
+        ]
+      },
+      "skips": {},
+      "candidates": {
+        "read": {
+          "eligible": [
+            {
+              "node": "0x72cd878e9681f01641becd1cdefd601b4c6f9bb9",
+              "score": 18100,
+              "fit": true,
+              "match": true,
+              "listedOrdinal": 0,
+              "dpRequestId": 980,
+              "band": 18,
+              "index": 0,
+              "tipWei": "200000000000000000"
+            },
+            {
+              "node": "0x28daea40c102c996ff46e4b3f6326f3abe11ddde",
+              "score": 18200,
+              "fit": true,
+              "match": true,
+              "listedOrdinal": 0,
+              "dpRequestId": 981,
+              "band": 18,
+              "index": 1,
+              "tipWei": "200000000000000000"
+            },
+            {
+              "node": "0x5007cd3b870f4bc6764415ea0e2af49263d68938",
+              "score": 18300,
+              "fit": true,
+              "match": true,
+              "listedOrdinal": 0,
+              "dpRequestId": 982,
+              "band": 18,
+              "index": 2,
+              "tipWei": "200000000000000000"
+            },
+            {
+              "node": "0xc3b750b0dc319b8f0ceeaa6a64960d1926fa9968",
+              "score": 18400,
+              "fit": true,
+              "match": true,
+              "listedOrdinal": 0,
+              "dpRequestId": 983,
+              "band": 18,
+              "index": 3,
+              "tipWei": "200000000000000000"
+            },
+            {
+              "node": "0x75846a2a80265adc0d5a745d090c5357968c46a8",
+              "score": 18500,
+              "fit": true,
+              "match": true,
+              "listedOrdinal": 0,
+              "dpRequestId": 984,
+              "band": 18,
+              "index": 4,
+              "tipWei": "200000000000000000"
+            }
+          ],
+          "listHash": "0x02d1372fd6079ae30bc79b45a704f8f7a8d8476355c31e1d76412430ae083bd3",
+          "matchFound": 5,
+          "nextBand": 0,
+          "nextFrom": 0,
+          "done": true,
+          "settled": true
+        }
+      },
+      "turns": [
+        {
+          "node": "0x72cd878e9681f01641becd1cdefd601b4c6f9bb9",
+          "band": 18,
+          "index": 0,
+          "eligible": true,
+          "fit": true,
+          "matches": true,
+          "matchAbove": 0,
+          "fitBefore": 3,
+          "restBefore": 0,
+          "fitInBand": 5,
+          "restInBand": 0,
+          "done": true,
+          "mandateStep": 4,
+          "excused": false,
+          "nextBand": 18,
+          "nextFrom": 5,
+          "settled": true
+        },
+        {
+          "node": "0x28daea40c102c996ff46e4b3f6326f3abe11ddde",
+          "band": 18,
+          "index": 1,
+          "eligible": true,
+          "fit": true,
+          "matches": true,
+          "matchAbove": 0,
+          "fitBefore": 0,
+          "restBefore": 0,
+          "fitInBand": 5,
+          "restInBand": 0,
+          "done": true,
+          "mandateStep": 1,
+          "excused": false,
+          "nextBand": 18,
+          "nextFrom": 5,
+          "settled": true
+        },
+        {
+          "node": "0x5007cd3b870f4bc6764415ea0e2af49263d68938",
+          "band": 18,
+          "index": 2,
+          "eligible": true,
+          "fit": true,
+          "matches": true,
+          "matchAbove": 0,
+          "fitBefore": 1,
+          "restBefore": 0,
+          "fitInBand": 5,
+          "restInBand": 0,
+          "done": true,
+          "mandateStep": 2,
+          "excused": false,
+          "nextBand": 18,
+          "nextFrom": 5,
+          "settled": true
+        },
+        {
+          "node": "0xc3b750b0dc319b8f0ceeaa6a64960d1926fa9968",
+          "band": 18,
+          "index": 3,
+          "eligible": true,
+          "fit": true,
+          "matches": true,
+          "matchAbove": 0,
+          "fitBefore": 4,
+          "restBefore": 0,
+          "fitInBand": 5,
+          "restInBand": 0,
+          "done": true,
+          "mandateStep": 5,
+          "excused": false,
+          "nextBand": 18,
+          "nextFrom": 5,
+          "settled": true
+        },
+        {
+          "node": "0x75846a2a80265adc0d5a745d090c5357968c46a8",
+          "band": 18,
+          "index": 4,
+          "eligible": true,
+          "fit": true,
+          "matches": true,
+          "matchAbove": 0,
+          "fitBefore": 2,
+          "restBefore": 0,
+          "fitInBand": 5,
+          "restInBand": 0,
+          "done": true,
+          "mandateStep": 3,
+          "excused": false,
+          "nextBand": 18,
+          "nextFrom": 5,
+          "settled": true
+        }
+      ]
+    },
+    {
+      "name": "epc-fit-bound",
+      "design": "3.7 fit on the EPC (D198): a request whose minimum EPC is 10 units (640 MiB); the offer of 10 units fits, that of 12 units (20% above) fits at the bound, that of 13 units does not fit and is mandated after the two that fit, although its key stands first",
+      "deployment": {
+        "slotSeconds": 43200,
+        "sameSecondBlocks": false
+      },
+      "parameterSet": {
+        "effectAt": 1794921800,
+        "claims": true,
+        "fitPercent": 20,
+        "maxSteps": 8,
+        "maxRounds": 5,
+        "fullBlockPercent": 90,
+        "settleMax": 4,
+        "pendingMax": 16,
+        "correctionMaxEntries": 16,
+        "stepBlocks": 1,
+        "leadBlocks": 1,
+        "banSlots": 60,
+        "gain": 137,
+        "missUnits": 1918,
+        "lateUnits": 548,
+        "bandWidth": 1000,
+        "minListedSeconds": 60,
+        "maxRequestAgeSeconds": 86400,
+        "startTimeoutSeconds": 900,
+        "minPauseSeconds": 3600,
+        "servingGraceSeconds": 3600,
+        "correctionWindowSeconds": 86400,
+        "correctionAskSeconds": 3600,
+        "fullWindowSeconds": 120,
+        "fetchTrySeconds": 600,
+        "heldMarginSeconds": 300,
+        "nodeFaultCodes": "1649267441664",
+        "defaultFaultCodes": "0",
+        "ambiguousCodes": "140737488355328",
+        "runBilledCodes": "9799832789158199296"
+      },
+      "readBlock": 1001,
+      "readTime": 1795008231,
+      "request": {
+        "id": 372,
+        "claims": true,
+        "ranked": true,
+        "imageMarked": false,
+        "settled": true,
+        "round": 0,
+        "seed": "0x917118b4b37b1d9789005bd15fcb66dbcf991961a2bd3ba7d44629344d56852c",
+        "createdAt": 1795008200,
+        "rollSlot": 41550,
+        "stepNow": 0,
+        "closedStep": 0,
+        "cpu": 4,
+        "memGB": 8,
+        "storageGB": 40,
+        "bandwidth": 10,
+        "needGflops": 250,
+        "ceilGflops": 400,
+        "epcUnits": 10,
+        "hours": 1,
+        "G": 400,
+        "tz": 1,
+        "imageKey": "0x6fe966ab74ebfbb5ddc4c3967e2723fb421fd33b2f2c041f246637305baa21"
+      },
+      "rounds": [
+        {
+          "round": 0,
+          "block": 1000,
+          "time": 1795008200,
+          "bidWei": "1200000000000000000",
+          "baseWei": "600000000000000000",
+          "closed": false
+        }
+      ],
+      "roll": {
+        "slot": 41550,
+        "bands": [
+          {
+            "band": 18,
+            "entries": [
+              {
+                "index": 0,
+                "node": "0xa9961e09bd30c9e2f59d6a98b45a7dd6de6d522e",
+                "score": 18100,
+                "beatTime": 1794960618
+              },
+              {
+                "index": 1,
+                "node": "0xa9e045a1cf324baa7770cdce7bdfad5234da278c",
+                "score": 18200,
+                "beatTime": 1794960678
+              },
+              {
+                "index": 2,
+                "node": "0xb6d79b159ade9114ebb64d22a9d942cdbe98261a",
+                "score": 18300,
+                "beatTime": 1794960738
+              }
+            ]
+          }
+        ]
+      },
+      "periods": {
+        "0xa9961e09bd30c9e2f59d6a98b45a7dd6de6d522e": [
+          {
+            "ordinal": 0,
+            "from": 1794960618,
+            "to": 0,
+            "toBlock": 0,
+            "endReason": 0,
+            "dpRequestId": 992,
+            "cpu": 4,
+            "memGB": 8,
+            "storageGB": 40,
+            "bandwidth": 10,
+            "gflops": 250,
+            "enclaveMemoryGB": 64,
+            "epcUnits": 10,
+            "tzMask": 1,
+            "tipWei": "200000000000000000"
+          }
+        ],
+        "0xa9e045a1cf324baa7770cdce7bdfad5234da278c": [
+          {
+            "ordinal": 0,
+            "from": 1794960678,
+            "to": 0,
+            "toBlock": 0,
+            "endReason": 0,
+            "dpRequestId": 991,
+            "cpu": 4,
+            "memGB": 8,
+            "storageGB": 40,
+            "bandwidth": 10,
+            "gflops": 250,
+            "enclaveMemoryGB": 64,
+            "epcUnits": 12,
+            "tzMask": 1,
+            "tipWei": "200000000000000000"
+          }
+        ],
+        "0xb6d79b159ade9114ebb64d22a9d942cdbe98261a": [
+          {
+            "ordinal": 0,
+            "from": 1794960738,
+            "to": 0,
+            "toBlock": 0,
+            "endReason": 0,
+            "dpRequestId": 990,
+            "cpu": 4,
+            "memGB": 8,
+            "storageGB": 40,
+            "bandwidth": 10,
+            "gflops": 250,
+            "enclaveMemoryGB": 64,
+            "epcUnits": 13,
+            "tzMask": 1,
+            "tipWei": "200000000000000000"
+          }
+        ]
+      },
+      "skips": {},
+      "candidates": {
+        "read": {
+          "eligible": [
+            {
+              "node": "0xa9961e09bd30c9e2f59d6a98b45a7dd6de6d522e",
+              "score": 18100,
+              "fit": true,
+              "match": true,
+              "listedOrdinal": 0,
+              "dpRequestId": 992,
+              "band": 18,
+              "index": 0,
+              "tipWei": "200000000000000000"
+            },
+            {
+              "node": "0xa9e045a1cf324baa7770cdce7bdfad5234da278c",
+              "score": 18200,
+              "fit": true,
+              "match": true,
+              "listedOrdinal": 0,
+              "dpRequestId": 991,
+              "band": 18,
+              "index": 1,
+              "tipWei": "200000000000000000"
+            },
+            {
+              "node": "0xb6d79b159ade9114ebb64d22a9d942cdbe98261a",
+              "score": 18300,
+              "fit": false,
+              "match": true,
+              "listedOrdinal": 0,
+              "dpRequestId": 990,
+              "band": 18,
+              "index": 2,
+              "tipWei": "200000000000000000"
+            }
+          ],
+          "listHash": "0x6b501ba657571e2a4ea0ee2afdf068e53be5d28b308490711b2feb922bb2044b",
+          "matchFound": 3,
+          "nextBand": 0,
+          "nextFrom": 0,
+          "done": true,
+          "settled": true
+        }
+      },
+      "turns": [
+        {
+          "node": "0xa9961e09bd30c9e2f59d6a98b45a7dd6de6d522e",
+          "band": 18,
+          "index": 0,
+          "eligible": true,
+          "fit": true,
+          "matches": true,
+          "matchAbove": 0,
+          "fitBefore": 1,
+          "restBefore": 1,
+          "fitInBand": 2,
+          "restInBand": 1,
+          "done": true,
+          "mandateStep": 2,
+          "excused": false,
+          "nextBand": 18,
+          "nextFrom": 3,
+          "settled": true
+        },
+        {
+          "node": "0xa9e045a1cf324baa7770cdce7bdfad5234da278c",
+          "band": 18,
+          "index": 1,
+          "eligible": true,
+          "fit": true,
+          "matches": true,
+          "matchAbove": 0,
+          "fitBefore": 0,
+          "restBefore": 1,
+          "fitInBand": 2,
+          "restInBand": 1,
+          "done": true,
+          "mandateStep": 1,
+          "excused": false,
+          "nextBand": 18,
+          "nextFrom": 3,
+          "settled": true
+        },
+        {
+          "node": "0xb6d79b159ade9114ebb64d22a9d942cdbe98261a",
+          "band": 18,
+          "index": 2,
+          "eligible": true,
+          "fit": false,
+          "matches": true,
+          "matchAbove": 0,
+          "fitBefore": 0,
+          "restBefore": 0,
+          "fitInBand": 2,
+          "restInBand": 1,
+          "done": true,
+          "mandateStep": 3,
+          "excused": false,
+          "nextBand": 18,
+          "nextFrom": 3,
+          "settled": true
+        }
+      ]
+    },
+    {
+      "name": "epc-fit-any",
+      "design": "3.7 fit on the EPC (D198): the offers of epc-fit-bound under a request that states no minimum EPC (0); the EPC is not in its fit, the three fit and are mandated in key order",
+      "deployment": {
+        "slotSeconds": 43200,
+        "sameSecondBlocks": false
+      },
+      "parameterSet": {
+        "effectAt": 1794921800,
+        "claims": true,
+        "fitPercent": 20,
+        "maxSteps": 8,
+        "maxRounds": 5,
+        "fullBlockPercent": 90,
+        "settleMax": 4,
+        "pendingMax": 16,
+        "correctionMaxEntries": 16,
+        "stepBlocks": 1,
+        "leadBlocks": 1,
+        "banSlots": 60,
+        "gain": 137,
+        "missUnits": 1918,
+        "lateUnits": 548,
+        "bandWidth": 1000,
+        "minListedSeconds": 60,
+        "maxRequestAgeSeconds": 86400,
+        "startTimeoutSeconds": 900,
+        "minPauseSeconds": 3600,
+        "servingGraceSeconds": 3600,
+        "correctionWindowSeconds": 86400,
+        "correctionAskSeconds": 3600,
+        "fullWindowSeconds": 120,
+        "fetchTrySeconds": 600,
+        "heldMarginSeconds": 300,
+        "nodeFaultCodes": "1649267441664",
+        "defaultFaultCodes": "0",
+        "ambiguousCodes": "140737488355328",
+        "runBilledCodes": "9799832789158199296"
+      },
+      "readBlock": 1001,
+      "readTime": 1795008231,
+      "request": {
+        "id": 373,
+        "claims": true,
+        "ranked": true,
+        "imageMarked": false,
+        "settled": true,
+        "round": 0,
+        "seed": "0x6155b4c23d6d03a0bcc3d21ffaded49c39195591c79e1863897016a135da4566",
+        "createdAt": 1795008200,
+        "rollSlot": 41550,
+        "stepNow": 0,
+        "closedStep": 0,
+        "cpu": 4,
+        "memGB": 8,
+        "storageGB": 40,
+        "bandwidth": 10,
+        "needGflops": 250,
+        "ceilGflops": 400,
+        "epcUnits": 0,
+        "hours": 1,
+        "G": 400,
+        "tz": 1,
+        "imageKey": "0x6fe966ab74ebfbb5ddc4c3967e2723fb421fd33b2f2c041f246637305baa21"
+      },
+      "rounds": [
+        {
+          "round": 0,
+          "block": 1000,
+          "time": 1795008200,
+          "bidWei": "1200000000000000000",
+          "baseWei": "600000000000000000",
+          "closed": false
+        }
+      ],
+      "roll": {
+        "slot": 41550,
+        "bands": [
+          {
+            "band": 18,
+            "entries": [
+              {
+                "index": 0,
+                "node": "0xa9961e09bd30c9e2f59d6a98b45a7dd6de6d522e",
+                "score": 18100,
+                "beatTime": 1794960618
+              },
+              {
+                "index": 1,
+                "node": "0xa9e045a1cf324baa7770cdce7bdfad5234da278c",
+                "score": 18200,
+                "beatTime": 1794960678
+              },
+              {
+                "index": 2,
+                "node": "0xb6d79b159ade9114ebb64d22a9d942cdbe98261a",
+                "score": 18300,
+                "beatTime": 1794960738
+              }
+            ]
+          }
+        ]
+      },
+      "periods": {
+        "0xa9961e09bd30c9e2f59d6a98b45a7dd6de6d522e": [
+          {
+            "ordinal": 0,
+            "from": 1794960618,
+            "to": 0,
+            "toBlock": 0,
+            "endReason": 0,
+            "dpRequestId": 992,
+            "cpu": 4,
+            "memGB": 8,
+            "storageGB": 40,
+            "bandwidth": 10,
+            "gflops": 250,
+            "enclaveMemoryGB": 64,
+            "epcUnits": 10,
+            "tzMask": 1,
+            "tipWei": "200000000000000000"
+          }
+        ],
+        "0xa9e045a1cf324baa7770cdce7bdfad5234da278c": [
+          {
+            "ordinal": 0,
+            "from": 1794960678,
+            "to": 0,
+            "toBlock": 0,
+            "endReason": 0,
+            "dpRequestId": 991,
+            "cpu": 4,
+            "memGB": 8,
+            "storageGB": 40,
+            "bandwidth": 10,
+            "gflops": 250,
+            "enclaveMemoryGB": 64,
+            "epcUnits": 12,
+            "tzMask": 1,
+            "tipWei": "200000000000000000"
+          }
+        ],
+        "0xb6d79b159ade9114ebb64d22a9d942cdbe98261a": [
+          {
+            "ordinal": 0,
+            "from": 1794960738,
+            "to": 0,
+            "toBlock": 0,
+            "endReason": 0,
+            "dpRequestId": 990,
+            "cpu": 4,
+            "memGB": 8,
+            "storageGB": 40,
+            "bandwidth": 10,
+            "gflops": 250,
+            "enclaveMemoryGB": 64,
+            "epcUnits": 13,
+            "tzMask": 1,
+            "tipWei": "200000000000000000"
+          }
+        ]
+      },
+      "skips": {},
+      "candidates": {
+        "read": {
+          "eligible": [
+            {
+              "node": "0xa9961e09bd30c9e2f59d6a98b45a7dd6de6d522e",
+              "score": 18100,
+              "fit": true,
+              "match": true,
+              "listedOrdinal": 0,
+              "dpRequestId": 992,
+              "band": 18,
+              "index": 0,
+              "tipWei": "200000000000000000"
+            },
+            {
+              "node": "0xa9e045a1cf324baa7770cdce7bdfad5234da278c",
+              "score": 18200,
+              "fit": true,
+              "match": true,
+              "listedOrdinal": 0,
+              "dpRequestId": 991,
+              "band": 18,
+              "index": 1,
+              "tipWei": "200000000000000000"
+            },
+            {
+              "node": "0xb6d79b159ade9114ebb64d22a9d942cdbe98261a",
+              "score": 18300,
+              "fit": true,
+              "match": true,
+              "listedOrdinal": 0,
+              "dpRequestId": 990,
+              "band": 18,
+              "index": 2,
+              "tipWei": "200000000000000000"
+            }
+          ],
+          "listHash": "0xbb9b9ddd22471d90e1f6ad9a24cd93897df7a35423b7b6794af4017073b5b8a8",
+          "matchFound": 3,
+          "nextBand": 0,
+          "nextFrom": 0,
+          "done": true,
+          "settled": true
+        }
+      },
+      "turns": [
+        {
+          "node": "0xa9961e09bd30c9e2f59d6a98b45a7dd6de6d522e",
+          "band": 18,
+          "index": 0,
+          "eligible": true,
+          "fit": true,
+          "matches": true,
+          "matchAbove": 0,
+          "fitBefore": 2,
+          "restBefore": 0,
+          "fitInBand": 3,
+          "restInBand": 0,
+          "done": true,
+          "mandateStep": 3,
+          "excused": false,
+          "nextBand": 18,
+          "nextFrom": 3,
+          "settled": true
+        },
+        {
+          "node": "0xa9e045a1cf324baa7770cdce7bdfad5234da278c",
+          "band": 18,
+          "index": 1,
+          "eligible": true,
+          "fit": true,
+          "matches": true,
+          "matchAbove": 0,
+          "fitBefore": 1,
+          "restBefore": 0,
+          "fitInBand": 3,
+          "restInBand": 0,
+          "done": true,
+          "mandateStep": 2,
+          "excused": false,
+          "nextBand": 18,
+          "nextFrom": 3,
+          "settled": true
+        },
+        {
+          "node": "0xb6d79b159ade9114ebb64d22a9d942cdbe98261a",
+          "band": 18,
+          "index": 2,
+          "eligible": true,
+          "fit": true,
+          "matches": true,
+          "matchAbove": 0,
+          "fitBefore": 0,
+          "restBefore": 0,
+          "fitInBand": 3,
+          "restInBand": 0,
+          "done": true,
+          "mandateStep": 1,
+          "excused": false,
+          "nextBand": 18,
+          "nextFrom": 3,
+          "settled": true
+        }
+      ]
+    },
+    {
       "name": "polygon-steps-of-8",
       "design": "section 5 Polygon: stepBlocks 8, leadBlocks 0; step s is blocks B + 8s - 7 to B + 8s; 43,200-second slots",
       "deployment": {
@@ -9848,6 +11282,7 @@
         "bandwidth": 10,
         "needGflops": 250,
         "ceilGflops": 400,
+        "epcUnits": 0,
         "hours": 1,
         "G": 400,
         "tz": 1,
@@ -9918,6 +11353,7 @@
             "bandwidth": 100,
             "gflops": 260,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "100000000000000000"
           }
@@ -9936,6 +11372,7 @@
             "bandwidth": 100,
             "gflops": 250,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "200000000000000000"
           }
@@ -9954,6 +11391,7 @@
             "bandwidth": 100,
             "gflops": 300,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "400000000000000000"
           }
@@ -9972,6 +11410,7 @@
             "bandwidth": 100,
             "gflops": 400,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "300000000000000000"
           }
@@ -9990,6 +11429,7 @@
             "bandwidth": 100,
             "gflops": 390,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "500000000000000000"
           }
@@ -10220,6 +11660,7 @@
         "bandwidth": 10,
         "needGflops": 250,
         "ceilGflops": 400,
+        "epcUnits": 0,
         "hours": 1,
         "G": 400,
         "tz": 1,
@@ -10290,6 +11731,7 @@
             "bandwidth": 100,
             "gflops": 260,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "100000000000000000"
           }
@@ -10308,6 +11750,7 @@
             "bandwidth": 100,
             "gflops": 250,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "200000000000000000"
           }
@@ -10326,6 +11769,7 @@
             "bandwidth": 100,
             "gflops": 300,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "400000000000000000"
           }
@@ -10344,6 +11788,7 @@
             "bandwidth": 100,
             "gflops": 400,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "300000000000000000"
           }
@@ -10362,6 +11807,7 @@
             "bandwidth": 100,
             "gflops": 390,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "500000000000000000"
           }
@@ -10592,6 +12038,7 @@
         "bandwidth": 10,
         "needGflops": 250,
         "ceilGflops": 400,
+        "epcUnits": 0,
         "hours": 1,
         "G": 400,
         "tz": 1,
@@ -10662,6 +12109,7 @@
             "bandwidth": 100,
             "gflops": 260,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "100000000000000000"
           }
@@ -10680,6 +12128,7 @@
             "bandwidth": 100,
             "gflops": 250,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "200000000000000000"
           }
@@ -10698,6 +12147,7 @@
             "bandwidth": 100,
             "gflops": 300,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "400000000000000000"
           }
@@ -10716,6 +12166,7 @@
             "bandwidth": 100,
             "gflops": 400,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "300000000000000000"
           }
@@ -10734,6 +12185,7 @@
             "bandwidth": 100,
             "gflops": 390,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "500000000000000000"
           }
@@ -10964,6 +12416,7 @@
         "bandwidth": 10,
         "needGflops": 250,
         "ceilGflops": 400,
+        "epcUnits": 0,
         "hours": 1,
         "G": 400,
         "tz": 1,
@@ -11034,6 +12487,7 @@
             "bandwidth": 100,
             "gflops": 260,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "100000000000000000"
           }
@@ -11052,6 +12506,7 @@
             "bandwidth": 100,
             "gflops": 250,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "200000000000000000"
           }
@@ -11070,6 +12525,7 @@
             "bandwidth": 100,
             "gflops": 300,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "400000000000000000"
           }
@@ -11088,6 +12544,7 @@
             "bandwidth": 100,
             "gflops": 400,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "300000000000000000"
           }
@@ -11106,6 +12563,7 @@
             "bandwidth": 100,
             "gflops": 390,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "500000000000000000"
           }
@@ -11336,6 +12794,7 @@
         "bandwidth": 10,
         "needGflops": 250,
         "ceilGflops": 400,
+        "epcUnits": 0,
         "hours": 1,
         "G": 400,
         "tz": 1,
@@ -11406,6 +12865,7 @@
             "bandwidth": 100,
             "gflops": 260,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "100000000000000000"
           }
@@ -11424,6 +12884,7 @@
             "bandwidth": 100,
             "gflops": 250,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "200000000000000000"
           }
@@ -11442,6 +12903,7 @@
             "bandwidth": 100,
             "gflops": 300,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "400000000000000000"
           }
@@ -11460,6 +12922,7 @@
             "bandwidth": 100,
             "gflops": 400,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "300000000000000000"
           }
@@ -11478,6 +12941,7 @@
             "bandwidth": 100,
             "gflops": 390,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "500000000000000000"
           }
@@ -11708,6 +13172,7 @@
         "bandwidth": 10,
         "needGflops": 250,
         "ceilGflops": 400,
+        "epcUnits": 0,
         "hours": 1,
         "G": 400,
         "tz": 1,
@@ -11859,6 +13324,7 @@
             "bandwidth": 100,
             "gflops": 250,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "200000000000000000"
           }
@@ -11877,6 +13343,7 @@
             "bandwidth": 100,
             "gflops": 260,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "200000000000000000"
           }
@@ -11895,6 +13362,7 @@
             "bandwidth": 100,
             "gflops": 250,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "900000000000000000"
           }
@@ -11913,6 +13381,7 @@
             "bandwidth": 100,
             "gflops": 300,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "200000000000000000"
           }
@@ -11931,6 +13400,7 @@
             "bandwidth": 100,
             "gflops": 250,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "200000000000000000"
           }
@@ -11949,6 +13419,7 @@
             "bandwidth": 100,
             "gflops": 250,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "200000000000000000"
           }
@@ -11967,6 +13438,7 @@
             "bandwidth": 100,
             "gflops": 250,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "700000000000000000"
           }
@@ -11985,6 +13457,7 @@
             "bandwidth": 100,
             "gflops": 390,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "200000000000000000"
           }
@@ -12003,6 +13476,7 @@
             "bandwidth": 100,
             "gflops": 280,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "200000000000000000"
           }
@@ -12021,6 +13495,7 @@
             "bandwidth": 100,
             "gflops": 255,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "200000000000000000"
           }
@@ -12039,6 +13514,7 @@
             "bandwidth": 100,
             "gflops": 270,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "200000000000000000"
           }
@@ -12057,6 +13533,7 @@
             "bandwidth": 100,
             "gflops": 310,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "200000000000000000"
           }
@@ -12075,6 +13552,7 @@
             "bandwidth": 100,
             "gflops": 320,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "200000000000000000"
           }
@@ -12093,6 +13571,7 @@
             "bandwidth": 100,
             "gflops": 330,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "200000000000000000"
           }
@@ -12111,6 +13590,7 @@
             "bandwidth": 100,
             "gflops": 250,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "200000000000000000"
           }
@@ -12129,6 +13609,7 @@
             "bandwidth": 100,
             "gflops": 260,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "200000000000000000"
           }
@@ -12688,6 +14169,7 @@
         "bandwidth": 10,
         "needGflops": 250,
         "ceilGflops": 400,
+        "epcUnits": 0,
         "hours": 1,
         "G": 400,
         "tz": 1,
@@ -12768,6 +14250,7 @@
             "bandwidth": 100,
             "gflops": 250,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "200000000000000000"
           }
@@ -12786,6 +14269,7 @@
             "bandwidth": 100,
             "gflops": 400,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "300000000000000000"
           }
@@ -12804,6 +14288,7 @@
             "bandwidth": 100,
             "gflops": 260,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "100000000000000000"
           }
@@ -12822,6 +14307,7 @@
             "bandwidth": 100,
             "gflops": 390,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "500000000000000000"
           }
@@ -12840,6 +14326,7 @@
             "bandwidth": 100,
             "gflops": 300,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "400000000000000000"
           }
@@ -13070,6 +14557,7 @@
         "bandwidth": 10,
         "needGflops": 250,
         "ceilGflops": 400,
+        "epcUnits": 0,
         "hours": 1,
         "G": 400,
         "tz": 1,
@@ -13140,6 +14628,7 @@
             "bandwidth": 100,
             "gflops": 260,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "100000000000000000"
           }
@@ -13158,6 +14647,7 @@
             "bandwidth": 100,
             "gflops": 250,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "200000000000000000"
           }
@@ -13176,6 +14666,7 @@
             "bandwidth": 100,
             "gflops": 300,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "400000000000000000"
           }
@@ -13194,6 +14685,7 @@
             "bandwidth": 100,
             "gflops": 400,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "300000000000000000"
           }
@@ -13212,6 +14704,7 @@
             "bandwidth": 100,
             "gflops": 390,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "500000000000000000"
           }
@@ -13442,6 +14935,7 @@
         "bandwidth": 10,
         "needGflops": 250,
         "ceilGflops": 400,
+        "epcUnits": 0,
         "hours": 1,
         "G": 400,
         "tz": 1,
@@ -13520,6 +15014,7 @@
             "bandwidth": 100,
             "gflops": 260,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "100000000000000000"
           }
@@ -13538,6 +15033,7 @@
             "bandwidth": 100,
             "gflops": 250,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "200000000000000000"
           }
@@ -13556,6 +15052,7 @@
             "bandwidth": 100,
             "gflops": 300,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "400000000000000000"
           }
@@ -13574,6 +15071,7 @@
             "bandwidth": 100,
             "gflops": 400,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "300000000000000000"
           }
@@ -13592,6 +15090,7 @@
             "bandwidth": 100,
             "gflops": 390,
             "enclaveMemoryGB": 64,
+            "epcUnits": 0,
             "tzMask": 1,
             "tipWei": "500000000000000000"
           }

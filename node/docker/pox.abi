@@ -1217,6 +1217,157 @@
     "type": "function"
   },
   {
+    "inputs": [
+      {
+        "internalType": "uint8",
+        "name": "cpu",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint8",
+        "name": "mem",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint8",
+        "name": "storageGB",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint8",
+        "name": "bw",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint16",
+        "name": "duration",
+        "type": "uint16"
+      },
+      {
+        "internalType": "uint40",
+        "name": "gflops",
+        "type": "uint40"
+      },
+      {
+        "internalType": "uint256",
+        "name": "tipPerCuHourWei",
+        "type": "uint256"
+      },
+      {
+        "internalType": "string",
+        "name": "metadata1",
+        "type": "string"
+      },
+      {
+        "internalType": "string",
+        "name": "metadata2",
+        "type": "string"
+      },
+      {
+        "internalType": "string",
+        "name": "metadata3",
+        "type": "string"
+      },
+      {
+        "internalType": "string",
+        "name": "metadata4",
+        "type": "string"
+      }
+    ],
+    "name": "addDPRequestV2",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "requestId",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "id",
+        "type": "uint256"
+      }
+    ],
+    "name": "doStamp",
+    "outputs": [
+      {
+        "internalType": "uint128",
+        "name": "basePriceWei",
+        "type": "uint128"
+      },
+      {
+        "internalType": "uint16",
+        "name": "escrowGflops",
+        "type": "uint16"
+      },
+      {
+        "internalType": "uint16",
+        "name": "epcUnits",
+        "type": "uint16"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "node",
+        "type": "address"
+      },
+      {
+        "internalType": "address",
+        "name": "wallet",
+        "type": "address"
+      }
+    ],
+    "name": "farmApprovalOf",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "farm",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "node",
+        "type": "address"
+      }
+    ],
+    "name": "farmJoinOf",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "payout",
+        "type": "address"
+      },
+      {
+        "internalType": "address",
+        "name": "broker",
+        "type": "address"
+      },
+      {
+        "internalType": "bool",
+        "name": "joined",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
     "constant": false,
     "inputs": [
       {

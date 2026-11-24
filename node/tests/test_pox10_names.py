@@ -257,11 +257,11 @@ def test_the_calls_the_agent_makes_on_pox_10_keep_their_selectors(path):
 
 def test_the_selectors_are_those_of_functions_the_agent_names():
     """Every function of SELECTORS is called by its name in etny-node.py, or
-    named in utils.py for a call etny-node.py makes by a name it is given
-    (_addDPRequest: utils.dp_request_arguments)."""
+    named in utils.py by its signature for a call etny-node.py makes by the
+    signature it is given (_addDPRequest: utils.dp_request_arguments)."""
     agent_source = (NODE / "etny-node.py").read_text(encoding="utf-8")
     utils_source = (NODE / "utils.py").read_text(encoding="utf-8")
     for table in SELECTORS.values():
         for signature in table:
             name = signature.split("(")[0]
-            assert f".{name}(" in agent_source or f"'{name}'" in utils_source, name
+            assert f".{name}(" in agent_source or f"'{signature}'" in utils_source, name

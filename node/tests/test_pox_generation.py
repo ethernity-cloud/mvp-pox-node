@@ -41,6 +41,16 @@ def test_an_rpc_failure_propagates():
         pox20.pox_generation(raising(ConnectionError("refused")))
 
 
+def test_the_version_names_the_epc_forms():
+    assert pox20.pox_version(lambda: "2.0") == "2.0"
+    assert pox20.takes_epc_forms(pox20.pox_version(lambda: "2.0")) is True
+    assert pox20.takes_epc_forms(pox20.pox_version(lambda: "1.2")) is False
+    assert pox20.pox_version(raising(ContractLogicError("execution reverted"))) == ''
+    assert pox20.takes_epc_forms('') is False
+    with pytest.raises(ConnectionError):
+        pox20.pox_version(raising(ConnectionError("refused")))
+
+
 class FakeContract:
     """A contract whose functions answer the values of `answers` on call()."""
 

@@ -18,6 +18,8 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from web3 import Web3
+from web3.providers.base import BaseProvider
 
 import config
 import matching
@@ -51,7 +53,7 @@ def period_words(p):
     first = (p.start | (p.to << 32) | (p.to_block << 64) | (p.dp_request_id << 112) | (p.gflops << 160)
              | (p.cpu << 176) | (p.mem << 184) | (p.storage << 192) | (p.bandwidth << 200) | (p.tz_mask << 208)
              | (p.end_reason << 224) | (p.ordinal << 232))
-    second = p.tip | (p.chain_first << 128) | (p.enclave_memory << 152)
+    second = p.tip | (p.chain_first << 128) | (p.enclave_memory << 152) | (p.epc_units << 160)
     return first, second
 
 
@@ -98,6 +100,7 @@ class FakeChain:
         self.judged_at = []
         self.simulate_refusal = set()
         self.estimates = 80000
+        self.request_epc = {}
 
     # --- the chain
     def head_number(self):
@@ -179,7 +182,7 @@ class FakeChain:
         return b"\x6f" * 31, 0
 
     def stamp(self, request_id):
-        return 0, 400
+        return 0, 400, self.request_epc.get(request_id, 0)
 
     def claimers(self, request_id):
         return self.claimer_rows.get(request_id, [])
@@ -253,7 +256,7 @@ class FakeChain:
         entries.append(matching.RollEntry(node, score, self.t))
         self.log('Beat', node=node, slot=slot, score=score, band=band, index=len(entries) - 1)
 
-    def announce(self, node, dp, gflops=250, tip=10**17, memory=8, enclave=64):
+    def announce(self, node, dp, gflops=250, tip=10**17, memory=8, enclave=64, epc=0):
         node = matching.address_text(node)
         periods = self.periods.setdefault(node, [])
         chain_first = len(periods)
@@ -261,10 +264,10 @@ class FakeChain:
             self.leave(node, matching.END_REPLACED)
             chain_first = periods[-1].chain_first
         p = matching.Period(len(periods), self.t, 0, 0, 0, dp, 4, memory, 40, 100, gflops, enclave, 1, tip,
-                            chain_first)
+                            chain_first, epc)
         periods.append(p)
         self.log('Announced', node=node, dpRequestId=dp, **{'from': self.t}, cpu=4, memGB=memory, storageGB=40,
-                 bandwidth=100, gflops=gflops, tipWei=tip, tzMask=1, enclaveMemoryGB=enclave)
+                 bandwidth=100, gflops=gflops, tipWei=tip, tzMask=1, enclaveMemoryGB=enclave, epcUnits=epc)
 
     def leave(self, node, reason):
         node = matching.address_text(node)
@@ -310,7 +313,7 @@ def test_the_adapter_names_every_output_of_request_info_in_the_abis_order():
 def test_the_copy_fed_from_the_logs_equals_a_rebuild_at_the_later_block(tmp_path):
     chain = FakeChain(ME, slot_seconds=3600, head=500, t=3600 * 100 + 100)
     for i, node in enumerate(NODES[:4]):
-        chain.announce(node, 10 + i)
+        chain.announce(node, 10 + i, epc=8 * i)
         chain.beat(node, 5000 + 100 * i)
     chain.mine(30, 60)
     node = node_on(chain, tmp_path)
@@ -318,12 +321,14 @@ def test_the_copy_fed_from_the_logs_equals_a_rebuild_at_the_later_block(tmp_path
     image = b"\x6f" * 31
     node._know_image(image)
     # Logs after the scan: a replacement, a pause and an announce after it, a
-    # new node, a skip, and heartbeats of the next slot.
+    # new node, a skip, and heartbeats of the next slot; the announces state
+    # EPC units, which the copy takes from Announced.epcUnits and the rebuild
+    # from the period's second word.
     chain.mine(20, 60)
-    chain.announce(NODES[0], 20, tip=2 * 10**17)
+    chain.announce(NODES[0], 20, tip=2 * 10**17, epc=65535)
     chain.leave(NODES[1], matching.END_PAUSED)
     chain.mine(5, 60)
-    chain.announce(NODES[4], 30)
+    chain.announce(NODES[4], 30, epc=16)
     chain.beat(NODES[4], 400)
     chain.skip(NODES[2], image, chain.t + 7 * 86400)
     chain.mine(40, 60)
@@ -336,6 +341,8 @@ def test_the_copy_fed_from_the_logs_equals_a_rebuild_at_the_later_block(tmp_path
     fresh._know_image(image)
     copies_equal(node.copy, fresh.copy)
     assert node.copy.block == fresh.copy.block == chain.head - LAG
+    assert node.copy.periods[matching.address_text(NODES[0])][-1].epc_units == 65535
+    assert node.copy.periods[matching.address_text(NODES[4])][-1].epc_units == 16
 
 
 def test_the_rebuild_reads_the_periods_an_open_round_can_find_and_no_older(tmp_path):
@@ -516,7 +523,7 @@ def example_one(tmp_path, me, settings=SETTINGS, read_block=1000, rounds=None):
         chain.periods[n] = [matching.Period(q["ordinal"], q["from"], q["to"], q["toBlock"], q["endReason"],
                                             q["dpRequestId"], q["cpu"], q["memGB"], q["storageGB"], q["bandwidth"],
                                             q["gflops"], q["enclaveMemoryGB"], q["tzMask"], int(q["tipWei"]),
-                                            q["ordinal"]) for q in ps]
+                                            q["ordinal"], q["epcUnits"]) for q in ps]
     q = case["request"]
     rnds = rounds or [{"block": 1000, "time": q["createdAt"], "bid": int(case["rounds"][0]["bidWei"]),
                        "base": int(case["rounds"][0]["baseWei"])}]
@@ -671,6 +678,66 @@ def test_an_offer_without_enclave_memory_covers_no_request(tmp_path):
     me = matching.address_text(N1)
     chain.periods[me][-1] = chain.periods[me][-1]._replace(enclave_memory=0)
     assert node.serve(301, terms, own) == 'wait'
+
+
+def test_the_request_takes_the_minimum_epc_the_stamp_answers(tmp_path):
+    chain, node, terms, own = example_one(tmp_path, N1)
+    chain.request_epc[301] = 2
+    assert node.request_of(301, chain.requests[301](node.copy.block), terms).epc == 2
+
+
+def test_no_claim_on_a_request_whose_minimum_epc_the_period_does_not_cover(tmp_path):
+    # A minimum of 2 units: N1's period states 1, so nothing is sent; at 2
+    # units it covers the request and is the only node of the list that
+    # does, mandated for step 1.
+    chain, node, terms, own = example_one(tmp_path, N1)
+    chain.request_epc[301] = 2
+    me = matching.address_text(N1)
+    chain.periods[me][-1] = chain.periods[me][-1]._replace(epc_units=1)
+    assert node.serve(301, terms, own) == 'wait'
+    assert chain.sent == []
+    chain.periods[me][-1] = chain.periods[me][-1]._replace(epc_units=2)
+    node.copy.periods[me][-1] = node.copy.periods[me][-1]._replace(epc_units=2)
+    assert node.serve(301, terms, own) == 'claimed'
+    assert chain.sent[0][1][3] == 1
+
+
+class AnswerProvider(BaseProvider):
+    """A provider whose every eth_call answers the bytes `answer`."""
+
+    def __init__(self, answer):
+        super().__init__()
+        self.answer = answer
+
+    def make_request(self, method, params):
+        if method == 'eth_call':
+            return {'jsonrpc': '2.0', 'id': 1, 'result': '0x' + self.answer.hex()}
+        if method == 'eth_chainId':
+            return {'jsonrpc': '2.0', 'id': 1, 'result': '0x1'}
+        raise ValueError(method)
+
+    def is_connected(self, show_traceback=False):
+        return True
+
+
+@pytest.mark.parametrize("epc_forms, answer, stamp", [
+    (True, (5, 400, 2), (5, 400, 2)),
+    (False, (5, 400), (5, 400, 0)),
+])
+def test_the_stamp_is_decoded_by_the_poxs_version(epc_forms, answer, stamp):
+    # A PoX whose VERSION() is "2.0" answers three values, one whose
+    # VERSION() is "1.2" two. A decode of the three under two outputs drops
+    # the third without an error, so the "2.0" answer is read through the
+    # union ABI's three-output doStamp.
+    types = ['uint128', 'uint16', 'uint16'][:len(answer)]
+    w3 = Web3(AnswerProvider(Web3().codec.encode(types, list(answer))))
+    pox = w3.eth.contract(address="0x" + "11" * 20, abi=Path(config.abi_filepath).read_text())
+    adapter = matching_node.ChainAdapter(w3, None, None, pox, ME, None, 1000, epc_forms)
+    assert adapter.stamp(9) == stamp
+    if not epc_forms:
+        three = Web3(AnswerProvider(Web3().codec.encode(['uint128', 'uint16', 'uint16'], [5, 400, 2])))
+        dropped = three.eth.contract(address=pox.address, abi=matching_node.STAMP_ABI_TWO_VALUES)
+        assert dropped.functions.doStamp(9).call() == [5, 400]
 
 
 def unmandated_chain(tmp_path, count, me_index, settings=SETTINGS):

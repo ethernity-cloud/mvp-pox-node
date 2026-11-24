@@ -984,6 +984,17 @@ def order_bucket_name(image_name: str, protocol: str) -> str:
 
 # The protocol version a DP request's metadata2 names.
 DP_REQUEST_PROTOCOL = 'v3'
+# The DP request adds the agent sends, by signature: the legacy add, the V2
+# add of a PoX whose VERSION() is "1.2" (gflops uint32, selector 0x6e01d461)
+# and the V2 add of one whose VERSION() is "2.0" (gflops uint40, selector
+# 0x72a6bda7; pox20.EPC_VERSION).
+DP_ADD_LEGACY = '_addDPRequest(uint8,uint8,uint8,uint8,uint16,uint8,string,string,string,string)'
+DP_ADD_V2 = 'addDPRequestV2(uint8,uint8,uint8,uint8,uint16,uint32,uint256,string,string,string,string)'
+DP_ADD_V2_EPC = 'addDPRequestV2(uint8,uint8,uint8,uint8,uint16,uint40,uint256,string,string,string,string)'
+# The agent's bound on each of a DP request's four metadata strings, in UTF-8
+# bytes: the PoX bounds a DO request's strings at 2,048 bytes and none of a DP
+# request's, and the agent holds its own to the same figure.
+DP_METADATA_MAX_BYTES = 2048
 # GFLOPS per CU, the contracts' GFLOPS_PER_CU; a DP request with gflops 0 is
 # recorded at 100 (one CU).
 GFLOPS_PER_CU = 100
@@ -1042,19 +1053,31 @@ def tip_per_cu_hour_wei(configured_tip, profile_gas, avg_gas_price_wei, token_pe
     return min(int(configured_tip) + own, MAX_TIP)
 
 
-def dp_request_arguments(legacy, resources, duration, price, gflops, tip, uuid, metadata3, metadata4):
-    """(function name, arguments) of the node's DP request: _addDPRequest with
-    the uint8 `price` on a legacy contract, addDPRequestV2 with `gflops` (the
-    advertised record's GFLOPS, 0 without one; the contract stores 0 as 100)
-    and `tip` on a 2.0 one.
+def dp_request_arguments(legacy, resources, duration, price, gflops, tip, uuid, metadata3, metadata4,
+                         epc_forms=False):
+    """(function signature, arguments) of the node's DP request:
+    DP_ADD_LEGACY with the uint8 `price` on a legacy contract; on a 2.0 one
+    the V2 add with `gflops` (its bits 0 to 15 the advertised record's
+    GFLOPS, 0 without one, which the contract stores as 100) and `tip`,
+    DP_ADD_V2_EPC on a PoX that takes the EPC forms (`epc_forms`,
+    pox20.takes_epc_forms) and DP_ADD_V2 on any other.
     `resources` is (cpu, memory, storage, bandwidth), `uuid` the node's
-    metadata1 and DP_REQUEST_PROTOCOL its metadata2."""
+    metadata1 and DP_REQUEST_PROTOCOL its metadata2. Raises ValueError when
+    a metadata string is above DP_METADATA_MAX_BYTES, or when `gflops` does
+    not fit the add's width."""
     cpu, memory, storage, bandwidth = resources
+    for index, value in ((1, uuid), (2, DP_REQUEST_PROTOCOL), (3, metadata3), (4, metadata4)):
+        size = len(str(value).encode('utf-8'))
+        if size > DP_METADATA_MAX_BYTES:
+            raise ValueError(f"the DP request's metadata{index} is {size} bytes, above {DP_METADATA_MAX_BYTES}")
     if legacy:
-        return '_addDPRequest', [cpu, memory, storage, bandwidth, duration, price, uuid, DP_REQUEST_PROTOCOL,
-                                 metadata3, metadata4]
-    return 'addDPRequestV2', [cpu, memory, storage, bandwidth, duration, int(gflops), int(tip), uuid,
-                              DP_REQUEST_PROTOCOL, metadata3, metadata4]
+        return DP_ADD_LEGACY, [cpu, memory, storage, bandwidth, duration, price, uuid, DP_REQUEST_PROTOCOL,
+                               metadata3, metadata4]
+    width = 40 if epc_forms else 32
+    if not 0 <= int(gflops) < 2**width:
+        raise ValueError(f"the DP request's gflops argument {gflops} does not fit uint{width}")
+    return DP_ADD_V2_EPC if epc_forms else DP_ADD_V2, [cpu, memory, storage, bandwidth, duration, int(gflops),
+                                                       int(tip), uuid, DP_REQUEST_PROTOCOL, metadata3, metadata4]
 
 
 def metadata_key(metadata, key):
