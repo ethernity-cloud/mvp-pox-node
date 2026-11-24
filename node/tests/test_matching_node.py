@@ -28,6 +28,7 @@ import matching_rules as rules
 
 SPEC = Path(__file__).parent / "spec" / "matching"
 RANKING = json.loads((SPEC / "ranking.json").read_text())
+RANK = json.loads((SPEC / "matching-rank.json").read_text())
 LOG = logging.getLogger("test")
 WALLET = "0x" + "33" * 20
 ZERO = "0x" + "00" * 20
@@ -736,6 +737,24 @@ def test_no_claim_while_banned_or_on_an_image_marked_at_its_add(tmp_path):
     marked = node_on(chain, tmp_path, SETTINGS._replace(claim_marked_images=True), address=N1)
     marked.slot_seconds, marked.copy, marked.synced = 43200, node.copy, True
     assert marked.serve(301, terms, own) == 'claimed'
+
+
+def test_a_bid_above_two_to_the_128_is_clamped_as_the_round_stamp_stores_it(tmp_path):
+    # MATCHING-SYNC-PLAN.md A17: matching-rank.json's
+    # bid-above-u128-and-65535-gflops, a maxPrice above 2^128 - 1 (the PoX
+    # of 52e36e0 refuses one at the add; a request the deployed sets hold
+    # can carry it): the round the node reads takes the bid 2^128 - 1 and
+    # its stamp is the reference's.
+    case = next(c for c in RANK["ranking"] if c["name"] == "bid-above-u128-and-65535-gflops")
+    r, e, q = case["rounds"][0], case["expected"], case["request"]
+    chain, node, _, _ = example_one(tmp_path, N1)
+    info = {'round': 0, 'roundBlock': r["block"], 'roundTime': r["time"], 'bidWei': int(r["bidWei"]),
+            'baseWei': int(r["baseWei"])}
+    (rnd,) = node.rounds_of(q["id"], info)
+    assert int(r["bidWei"]) > matching.UINT128_MAX and rnd.bid == matching.UINT128_MAX == int(e["bidWei"])
+    stamp = matching.round_stamp(q["id"], bytes.fromhex(q["seedStamp"][2:]), rnd.number, rnd.block, rnd.time,
+                                 rnd.bid, rnd.base)
+    assert "0x" + stamp.hex() == e["roundStamp"]
 
 
 def test_a_claim_states_the_nodes_step_in_every_round(tmp_path):
