@@ -48,11 +48,22 @@ def test_a_max_gflops_below_the_gflops_is_refused():
     refusal = admits_do_request(do_v2(max_price=10**18, max_gflops=200), 0, QUOTE_PRICE, TIP, GFLOPS, FEE_PERCENTS,
                                 (0, 0))
     assert refusal.kind == "gflops"
-    assert refusal.text == "gflops 250 above the request's maxGflops 200"
+    assert refusal.text == "gflops 250 above the request's ceiling 200"
     assert admits_do_request(do_v2(max_price=10**18, max_gflops=250), 0, QUOTE_PRICE, TIP, GFLOPS, FEE_PERCENTS,
                              (0, 0)) is None
     assert admits_do_request(do_v2(max_price=10**18, max_gflops=0), 0, QUOTE_PRICE, TIP, 6400, FEE_PERCENTS,
                              (0, 0)) is None
+
+
+def test_the_ceiling_is_max_gflops_mod_65536_whatever_the_required_figure():
+    # maxGflops carries the GFLOPS the request requires in bits 16 to 31 and
+    # its ceiling in bits 0 to 15 (Ethernity20.sol _checkPlacement reads the
+    # low 16 bits alone).
+    refusal = admits_do_request(do_v2(max_price=10**18, max_gflops=(150 << 16) | 200), 0, QUOTE_PRICE, TIP, GFLOPS,
+                                FEE_PERCENTS, (0, 0))
+    assert refusal.kind == "gflops" and refusal.text == "gflops 250 above the request's ceiling 200"
+    assert admits_do_request(do_v2(max_price=10**18, max_gflops=(300 << 16) | 0), 0, QUOTE_PRICE, TIP, 6400,
+                             FEE_PERCENTS, (0, 0)) is None
 
 
 def test_a_reserved_request_is_left_to_the_broker():

@@ -680,14 +680,12 @@ class MatchingNode:
 
     # ------------------------------------------------------------ requests
 
-    def request_of(self, request_id, info, terms):
-        """matching.Request of DO request `request_id` from its requestInfo
-        `info` and its `terms` (cpu, memory, storage, bandwidth, duration,
-        max_gflops, metadata1), read once: the need from maxGflops, G and the
-        minimum EPC from the PoX's stamp, the template bit, the image key
-        PoxMatching recorded; its parameter set the one requestInfo's
-        parameterSet names. None when no set is in force for it
-        (parameterSet 256) or the copy does not hold the set named."""
+    def _request_terms(self, request_id, terms):
+        """(need, ceil, G, minimum EPC, image key, template key) of DO request
+        `request_id`, read once and kept: the need and the ceiling from its
+        maxGflops, G and the minimum EPC from the PoX's stamp, the image key
+        PoxMatching recorded, the template's key with its bit read into the
+        copy."""
         cached = self.terms.get(request_id)
         if cached is None:
             need, ceil = matching.need_gflops(terms['max_gflops'])
@@ -700,7 +698,33 @@ class MatchingNode:
                     self.copy.templates[key] = found
             cached = (need, ceil, g, epc, image, key)
             self.terms[request_id] = cached
-        need, ceil, g, epc, image, key = cached
+        return cached
+
+    def placement_covers(self, request_id, terms, offer):
+        """Whether the node's offer covers DO request `request_id` as the
+        claim's cover does (matching.covers without the template: its
+        resources, the required GFLOPS and the ceiling, the enclave memory
+        need and the minimum EPC; OD30), on the figures of its period on the
+        standing offer, open or ended, which PoxMatching wrote from the offer
+        at its announce. False without such a period."""
+        period = self.own_period()
+        if offer is None or period is None or period.dp_request_id != int(offer.dp_request_id):
+            return False
+        need, ceil, g, epc, image, _ = self._request_terms(request_id, terms)
+        request = matching.Request(int(request_id), b'', int(terms['cpu']), int(terms['memory']),
+                                   int(terms['storage']), int(terms['bandwidth']), need, ceil,
+                                   int(terms['duration']) // 3600, g, 0, image, False, None, epc)
+        return matching.covers(request, period, with_template=False)
+
+    def request_of(self, request_id, info, terms):
+        """matching.Request of DO request `request_id` from its requestInfo
+        `info` and its `terms` (cpu, memory, storage, bandwidth, duration,
+        max_gflops, metadata1), read once: the need from maxGflops, G and the
+        minimum EPC from the PoX's stamp, the template bit, the image key
+        PoxMatching recorded; its parameter set the one requestInfo's
+        parameterSet names. None when no set is in force for it
+        (parameterSet 256) or the copy does not hold the set named."""
+        need, ceil, g, epc, image, key = self._request_terms(request_id, terms)
         created_at = int(info['createdAt'])
         index = int(info['parameterSet'])
         if index >= len(self.copy.params):
@@ -742,17 +766,26 @@ class MatchingNode:
 
     def serve(self, request_id, terms, offer):
         """One tick of DO request `request_id` (7.6, 7.15): 'placement' when
-        its parameter set does not serve it by claims (the agent places as
-        today), 'done' when the node has nothing more to do on it, 'claimed'
-        when its claim was mined, 'wait' otherwise. It acts only on a settled
-        requestInfo read at the block the copy has read the logs to, with
-        every round's roll in the copy."""
+        its parameter set does not serve it by claims and the node's offer
+        covers it (placement_covers; the agent places as today),
+        'uncovered' when it does not, 'done' when the node has nothing more
+        to do on it, 'claimed' when its claim was mined, 'wait' otherwise.
+        Serving ends on the node's own claim, on a final request (requestInfo
+        isFinal) and on one the PoX no longer holds AVAILABLE
+        (`terms['available']`), not on an approval of another node's claim:
+        a request of several instances takes claims while it is AVAILABLE
+        (spec/matching.md section 5). It acts only on a settled requestInfo
+        read at the block the copy has read the logs to, with every round's
+        roll in the copy."""
         if not self.synced:
             return 'wait'
         info = self.chain.request_info(request_id, self.copy.block)
         if not info['claims']:
-            return 'placement'
-        if info['isFinal'] or int(info['filledStep']) != 0:
+            if self.placement_covers(request_id, terms, offer):
+                return 'placement'
+            self.logger.debug(f"Matching: DO request {request_id} is not covered by this node's offer; not placed")
+            return 'uncovered'
+        if info['isFinal'] or not terms['available']:
             self._forget(request_id)
             return 'done'
         if request_id in self.claimed or (info['imageMarked'] and not self.settings.claim_marked_images):

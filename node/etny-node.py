@@ -5762,7 +5762,10 @@ class EtnyPoXNode:
                 # claims is claimed and never placed (MATCHING-DESIGN.md 7.6):
                 # its price is tested on the round's stamp, not on the quote of
                 # the moment. A claim mined, or nothing left to do, caches the
-                # request; a request not served by claims is placed below.
+                # request; a request not served by claims is placed below when
+                # the node's offer covers it as a claim's cover would
+                # (MatchingNode.placement_covers), and skipped this pass when
+                # it does not.
                 if unpinned and self.__matching is not None:
                     refusal = self.__trustedzone_refusal(metadata[i][1])
                     if refusal:
@@ -6499,14 +6502,16 @@ class EtnyPoXNode:
     def __matching_terms(self, request_id):
         """The terms of DO request `request_id` the ranking reads
         (MatchingNode.request_of): its resources, its duration in seconds,
-        its maxGflops, its metadata1 and whether it was added with terms."""
+        its maxGflops, its metadata1, whether it was added with terms and
+        whether the PoX holds it AVAILABLE."""
         time.sleep(self.__network_config.rpc_delay / 1000)
         do_req = DORequest(self.__etny.caller()._getDORequest(int(request_id)))
         v2 = DORequestV2(self.__reader.caller()._getDORequestV2(int(request_id))) if self.__reader is not None else None
         metadata = self.__etny.caller()._getDORequestMetadata(int(request_id))
         return {'cpu': do_req.cpu, 'memory': do_req.memory, 'storage': do_req.storage, 'bandwidth': do_req.bandwidth,
                 'duration': int(do_req.duration) * 3600, 'max_gflops': v2.max_gflops if v2 is not None else 0,
-                'metadata1': metadata[1], 'with_terms': v2 is not None and (v2.max_price or v2.reserved_price) != 0}
+                'metadata1': metadata[1], 'with_terms': v2 is not None and (v2.max_price or v2.reserved_price) != 0,
+                'available': do_req.status == RequestStatus.AVAILABLE}
 
     def __expiry_admitted_at(self, order_id, placed_at, terminated_at):
         """The time from which expireOrder was admitted for `order_id`: one

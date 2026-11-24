@@ -601,7 +601,7 @@ def example_one(tmp_path, me, settings=SETTINGS, read_block=1000, rounds=None):
     own = chain.current(me)
     terms = {'cpu': q["cpu"], 'memory': q["memGB"], 'storage': q["storageGB"], 'bandwidth': q["bandwidth"],
              'duration': q["hours"] * 3600, 'max_gflops': (q["needGflops"] << 16) | q["ceilGflops"],
-             'metadata1': "v3:QmImage:ecld-nodenithy-matching:1.0.0", 'with_terms': True}
+             'metadata1': "v3:QmImage:ecld-nodenithy-matching:1.0.0", 'with_terms': True, 'available': True}
     return chain, node, terms, offer(own.dp_request_id, tip=own.tip)
 
 
@@ -665,6 +665,43 @@ def test_claims_off_is_served_by_the_agents_own_placement(tmp_path):
     base = chain.requests[301]
     chain.requests[301] = lambda block: {**base(block), 'claims': False}
     assert node.serve(301, terms, own) == 'placement'
+    assert chain.sent == []
+
+
+@pytest.mark.parametrize("change", ["required", "ceiling", "enclave", "epc", "no-period"])
+def test_a_request_not_served_by_claims_is_placed_only_when_the_offer_covers_it(tmp_path, change):
+    # OD30: the claim's cover, on the period of the node's standing offer.
+    chain, node, terms, own = example_one(tmp_path, N1)
+    base = chain.requests[301]
+    chain.requests[301] = lambda block: {**base(block), 'claims': False}
+    me = matching.address_text(N1)
+    period = chain.periods[me][-1]
+    if change == "required":
+        terms = {**terms, 'max_gflops': ((period.gflops + 1) << 16)}
+    elif change == "ceiling":
+        terms = {**terms, 'max_gflops': period.gflops - 1}
+    elif change == "enclave":
+        chain.periods[me][-1] = period._replace(enclave_memory=terms['memory'] - 1)
+    elif change == "epc":
+        chain.request_epc[301] = period.epc_units + 1
+    else:
+        own = offer(own.dp_request_id + 1, tip=own.tip)
+    assert node.serve(301, terms, own) == 'uncovered'
+    assert chain.sent == []
+
+
+def test_a_request_of_several_instances_is_served_after_another_nodes_approval(tmp_path):
+    # Another node's approval writes filledStep; the request stays open
+    # while the PoX holds it AVAILABLE and it is not final.
+    chain, node, terms, own = example_one(tmp_path, N1)
+    base = chain.requests[301]
+    chain.requests[301] = lambda block: {**base(block), 'filledStep': 2, 'claimCount': 1}
+    assert node.serve(301, terms, own) == 'claimed'
+    chain, node, terms, own = example_one(tmp_path, N1)
+    assert node.serve(301, {**terms, 'available': False}, own) == 'done'
+    base = chain.requests[301]
+    chain.requests[301] = lambda block: {**base(block), 'isFinal': True}
+    assert node.serve(301, terms, own) == 'done'
     assert chain.sent == []
 
 
@@ -815,7 +852,7 @@ def unmandated_chain(tmp_path, count, me_index, settings=SETTINGS):
     node.oldest_time = 3600 * 10 - 86400
     node.rebuild()
     terms = {'cpu': 4, 'memory': 8, 'storage': 40, 'bandwidth': 10, 'duration': 3600, 'max_gflops': (250 << 16) | 400,
-             'metadata1': "v3:QmImage:ecld-nodenithy-matching", 'with_terms': True}
+             'metadata1': "v3:QmImage:ecld-nodenithy-matching", 'with_terms': True, 'available': True}
     return chain, node, terms, offer(500 + me_index), nodes
 
 

@@ -1228,7 +1228,9 @@ def admits_do_request(do_v2, legacy_price_tokens, price_per_cu_hour_wei, tip, gf
     (a reserved price recorded) is left to the broker, which places on the
     offer. A recorded spot request takes the bid, the pricing's price plus
     the node's tip, at most its maxPricePerCuHourWei and the node's `gflops`
-    at most its maxGflops (0: any). A legacy request (no terms) takes the bid
+    at most its ceiling, maxGflops mod 65,536 (0: any; the GFLOPS it requires
+    is in bits 16 to 31, which the PoX's placement does not test:
+    Ethernity20.sol _checkPlacement). A legacy request (no terms) takes the bid
     with the fees: bid x (100 + network + validator + trustedzone +
     securelock percents) at most 100 x its uint8 price (`legacy_price_tokens`)
     in token wei. `fee_percents` is (NETWORK_FEE_PERCENT,
@@ -1240,8 +1242,9 @@ def admits_do_request(do_v2, legacy_price_tokens, price_per_cu_hour_wei, tip, gf
     if do_v2.max_price != 0:
         if bid > do_v2.max_price:
             return Refusal('price', f"bid {bid} wei per CU-hour above the request's maximum {do_v2.max_price}")
-        if do_v2.max_gflops != 0 and int(gflops) > do_v2.max_gflops:
-            return Refusal('gflops', f"gflops {gflops} above the request's maxGflops {do_v2.max_gflops}")
+        ceiling = do_v2.max_gflops % 65536
+        if ceiling != 0 and int(gflops) > ceiling:
+            return Refusal('gflops', f"gflops {gflops} above the request's ceiling {ceiling}")
         return None
     network_fee, validator_fee = fee_percents
     trustedzone_fee, securelock_fee = publisher_fees
