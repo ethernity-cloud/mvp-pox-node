@@ -18,6 +18,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from eth_utils import to_checksum_address
 from web3 import Web3
 from web3.providers.base import BaseProvider
 
@@ -1206,7 +1207,8 @@ def test_a_join_left_behind_by_a_broker_replacement_is_undone_by_the_node(tmp_pa
     chain.join = (stored, OLD_BROKER, True)
     chain.payout = "0x" + "77" * 20
     assert node.payout_tick(setting) == 'recovered'
-    assert chain.sent[-1][:2] == ('pox.setPayoutAddress', (matching.address_text(named),))
+    # web3 encodes an address argument only in its checksum form.
+    assert chain.sent[-1][:2] == ('pox.setPayoutAddress', (to_checksum_address(named),))
 
 
 def test_a_join_left_behind_that_stored_another_wallet_is_named_not_sent(tmp_path, caplog):

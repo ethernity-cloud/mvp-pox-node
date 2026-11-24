@@ -11,6 +11,8 @@ import time
 from collections import namedtuple
 from types import SimpleNamespace
 
+from eth_utils import to_checksum_address
+
 import matching
 import matching_rules as rules
 
@@ -1210,7 +1212,7 @@ class MatchingNode:
         if rules.join_left_behind(join, broker):
             route, wallet = rules.left_behind_route(join, self.address, setting)
             if route == 'set':
-                fn = self.chain.pox_function('setPayoutAddress', wallet)
+                fn = self.chain.pox_function('setPayoutAddress', to_checksum_address(wallet))
                 self.chain.simulate(fn)
                 if mined(self.chain.transact(fn, 'setPayoutAddress', None, 0)):
                     self.logger.info(f"Matching: the farm join broker {join[1]} reported, which the PoX no longer "
