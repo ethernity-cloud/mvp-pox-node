@@ -185,6 +185,11 @@ class NetworkConfig:
     # it lowers the probe's claim (epc_claim.claim_mib) and the offer's EPC
     # units (capability.offer_epc_units), and never raises either.
     epc_mib: int = 0
+    # The image registry name of the memory probe of each enclave size, with
+    # {size} for the size in GiB (<NETWORK>_PROBE_IMAGE; MATCHING-SYNC-PLAN.md
+    # B02, OD17): the agent runs the probe the registry holds under it, from
+    # the newest default release that lists the size; empty: no probe runs.
+    probe_image: str = ''
 
 # Platform requirements a trustedzone names in <NETWORK>_TRUSTEDZONE_IMAGES:
 #   dcap  provisioned by a CAS, which admits the enclave on a DCAP quote: the

@@ -28,6 +28,7 @@ import pox20
 import capability
 import bench_record
 import epc_claim
+import probe_run
 import gas_profile
 import gas_ledger
 import broker
@@ -562,6 +563,10 @@ class EtnyPoXNode:
         # request's want of one is logged (__advertised_bench).
         self.__bench_store = bench_record.BenchStore(self.cache_config.bench_filepath)
         self.__no_bench_logged = False
+        # The probe runs that admitted no record in a row and when the next
+        # may run (time.monotonic), on the integration test's backoff
+        # (__run_probe_if_due; OD22 A).
+        self.__probe_retry = (0, 0.0)
         # The RecordMissing hold of this network (capability.RecordMissingHold),
         # kept in broker_cursor.json across process starts, and whether the
         # hold's current state is logged (__dp_request_held).
@@ -7368,7 +7373,12 @@ class EtnyPoXNode:
         node's wallet."""
         return integration_env(self.__network_config, self.__address)
 
-    def build_prerequisites_integration_test(self, bucket_name, order_id, docker_compose_file):
+    def build_prerequisites_integration_test(self, bucket_name, order_id, docker_compose_file, env_content=None):
+        """Prepares the integration bucket `bucket_name` and the compose of a
+        run in the integration bucket: the bucket made empty, the compose
+        copied for `order_id`, and the bucket's .env, the integration test's
+        (get_env_for_integration_test) or `env_content` when given (a memory
+        probe's, probe_run.probe_env)."""
         logger = self.logger
 
         try:
@@ -7387,7 +7397,8 @@ class EtnyPoXNode:
             self.set_retry_policy_on_fail_for_compose()
             self.update_enclave_docker_compose(self.order_docker_compose_file, order_id)
 
-            env_content = self.get_env_for_integration_test()
+            if env_content is None:
+                env_content = self.get_env_for_integration_test()
             self.generate_enclave_env_file(f'{self.order_folder}/.env', env_content)
 
             (status, msg) = self.swift_stream_service.upload_file(bucket_name,
@@ -7663,12 +7674,15 @@ class EtnyPoXNode:
         with integration_test_lock:
             due = integration_tests_due(self.__integration_images, integration_test_passed, integration_test_remeasure,
                                         integration_test_retry, now)
+        probe = self.__probe_due(time.time(), now)
         # Another network may have taken the slot during the registry reads;
         # the loop does not wait on its order here, the next pass tests. On a
         # network with matching no test starts while a claim of the node can
         # still be approved: the test holds the task slot for up to 900 s, the
         # whole of the 15 minutes an approved order has to start (7.7, D81).
-        if not due or get_task_running_on():
+        # The memory probe runs in the same slot after the tests, whose
+        # trustedzone record its share check reads (__run_probe_if_due).
+        if (not due and not probe) or get_task_running_on():
             return
         if self.__matching is not None and self.__matching.claim_approvable():
             return
@@ -7676,9 +7690,150 @@ class EtnyPoXNode:
         try:
             for image in due:
                 self.__run_integration_test_if_due(image)
+            if probe:
+                self.__run_probe_if_due()
         finally:
             release_task_slot(self.__network)
-        self.__log_runnable_trustedzones()
+        if due:
+            self.__log_runnable_trustedzones()
+
+    def __probe_due(self, now, monotonic):
+        """Whether the memory probe runs (MATCHING-SYNC-PLAN.md B02): on a
+        network whose pricing names a PoxMatching and that names a
+        ValidatorRegistry (our CAS gives the probe its key), with a probe
+        name set (config probe_image) and a trustedzone record advertised
+        (a bench record proves nothing beside none), while the stored bench
+        record is due (bench_record.BenchStore.remeasure_due: none, or its
+        re-measure margin reached) and the backoff after a run that admitted
+        none has passed."""
+        if not (self.__matching_network and self.__validator_registry_address()
+                and self.__network_config.probe_image):
+            return False
+        if self.__advertised_record() is None or not self.__bench_store.remeasure_due(now):
+            return False
+        return monotonic >= self.__probe_retry[1]
+
+    def __run_probe_if_due(self):
+        """Runs the memory probe of the largest listed size that admits a
+        bench record (probe_run.run_largest over probe_run.sizes_to_try of
+        the offer's memory figure, the probes found by __find_probe and run
+        by __run_probe), on the EPC claim of epc_claim.read_claim lowered by
+        the network's epc_mib, and stores the record (bench_record.BenchStore)
+        for the DP request. A claim that is not read runs no probe. A run
+        that admits no record leaves the stored one standing until it
+        expires and tries the same claim again after a backoff doubling from
+        INTEGRATION_TEST_RETRY_MIN_SECONDS up to
+        INTEGRATION_TEST_RETRY_MAX_SECONDS (OD22 A); meanwhile the offer
+        states no EPC beyond the stored record's. The caller holds the task
+        slot."""
+        logger = self.logger
+        now = time.time()
+        if not self.__probe_due(now, time.monotonic()):
+            return
+        advertised = self.__advertised_record()
+        claim, source = epc_claim.read_claim(self.__network_config.epc_mib)
+        record = probe = None
+        if claim is None:
+            logger.warning(f"The memory probe does not run: no EPC claim is read ({source})")
+        else:
+            logger.info(f"The memory probe runs on an EPC claim of {claim} MiB ({source})")
+            memory = self.__offer_figures(None).memory_gib
+            try:
+                probe, record = probe_run.run_largest(
+                    probe_run.sizes_to_try(memory), self.__find_probe, lambda found: self.__run_probe(found, claim),
+                    lambda found, objects: self.__admit_bench_record(found, objects, advertised), logger.info)
+            except Exception as e:
+                logger.warning(f"The memory probe failed: {e}")
+        if record is not None:
+            self.__bench_store.put(record, probe.image_hash, now)
+            self.__probe_retry = (0, 0.0)
+            logger.info(f"Probe {probe.size} GiB ({probe.name}, release {probe.release}): bench record admitted "
+                        f"(encmem {record['encmem']} GiB, custorage {record['custorage']} GiB, epc {record['epc']} "
+                        f"MiB, window {record['t1'] - record['t0']} s)")
+            return
+        failures = self.__probe_retry[0] + 1
+        backoff = min(INTEGRATION_TEST_RETRY_MIN_SECONDS * 2 ** (failures - 1), INTEGRATION_TEST_RETRY_MAX_SECONDS)
+        self.__probe_retry = (failures, time.monotonic() + backoff)
+        logger.warning(f"The memory probe admitted no bench record {failures} time(s); next run in "
+                       f"{backoff // 60} min")
+
+    def __find_probe(self, size):
+        """The probe of `size` GiB (probe_run.find_probe): the newest
+        ECImageRegistryV4 default release listing the size, and the image
+        the registry holds under the size's name (config probe_image) as
+        getLatestTrustedZoneImageCertPublicKey answers it; None when the
+        registry answers neither, a registry before V4 included."""
+        registry = self.__image_registry.caller()
+
+        def latest(name):
+            try:
+                return tuple(registry.getLatestTrustedZoneImageCertPublicKey(name, 'v3'))
+            except exceptions.ContractLogicError:
+                return None
+        try:
+            return probe_run.find_probe(size, self.__network_config.probe_image, registry.defaultReleaseCount,
+                                        registry.probeMrenclave, latest)
+        except (exceptions.ContractLogicError, exceptions.BadFunctionCallOutput):
+            return None
+
+    def __run_probe(self, probe, claim):
+        """Runs the probe `probe` (probe_run.ProbeImage) as an integration
+        test runs: its image tree and compose from IPFS, the integration
+        bucket's .env holding the node's three values (probe_run.probe_env:
+        this wallet, the task filesystem's free bytes, the EPC claim
+        `claim`), the enclave environment from the image's own compose, the
+        wait for probe.<g>.etny up to INTEGRATION_TEST_SECONDS; the texts of
+        (probe.<g>.etny, probe.time.<g>.etny), read before the bucket is
+        wiped, or None when the probe wrote no record. The caller holds the
+        task slot."""
+        logger = self.logger
+        object_name = bench_record.PROBE_OBJECT.format(size=probe.size)
+        time_name = bench_record.PROBE_TIME_OBJECT.format(size=probe.size)
+        if not self.storage.download_many([probe.image_hash, probe.compose_hash], attempts=10, delay=3):
+            logger.warning(f"Probe {probe.size} GiB: its image could not be downloaded from IPFS")
+            return None
+        os.chdir(self.cache_config.base_path)
+        run_subprocess(
+            ['docker-compose', '-f', '../docker/docker-compose-swift-stream.yml', 'up', '-d', 'swift-stream'], logger)
+        self.integration_bucket_name = INTEGRATION_BUCKET
+        _, free_storage = HardwareInfoProvider.get_storage_bytes(self.cache_config.base_path)
+        env = probe_run.probe_env(self.__address, free_storage, claim)
+        compose = f'{self.cache_config.base_path}/{probe.compose_hash}'
+        try:
+            self.build_prerequisites_integration_test(INTEGRATION_BUCKET, f'probe_{probe.size}', compose, env)
+            self.__start_enclave_environment(probe.image_hash)
+            written = self.wait_for_enclave_v2(INTEGRATION_BUCKET, object_name, INTEGRATION_TEST_SECONDS)
+        except Exception as e:
+            logger.warning(f"Probe {probe.size} GiB: {e}")
+            written = False
+        texts = None
+        if written is True:
+            found, probe_etny = self.swift_stream_service.get_file_content(INTEGRATION_BUCKET, object_name)
+            timed, probe_time_etny = self.swift_stream_service.get_file_content(INTEGRATION_BUCKET, time_name)
+            texts = (probe_etny if found else None, probe_time_etny if timed else None)
+        self.__clean_up_integration_test()
+        return texts
+
+    def __admit_bench_record(self, probe, objects, advertised):
+        """The bench record of the probe `probe`'s objects
+        (bench_record.bench_record_from): this wallet's, on this network's
+        chain id and PoX, its statements signed by a seated member of the
+        network's registry, under the probe image's certificate and under
+        none of the advertised trustedzone's, beside the advertised
+        trustedzone record's GFLOPS; (None, reason) otherwise."""
+        image, record = advertised
+        try:
+            found = tuple(self.__image_registry.caller().getLatestTrustedZoneImageCertPublicKey(image, 'v3'))
+            trustedzone_certs = [found[1]] if str(found[1] or '').strip() else []
+        except exceptions.ContractLogicError:
+            trustedzone_certs = []
+        try:
+            return bench_record.bench_record_from(
+                objects[0], objects[1], probe.size, self.__address, time.time(), self.__network_config.chain_id,
+                self.__network_config.contract_address, self.__validator_registry_address(), self.__is_seated,
+                [probe.cert], trustedzone_certs, record['gflops'])
+        except Exception as e:
+            return None, f"the validator seat could not be read ({e})"
 
     def __retest_requirement(self, trustedzone):
         """Run now, past any backoff, the failed integration tests that decide
