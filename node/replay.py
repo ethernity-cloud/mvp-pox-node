@@ -186,27 +186,25 @@ def replay_set(predecessor, input_values, output_rows, wallet, first_late):
     return sorted(replays, key=lambda row: row.seq)
 
 
-def registry_certificates(versions, cert_of, name):
+def registry_certificates(hashes, cert_of, name):
     """The certificates the image registry holds for trustedzone `name`:
-    `versions(name, TRUSTEDZONE_PROTOCOL_VERSION, i)` answers the
-    registered image's record (trustedZoneVersions: owner, ipfsHash,
-    version, validated, certPublicKey, dockerComposeHash, name) for i from
-    0 until it raises, at most MAX_TRUSTEDZONE_VERSIONS; a record with an
-    empty certificate is read through `cert_of(ipfsHash)`
-    (getTrustedZoneImageCertPublicKey), and one still empty contributes
-    nothing."""
+    `hashes(name, TRUSTEDZONE_PROTOCOL_VERSION, i)` answers the i-th image
+    hash registered under the name and version (the public
+    trustedZoneVersionsHash of ECImageRegistry, ECImageRegistryV2 and
+    ECImageRegistryV4) for i from 0 until it raises, at most
+    MAX_TRUSTEDZONE_VERSIONS, and each hash's certificate is read through
+    `cert_of(ipfsHash)` (getTrustedZoneImageCertPublicKey); an empty or
+    unread certificate contributes nothing."""
     certs = []
     for i in range(MAX_TRUSTEDZONE_VERSIONS):
         try:
-            record = versions(name, TRUSTEDZONE_PROTOCOL_VERSION, i)
+            ipfs_hash = hashes(name, TRUSTEDZONE_PROTOCOL_VERSION, i)
         except Exception:
             break
-        cert = str(record[4] or '')
-        if not cert.strip():
-            try:
-                cert = str(cert_of(record[1]) or '')
-            except Exception:
-                cert = ''
+        try:
+            cert = str(cert_of(ipfs_hash) or '')
+        except Exception:
+            cert = ''
         if cert.strip() and cert not in certs:
             certs.append(cert)
     return certs

@@ -191,23 +191,49 @@ def test_the_fixture_forced_example_leaves_its_second_input_and_the_successor_an
 
 # ------------------------------------------------------- the certificate walk
 
-def test_the_certificates_are_walked_until_the_enumerator_reverts(monkeypatch):
-    records = {0: ('0xowner', 'bafyA', 'v3', True, 'CERT-A', 'bafyCA', 'tz'),
-               1: ('0xowner', 'bafyB', 'v3', True, '', 'bafyCB', 'tz'),
-               2: ('0xowner', 'bafyC', 'v3', False, '', 'bafyCC', 'tz'),
-               3: ('0xowner', 'bafyD', 'v3', True, 'CERT-A', 'bafyCD', 'tz')}
+class HashWalkRegistry:
+    """A registry that answers only the hash walk, as ECImageRegistry,
+    ECImageRegistryV2 and ECImageRegistryV4 do (MATCHING-SYNC-PLAN.md D01:
+    none of them declares trustedZoneVersions): trustedZoneVersionsHash
+    reverts past the last hash, getTrustedZoneImageCertPublicKey answers
+    each hash's certificate."""
 
-    def versions(name, version, i):
+    def __init__(self, hashes, certs):
+        self.hashes = hashes
+        self.certs = certs
+
+    def trustedZoneVersionsHash(self, name, version, i):
         assert (name, version) == ('tz', 'v3')
-        return records[i]
+        if i >= len(self.hashes):
+            raise ValueError("execution reverted")
+        return self.hashes[i]
 
-    def cert_of(ipfs_hash):
-        return {'bafyB': 'CERT-B', 'bafyC': ''}[ipfs_hash]
+    def getTrustedZoneImageCertPublicKey(self, ipfs_hash):
+        if self.certs[ipfs_hash] is None:
+            raise ValueError("execution reverted")
+        return self.certs[ipfs_hash]
 
-    assert replay.registry_certificates(versions, cert_of, 'tz') == ['CERT-A', 'CERT-B']
+    def __getattr__(self, name):
+        raise AttributeError(f"the registry declares no {name}")
+
+
+def test_every_listed_hash_has_its_certificate_held(monkeypatch):
+    registry = HashWalkRegistry(['bafyA', 'bafyB', 'bafyC', 'bafyD', 'bafyE'],
+                                {'bafyA': 'CERT-A', 'bafyB': 'CERT-B', 'bafyC': '', 'bafyD': 'CERT-A',
+                                 'bafyE': None})
+    walk = (registry.trustedZoneVersionsHash, registry.getTrustedZoneImageCertPublicKey)
+    assert replay.registry_certificates(*walk, 'tz') == ['CERT-A', 'CERT-B']
     monkeypatch.setattr(replay, 'MAX_TRUSTEDZONE_VERSIONS', 1)
-    assert replay.registry_certificates(versions, cert_of, 'tz') == ['CERT-A']
-    assert replay.registry_certificates(lambda *a: (_ for _ in ()).throw(ValueError()), cert_of, 'tz') == []
+    assert replay.registry_certificates(*walk, 'tz') == ['CERT-A']
+    assert replay.registry_certificates(lambda *a: (_ for _ in ()).throw(ValueError()), walk[1], 'tz') == []
+
+
+def test_the_agent_walks_the_registry_by_its_hash_view():
+    # etny-node.py names the view registry_certificates walks, which the
+    # registry ABI the agent binds carries.
+    source = (Path(__file__).resolve().parents[1] / "etny-node.py").read_text(encoding="utf-8")
+    assert "replay.registry_certificates(registry.trustedZoneVersionsHash," in source
+    assert "registry.trustedZoneVersions," not in source
 
 
 def test_the_spool_path_and_the_digest_check(tmp_path):

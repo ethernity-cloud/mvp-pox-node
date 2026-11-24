@@ -4213,8 +4213,8 @@ class EtnyPoXNode:
             elif key == replay.SESSION_WALLET_KEY:
                 wallet_values.append(value)
         registry = self.__image_registry.caller()
-        certs = replay.registry_certificates(registry.trustedZoneVersions, registry.getTrustedZoneImageCertPublicKey,
-                                             predecessor['trustedzone'])
+        certs = replay.registry_certificates(registry.trustedZoneVersionsHash,
+                                             registry.getTrustedZoneImageCertPublicKey, predecessor['trustedzone'])
         wallet = replay.attested_wallet(wallet_values, predecessor['order'], certs)
         rows = replay.replay_set(predecessor['order'], input_values, output_rows, wallet, replay.first_late_row(logs))
         logger.info(f"Order {order_id}: predecessor {predecessor['order']} at block {at_block}: {len(input_values)} input "

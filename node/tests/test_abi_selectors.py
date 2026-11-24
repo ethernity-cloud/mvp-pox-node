@@ -71,7 +71,7 @@ CALLS = {
     ],
     config.image_registry_abi_filepath: [
         "getLatestTrustedZoneImageCertPublicKey(string,string)",
-        "trustedZoneVersions(string,string,uint256)",
+        "trustedZoneVersionsHash(string,string,uint256)",
         "getTrustedZoneImageCertPublicKey(string)",
     ],
     config.esr_abi_filepath: [
