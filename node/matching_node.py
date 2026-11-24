@@ -376,6 +376,13 @@ class MatchingNode:
         None before the first set's effectAt."""
         return matching.parameters_in_force(self.copy.params, self.now() if t is None else t)
 
+    def claims_on(self):
+        """Whether the parameter set in force takes claims (its claims flag):
+        the node's tip is then priced from the claim network's gas profile
+        kinds (gas_profile.kinds_for; MATCHING-DESIGN.md 7 item 9)."""
+        params = self.params()
+        return params is not None and bool(params.claims)
+
     def set_in_force(self, t=None):
         """params(t); while no set is in force PoxMatching refuses a heartbeat,
         an announce and a correction list and no request takes claims, so the

@@ -2397,13 +2397,29 @@ class EtnyPoXNode:
     def __current_tip(self, gflops):
         """The tip of this node's 2.0 DP request for `gflops` GFLOPS (0: one
         CU) (utils.tip_per_cu_hour_wei): the configured tip plus its own gas
-        (the gas profile's three figures) at the quote's avgGasPriceWei and
-        tokenPerPol; the configured tip alone without a reader."""
+        (the gas profile's figures of the kinds the node sends on this
+        network, gas_profile.kinds_for: the claim network's where the
+        parameter set in force takes claims, MatchingNode.claims_on) at the
+        quote's avgGasPriceWei and tokenPerPol; the configured tip alone
+        without a reader."""
         quote = self.__quote()
         if quote is None:
             return tip_per_cu_hour_wei(self.__network_config.tip_per_cu_hour_wei, {}, 0, 0, gflops)
-        return tip_per_cu_hour_wei(self.__network_config.tip_per_cu_hour_wei, self.__gas_profile.figures(),
+        kinds = gas_profile.kinds_for(self.__claim_network())
+        return tip_per_cu_hour_wei(self.__network_config.tip_per_cu_hour_wei, self.__gas_profile.figures(kinds),
                                    quote[2], quote[1], gflops)
+
+    def __claim_network(self):
+        """Whether this network's PoxMatching holds a parameter set in force
+        that takes claims; False without matching, and when the read fails
+        (logged at debug)."""
+        if self.__matching is None:
+            return False
+        try:
+            return self.__matching.claims_on()
+        except Exception as e:
+            self.logger.debug(f"The parameter set in force was not read ({e}); the tip is priced as without claims")
+            return False
 
     def __dp_request_params(self):
         """(function name, arguments) of this node's DP request
@@ -6091,12 +6107,19 @@ class EtnyPoXNode:
         return self.__w3.eth.account.sign_transaction(txn, private_key=self.__acct.key).raw_transaction, value
 
     def __record_order_started(self, order_id, value):
-        """Writes orders/<id>/started_row: the row `value` is on chain."""
+        """Writes orders/<id>/started_row: the row `value` is on chain. On a
+        claim network the order counts as one won in the gas profile's
+        claims per order (gas_profile.GasProfile.record_won)."""
         marker = os.path.join(ORDERS_DIR, str(order_id), 'started_row')
         os.makedirs(os.path.dirname(marker), exist_ok=True)
         with open(marker, 'w') as f:
             f.write(value)
         self.logger.info(f"Order {order_id}: started row {value} is on chain")
+        if self.__claim_network():
+            try:
+                self.__gas_profile.record_won()
+            except Exception as e:
+                self.logger.debug(f"The gas profile did not count order {order_id} won ({e})")
 
     def __send_order_started(self, order_id):
         """Sends the started row of `order_id` (__started_row_transaction) and
@@ -6636,7 +6659,12 @@ class EtnyPoXNode:
         txn = fn.build_transaction(opts)
         _hash = self.send_transaction(txn)
         self.logger.info(f"TXID {_hash} pending ({label})")
-        return self.__w3.eth.wait_for_transaction_receipt(_hash, timeout=RECEIPT_TIMEOUT_SECONDS)
+        receipt = self.__w3.eth.wait_for_transaction_receipt(_hash, timeout=RECEIPT_TIMEOUT_SECONDS)
+        # The heartbeats, announces, pauses, claims and correction lists are
+        # kinds of the gas profile (gas_profile.MATCHING_KINDS).
+        if label in gas_profile.MATCHING_KINDS:
+            self.__record_gas(label, receipt)
+        return receipt
 
     def __full_block_fees(self, opts, streak):
         """Raises the price of a transaction with a deadline while blocks are

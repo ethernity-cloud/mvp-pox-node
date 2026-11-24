@@ -406,7 +406,7 @@ def test_the_seed_file_gives_a_copy_no_gas_figure():
     assert seeds["bloxberg_testnet_pox10"] == seeds["bloxberg_mainnet"] == empty
     assert "polygon_amoy_pox10" not in seeds and "polygon_mainnet" not in seeds
     for name in config.POX10_TESTNETS:
-        assert gas_profile.load_seed(config.gas_profile_seed_filepath, name) == empty
+        assert gas_profile.load_seed(config.gas_profile_seed_filepath, name) == {kind: 0 for kind in gas_profile.KINDS}
 
 
 def test_the_installers_list_names_each_copy_with_the_release_files_rpc_and_gas():

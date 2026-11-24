@@ -1,0 +1,9 @@
+{
+  "description": "The gasUsed of a node's first addDPRequestV2 (uint40 gflops, a PoX answering VERSION() 2.0) on a fresh pox-smart-contract-litvm 2f600f6 rehearsal set on the in-process Hardhat network, in the setting of scripts/measure-gas.js measure() (a new funded node wallet, gflops 100, tip 0.1 ECLD, the hook block's base fee raised above every base fee of the run), metadata1 a 32-character uuid, metadata2 v3; the two-record strings are spec/bench-record.json metadata3.value and metadata4.value, the one-record strings spec/capability-record.json's. The pricing's matching pointer changes nothing on the DP add (Ethernity20Extension.sol addDPRequestV2 and _insertDPRequest, PoxPricing.onDPRequestAdded read no matching pointer). MATCHING-SYNC-PLAN.md B05; OD1 A.",
+  "metadataBytes": {"twoRecords": {"metadata3": 1077, "metadata4": 683}, "oneRecord": {"metadata3": 546, "metadata4": 390}},
+  "ruleSets": {
+    "default": {"hardfork": "Hardhat 2.29.1 default (osaka): the rules of Polygon and Amoy", "twoRecords": 1798880, "oneRecord": 1229304},
+    "istanbul": {"hardfork": "FORK_HARDFORK=istanbul: the rules of bloxberg", "twoRecords": 1657180, "oneRecord": 1140104}
+  },
+  "seeds": {"polygon_amoy": "default", "bloxberg_testnet": "istanbul"}
+}
