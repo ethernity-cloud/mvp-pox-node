@@ -354,6 +354,20 @@ def test_a_record_stating_no_bench_readings_offers_no_enclave_memory(agent, monk
     assert "encmem=" not in arguments[10] and "custorage=" not in arguments[10]
 
 
+def test_an_offer_without_a_record_states_no_gflops(agent, monkeypatch, tmp_path):
+    # Weakness (d), MATCHING-SYNC-PLAN.md A19: an offer with no capability
+    # record, as an -unsafe-only node's, states 0 in bits 0 to 15 of its
+    # gflops argument (stored as 100, one CU, never above it: reason 13 on a
+    # passed-over offer judges above 100) and no cu keys.
+    node = params_node(agent, monkeypatch, tmp_path, StubMatching(), None)
+    monkeypatch.setattr(agent.EtnyPoXNode, "_EtnyPoXNode__runnable_trustedzones",
+                        lambda self: {"ecld-nodenithy-amoy-unsafe", "ecld-pynithy-amoy-unsafe"})
+    name, arguments = node._EtnyPoXNode__dp_request_params()
+    assert name == utils.DP_ADD_V2_EPC
+    assert arguments[5] & 0xFFFF == 0
+    assert "cugflops=" not in arguments[10] and "cusig=" not in arguments[10]
+
+
 def test_without_matching_the_offer_is_todays(agent, monkeypatch, tmp_path):
     node = params_node(agent, monkeypatch, tmp_path, None, BENCH)
     _, arguments = node._EtnyPoXNode__dp_request_params()
