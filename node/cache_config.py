@@ -30,6 +30,9 @@ class CacheConfig:
         # The passed integration tests and their capability records
         # (capability.RecordStore).
         self.capability_filepath = base_path / 'capability.json'
+        # The bench record of this network's memory probe
+        # (bench_record.BenchStore).
+        self.bench_filepath = base_path / 'bench.json'
         # The idle tick's state kept across process starts, {name: value}
         # (utils.read_cursor, utils.write_cursor): the block cursors of its log
         # scans (DPRequestCancelled and the broker's events), the broker's

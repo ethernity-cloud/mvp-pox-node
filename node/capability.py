@@ -102,10 +102,10 @@ EPC_UNITS_MAX = 65535
 # The enclave sizes an offer states, in GiB (D150): the probe of each size is
 # its own measurement.
 ENCLAVE_SIZES_GIB = (1, 2, 4, 8, 16, 32, 64)
-# The capability record's key of the enclave size its probe passed at, the
-# memory the bench allocated and touched (encmem=, SLH 24.7), and of the
-# storage reading the bench signs beside it (custorage=, GiB); both travel in
-# the DP request's metadata4 beside the record's cu keys.
+# The bench record's readings (bench_record.bench_record_from) of the enclave
+# size its probe passed at, the memory the probe allocated and touched
+# (encmem=, SLH 24.7), and of the storage it read beside it (custorage=,
+# GiB); the DP request carries them as pbencmem and pbstorage.
 RECORD_ENCLAVE_MEMORY_KEY = 'encmem'
 RECORD_STORAGE_KEY = 'custorage'
 # The broker_cursor.json keys of the enclave memory, the storage, the EPC
@@ -156,8 +156,8 @@ def cancel_disposition(code):
 
 
 def record_enclave_memory(record):
-    """The enclave size in GiB a capability record states (its encmem=), a
-    listed size; None for a record that states none or another value."""
+    """The enclave size in GiB a bench record states (its encmem=), a listed
+    size; None for no record or another value."""
     if not record:
         return None
     try:
@@ -168,8 +168,8 @@ def record_enclave_memory(record):
 
 
 def record_storage(record):
-    """The storage in GiB a capability record's bench read (its custorage=),
-    None for a record that carries none or another value."""
+    """The storage in GiB a bench record read (its custorage=), None for no
+    record or another value."""
     if not record:
         return None
     try:
@@ -865,12 +865,11 @@ class RecordStore:
 def metadata4(trustedzones_runnable, record_image, peer_id, record):
     """A DP request's metadata4: trustedzones=<names>;ipfs=<peer id>;startrow=v1
     and, with `record`, the six cu keys (cugflops = the record's gflops, cuv,
-    cuat = t1, cusig = the DER hex without 0x, cuheap, cuworkers), then the
-    bench's two readings when the record carries them, encmem= (the enclave
-    size it allocated) and custorage= (the storage it read). `record_image`
-    is listed first (the validators verify cusig under the first name's
-    certificates) and the other runnable names sorted after it; without a
-    record the names are sorted."""
+    cuat = t1, cusig = the DER hex without 0x, cuheap, cuworkers); a bench
+    record's pb keys follow them (bench_record.metadata4_keys).
+    `record_image` is listed first (the validators verify cusig under the
+    first name's certificates) and the other runnable names sorted after it;
+    without a record the names are sorted."""
     names = sorted(trustedzones_runnable)
     if record is not None and record_image in names:
         names.remove(record_image)
@@ -879,13 +878,8 @@ def metadata4(trustedzones_runnable, record_image, peer_id, record):
     if record is None:
         return value
     sig = record['sig_der_hex'][2:] if record['sig_der_hex'].lower().startswith('0x') else record['sig_der_hex']
-    value = (f"{value};cugflops={record['gflops']};cuv={record['cuv']};cuat={record['t1']};cusig={sig.lower()}"
-             f";cuheap={record['heap']};cuworkers={record['workers']}")
-    if record_enclave_memory(record) is not None:
-        value += f";{RECORD_ENCLAVE_MEMORY_KEY}={record_enclave_memory(record)}"
-    if record_storage(record) is not None:
-        value += f";{RECORD_STORAGE_KEY}={record_storage(record)}"
-    return value
+    return (f"{value};cugflops={record['gflops']};cuv={record['cuv']};cuat={record['t1']};cusig={sig.lower()}"
+            f";cuheap={record['heap']};cuworkers={record['workers']}")
 
 
 def metadata3(geo, record):

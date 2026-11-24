@@ -108,7 +108,7 @@ MATCHING_FIELDS = dict(
     payout_address="", claim_ahead_blocks=0, claim_spread_nodes=8, claim_stand_limit=2,
     claim_hold_back=False, claim_marked_images=False, tip_keep_percent=10, fee_ceiling_pause_percent=80,
     minimum_score_hold=True, beat_gas_allowance=1200000, matching_page_entries=800, matching_lag_blocks=1,
-    enclave_memory_gib=0)
+    enclave_memory_gib=0, epc_mib=0)
 # The NetworkConfig config.parse_networks gives each copy from node/.env.
 LOADED = {
     "bloxberg_testnet_pox10": dict(

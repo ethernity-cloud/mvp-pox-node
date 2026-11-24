@@ -127,6 +127,36 @@ def test_the_offers_gflops_argument_carries_the_enclave_memory_above_the_gflops(
     assert rules.gflops_argument(250, 0) == 250
     assert rules.gflops_argument(250, 64) == 250 | (64 << 16)
     assert rules.gflops_argument(65535, 2) & 0xFFFF == 65535
+    assert rules.gflops_argument(250, 2, 16) == 250 | (2 << 16) | (16 << 24)
+    assert rules.gflops_argument(250, 2, 65535) >> 24 == 65535
+
+
+def every_period():
+    """Every period of matching-rank.json (pox-smart-contract-litvm 2f600f6)
+    stating its gflopsArg, the V2 add's argument of its offer."""
+    found = []
+
+    def walk(value):
+        if isinstance(value, dict):
+            if "gflopsArg" in value and "enclaveMemoryGB" in value:
+                found.append(value)
+            for inner in value.values():
+                walk(inner)
+        elif isinstance(value, list):
+            for inner in value:
+                walk(inner)
+    walk(RANK)
+    return found
+
+
+def test_the_offer_word_is_the_fixtures_gflops_argument_for_every_period():
+    """MATCHING-SYNC-PLAN.md A03; spec/matching.md section 3, item 33: GFLOPS
+    in bits 0 to 15, enclave memory in bits 16 to 23, EPC units in bits 24
+    to 39."""
+    periods = every_period()
+    assert len(periods) >= 200 and any(p["epcUnits"] > 0 for p in periods)
+    for p in periods:
+        assert rules.gflops_argument(p["gflops"], p["enclaveMemoryGB"], p["epcUnits"]) == int(p["gflopsArg"]), p
 
 
 @pytest.mark.parametrize("state, due", [

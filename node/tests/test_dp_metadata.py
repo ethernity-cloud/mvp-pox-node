@@ -1,12 +1,16 @@
 """capability.metadata4 / metadata3 (PHASE-E-PLAN.md E2, C.4): the builders
 reproduce the strings of tests/spec/capability-record.json byte for byte
 from the parsed record, the record's trustedzone first; without a record the
-three keys and the geography alone."""
+three keys and the geography alone; with the bench record's pb keys after
+them, the strings of tests/spec/bench-record.json, and the key of the two
+records a request carries."""
 import json
 import re
 from pathlib import Path
 
+import bench_record
 import capability
+from utils import record_key
 
 SPEC = Path(__file__).parent / "spec"
 FIXTURE = json.loads((SPEC / "capability-record.json").read_text())
@@ -101,6 +105,43 @@ def test_no_metadata_value_contains_a_semicolon():
     for key in ("validator", "nonce", "sig0", "sig1", "sig_der_hex", "heap", "gflops", "cuv", "t0", "t1",
                 "block0", "block1", "workers"):
         assert ";" not in str(found[key])
+
+
+BENCH = json.loads((SPEC / "bench-record.json").read_text())
+
+
+def bench():
+    found, reason = bench_record.bench_record_from(
+        BENCH["probeEtny"]["content"], BENCH["probeTimeEtny"]["content"], BENCH["probeKey"]["sizeGib"],
+        FIXTURE["node"]["address"], BENCH["benchChecks"]["cases"][0]["readTime"], FIXTURE["network"]["chainId"],
+        FIXTURE["network"]["pox"], FIXTURE["network"]["validatorRegistry"], lambda address: True,
+        [BENCH["probeKey"]["publicKeyPem"]], [FIXTURE["trustedzoneKey"]["publicKeyPem"]], 250)
+    assert reason is None
+    return found
+
+
+def test_the_two_records_strings_are_the_bench_fixtures():
+    """MATCHING-SYNC-PLAN.md B04; OD1 A: the trustedzone record's keys, then
+    the bench record's pb keys, in each string (bench-record.json at
+    pox-smart-contract-litvm 2f600f6, metadata4.value and metadata3.value)."""
+    four = capability.metadata4(RUNNABLE, RECORD_IMAGE, PEER_ID, record()) + bench_record.metadata4_keys(bench())
+    three = capability.metadata3(GEO, record()) + bench_record.metadata3_keys(bench())
+    assert four == BENCH["metadata4"]["value"]
+    assert three == BENCH["metadata3"]["value"]
+    assert [e.partition("=")[0] for e in four.split(";")][-8:] == BENCH["metadata4"]["keys"]
+    assert [e.partition("=")[0] for e in three.split(";")][-9:] == BENCH["metadata3"]["keys"]
+
+
+def test_the_requests_key_names_both_records_and_either_changing_it():
+    key = bench_record.request_offer_key(BENCH["metadata3"]["value"], BENCH["metadata4"]["value"])
+    assert key == f"{FIXTURE['signatureDerHex']}|{bench_record.bench_key(bench())}"
+    assert bench_record.split_offer_key(key) == (FIXTURE["signatureDerHex"], BENCH["signatureDerHex"])
+    assert key == bench_record.offer_key(record_key(record()), bench_record.bench_key(bench()))
+    one = bench_record.request_offer_key(FIXTURE["metadata3"]["value"], FIXTURE["metadata4"]["value"])
+    assert one == FIXTURE["signatureDerHex"] and one != key
+    assert bench_record.split_offer_key(one) == (FIXTURE["signatureDerHex"], None)
+    assert bench_record.offer_key(None, "abcd") is None
+    assert bench_record.request_offer_key(GEO, capability.metadata4(RUNNABLE, None, PEER_ID, None)) is None
 
 
 def test_the_metadata_keys_examples_equal_the_fixture_values():

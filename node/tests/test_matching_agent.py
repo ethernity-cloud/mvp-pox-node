@@ -6,20 +6,25 @@ reader() of zero leave the network as today. On a matching network the
 heartbeat goes to PoxMatching alone; an
 unpinned request served by claims is claimed and never placed, one that is
 not served by claims is placed as today (roll-out step 2), and a PoX 1.0
-network keeps the rotation; the offer states its enclave memory above its
-GFLOPS; the refresh keeps the period's tip while a claim stands; no
+network keeps the rotation; the offer states its enclave memory and EPC
+units above its GFLOPS from the bench record its DP request carries beside
+the trustedzone record (an -unsafe-only offer its readings), and a request
+of a trustedzone record without a bench record is held where the pricing
+names a PoxMatching; the refresh keeps the period's tip while a claim stands; no
 integration test starts while a claim can be approved, and an approved
 order ends a running one; an order's objects are fetched for 10 minutes
 after its approval, the validators' nodes read again between attempts;
 the farm step names no payout and waits for the rewards wallet's approval."""
 import importlib.util
 import logging
+import time
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 from web3.exceptions import ContractLogicError
 
+import bench_record
 import capability
 import matching
 import matching_node
@@ -236,15 +241,22 @@ GIB = 2**30
 
 
 def params_node(agent, monkeypatch, tmp_path, stub, record, memory=(64 * GIB, 60 * GIB),
-                storage=(200 * GIB, 150 * GIB)):
+                storage=(200 * GIB, 150 * GIB), bench=None, epc_mib=0):
     """A node whose host has `memory` (total, MemAvailable) and `storage`
     (total, free) bytes and the free figures of today's offer, 16 GB and
-    100 GB, advertising `record`."""
+    100 GB, advertising `record` and holding the bench record `bench`; its
+    pricing names a PoxMatching when `stub` is a MatchingNode stand-in."""
     node = object.__new__(agent.EtnyPoXNode)
     node.logger = logging.getLogger("test")
     network = intake.polygon_mainnet(monkeypatch)
-    node._EtnyPoXNode__network_config = network.__class__(**{**network.__dict__, "enclave_memory_gib": 0})
+    node._EtnyPoXNode__network_config = network.__class__(**{**network.__dict__, "enclave_memory_gib": 0,
+                                                             "epc_mib": epc_mib})
     node._EtnyPoXNode__matching = stub
+    node._EtnyPoXNode__matching_network = stub is not None
+    node._EtnyPoXNode__bench_store = bench_record.BenchStore(tmp_path / "bench.json")
+    if bench is not None:
+        node._EtnyPoXNode__bench_store.put(bench, "QmProbe", bench["t1"])
+    node._EtnyPoXNode__no_bench_logged = False
     node._EtnyPoXNode__enclave_memory = capability.enclave_memory_book(tmp_path / "broker_cursor.json")
     node._EtnyPoXNode__offer_storage = capability.storage_book(tmp_path / "broker_cursor.json")
     node._EtnyPoXNode__offer_epc = capability.epc_book(tmp_path / "broker_cursor.json")
@@ -271,26 +283,62 @@ def params_node(agent, monkeypatch, tmp_path, stub, record, memory=(64 * GIB, 60
 
 
 RECORD = {"gflops": 250, "cuv": 4, "t1": 1761724830, "sig_der_hex": "3065AB", "heap": "2G", "workers": 4}
-BENCH = {**RECORD, "encmem": "32", "custorage": "120"}
+NOW = int(time.time())
+# A bench record of a 32 GiB probe that read 120 GiB of storage and proved
+# 2,048 MiB of EPC (32 units) over a 20 s window: its region's work, 32 x
+# 8,192 x 4 x 8,388,608 is at least 0.1 x 250 GFLOPS over the window.
+BENCH = {"gflops": 118, "cuv": 4, "heap": "34G", "workers": 4, "encmem": 32, "custorage": 120, "epc": 2048,
+         "t0": NOW - 20, "t1": NOW, "block0": 1, "block1": 11, "validator": "0x" + "2a" * 20,
+         "nonce": "0x" + "a8" * 32, "salt": "0x" + "82" * 32, "sig0": "0x" + "d5" * 65, "sig1": "0x" + "1e" * 65,
+         "sig_der_hex": "3066CD", "size": 32}
+BENCH_KEY = "3066cd"
 
 
 def test_the_offer_states_the_largest_bench_size_its_record_passed_above_its_gflops(agent, monkeypatch, tmp_path):
-    node = params_node(agent, monkeypatch, tmp_path, StubMatching(), {**RECORD, "encmem": "8"})
+    node = params_node(agent, monkeypatch, tmp_path, StubMatching(), RECORD, bench={**BENCH, "encmem": 8})
     name, arguments = node._EtnyPoXNode__dp_request_params()
-    assert name == utils.DP_ADD_V2_EPC and arguments[5] == 250 | (8 << 16)
-    node._EtnyPoXNode__enclave_memory.refuse("3065ab", 8)
+    assert name == utils.DP_ADD_V2_EPC and arguments[5] == 250 | (8 << 16) | (32 << 24)
+    node._EtnyPoXNode__enclave_memory.refuse(BENCH_KEY, 8)
     _, arguments = node._EtnyPoXNode__dp_request_params()
-    assert arguments[5] == 250 | (4 << 16)
+    assert arguments[5] == 250 | (4 << 16) | (32 << 24)
+
+
+def test_the_offer_states_the_epc_units_the_bench_record_proves_lowered_by_the_setting_and_a_refusal(
+        agent, monkeypatch, tmp_path):
+    """MATCHING-SYNC-PLAN.md A03; OD21 A: floor(epc / 64) of the bench
+    record in bits 24 to 39, at most the setting's units, below a reason-12
+    refusal under the record."""
+    node = params_node(agent, monkeypatch, tmp_path, StubMatching(), RECORD, bench=BENCH)
+    _, arguments = node._EtnyPoXNode__dp_request_params()
+    assert arguments[5] >> 24 == 32 and node._EtnyPoXNode__offer_epc_sent == 32
+    node = params_node(agent, monkeypatch, tmp_path, StubMatching(), RECORD, bench=BENCH, epc_mib=640)
+    _, arguments = node._EtnyPoXNode__dp_request_params()
+    assert arguments[5] >> 24 == 10
+    node._EtnyPoXNode__offer_epc.refuse(BENCH_KEY, 8)
+    _, arguments = node._EtnyPoXNode__dp_request_params()
+    assert arguments[5] >> 24 == 7
+
+
+def test_the_dp_request_carries_the_bench_records_keys_after_the_cu_keys(agent, monkeypatch, tmp_path):
+    """MATCHING-SYNC-PLAN.md B04; OD1 A: metadata4 and metadata3 each carry
+    the bench record's pb keys after the trustedzone record's."""
+    node = params_node(agent, monkeypatch, tmp_path, StubMatching(), RECORD, bench=BENCH)
+    _, arguments = node._EtnyPoXNode__dp_request_params()
+    assert arguments[10].endswith(bench_record.metadata4_keys(BENCH))
+    assert ";cuworkers=4;pbgflops=118;pbcuv=4;pbsig=3066cd;" in arguments[10]
+    assert arguments[9] == "m3" + bench_record.metadata3_keys(BENCH)
+    assert ";encmem=" not in arguments[10] and ";custorage=" not in arguments[10]
 
 
 @pytest.mark.parametrize("epc_forms, wanted", [(True, utils.DP_ADD_V2_EPC), (False, utils.DP_ADD_V2)])
 def test_the_dp_add_is_bound_by_the_signature_the_poxs_version_names(agent, monkeypatch, tmp_path, epc_forms,
                                                                        wanted):
-    node = params_node(agent, monkeypatch, tmp_path, StubMatching(), {**RECORD, "encmem": "8"})
+    node = params_node(agent, monkeypatch, tmp_path, StubMatching(), RECORD, bench={**BENCH, "encmem": 8, "epc": 0})
     node._EtnyPoXNode__pox_epc_forms = epc_forms
     bound_to = []
     node._EtnyPoXNode__etny = SimpleNamespace(
         get_function_by_signature=lambda signature: (lambda *args: bound_to.append(signature) or signature))
+    monkeypatch.setattr(bench_record, "share_holds", lambda bench, cugflops: True)
     fn, arguments = node._EtnyPoXNode__dp_request_function()
     assert fn == wanted and bound_to == [wanted]
     assert arguments[5] == 250 | (8 << 16)
@@ -325,62 +373,95 @@ def test_the_poxs_version_names_the_form_of_its_adds(agent, monkeypatch, version
 
 def test_the_offer_states_the_reserved_figures_at_most_the_bench_records_readings(agent, monkeypatch, tmp_path):
     # 64 GiB of memory, 60 available: 60 GiB; 200 GiB of storage, 150 free:
-    # 150 GiB; the record read 32 GiB allocated and 120 GiB of storage.
-    node = params_node(agent, monkeypatch, tmp_path, StubMatching(), BENCH)
+    # 150 GiB; the bench record read 32 GiB allocated and 120 GiB of storage.
+    node = params_node(agent, monkeypatch, tmp_path, StubMatching(), RECORD, bench=BENCH)
     _, arguments = node._EtnyPoXNode__dp_request_params()
     assert arguments[:4] == [8, 32, 120, 100]
-    assert arguments[5] == 250 | (32 << 16)
-    # The DP request carries the record with both readings in metadata4.
-    assert arguments[10].endswith(";encmem=32;custorage=120")
-    node = params_node(agent, monkeypatch, tmp_path, StubMatching(), {**BENCH, "encmem": "64", "custorage": "190"},
-                       storage=(200 * GIB, 195 * GIB))
+    assert arguments[5] == 250 | (32 << 16) | (32 << 24)
+    node = params_node(agent, monkeypatch, tmp_path, StubMatching(), RECORD,
+                       bench={**BENCH, "encmem": 64, "custorage": 190}, storage=(200 * GIB, 195 * GIB))
+    monkeypatch.setattr(bench_record, "share_holds", lambda bench, cugflops: True)
     _, arguments = node._EtnyPoXNode__dp_request_params()
     # memory min(64 - 1, 60) = 60, the record's 64 above it; storage
     # min(200 - 20, 195) = 180, the record's 190 above it.
     assert arguments[:4] == [8, 60, 180, 100]
-    assert arguments[5] == 250 | (32 << 16)
+    assert arguments[5] == 250 | (32 << 16) | (32 << 24)
 
 
 def test_a_reason_11_refusal_keeps_the_storage_below_it(agent, monkeypatch, tmp_path):
-    node = params_node(agent, monkeypatch, tmp_path, StubMatching(), BENCH, storage=(200 * GIB, 195 * GIB))
-    node._EtnyPoXNode__offer_storage.refuse("3065ab", 120)
+    node = params_node(agent, monkeypatch, tmp_path, StubMatching(), RECORD, bench=BENCH,
+                       storage=(200 * GIB, 195 * GIB))
+    node._EtnyPoXNode__offer_storage.refuse(BENCH_KEY, 120)
+    _, arguments = node._EtnyPoXNode__dp_request_params()
+    assert arguments[2] == 119
+    # A figure refused under the trustedzone record's key is not the bench
+    # record's.
+    node._EtnyPoXNode__offer_storage.refuse("3065ab", 100)
     _, arguments = node._EtnyPoXNode__dp_request_params()
     assert arguments[2] == 119
 
 
-def test_a_record_stating_no_bench_readings_offers_no_enclave_memory(agent, monkeypatch, tmp_path):
+def test_without_a_bench_record_the_request_states_no_enclave_memory_or_epc_and_is_held(agent, monkeypatch,
+                                                                                       tmp_path, caplog):
+    caplog.set_level(logging.WARNING)
     node = params_node(agent, monkeypatch, tmp_path, StubMatching(), RECORD)
     _, arguments = node._EtnyPoXNode__dp_request_params()
     assert arguments[:4] == [8, 60, 150, 100]
     assert arguments[5] == 250
-    assert "encmem=" not in arguments[10] and "custorage=" not in arguments[10]
+    assert ";pb" not in arguments[10] and arguments[9] == "m3"
+    assert node._EtnyPoXNode__dp_request_held() is True
+    assert sum("carries no bench record" in m for m in caplog.messages) == 1
 
 
-def test_an_offer_without_a_record_states_no_gflops(agent, monkeypatch, tmp_path):
-    # Weakness (d), MATCHING-SYNC-PLAN.md A19: an offer with no capability
-    # record, as an -unsafe-only node's, states 0 in bits 0 to 15 of its
-    # gflops argument (stored as 100, one CU, never above it: reason 13 on a
-    # passed-over offer judges above 100) and no cu keys.
+def test_a_bench_record_that_proves_nothing_beside_the_record_is_not_carried(agent, monkeypatch, tmp_path):
+    """A bench record whose region's rate is below the share of the
+    trustedzone record's GFLOPS (bench_record.share_holds) is judged as no
+    bench record: the request carries neither its keys nor its figures."""
+    node = params_node(agent, monkeypatch, tmp_path, StubMatching(), {**RECORD, "gflops": 6400}, bench=BENCH)
+    _, arguments = node._EtnyPoXNode__dp_request_params()
+    assert ";pb" not in arguments[10] and arguments[5] == 6400
+
+
+def test_an_offer_of_unsafe_trustedzones_alone_states_its_readings_and_no_gflops(agent, monkeypatch, tmp_path):
+    # Weakness (d), MATCHING-SYNC-PLAN.md A19, D05 (OD9 (iii) A): an offer
+    # with no capability record, as an -unsafe-only node's, states 0 in bits
+    # 0 to 15 of its gflops argument (stored as 100, one CU, never above it:
+    # reason 13 on a passed-over offer judges above 100) and no cu or pb
+    # keys; its enclave memory is the largest listed size its memory figure
+    # admits and its EPC its claim, at most the settings.
     node = params_node(agent, monkeypatch, tmp_path, StubMatching(), None)
     monkeypatch.setattr(agent.EtnyPoXNode, "_EtnyPoXNode__runnable_trustedzones",
                         lambda self: {"ecld-nodenithy-amoy-unsafe", "ecld-pynithy-amoy-unsafe"})
+    monkeypatch.setattr(agent.epc_claim, "read_claim", lambda setting: (2048, "CPUID leaf 0x12"))
     name, arguments = node._EtnyPoXNode__dp_request_params()
     assert name == utils.DP_ADD_V2_EPC
     assert arguments[5] & 0xFFFF == 0
-    assert "cugflops=" not in arguments[10] and "cusig=" not in arguments[10]
+    assert arguments[5] == (32 << 16) | (32 << 24)
+    assert "cugflops=" not in arguments[10] and "cusig=" not in arguments[10] and ";pb" not in arguments[10]
+    monkeypatch.setattr(agent.epc_claim, "read_claim", lambda setting: (None, "no EPC"))
+    _, arguments = node._EtnyPoXNode__dp_request_params()
+    assert arguments[5] == 32 << 16
+
+
+def test_an_offer_without_a_record_naming_a_cas_trustedzone_states_no_readings(agent, monkeypatch, tmp_path):
+    node = params_node(agent, monkeypatch, tmp_path, StubMatching(), None)
+    monkeypatch.setattr(agent.epc_claim, "read_claim", lambda setting: (2048, "CPUID leaf 0x12"))
+    _, arguments = node._EtnyPoXNode__dp_request_params()
+    assert arguments[5] == 0
 
 
 def test_without_matching_the_offer_is_todays(agent, monkeypatch, tmp_path):
-    node = params_node(agent, monkeypatch, tmp_path, None, BENCH)
+    node = params_node(agent, monkeypatch, tmp_path, None, RECORD, bench=BENCH)
     _, arguments = node._EtnyPoXNode__dp_request_params()
     assert arguments[:4] == [8, 16, 100, 100]
     assert arguments[5] == 250
+    assert ";pb" not in arguments[10]
 
 
 def test_no_offer_is_posted_while_a_figure_is_below_one_gb(agent, monkeypatch, tmp_path):
-    node = params_node(agent, monkeypatch, tmp_path, StubMatching(), BENCH, storage=(15 * GIB, 15 * GIB))
+    node = params_node(agent, monkeypatch, tmp_path, StubMatching(), RECORD, bench=BENCH, storage=(15 * GIB, 15 * GIB))
     assert node._EtnyPoXNode__dp_request_held() is True
-    node = params_node(agent, monkeypatch, tmp_path, StubMatching(), BENCH)
+    node = params_node(agent, monkeypatch, tmp_path, StubMatching(), RECORD, bench=BENCH)
     node._EtnyPoXNode__record_missing_hold = SimpleNamespace(disposition=lambda advertised, runnable: 'post')
     assert node._EtnyPoXNode__dp_request_held() is False
 

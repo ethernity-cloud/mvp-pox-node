@@ -361,6 +361,57 @@ def metadata3_keys(record):
     return ''.join(f';{name}={keys[name]}' for name in METADATA3_KEYS)
 
 
+def share_holds(record, cugflops):
+    """Whether an admitted bench record passes the share and floor checks
+    beside a trustedzone record of `cugflops` (bench_verdict's share and
+    floor, from the record's attested window and region work): a request
+    carries the bench record only beside a trustedzone record it proves
+    something with."""
+    if record is None or cugflops is None:
+        return False
+    work = region_work(record['encmem'], record['workers'], record['epc'])
+    window = int(record['t1']) - int(record['t0'])
+    return (work is not None and work * 1000 >= SHARE_MILLI * int(cugflops) * window * 10**9
+            and work >= lowest_floor() * window * 10**9)
+
+
+# The separator of an offer's key: the trustedzone record's cusig, then the
+# bench record's pbsig when the request carries one.
+OFFER_KEY_SEPARATOR = '|'
+
+
+def offer_key(trustedzone_key, bench):
+    """What identifies the records a DP request carries: the trustedzone
+    record's key (utils.record_key, None for none), and after
+    OFFER_KEY_SEPARATOR the bench record's pbsig when it carries one; None
+    without a trustedzone record, beside which alone a bench record is
+    carried."""
+    if trustedzone_key is None:
+        return None
+    return trustedzone_key if bench is None else f'{trustedzone_key}{OFFER_KEY_SEPARATOR}{bench}'
+
+
+def split_offer_key(key):
+    """(trustedzone record key, bench record key) of an offer_key, each None
+    when absent."""
+    if key is None:
+        return None, None
+    trustedzone, _, bench = str(key).partition(OFFER_KEY_SEPARATOR)
+    return trustedzone or None, bench or None
+
+
+def request_offer_key(metadata3, metadata4):
+    """The offer_key of the records a DP request's metadata3 and metadata4
+    carry by the key rules (request_records): the cusig lower-cased without
+    0x, and the pbsig beside it."""
+    trustedzone, bench = request_records(metadata3, metadata4)
+    if trustedzone is None:
+        return None
+    cusig = trustedzone['cusig']
+    cusig = (cusig[2:] if cusig.lower().startswith('0x') else cusig).lower()
+    return offer_key(cusig, bench['pbsig'].lower() if bench is not None else None)
+
+
 def record_expired(record, now):
     """Whether a bench record has reached CU_TTL_SECONDS after its t1."""
     return int(now) >= int(record['t1']) + CU_TTL_SECONDS

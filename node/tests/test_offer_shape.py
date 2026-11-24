@@ -3,8 +3,9 @@
 MemAvailable), and storage, min(total - OFFER_STORAGE_RESERVE_GIB, free), at
 usage below and above each reserve; the settings and their defaults of 1
 and 20 GiB; both figures at most the bench record's readings (encmem=,
-custorage=), which metadata4 carries in the DP request; the bench sizes at
-or below the memory figure; the offer's enclave memory the largest of them
+custorage=), which the DP request carries as pbencmem and pbstorage beside
+the trustedzone record's cu keys, which carry none; the bench sizes at or
+below the memory figure; the offer's enclave memory the largest of them
 whose record passed."""
 import os
 import subprocess
@@ -92,11 +93,13 @@ def test_the_offer_states_the_largest_bench_size_its_record_passed(record_size, 
 RECORD = {"gflops": 250, "cuv": 4, "t1": 1761724830, "sig_der_hex": "3065AB", "heap": "2G", "workers": 4}
 
 
-def test_the_dp_request_carries_the_bench_records_readings():
+def test_the_trustedzone_records_keys_carry_no_bench_reading():
+    # The agent's form of 52e36e0 (encmem= and custorage= after the cu keys)
+    # carries no bench record (bench-record.json keyRules.noAgentForm); the
+    # readings travel in the bench record's pb keys (bench_record).
     base = "trustedzones=tz;ipfs=peer;startrow=v1;cugflops=250;cuv=4;cuat=1761724830;cusig=3065ab;cuheap=2G;cuworkers=4"
     assert capability.metadata4({"tz"}, "tz", "peer", RECORD) == base
-    assert capability.metadata4({"tz"}, "tz", "peer", {**RECORD, "encmem": "32", "custorage": "400"}) == \
-        base + ";encmem=32;custorage=400"
+    assert capability.metadata4({"tz"}, "tz", "peer", {**RECORD, "encmem": "32", "custorage": "400"}) == base
     assert capability.record_storage({**RECORD, "custorage": "400"}) == 400
     assert capability.record_storage(RECORD) is None
     assert capability.record_storage({**RECORD, "custorage": "-1"}) is None

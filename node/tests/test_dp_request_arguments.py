@@ -13,6 +13,7 @@ import pytest
 from eth_utils import keccak
 from eth_utils.abi import collapse_if_tuple
 
+import bench_record
 import capability
 import config
 import pox20
@@ -120,13 +121,18 @@ def test_the_lists_match_the_bundled_abi():
 def test_each_metadata_string_is_within_the_bound_for_the_longest_trustedzones_list():
     # A network and its -unsafe twin joined run the trustedzones of both
     # stacks on both (config.join_unsafe_twins): four names. Eight names of
-    # 48 characters, longer than any network entry's image name, with a
-    # record carrying both bench readings and a 64-byte geography.
+    # 48 characters, longer than any network entry's image name, with the
+    # trustedzone record, a bench record of the widest readings beside it
+    # and a 64-byte geography.
     names = {f"ecld-nodenithy-{i}-" + "x" * (48 - len(f"ecld-nodenithy-{i}-")) for i in range(8)}
-    rec = {**record(), "encmem": "64", "custorage": "65535"}
+    rec = record()
+    bench = {"gflops": 65535, "cuv": 4, "heap": "65G", "workers": 64, "encmem": 64, "custorage": 2**53 - 1,
+             "epc": 2**31 - 1, "t0": 2**63, "t1": 2**63, "block0": 2**63, "block1": 2**63,
+             "validator": "0x" + "2a" * 20, "nonce": "0x" + "a8" * 32, "salt": "0x" + "82" * 32,
+             "sig0": "0x" + "d5" * 65, "sig1": "0x" + "1e" * 65, "sig_der_hex": "30" + "ab" * 103}
     image = sorted(names)[0]
-    metadata3 = capability.metadata3("9" * 64, rec)
-    metadata4 = capability.metadata4(names, image, PEER_ID, rec)
+    metadata3 = capability.metadata3("9" * 64, rec) + bench_record.metadata3_keys(bench)
+    metadata4 = capability.metadata4(names, image, PEER_ID, rec) + bench_record.metadata4_keys(bench)
     _, arguments = dp_request_arguments(False, RESOURCES, 24, 1, rec["gflops"], TIP, UUID, metadata3, metadata4,
                                         epc_forms=True)
     assert all(len(arguments[i].encode("utf-8")) <= DP_METADATA_MAX_BYTES for i in (7, 8, 9, 10))

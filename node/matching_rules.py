@@ -134,10 +134,13 @@ def refresh_tip(computed, period_tip, standing, keep_percent):
     return int(computed)
 
 
-def gflops_argument(gflops, enclave_memory):
-    """The V2 offer add's gflops argument (D167): GFLOPS in bits 0 to 15, the
-    enclave memory in GiB in bits 16 to 23."""
-    return (int(gflops) & matching.UINT16_MAX) | ((int(enclave_memory) & 255) << 16)
+def gflops_argument(gflops, enclave_memory, epc_units=0):
+    """The V2 offer add's gflops argument (D167, D191; pox-smart-contract-litvm
+    spec/matching.md section 3, item 33): GFLOPS in bits 0 to 15, the enclave
+    memory in GiB in bits 16 to 23, the EPC units of 64 MiB in bits 24 to
+    39."""
+    return ((int(gflops) & matching.UINT16_MAX) | ((int(enclave_memory) & 255) << 16)
+            | ((int(epc_units) & matching.UINT16_MAX) << 24))
 
 
 def announce_due(available, expired, period_open, holding, paused_at, min_pause, now, tip_changed):

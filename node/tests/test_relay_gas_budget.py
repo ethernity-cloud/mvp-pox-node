@@ -21,7 +21,7 @@ def test_the_defaulted_fields_are_the_relay_budget_the_logs_chunk_the_do_request
                         "payout_address", "claim_ahead_blocks", "claim_spread_nodes",
                         "claim_stand_limit", "claim_hold_back", "claim_marked_images", "tip_keep_percent",
                         "fee_ceiling_pause_percent", "minimum_score_hold", "beat_gas_allowance",
-                        "matching_page_entries", "matching_lag_blocks", "enclave_memory_gib"]
+                        "matching_page_entries", "matching_lag_blocks", "enclave_memory_gib", "epc_mib"]
 
 
 def test_a_network_without_the_variable_takes_the_global_default():

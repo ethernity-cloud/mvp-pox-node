@@ -178,8 +178,13 @@ class NetworkConfig:
     # (<NETWORK>_MATCHING_LAG_BLOCKS; 1: bloxberg's measured lag, 4.7).
     matching_lag_blocks: int = 1
     # The enclave memory in GiB the operator offers at most; 0: the size the
-    # capability record states (<NETWORK>_ENCLAVE_MEMORY_GIB; 7.24, D146).
+    # bench record states (<NETWORK>_ENCLAVE_MEMORY_GIB; 7.24, D146).
     enclave_memory_gib: int = 0
+    # The EPC in MiB the operator claims and offers at most; 0: the
+    # platform's (<NETWORK>_EPC_MIB; MATCHING-SYNC-PLAN.md A03, B03; OD21 A):
+    # it lowers the probe's claim (epc_claim.claim_mib) and the offer's EPC
+    # units (capability.offer_epc_units), and never raises either.
+    epc_mib: int = 0
 
 # Platform requirements a trustedzone names in <NETWORK>_TRUSTEDZONE_IMAGES:
 #   dcap  provisioned by a CAS, which admits the enclave on a DCAP quote: the

@@ -26,6 +26,8 @@ from utils import order_bucket_name, scone_queues, enclave_compose_env, get_or_g
 import scone_image
 import pox20
 import capability
+import bench_record
+import epc_claim
 import gas_profile
 import gas_ledger
 import broker
@@ -555,6 +557,11 @@ class EtnyPoXNode:
         # The passed integration tests and their capability records of this
         # network, kept across process starts (capability.RecordStore).
         self.__record_store = capability.RecordStore(self.cache_config.capability_filepath)
+        # The bench record of this network's memory probe, kept across
+        # process starts (bench_record.BenchStore), and whether the DP
+        # request's want of one is logged (__advertised_bench).
+        self.__bench_store = bench_record.BenchStore(self.cache_config.bench_filepath)
+        self.__no_bench_logged = False
         # The RecordMissing hold of this network (capability.RecordMissingHold),
         # kept in broker_cursor.json across process starts, and whether the
         # hold's current state is logged (__dp_request_held).
@@ -2341,6 +2348,38 @@ class EtnyPoXNode:
             return None
         return self.__record_store.advertised(self.__runnable_trustedzones(), time.time())
 
+    def __advertised_bench(self, record):
+        """The bench record this node's DP request carries beside the
+        trustedzone record `record` (MATCHING-SYNC-PLAN.md B04; OD1 A): on a
+        network whose pricing names a PoxMatching, the stored bench record
+        (bench_record.BenchStore) younger than CU_TTL_SECONDS whose share and
+        floor checks pass beside `record`'s GFLOPS (bench_record.share_holds);
+        None otherwise, and always without `record` (a request never carries
+        the bench record alone). A want of one on such a network is logged
+        once until one is carried."""
+        if not self.__matching_network or record is None:
+            return None
+        bench = self.__bench_store.record(time.time())
+        if bench is not None and not bench_record.share_holds(bench, record['gflops']):
+            bench = None
+        if bench is None and not self.__no_bench_logged:
+            self.__no_bench_logged = True
+            self.logger.warning("The DP request carries no bench record: none is held, or the held one proves "
+                                "nothing beside the trustedzone record; the offer states no enclave memory and no "
+                                "EPC until the probe admits one")
+        elif bench is not None:
+            self.__no_bench_logged = False
+        return bench
+
+    def __unsafe_readings(self, record):
+        """Whether the offer states the node's own readings as its enclave
+        memory and EPC (MATCHING-SYNC-PLAN.md D05; OD9 (iii) A): a request
+        without a trustedzone record whose trustedzones= list names only
+        -unsafe trustedzones, which the validators pass over and judge on no
+        reason of 10 to 12 (pox-smart-contract-litvm 2f600f6
+        spec/metadata-keys.md)."""
+        return record is None and capability.unsafe_only(self.__runnable_trustedzones())
+
     def __quote(self):
         """The reader's quote() on a 2.0 contract with a reader:
         (pricePerCuHourWei, tokenPerPol, avgGasPriceWei, smoothedUtilization,
@@ -2366,8 +2405,11 @@ class EtnyPoXNode:
         (utils.dp_request_arguments): its hardware resources, read now,
         bandwidth, duration, then the legacy price or the advertised record's
         gflops (0 without one) and the tip (__current_tip), uuid, protocol
-        version, geography with the record's time statements
-        (capability.metadata3) and capabilities (__dp_metadata4)."""
+        version, geography with the trustedzone record's time statements
+        (capability.metadata3) and capabilities (__dp_metadata4), each
+        followed by the bench record's pb keys when the request carries one
+        (__advertised_bench, bench_record.metadata3_keys and
+        metadata4_keys)."""
         if self.__price is None:
             self.__price = 1
         self.__number_of_cpus = int(HardwareInfoProvider.get_number_of_cpus())
@@ -2375,12 +2417,13 @@ class EtnyPoXNode:
         self.__free_storage = int(HardwareInfoProvider.get_free_storage())
         advertised = self.__advertised_record()
         record = advertised[1] if advertised else None
+        bench = self.__advertised_bench(record)
         resources = (self._limited_arg(self.__number_of_cpus), self._limited_arg(self.__free_memory),
                      self._limited_arg(self.__free_storage), self._limited_arg(self.__bandwidth))
         # On a network with matching the memory and the storage are the
-        # host's totals less their reserves, at most what the bench's record
+        # host's totals less their reserves, at most what the bench record
         # shows (__offer_figures, 7.4).
-        figures = self.__offer_figures(record) if self.__matching is not None else None
+        figures = self.__offer_figures(bench) if self.__matching is not None else None
         if figures is not None:
             resources = (resources[0], figures.memory_gib, figures.storage_gib, resources[3])
             self.__offer_storage_sent = figures.storage_gib
@@ -2395,37 +2438,53 @@ class EtnyPoXNode:
         self.__offer_gflops_sent = gflops
         tip = self.__current_tip(gflops) if self.__pox_is_20 else 0
         # On a network with matching the offer states the node's enclave
-        # memory above its GFLOPS (7.24, D146, D167): the largest listed size
-        # the record states, the operator's setting and a reason-10 refusal
-        # admit (capability.offer_enclave_memory), 0 for a record that states
-        # none.
+        # memory and EPC above its GFLOPS (7.24, D146, D167, D191): the
+        # largest listed size the bench record states, the operator's setting
+        # and a reason-10 refusal admit (capability.offer_enclave_memory), and
+        # the EPC units it proves, lowered by the setting and below a reason-12
+        # refusal (capability.offer_epc_units); 0 and 0 without one. An offer
+        # of -unsafe trustedzones alone states the node's readings and
+        # settings instead (__unsafe_readings): the largest listed size its
+        # memory figure admits and its EPC claim (epc_claim.read_claim).
         argument = gflops
+        self.__offer_epc_sent = 0
         if figures is not None:
+            key = bench_record.bench_key(bench)
+            size, units = capability.record_enclave_memory(bench), capability.record_epc_units(bench)
+            if self.__unsafe_readings(record):
+                listed = offer_shape.bench_sizes(figures.memory_gib, capability.ENCLAVE_SIZES_GIB)
+                size = listed[-1] if listed else None
+                claim, _ = epc_claim.read_claim(self.__network_config.epc_mib)
+                units = claim // capability.EPC_UNIT_MIB if claim is not None else None
             self.__offer_enclave_memory_sent = capability.offer_enclave_memory(
-                self.__network_config.enclave_memory_gib, capability.record_enclave_memory(record),
-                self.__enclave_memory.refused(record_key(record)), figures.memory_gib)
-            argument = matching_rules.gflops_argument(gflops, self.__offer_enclave_memory_sent)
+                self.__network_config.enclave_memory_gib, size, self.__enclave_memory.refused(key),
+                figures.memory_gib)
+            self.__offer_epc_sent = capability.offer_epc_units(units, self.__network_config.epc_mib,
+                                                               self.__offer_epc.refused(key))
+            argument = matching_rules.gflops_argument(gflops, self.__offer_enclave_memory_sent, self.__offer_epc_sent)
         return dp_request_arguments(not self.__pox_is_20, resources, self.__duration, self.__price, argument, tip,
-                                    self.__uuid, capability.metadata3(self.__node_geo, record),
-                                    self.__dp_metadata4(advertised), epc_forms=self.__pox_epc_forms)
+                                    self.__uuid,
+                                    capability.metadata3(self.__node_geo, record) + bench_record.metadata3_keys(bench),
+                                    self.__dp_metadata4(advertised) + bench_record.metadata4_keys(bench),
+                                    epc_forms=self.__pox_epc_forms)
 
-    def __offer_figures(self, record):
+    def __offer_figures(self, bench):
         """The memory and storage of the offer on a network with matching
         (offer_shape, 7.4): the host's total memory less the larger of
         config.offer_memory_reserve_gib and the memory in use (MemAvailable),
         the total storage of the network's working filesystem less the larger
         of config.offer_storage_reserve_gib and the space in use, each at
-        most the reading the bench's signed record `record` carries
+        most the reading the bench record `bench` carries
         (capability.record_enclave_memory, capability.record_storage), which
-        travels in the request's metadata4, the storage below a figure
-        reason 11 refused under that record."""
+        travels in the request's pb keys, the storage below a figure reason
+        11 refused under that record."""
         total_storage, free_storage = HardwareInfoProvider.get_storage_bytes(self.cache_config.base_path)
         shape = offer_shape.offer_shape(HardwareInfoProvider.get_total_memory_bytes(),
                                         HardwareInfoProvider.get_available_memory_bytes(),
                                         config.offer_memory_reserve_gib, total_storage, free_storage,
                                         config.offer_storage_reserve_gib)
-        return offer_shape.bounded(shape, capability.record_enclave_memory(record), capability.record_storage(record),
-                                   self.__offer_storage.refused(record_key(record)))
+        return offer_shape.bounded(shape, capability.record_enclave_memory(bench), capability.record_storage(bench),
+                                   self.__offer_storage.refused(bench_record.bench_key(bench)))
 
     def __dp_request_function(self):
         """The bound contract call adding this node's DP request, by the
@@ -2544,7 +2603,12 @@ class EtnyPoXNode:
             logger.warning(f"DP request {self.__dprequest}: its terms were not read ({e}); next tick")
             return False, None
         advertised = self.__advertised_record()
-        advertised_key = record_key(advertised[1] if advertised else None)
+        record = advertised[1] if advertised else None
+        # The records the request would carry now, the trustedzone record and
+        # the bench record beside it (bench_record.offer_key): a change of
+        # either replaces the request.
+        advertised_key = bench_record.offer_key(record_key(record),
+                                                bench_record.bench_key(self.__advertised_bench(record)))
         accepts = bool(self.__network_config.accept_reserved) if self.__accepts_reserved_set else None
         disposition = dp_request_disposition(terms, time.time(), self.__dprequest_record_key, advertised_key, accepts)
         # A standing acceptance bounds the offer at the predecessor's gflops:
@@ -2561,7 +2625,7 @@ class EtnyPoXNode:
         if not terms.recorded:
             why = 'it has no terms on the 2.0 contract'
         elif self.__dprequest_record_key != advertised_key:
-            why = 'the advertised capability record changed'
+            why = 'the advertised capability record or bench record changed'
         elif gflops_bound < terms.gflops:
             why = (f"its gflops {terms.gflops} is above the predecessor's {gflops_bound} of the handover this node "
                    f"accepted")
@@ -3118,28 +3182,32 @@ class EtnyPoXNode:
 
     def __dp_request_cancelled(self, req, reason):
         """Handles the validators' cancel of this node's DP request `req` for
-        `reason` (capability.cancel_reaction over the cusig `req` carried:
-        __dprequest_record_key for the standing request, its metadata4 read
-        for another). The reason is logged by name. RecordMissing
-        (capability.REASON_RECORD_MISSING) sets this network's hold
-        (capability.RecordMissingHold), written at once: until an
-        integration test produces a capability record, no DP request without
-        one is posted unless it names only -unsafe trustedzones, and the
-        passed tests whose images can carry a record and whose pass holds
-        none run again (__retest_for_record). A reason that faults the record
-        on a request that carried one drops that record
+        `reason` (capability.cancel_reaction over the records `req` carried:
+        __dprequest_record_key for the standing request, its metadata read
+        for another, bench_record.split_offer_key giving the trustedzone
+        record's cusig and the bench record's pbsig). The reason is logged by
+        name. RecordMissing (capability.REASON_RECORD_MISSING) sets this
+        network's hold (capability.RecordMissingHold), written at once: until
+        an integration test produces a capability record, no DP request
+        without one is posted unless it names only -unsafe trustedzones, and
+        the passed tests whose images can carry a record and whose pass holds
+        none run again (__retest_for_record). A reason that faults the
+        trustedzone record on a request that carried one drops that record
         (RecordStore.image_of) with its trustedzone's passed test, so the
-        test runs again before the next request; the strike reason, and a
-        record reason on a request without a record, leave both. Returns
-        whether `req` is the standing request."""
+        test runs again before the next request, reason 13 refusing the
+        GFLOPS the request stated under it; reasons 10 to 12 refuse the
+        figure under the bench record (__figure_refused); the strike reason,
+        and a record reason on a request without a record, leave both.
+        Returns whether `req` is the standing request."""
         logger = self.logger
         standing = has_standing_dp_request(self.__dprequest) and int(req) == int(self.__dprequest)
-        key = self.__dprequest_record_key if standing else self.__dp_request_record_key(req)
+        key, bench_key = bench_record.split_offer_key(
+            self.__dprequest_record_key if standing else self.__dp_request_record_key(req))
         hold, retest = capability.cancel_reaction(reason, key)
         cancelled = (f"DP request {req} was cancelled by the validators: "
                      f"{capability.cancel_reason_name(reason)} ({reason})")
         if capability.cancel_disposition(reason) in ('memory', 'storage', 'epc'):
-            retest = self.__figure_refused(capability.cancel_disposition(reason), req, key, cancelled)
+            self.__figure_refused(capability.cancel_disposition(reason), req, bench_key, cancelled)
         if int(reason) == capability.REASON_GFLOPS_ABOVE_RECORD:
             # The GFLOPS the request stated is refused under the record it
             # carried, which the retest drops (OD7).
@@ -3174,36 +3242,47 @@ class EtnyPoXNode:
         EnclaveMemoryAboveRecord (`figure` 'memory'), 11, StorageAboveRecord
         ('storage'), or 12, EpcAboveRecord ('epc', in EPC units), by
         capability.figure_after_cancel: the figure the request stated
-        (capability.OfferFigureBook) is refused under the record `key` it
-        carried, so no later request states it on that record; the next
+        (capability.OfferFigureBook) is refused under the bench record `key`
+        it carried, so no later request states it on that record; the next
         request states the record's reading below it, and when the record
-        carries none, or none below it, the record is dropped and its
-        integration test, the bench, runs again (the returned retest). The
+        carries none, or none below it, the bench record is dropped and the
+        probe runs again. A request that carried no bench record (key None:
+        an -unsafe-only offer's readings, D05) books nothing. The
         RecordMissing hold is not touched."""
+        if key is None:
+            self.logger.warning(f"{cancelled}; the request carried no bench record, nothing is refused")
+            return
         book, reading = {'memory': (self.__enclave_memory, capability.record_enclave_memory),
                          'storage': (self.__offer_storage, capability.record_storage),
                          'epc': (self.__offer_epc, capability.record_epc_units)}[figure]
         stated = book.stated(req)
-        image = self.__record_store.image_of(key) if key is not None else None
-        entry = self.__record_store.get(image) if image is not None else None
-        record_figure = reading(entry.get('record') if entry else None)
+        held = self.__bench_store.entry['record'] if self.__bench_store.entry else None
+        bench = held if bench_record.bench_key(held) == key else None
+        record_figure = reading(bench)
         next_figure, rerun = capability.figure_after_cancel(stated, record_figure)
         book.refuse(key, stated)
         unit = 'EPC units' if figure == 'epc' else 'GiB'
         if not rerun:
-            self.logger.warning(f"{cancelled}; it stated {stated} {unit} of {figure}, its record {record_figure} "
-                                f"{unit}: the next request states {next_figure} {unit}")
-        return rerun and key is not None
+            self.logger.warning(f"{cancelled}; it stated {stated} {unit} of {figure}, its bench record "
+                                f"{record_figure} {unit}: the next request states {next_figure} {unit}")
+        elif bench is not None:
+            self.logger.warning(f"{cancelled}; it stated {stated} {unit} of {figure}, its bench record "
+                                f"{record_figure}: the bench record is dropped and the probe runs again")
+            self.__bench_store.drop()
+        else:
+            self.logger.warning(f"{cancelled}; the bench record it carried is not held")
 
     def __dp_request_record_key(self, req):
-        """The cusig of DP request `req`'s metadata4 (utils.metadata_key), the
-        key of the capability record it carries; None without one, and when
-        the RPC does not answer the metadata read in ten tries (logged)."""
+        """The records DP request `req` carries (bench_record.request_offer_key
+        of its metadata3 and metadata4: the cusig of its trustedzone record
+        and the pbsig of a bench record beside it); None without a
+        trustedzone record, and when the RPC does not answer the metadata
+        read in ten tries (logged)."""
         answered, metadata = retry(self.__etny.caller()._getDPRequestMetadata, int(req), attempts=10, delay=3)
         if not answered:
             self.logger.warning(f"DP request {req}: its metadata was not read; its capability record is unknown")
             return None
-        return metadata_key(metadata[4], 'cusig')
+        return bench_record.request_offer_key(metadata[3], metadata[4])
 
     def __dp_request_held(self):
         """Whether this node posts no DP request now: on a 2.0 contract, the
@@ -3214,12 +3293,19 @@ class EtnyPoXNode:
         it. The hold and its clearing are each logged once per change. On a
         network with matching it posts none either while the offer's memory or
         storage figure (__offer_figures) is below the 1 GB the PoX admits,
-        logged once per figure."""
+        logged once per figure, nor, where the pricing names a PoxMatching,
+        an offer carrying a trustedzone record without a bench record beside
+        it (__advertised_bench, which logs it): the validators judge its
+        storage against 0 there (reason 11), so the request waits for the
+        probe's record."""
         if not self.__pox_is_20:
             return False
         if self.__matching is not None:
             advertised = self.__advertised_record()
-            figures = self.__offer_figures(advertised[1] if advertised else None)
+            bench = self.__advertised_bench(advertised[1] if advertised else None)
+            if advertised is not None and bench is None and self.__matching_network:
+                return True
+            figures = self.__offer_figures(bench)
             short = min(figures) < offer_shape.OFFER_RESOURCE_MIN
             if short and self.__offer_figures_logged != figures:
                 self.logger.warning(f"No DP request is posted on this network: the offer's memory is "
