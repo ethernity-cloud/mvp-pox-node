@@ -1,10 +1,12 @@
 """utils.result_end_fields and result_fields on v6 (D175, D182;
-pox-smart-contract-litvm spec/matching.md section 17): the three fields
-after the fifteen of v5, landedAt, ranUntil and slClass, read on every
-accepted vector of spec/matching/result-fields.json with its values and on
-no refused one; a v6 result's task code, commits and gas read as a v5
-one's; and the task table with the codes of 3.19 (MATCHING-DESIGN.md
-7.16)."""
+pox-smart-contract-litvm 2f600f6 spec/matching.md section 17;
+MATCHING-SYNC-PLAN.md C02): the three fields after the fifteen of v5,
+landedAt, ranUntil and slClass, read on every accepted vector of
+spec/matching/result-fields.json with its values and on no refused one; a
+v6 result's task code, commits and gas read as a v5 one's; a result of
+twenty fields or more (the round's writers' and every session status's) read
+as one of eighteen, fields 18 and 19 not read; and the task table with the
+codes of 3.19 (MATCHING-DESIGN.md 7.16)."""
 import json
 from pathlib import Path
 
@@ -28,6 +30,42 @@ def test_an_accepted_result_carries_its_three_fields(case):
 def test_a_refused_result_carries_none_of_them(case):
     assert result_end_fields(case["result"]) is None
     assert int(case["result"].split(":")[1]) == case["expected"]["code"]
+
+
+V6 = FIELDS["v6"]
+TWENTY = [c for c in V6["writers"] + V6["sessionStatuses"] if len(c["result"].split(":")) >= 20]
+
+
+def plain_decimal_fields(result):
+    parts = result.split(":")
+    return all(text.isdigit() and (text == "0" or not text.startswith("0")) for text in parts[15:18])
+
+
+@pytest.mark.parametrize("case", TWENTY, ids=[c["name"] for c in TWENTY])
+def test_a_result_of_twenty_fields_or_more_yields_its_code_esr_fields_and_class(case):
+    """result-fields.json v6 at 2f600f6: the writers' twenty-field vectors
+    and the session-status vectors are read as one of eighteen fields
+    (readers, "20 or more": the agent "as for 18"): the code, the ESR
+    fields and the three fields 15 to 17; fields 18 and 19, whatever they
+    hold, are not read."""
+    parts = case["result"].split(":")
+    fields = result_fields(case["result"])
+    assert fields.version == "v6" and fields.task_code == parts[1]
+    assert (fields.esr_commits, fields.esr_gas_wei) == (int(parts[12].split("=")[1]), int(parts[14].split("=")[1]))
+    assert plain_decimal_fields(case["result"])
+    assert result_end_fields(case["result"]) == (int(parts[15]), int(parts[16]), int(parts[17]))
+    eighteen = ":".join(parts[:18])
+    assert result_end_fields(eighteen) == result_end_fields(case["result"])
+    assert result_fields(eighteen) == fields
+
+
+def test_the_twenty_field_vectors_cover_every_session_status_and_the_invalid_forms_of_fields_18_and_19():
+    assert V6["writerFields"] == 20
+    assert {c["status"] for c in V6["sessionStatuses"]} >= {"00", "01", "02", "03", "04", "05", "06", "07", "0f"}
+    names = {c["name"] for c in TWENTY}
+    assert {"close-block-empty", "close-rows-not-digit", "rows-without-block", "pair-without-session"} <= names
+    readers = {r["fieldCount"]: r["agent"] for r in V6["readers"]}
+    assert readers["20 or more"] == "as for 18"
 
 
 def test_a_v5_result_is_read_as_before():

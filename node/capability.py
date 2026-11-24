@@ -932,6 +932,31 @@ def p384_public_key(cert_text):
     return None
 
 
+# The bytes a trustedzone identity key signs for its own statements, an
+# etny-cu|v2 record line and an etny-sw row (pox-smart-contract-litvm 2f600f6
+# spec/reserved-prefixes.json statementForm, SF19, OD10 B): 0xFF ||
+# "ecld-stmt-1" || 0x00 || the statement's UTF-8 bytes. 0xFF occurs in no
+# UTF-8 encoding, so no hand-over signature is over these bytes.
+STATEMENT_PREFIX = b'\xffecld-stmt-1\x00'
+
+
+def statement_bytes(statement):
+    """The signed bytes of `statement` in the statement form."""
+    return STATEMENT_PREFIX + str(statement).encode('utf-8')
+
+
+def verify_statement(cert_text, statement, der_hex, matching_network):
+    """Whether `der_hex` signs the trustedzone statement `statement` (an
+    etny-sw row's text) under `cert_text` (verify_p384) in a form the
+    network admits (reserved-prefixes.json statementForm.cutRule): on a
+    network whose pricing names a PoxMatching the statement form alone
+    (statement_bytes), on any other the plain form (the UTF-8 text) and the
+    statement form."""
+    if verify_p384(cert_text, statement_bytes(statement), der_hex):
+        return True
+    return not matching_network and verify_p384(cert_text, statement, der_hex)
+
+
 def verify_p384(cert_text, message, der_hex):
     """Whether `der_hex` (an ECDSA P-384 signature, DER, hex with or without
     0x) verifies over SHA-256 of `message` (text or bytes) under the key of

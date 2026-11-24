@@ -5,10 +5,14 @@ signed by another wallet answers nothing, an etny-sw row verifying under
 none of the certificates leaves no wallet and every input replayed, a row
 logged after the bound answers nothing, the set in seq order), with vectors
 built here (eth_account for the rows, cryptography for the P-384
-attestation) and the fixture's replayed example; the certificate walk."""
+attestation) and the fixture's replayed example; the attestation's form by
+network kind (MATCHING-SYNC-PLAN.md C03; OD10 B; reserved-prefixes.json at
+pox-smart-contract-litvm 2f600f6); the certificate walk."""
+import hashlib
 import json
 from pathlib import Path
 
+import pytest
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
@@ -23,6 +27,7 @@ from constants import RPC_REPLICA_LAG_BLOCKS
 RESULT = json.loads((Path(__file__).parent / "spec" / "result-v5.json").read_text())
 FENCE = json.loads((Path(__file__).parent / "spec" / "session-fence.json").read_text())
 RECORD = json.loads((Path(__file__).parent / "spec" / "capability-record.json").read_text())
+PREFIXES = json.loads((Path(__file__).parent / "spec" / "reserved-prefixes.json").read_text())
 PREDECESSOR = 4101
 WINDOW = broker.HandoverOf(True, PREDECESSOR, True, 4102, 52_646_900, 52_647_800)
 
@@ -54,8 +59,12 @@ def pem_of(private):
                                             serialization.PublicFormat.SubjectPublicKeyInfo).decode()
 
 
-def wallet_row(private, order_id=PREDECESSOR, wallet=WALLET):
+def wallet_row(private, order_id=PREDECESSOR, wallet=WALLET, statement_form=False):
+    """An etny-sw row signed in the plain form (the UTF-8 text) or the
+    statement form (0xFF || "ecld-stmt-1" || 0x00 || the text)."""
     message = f"etny-sw|{order_id}|{wallet}".encode()
+    if statement_form:
+        message = b"\xffecld-stmt-1\x00" + message
     return f"v1:{order_id}:{wallet}:{private.sign(message, ec.ECDSA(hashes.SHA256())).hex()}"
 
 
@@ -113,18 +122,62 @@ def test_the_output_row_signer_is_recovered_over_its_fields():
 
 # --------------------------------------------------------- the attestation
 
-def test_the_task_wallet_is_attested_under_a_registry_certificate():
+@pytest.mark.parametrize("statement_form", [True, False])
+def test_the_task_wallet_is_attested_under_a_registry_certificate(statement_form):
     private, other = p384_key(), p384_key()
-    row = replay.parse_wallet_row(wallet_row(private))
-    assert replay.wallet_attested_by(row, PREDECESSOR, [pem_of(other), pem_of(private)]) == WALLET
-    assert replay.wallet_attested_by(row, PREDECESSOR, [pem_of(other)]) is None
-    assert replay.wallet_attested_by(row, PREDECESSOR, []) is None
-    assert replay.wallet_attested_by(row, 4102, [pem_of(private)]) is None
-    assert replay.wallet_attested_by(None, PREDECESSOR, [pem_of(private)]) is None
+    row = replay.parse_wallet_row(wallet_row(private, statement_form=statement_form))
+    assert replay.wallet_attested_by(row, PREDECESSOR, [pem_of(other), pem_of(private)], False) == WALLET
+    assert replay.wallet_attested_by(row, PREDECESSOR, [pem_of(other)], False) is None
+    assert replay.wallet_attested_by(row, PREDECESSOR, [], False) is None
+    assert replay.wallet_attested_by(row, 4102, [pem_of(private)], False) is None
+    assert replay.wallet_attested_by(None, PREDECESSOR, [pem_of(private)], False) is None
     # The DER of the key as hex is a certificate text too.
     der_hex = private.public_key().public_bytes(serialization.Encoding.DER,
                                                 serialization.PublicFormat.SubjectPublicKeyInfo).hex()
-    assert replay.attested_wallet([wallet_row(other), wallet_row(private)], PREDECESSOR, ['0x' + der_hex]) == WALLET
+    rows = [wallet_row(other, statement_form=statement_form), wallet_row(private, statement_form=statement_form)]
+    assert replay.attested_wallet(rows, PREDECESSOR, ['0x' + der_hex], False) == WALLET
+
+
+def test_on_a_matching_network_only_the_statement_form_attests_the_wallet():
+    """reserved-prefixes.json statementForm.cutRule at
+    pox-smart-contract-litvm 2f600f6: an etny-sw row verifies in the
+    statement form alone where the pricing names a PoxMatching, in the
+    plain form and the statement form elsewhere."""
+    private = p384_key()
+    plain = replay.parse_wallet_row(wallet_row(private))
+    statement = replay.parse_wallet_row(wallet_row(private, statement_form=True))
+    assert replay.wallet_attested_by(statement, PREDECESSOR, [pem_of(private)], True) == WALLET
+    assert replay.wallet_attested_by(plain, PREDECESSOR, [pem_of(private)], True) is None
+    assert replay.attested_wallet([wallet_row(private)], PREDECESSOR, [pem_of(private)], True) is None
+    rule = {r["statement"]: r for r in PREFIXES["statementForm"]["cutRule"]["rows"]}["etny-sw row"]
+    assert (rule["matchingNetwork"], rule["otherNetwork"]) == (
+        "the statement form only", "the plain form and the statement form")
+
+
+@pytest.mark.parametrize("matching_network", [True, False])
+def test_the_spec_statement_vectors_verify_in_their_form(matching_network):
+    """reserved-prefixes.json's signed statements under capability-record.json's
+    trustedzone key: the etny-sw row and the etny-cu|v2 line in the
+    statement form verify on every network; the plain-form signature of the
+    v2 line verifies as a statement on none; the v2 line's cusig verifies
+    over its statement bytes and not as plain text."""
+    pem = RECORD["trustedzoneKey"]["publicKeyPem"]
+    examples = {e["name"]: e for e in PREFIXES["statementForm"]["examples"]}
+    assert capability.STATEMENT_PREFIX.hex() == PREFIXES["statementForm"]["prefixHex"] == RECORD["statementPrefixHex"]
+    sw = examples["etny-sw"]
+    assert hashlib.sha256(capability.statement_bytes(sw["statement"])).hexdigest() == sw["statementBytesSha256"]
+    assert capability.verify_statement(pem, sw["statement"], sw["signatureDerHex"], matching_network)
+    order, wallet, sig = sw["row"].split(":")[1:]
+    row = replay.WalletRow(int(order), wallet, sig)
+    assert replay.wallet_attested_by(row, int(order), [pem], matching_network) == wallet.lower()
+    v2 = examples["etny-cu-v2"]
+    assert v2["statement"] == RECORD["line"] and v2["signatureDerHex"] == RECORD["signatureDerHex"]
+    assert capability.verify_statement(pem, v2["statement"], v2["signatureDerHex"], matching_network)
+    assert capability.verify_p384(pem, capability.statement_bytes(RECORD["line"]), RECORD["signatureDerHex"])
+    assert not capability.verify_p384(pem, RECORD["line"], RECORD["signatureDerHex"])
+    plain = examples["etny-cu-v2-plain"]
+    assert capability.verify_p384(pem, plain["statement"], plain["signatureDerHex"])
+    assert not capability.verify_p384(pem, capability.statement_bytes(plain["statement"]), plain["signatureDerHex"])
 
 
 def test_verify_p384_checks_the_fixture_fence_signatures_under_the_trustedzone_key():

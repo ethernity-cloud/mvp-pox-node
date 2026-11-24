@@ -4206,7 +4206,9 @@ class EtnyPoXNode:
         `bound` up to `at_block`, the predecessor's rows read pinned at
         `at_block`, the certificates the image registry holds for its
         trustedzone name (replay.registry_certificates) and the task wallet
-        its etny-sw row attests. The rows are read here; the ciphertexts go
+        its etny-sw row attests in a form the network admits (the statement
+        form alone where the pricing names a PoxMatching,
+        replay.wallet_attested_by). The rows are read here; the ciphertexts go
         into the bucket off the tick (__stage_replay_blobs): a spooled one is
         staged, one not spooled is fetched once more and left unstaged when
         that fails. A predecessor of another trustedzone image stages
@@ -4235,7 +4237,7 @@ class EtnyPoXNode:
         registry = self.__image_registry.caller()
         certs = replay.registry_certificates(registry.trustedZoneVersionsHash,
                                              registry.getTrustedZoneImageCertPublicKey, predecessor['trustedzone'])
-        wallet = replay.attested_wallet(wallet_values, predecessor['order'], certs)
+        wallet = replay.attested_wallet(wallet_values, predecessor['order'], certs, self.__matching_network)
         rows = replay.replay_set(predecessor['order'], input_values, output_rows, wallet, replay.first_late_row(logs))
         logger.info(f"Order {order_id}: predecessor {predecessor['order']} at block {at_block}: {len(input_values)} input "
                     f"row(s), {len(output_rows)} output row(s), wallet {wallet or 'unattested'}, {len(rows)} to replay")

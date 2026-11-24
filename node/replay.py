@@ -132,25 +132,27 @@ def output_row_signer(row):
         return None
 
 
-def wallet_attested_by(row, order_id, certs):
+def wallet_attested_by(row, order_id, certs, matching_network):
     """The task wallet (lower-case) an etny-sw row of `order_id` attests when
     its P-384 signature over etny-sw|<orderId>|<taskWallet> verifies under
-    any of `certs`, the registry's certificates of the trustedzone name;
-    None otherwise."""
+    any of `certs`, the registry's certificates of the trustedzone name, in
+    a form the network admits (capability.verify_statement: the statement
+    form alone where the pricing names a PoxMatching, `matching_network`;
+    the plain form or the statement form elsewhere); None otherwise."""
     if row is None or row.order_id != int(order_id):
         return None
     message = f"{SESSION_WALLET_KEY}|{row.order_id}|{row.wallet}"
     for cert in certs:
-        if capability.verify_p384(cert, message, row.sig):
+        if capability.verify_statement(cert, message, row.sig, matching_network):
             return row.wallet.lower()
     return None
 
 
-def attested_wallet(wallet_values, order_id, certs):
+def attested_wallet(wallet_values, order_id, certs, matching_network):
     """The first wallet among the etny-sw values that verifies
     (wallet_attested_by); None when none does."""
     for value in wallet_values:
-        wallet = wallet_attested_by(parse_wallet_row(value), order_id, certs)
+        wallet = wallet_attested_by(parse_wallet_row(value), order_id, certs, matching_network)
         if wallet is not None:
             return wallet
     return None
