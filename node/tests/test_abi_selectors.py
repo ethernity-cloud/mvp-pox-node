@@ -6,6 +6,7 @@ resolver's two selectors XOR to broker-interface-id.json's id; and
 utils.parse_transaction_bytes_ut decodes a signed _addResultToOrder under
 the 2.0 union, the seven result-v5.json examples' fields by position."""
 import json
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -15,9 +16,18 @@ from eth_utils.abi import collapse_if_tuple
 from web3 import Web3
 
 import config
+import matching_node
 from utils import parse_transaction_bytes_ut
 
 SPEC = Path(__file__).parent / "spec"
+# The contract repository beside this one, and the commit node/matching.abi
+# and node/match_reader.abi are copied from (MATCHING-SYNC-PLAN.md A01).
+SOURCE = Path(__file__).resolve().parents[3] / "pox-smart-contract-litvm"
+SOURCE_COMMIT = "2f600f6"
+SELECTORS = json.loads((SPEC / "abi-selectors.json").read_text())
+# {bundled ABI file: the abi/ file it is a byte copy of}.
+COPIED_ABIS = {config.matching_abi_filepath: "IPoxMatching.json",
+               config.match_reader_abi_filepath: "IPoxMatchReader.json"}
 
 # {ABI file: [signature the agent calls or scans]}
 CALLS = {
@@ -196,6 +206,47 @@ def test_the_union_holds_both_v2_dp_adds_and_the_three_value_stamp():
     assert found[bytes.fromhex("72a6bda7")].split(",")[5] == "uint40"
     stamp = next(e for e in load(config.abi_filepath) if e.get("name") == "doStamp")
     assert [o["type"] for o in stamp["outputs"]] == ["uint128", "uint16", "uint16"]
+
+
+@pytest.mark.parametrize("path, source", list(COPIED_ABIS.items()), ids=list(COPIED_ABIS.values()))
+def test_the_matching_abis_are_the_source_commits_byte_for_byte(path, source):
+    if not (SOURCE / ".git").exists():
+        pytest.skip(f"{SOURCE} is not checked out beside this repository")
+    shown = subprocess.run(["git", "-C", str(SOURCE), "show", f"{SOURCE_COMMIT}:abi/{source}"], capture_output=True)
+    if shown.returncode != 0:
+        pytest.skip(f"{SOURCE} holds no commit {SOURCE_COMMIT}")
+    assert Path(path).read_bytes() == shown.stdout
+
+
+@pytest.mark.parametrize("path, source", list(COPIED_ABIS.items()), ids=list(COPIED_ABIS.values()))
+def test_every_entry_of_the_matching_abis_carries_its_spec_selector(path, source):
+    """The functions, events and errors of the bundled copy are exactly
+    abi-selectors.json's entries of the abi/ file it copies, each with its
+    selector (events: topic0)."""
+    for kind, value in (("function", "selector"), ("event", "topic0"), ("error", "selector")):
+        found = {(sig, "0x" + sel.hex()) for sel, sig in selectors(path, kind).items()}
+        listed = {(e["signature"], e[value]) for e in SELECTORS["entries"] if e["abi"] == source and e["kind"] == kind}
+        assert found == listed, kind
+
+
+def test_the_entries_this_line_changed_or_added_that_the_agent_uses_carry_their_values():
+    """abi-selectors.json's changed and added entries in the agent's
+    bundled files: the new Announced (with epcUnits) and ParametersReplaced
+    of PoxMatching, the uint40 DP add beside the uint32 one it replaced,
+    farmJoinOf, and the generation signals VERSION() of the PoX and
+    matching() of the pricing."""
+    changed = {c["name"]: c for c in SELECTORS["changed"]}
+    added = {a["name"]: a for a in SELECTORS["added"]}
+    events = {"0x" + sel.hex(): sig for sel, sig in selectors(config.matching_abi_filepath, "event").items()}
+    assert changed["Announced"]["now"] == "0xd3b318a1e99c3395d79424d596c72f8fe353d8510372e958846f833dc5ebca59"
+    assert changed["Announced"]["now"] in events and changed["Announced"]["beforeValue"] not in events
+    assert added["ParametersReplaced"]["value"] in events
+    functions = {"0x" + sel.hex() for sel in selectors(config.abi_filepath, "function")}
+    assert {changed["addDPRequestV2"]["now"], changed["addDPRequestV2"]["beforeValue"],
+            added["farmJoinOf"]["value"], SELECTORS["signals"]["version"]["selector"]} <= functions
+    assert SELECTORS["signals"]["version"]["answers"][0]["value"] == "2.0"
+    pointer = {"0x" + keccak(text=signature(e))[:4].hex() for e in matching_node.POINTER_ABI if e.get("type") == "function"}
+    assert SELECTORS["signals"]["matching"]["selector"] in pointer
 
 
 def test_the_order_terms_outputs_are_in_the_readers_order():

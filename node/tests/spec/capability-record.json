@@ -1,5 +1,5 @@
 {
-  "description": "Plan amendment 6 (capability record) with the two time statements of amendment 7 and the metadata3 / metadata4 strings of amendments 1 and 17: the record line a trustedzone writes to capability.etny after its benchmark, signed with its enclave key as signData does (ECDSA P-384 over SHA-256 of the UTF-8 line, DER, hex), the two GET /validator/time answers it writes to capability.time.etny, and the DP-request metadata the node agent builds from both. Test keys only.",
+  "description": "Plan amendment 6 (capability record) in its v2 form (the closing nonce: the closing time statement is over n1, which binds the run's outcome and a salt the trustedzone draws after the run), with the two time statements of amendment 7 and the metadata3 / metadata4 strings of amendments 1 and 17: the record line a trustedzone writes to capability.etny after its benchmark, signed with its enclave key in the statement form of reserved-prefixes.json (ECDSA P-384 over SHA-256 of 0xFF || \"ecld-stmt-1\" || 0x00 || the UTF-8 line, DER, hex), the two GET /validator/time answers it writes to capability.time.etny, the DP-request metadata the node agent builds from both, the rate bound every reader applies to a timed record, the admission of each form per network kind, the closing checks with a vector each, and the v1 record of before (legacyV1). Test keys only.",
   "generator": "spec/make/capability-record.js",
   "network": {
     "chainId": 80002,
@@ -19,11 +19,24 @@
     "heap": "256M",
     "workers": 4,
     "runNonce": "0xf9324b49b24c8561481ef6b84ec6cbeabd1ccd691e3e55f109d1243ea864e569",
-    "runNonceRule": "32 random bytes drawn by the trustedzone for the run, 0x-prefixed lower-case hex; the same nonce is sent to the validator for both time statements.",
+    "runNonceRule": "n0: 32 random bytes the trustedzone draws before the run, 0x-prefixed lower-case hex; the opening time statement is over n0, requested before the run. The closing statement is over n1 (closeNonce). When a pair restarts with the next member (the run made again over the same n0), the salt is drawn again after that attempt's run, and the record carries the last attempt's salt and outcome.",
+    "salt": "0xb6df4b03ac8957c50dc55aa44db55bac8e28268c51ad8f7148650749b5d0b954",
+    "saltRule": "32 random bytes the trustedzone draws after the run's last measured operation and before it asks for the closing statement, never earlier; 0x-prefixed lower-case hex. This fixture's salt is keccak256 of the label \"spec time-statement close salt\".",
     "t0": 1761724800,
-    "t1": 1761724830,
+    "t1": 1761724810,
     "block0": 29000000,
-    "block1": 29000015
+    "block1": 29000005
+  },
+  "closeNonce": {
+    "layout": "n1 = keccak256(abi.encodePacked(bytes(\"ecld-close-1\"), n0, salt, keccak256(utf8(outcome)))): the tag (12 ASCII bytes), n0 (32), salt (32) and the keccak256 of the outcome's UTF-8 bytes (32), 108 bytes",
+    "tag": "ecld-close-1",
+    "n0": "0xf9324b49b24c8561481ef6b84ec6cbeabd1ccd691e3e55f109d1243ea864e569",
+    "salt": "0xb6df4b03ac8957c50dc55aa44db55bac8e28268c51ad8f7148650749b5d0b954",
+    "outcome": "250|4|heap=256M;workers=4",
+    "outcomeRule": "the record line's <gflops>|<cuv>|<last field>: field 4, field 5 and field 13 joined by |; for result field 13 its decimal GFLOPS value alone; for a bench line its <gflops>|<cuv>|<readings>",
+    "outcomeKeccak256": "0x6449aa12f40bffbfd9b047d86cf376adea1905f47eae1eff9290f800ece5238b",
+    "preimageHex": "0x65636c642d636c6f73652d31f9324b49b24c8561481ef6b84ec6cbeabd1ccd691e3e55f109d1243ea864e569b6df4b03ac8957c50dc55aa44db55bac8e28268c51ad8f7148650749b5d0b9546449aa12f40bffbfd9b047d86cf376adea1905f47eae1eff9290f800ece5238b",
+    "n1": "0x12de19fd7d534c530111a36e55fc94e6cecf0353569123cad7964c7e7d9dd92a"
   },
   "validator": {
     "address": "0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278",
@@ -31,7 +44,7 @@
     "privateKeyNote": "test key only; the secp256k1 identity a seated validator signs time statements with"
   },
   "timeStatements": {
-    "layout": "keccak256(\"ecas-time-1\" || chainId uint256 BE || registry 20 bytes || node 20 bytes || nonce 32 bytes || t uint64 BE || block uint64 BE), signed over the digest with no EIP-191 prefix; see time-statement.json",
+    "layout": "keccak256(\"ecas-time-1\" || chainId uint256 BE || registry 20 bytes || node 20 bytes || nonce 32 bytes || t uint64 BE || block uint64 BE), signed over the digest with no EIP-191 prefix; see time-statement.json. t0 is over n0, t1 over n1.",
     "t0": {
       "fields": {
         "chainId": 80002,
@@ -64,25 +77,25 @@
         "chainId": 80002,
         "registry": "0x70bfdf41d4061592df509b9b46f91a8457f88483",
         "node": "0x470d8b388f4a0ae6bd512b74038c7e87957bb8fe",
-        "nonce": "0xf9324b49b24c8561481ef6b84ec6cbeabd1ccd691e3e55f109d1243ea864e569",
-        "t": 1761724830,
-        "block": 29000015
+        "nonce": "0x12de19fd7d534c530111a36e55fc94e6cecf0353569123cad7964c7e7d9dd92a",
+        "t": 1761724810,
+        "block": 29000005
       },
-      "preimageHex": "0x656361732d74696d652d31000000000000000000000000000000000000000000000000000000000001388270bfdf41d4061592df509b9b46f91a8457f88483470d8b388f4a0ae6bd512b74038c7e87957bb8fef9324b49b24c8561481ef6b84ec6cbeabd1ccd691e3e55f109d1243ea864e569000000006901c99e0000000001ba814f",
-      "digest": "0x58a503b2654214dbccef1489b801782ac05edc741079c2a1e496b78310803b36",
+      "preimageHex": "0x656361732d74696d652d31000000000000000000000000000000000000000000000000000000000001388270bfdf41d4061592df509b9b46f91a8457f88483470d8b388f4a0ae6bd512b74038c7e87957bb8fe12de19fd7d534c530111a36e55fc94e6cecf0353569123cad7964c7e7d9dd92a000000006901c98a0000000001ba8145",
+      "digest": "0x49545551fce3598320c690ae1530a08a6128e0920f4d8f1295219c73d1383c95",
       "signature": {
-        "r": "0x00f6af616becd151b753b09ee4830c51df8449e840a57a135160facdccf410a8",
-        "s": "0x203b15fc4d879e3c9a9cd94befa207d5032f1ef951731f26d5db40bc0d85278c",
+        "r": "0xfaeb40e95667f04e4e09fe927e6c73b5b32221ee7c69a6e8dab279af950a6fc2",
+        "s": "0x7fac1d554458a73b32df4db8307345366f8e18a530335fa92d1ea7dc9e75740c",
         "v": 27,
-        "serialized": "0x00f6af616becd151b753b09ee4830c51df8449e840a57a135160facdccf410a8203b15fc4d879e3c9a9cd94befa207d5032f1ef951731f26d5db40bc0d85278c1b"
+        "serialized": "0xfaeb40e95667f04e4e09fe927e6c73b5b32221ee7c69a6e8dab279af950a6fc27fac1d554458a73b32df4db8307345366f8e18a530335fa92d1ea7dc9e75740c1b"
       },
       "answer": {
         "validator": "0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278",
         "node": "0x470d8b388f4a0ae6bd512b74038c7e87957bb8fe",
-        "nonce": "0xf9324b49b24c8561481ef6b84ec6cbeabd1ccd691e3e55f109d1243ea864e569",
-        "t": 1761724830,
-        "block": 29000015,
-        "sig": "0x00f6af616becd151b753b09ee4830c51df8449e840a57a135160facdccf410a8203b15fc4d879e3c9a9cd94befa207d5032f1ef951731f26d5db40bc0d85278c1b"
+        "nonce": "0x12de19fd7d534c530111a36e55fc94e6cecf0353569123cad7964c7e7d9dd92a",
+        "t": 1761724810,
+        "block": 29000005,
+        "sig": "0xfaeb40e95667f04e4e09fe927e6c73b5b32221ee7c69a6e8dab279af950a6fc27fac1d554458a73b32df4db8307345366f8e18a530335fa92d1ea7dc9e75740c1b"
       },
       "recovered": "0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278"
     }
@@ -93,23 +106,25 @@
     "publicKeyPem": "-----BEGIN PUBLIC KEY-----\nMHYwEAYHKoZIzj0CAQYFK4EEACIDYgAEywr/me1Dyph8kkrzjtgkIxkF4b7/pb9H\njGVlgqJQiGvG25tNjAlldf8YO76YH54IBjiA+o9b5+JyC+zhMgqN5PRURlWrdIOj\nNK5RT3izKpMxzh51If8fJ+EANFDlb2bS\n-----END PUBLIC KEY-----\n",
     "note": "test key only; stands for the enclave key whose certificate the image registry holds"
   },
-  "lineLayout": "etny-cu|v1|<chainId>:<pox address>|<node address lower-case>|<gflops>|<cuv>|<validator address lower-case>|<run nonce 0x+64 hex>|<t0>|<t1>|<sig t0 0x+130 hex>|<sig t1 0x+130 hex>|heap=<SCONE_HEAP>;workers=<n>",
-  "line": "etny-cu|v1|80002:0xB8f46D2B943fFbe2A061Ae8be087ef5055AD96A3|0x470d8b388f4a0ae6bd512b74038c7e87957bb8fe|250|4|0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278|0xf9324b49b24c8561481ef6b84ec6cbeabd1ccd691e3e55f109d1243ea864e569|1761724800|1761724830|0x32dac36e060115ab6b0c8904fe92c8588affd0fec146186f68a61902a2f89d7f20c5392feeb2db341616f71eb82f6309fde0c8f6bdd9cd0237f21e43482551a81c|0x00f6af616becd151b753b09ee4830c51df8449e840a57a135160facdccf410a8203b15fc4d879e3c9a9cd94befa207d5032f1ef951731f26d5db40bc0d85278c1b|heap=256M;workers=4",
-  "lineSha256": "91f5c4e30fd27030822f8fc5cff38e5574d38c71471e2224eb0785c5d48d2a2f",
-  "signatureScheme": "ECDSA secp384r1 over SHA-256 of the UTF-8 bytes of line (no trailing newline), DER encoded, lower-case hex without 0x. Verifiers prehash with SHA-256 and parse the DER (from_der), never SHA-384.",
-  "signatureDerHex": "30660231009ed1a9f357e9c1f5a1c47d972f39a9972f8d535bfbb02994bb7b26a5a416e2d76d0cc9bd655c2212698c628462a199fe023100a21975f8209b93d18bec1a6f6d1c4daf43010f9cdc97d292fff39b5ac9a2a880c1092ac048af8c937ec33044a8e49a26",
+  "lineLayout": "etny-cu|v2|<chainId>:<pox address>|<node address lower-case>|<gflops>|<cuv>|<validator address lower-case>|<n0 0x+64 hex>|<salt 0x+64 hex>|<t0>|<t1>|<sig t0 0x+130 hex>|<sig t1 0x+130 hex>|heap=<SCONE_HEAP>;workers=<n>",
+  "lineFields": 14,
+  "line": "etny-cu|v2|80002:0xB8f46D2B943fFbe2A061Ae8be087ef5055AD96A3|0x470d8b388f4a0ae6bd512b74038c7e87957bb8fe|250|4|0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278|0xf9324b49b24c8561481ef6b84ec6cbeabd1ccd691e3e55f109d1243ea864e569|0xb6df4b03ac8957c50dc55aa44db55bac8e28268c51ad8f7148650749b5d0b954|1761724800|1761724810|0x32dac36e060115ab6b0c8904fe92c8588affd0fec146186f68a61902a2f89d7f20c5392feeb2db341616f71eb82f6309fde0c8f6bdd9cd0237f21e43482551a81c|0xfaeb40e95667f04e4e09fe927e6c73b5b32221ee7c69a6e8dab279af950a6fc27fac1d554458a73b32df4db8307345366f8e18a530335fa92d1ea7dc9e75740c1b|heap=256M;workers=4",
+  "lineSha256": "327a7b926793c0b492f31dff8d83e8f6cee5b9b1dea3588a679d41c832ef1750",
+  "signatureScheme": "ECDSA secp384r1 over SHA-256 of the statement bytes of the line: 0xFF || \"ecld-stmt-1\" || 0x00 || the UTF-8 bytes of line (no trailing newline), DER encoded, lower-case hex without 0x (reserved-prefixes.json statementForm). Verifiers prehash with SHA-256 and parse the DER (from_der), never SHA-384.",
+  "statementPrefixHex": "ff65636c642d73746d742d3100",
+  "signatureDerHex": "306402300696d5835fffb8b950811294f210626e90d1b18c8b47f97fa64e4ef70e4ecd3334198eb09485b8c9d1ba50a3b829ac2e023054527a77efec630239a424aded6f3124ca98f506428efb797229848c8168d6a56f049bf9b8429ee35a5d32bd1a0c4770",
   "capabilityEtny": {
     "bucket": "etny-bucket-integration",
     "object": "capability.etny",
     "layout": "three LF-terminated lines: the record line, its DER hex signature, then an unsigned platform line (cpu model, cores, MHz read from the host); written after capability.time.etny and before context_test.etny",
-    "content": "etny-cu|v1|80002:0xB8f46D2B943fFbe2A061Ae8be087ef5055AD96A3|0x470d8b388f4a0ae6bd512b74038c7e87957bb8fe|250|4|0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278|0xf9324b49b24c8561481ef6b84ec6cbeabd1ccd691e3e55f109d1243ea864e569|1761724800|1761724830|0x32dac36e060115ab6b0c8904fe92c8588affd0fec146186f68a61902a2f89d7f20c5392feeb2db341616f71eb82f6309fde0c8f6bdd9cd0237f21e43482551a81c|0x00f6af616becd151b753b09ee4830c51df8449e840a57a135160facdccf410a8203b15fc4d879e3c9a9cd94befa207d5032f1ef951731f26d5db40bc0d85278c1b|heap=256M;workers=4\n30660231009ed1a9f357e9c1f5a1c47d972f39a9972f8d535bfbb02994bb7b26a5a416e2d76d0cc9bd655c2212698c628462a199fe023100a21975f8209b93d18bec1a6f6d1c4daf43010f9cdc97d292fff39b5ac9a2a880c1092ac048af8c937ec33044a8e49a26\nplatform|cpu=Intel(R) Xeon(R) E-2288G CPU @ 3.70GHz|cores=8|mhz=3700\n",
+    "content": "etny-cu|v2|80002:0xB8f46D2B943fFbe2A061Ae8be087ef5055AD96A3|0x470d8b388f4a0ae6bd512b74038c7e87957bb8fe|250|4|0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278|0xf9324b49b24c8561481ef6b84ec6cbeabd1ccd691e3e55f109d1243ea864e569|0xb6df4b03ac8957c50dc55aa44db55bac8e28268c51ad8f7148650749b5d0b954|1761724800|1761724810|0x32dac36e060115ab6b0c8904fe92c8588affd0fec146186f68a61902a2f89d7f20c5392feeb2db341616f71eb82f6309fde0c8f6bdd9cd0237f21e43482551a81c|0xfaeb40e95667f04e4e09fe927e6c73b5b32221ee7c69a6e8dab279af950a6fc27fac1d554458a73b32df4db8307345366f8e18a530335fa92d1ea7dc9e75740c1b|heap=256M;workers=4\n306402300696d5835fffb8b950811294f210626e90d1b18c8b47f97fa64e4ef70e4ecd3334198eb09485b8c9d1ba50a3b829ac2e023054527a77efec630239a424aded6f3124ca98f506428efb797229848c8168d6a56f049bf9b8429ee35a5d32bd1a0c4770\nplatform|cpu=Intel(R) Xeon(R) E-2288G CPU @ 3.70GHz|cores=8|mhz=3700\n",
     "platformLine": "platform|cpu=Intel(R) Xeon(R) E-2288G CPU @ 3.70GHz|cores=8|mhz=3700"
   },
   "capabilityTimeEtny": {
     "bucket": "etny-bucket-integration",
     "object": "capability.time.etny",
-    "layout": "two LF-terminated lines: the GET /validator/time answer of t0, then the answer of t1, each the JSON object the validator returned (the six keys of time-statement.json answer: validator, node, nonce, t, block, sig); written before capability.etny. The node agent parses each line as JSON and takes its block for metadata3 cub0 (first line) and cub1 (second line).",
-    "content": "{\"validator\":\"0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278\",\"node\":\"0x470d8b388f4a0ae6bd512b74038c7e87957bb8fe\",\"nonce\":\"0xf9324b49b24c8561481ef6b84ec6cbeabd1ccd691e3e55f109d1243ea864e569\",\"t\":1761724800,\"block\":29000000,\"sig\":\"0x32dac36e060115ab6b0c8904fe92c8588affd0fec146186f68a61902a2f89d7f20c5392feeb2db341616f71eb82f6309fde0c8f6bdd9cd0237f21e43482551a81c\"}\n{\"validator\":\"0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278\",\"node\":\"0x470d8b388f4a0ae6bd512b74038c7e87957bb8fe\",\"nonce\":\"0xf9324b49b24c8561481ef6b84ec6cbeabd1ccd691e3e55f109d1243ea864e569\",\"t\":1761724830,\"block\":29000015,\"sig\":\"0x00f6af616becd151b753b09ee4830c51df8449e840a57a135160facdccf410a8203b15fc4d879e3c9a9cd94befa207d5032f1ef951731f26d5db40bc0d85278c1b\"}\n",
+    "layout": "two LF-terminated lines: the GET /validator/time answer of t0 (over n0), then the answer of t1 (over n1), each the JSON object the validator returned (the six keys of time-statement.json answer: validator, node, nonce, t, block, sig); written before capability.etny. The node agent parses each line as JSON and takes its block for metadata3 cub0 (first line) and cub1 (second line).",
+    "content": "{\"validator\":\"0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278\",\"node\":\"0x470d8b388f4a0ae6bd512b74038c7e87957bb8fe\",\"nonce\":\"0xf9324b49b24c8561481ef6b84ec6cbeabd1ccd691e3e55f109d1243ea864e569\",\"t\":1761724800,\"block\":29000000,\"sig\":\"0x32dac36e060115ab6b0c8904fe92c8588affd0fec146186f68a61902a2f89d7f20c5392feeb2db341616f71eb82f6309fde0c8f6bdd9cd0237f21e43482551a81c\"}\n{\"validator\":\"0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278\",\"node\":\"0x470d8b388f4a0ae6bd512b74038c7e87957bb8fe\",\"nonce\":\"0x12de19fd7d534c530111a36e55fc94e6cecf0353569123cad7964c7e7d9dd92a\",\"t\":1761724810,\"block\":29000005,\"sig\":\"0xfaeb40e95667f04e4e09fe927e6c73b5b32221ee7c69a6e8dab279af950a6fc27fac1d554458a73b32df4db8307345366f8e18a530335fa92d1ea7dc9e75740c1b\"}\n",
     "t0": {
       "validator": "0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278",
       "node": "0x470d8b388f4a0ae6bd512b74038c7e87957bb8fe",
@@ -121,15 +136,15 @@
     "t1": {
       "validator": "0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278",
       "node": "0x470d8b388f4a0ae6bd512b74038c7e87957bb8fe",
-      "nonce": "0xf9324b49b24c8561481ef6b84ec6cbeabd1ccd691e3e55f109d1243ea864e569",
-      "t": 1761724830,
-      "block": 29000015,
-      "sig": "0x00f6af616becd151b753b09ee4830c51df8449e840a57a135160facdccf410a8203b15fc4d879e3c9a9cd94befa207d5032f1ef951731f26d5db40bc0d85278c1b"
+      "nonce": "0x12de19fd7d534c530111a36e55fc94e6cecf0353569123cad7964c7e7d9dd92a",
+      "t": 1761724810,
+      "block": 29000005,
+      "sig": "0xfaeb40e95667f04e4e09fe927e6c73b5b32221ee7c69a6e8dab279af950a6fc27fac1d554458a73b32df4db8307345366f8e18a530335fa92d1ea7dc9e75740c1b"
     }
   },
   "metadata4": {
     "layout": "trustedzones=<a,b>;ipfs=<peer id>;startrow=v1;cugflops=<gflops>;cuv=<cuv>;cuat=<t1>;cusig=<DER hex of the record signature>;cuheap=<SCONE_HEAP>;cuworkers=<n>",
-    "value": "trustedzones=ecld-nodenithy-amoy,ecld-pynithy-amoy;ipfs=12D3KooWQYhTNQdmr3ArTeUHRYzFg94BKyTkoWBDWez9kSCVe2Xo;startrow=v1;cugflops=250;cuv=4;cuat=1761724830;cusig=30660231009ed1a9f357e9c1f5a1c47d972f39a9972f8d535bfbb02994bb7b26a5a416e2d76d0cc9bd655c2212698c628462a199fe023100a21975f8209b93d18bec1a6f6d1c4daf43010f9cdc97d292fff39b5ac9a2a880c1092ac048af8c937ec33044a8e49a26;cuheap=256M;cuworkers=4",
+    "value": "trustedzones=ecld-nodenithy-amoy,ecld-pynithy-amoy;ipfs=12D3KooWQYhTNQdmr3ArTeUHRYzFg94BKyTkoWBDWez9kSCVe2Xo;startrow=v1;cugflops=250;cuv=4;cuat=1761724810;cusig=306402300696d5835fffb8b950811294f210626e90d1b18c8b47f97fa64e4ef70e4ecd3334198eb09485b8c9d1ba50a3b829ac2e023054527a77efec630239a424aded6f3124ca98f506428efb797229848c8168d6a56f049bf9b8429ee35a5d32bd1a0c4770;cuheap=256M;cuworkers=4",
     "keys": [
       "trustedzones",
       "ipfs",
@@ -143,12 +158,13 @@
     ]
   },
   "metadata3": {
-    "layout": "<lat,lon>;cuval=<validator address lower-case>;cun=<run nonce>;cut0=<t0>;cut1=<t1>;cub0=<block0>;cub1=<block1>;cusig0=<sig t0>;cusig1=<sig t1> -- the first ;-field is the geography and may be empty, in which case the string starts with ;",
-    "value": "44.4268,26.1025;cuval=0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278;cun=0xf9324b49b24c8561481ef6b84ec6cbeabd1ccd691e3e55f109d1243ea864e569;cut0=1761724800;cut1=1761724830;cub0=29000000;cub1=29000015;cusig0=0x32dac36e060115ab6b0c8904fe92c8588affd0fec146186f68a61902a2f89d7f20c5392feeb2db341616f71eb82f6309fde0c8f6bdd9cd0237f21e43482551a81c;cusig1=0x00f6af616becd151b753b09ee4830c51df8449e840a57a135160facdccf410a8203b15fc4d879e3c9a9cd94befa207d5032f1ef951731f26d5db40bc0d85278c1b",
-    "valueEmptyGeography": ";cuval=0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278;cun=0xf9324b49b24c8561481ef6b84ec6cbeabd1ccd691e3e55f109d1243ea864e569;cut0=1761724800;cut1=1761724830;cub0=29000000;cub1=29000015;cusig0=0x32dac36e060115ab6b0c8904fe92c8588affd0fec146186f68a61902a2f89d7f20c5392feeb2db341616f71eb82f6309fde0c8f6bdd9cd0237f21e43482551a81c;cusig1=0x00f6af616becd151b753b09ee4830c51df8449e840a57a135160facdccf410a8203b15fc4d879e3c9a9cd94befa207d5032f1ef951731f26d5db40bc0d85278c1b",
+    "layout": "<lat,lon>;cuval=<validator address lower-case>;cun=<n0>;cus=<salt>;cut0=<t0>;cut1=<t1>;cub0=<block0>;cub1=<block1>;cusig0=<sig t0>;cusig1=<sig t1> -- the first ;-field is the geography and may be empty, in which case the string starts with ;",
+    "value": "44.4268,26.1025;cuval=0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278;cun=0xf9324b49b24c8561481ef6b84ec6cbeabd1ccd691e3e55f109d1243ea864e569;cus=0xb6df4b03ac8957c50dc55aa44db55bac8e28268c51ad8f7148650749b5d0b954;cut0=1761724800;cut1=1761724810;cub0=29000000;cub1=29000005;cusig0=0x32dac36e060115ab6b0c8904fe92c8588affd0fec146186f68a61902a2f89d7f20c5392feeb2db341616f71eb82f6309fde0c8f6bdd9cd0237f21e43482551a81c;cusig1=0xfaeb40e95667f04e4e09fe927e6c73b5b32221ee7c69a6e8dab279af950a6fc27fac1d554458a73b32df4db8307345366f8e18a530335fa92d1ea7dc9e75740c1b",
+    "valueEmptyGeography": ";cuval=0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278;cun=0xf9324b49b24c8561481ef6b84ec6cbeabd1ccd691e3e55f109d1243ea864e569;cus=0xb6df4b03ac8957c50dc55aa44db55bac8e28268c51ad8f7148650749b5d0b954;cut0=1761724800;cut1=1761724810;cub0=29000000;cub1=29000005;cusig0=0x32dac36e060115ab6b0c8904fe92c8588affd0fec146186f68a61902a2f89d7f20c5392feeb2db341616f71eb82f6309fde0c8f6bdd9cd0237f21e43482551a81c;cusig1=0xfaeb40e95667f04e4e09fe927e6c73b5b32221ee7c69a6e8dab279af950a6fc27fac1d554458a73b32df4db8307345366f8e18a530335fa92d1ea7dc9e75740c1b",
     "keys": [
       "cuval",
       "cun",
+      "cus",
       "cut0",
       "cut1",
       "cub0",
@@ -159,7 +175,338 @@
     "blocksRule": "cub0 and cub1 are the block field of the t0 and t1 time statements (decimal), written by the node agent from the first and second line of capability.time.etny (capabilityTimeEtny); the record line does not carry them, so they are unsigned by the trustedzone, and a wrong value only fails the recovery of cusig0 / cusig1 to a seated member (the node's own offer is cancelled)"
   },
   "lineFromMetadata": {
-    "rule": "a validator rebuilds the signed line from the DP request alone: etny-cu|v1|<baked chainId>:<baked pox>|<dproc lower-case>|<gflops>|<cuv>|<cuval>|<cun>|<cut0>|<cut1>|<cusig0>|<cusig1>|heap=<cuheap>;workers=<cuworkers>, then verifies cusig over it; gflops is the cugflops key; cun, cuheap and cuworkers carry the three fields of the line that no other key or chain state holds; the line carries no block numbers: cusig0 and cusig1 are recovered over the time statements rebuilt with node = dproc, nonce = cun, t = cut0 / cut1 and block = cub0 / cub1",
-    "rebuilt": "etny-cu|v1|80002:0xB8f46D2B943fFbe2A061Ae8be087ef5055AD96A3|0x470d8b388f4a0ae6bd512b74038c7e87957bb8fe|250|4|0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278|0xf9324b49b24c8561481ef6b84ec6cbeabd1ccd691e3e55f109d1243ea864e569|1761724800|1761724830|0x32dac36e060115ab6b0c8904fe92c8588affd0fec146186f68a61902a2f89d7f20c5392feeb2db341616f71eb82f6309fde0c8f6bdd9cd0237f21e43482551a81c|0x00f6af616becd151b753b09ee4830c51df8449e840a57a135160facdccf410a8203b15fc4d879e3c9a9cd94befa207d5032f1ef951731f26d5db40bc0d85278c1b|heap=256M;workers=4"
+    "rule": "a validator rebuilds the signed line from the DP request alone: etny-cu|v2|<baked chainId>:<baked pox>|<dproc lower-case>|<cugflops>|<cuv>|<cuval>|<cun>|<cus>|<cut0>|<cut1>|<cusig0>|<cusig1>|heap=<cuheap>;workers=<cuworkers>, then verifies cusig over its statement bytes; cun, cus, cuheap and cuworkers carry the four fields of the line that no other key or chain state holds; the line carries no block numbers: cusig0 is recovered over the time statement rebuilt with node = dproc, nonce = cun, t = cut0, block = cub0, and cusig1 over the one with nonce = closeNonce(cun, cus, \"<cugflops>|<cuv>|heap=<cuheap>;workers=<cuworkers>\"), t = cut1, block = cub1",
+    "rebuilt": "etny-cu|v2|80002:0xB8f46D2B943fFbe2A061Ae8be087ef5055AD96A3|0x470d8b388f4a0ae6bd512b74038c7e87957bb8fe|250|4|0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278|0xf9324b49b24c8561481ef6b84ec6cbeabd1ccd691e3e55f109d1243ea864e569|0xb6df4b03ac8957c50dc55aa44db55bac8e28268c51ad8f7148650749b5d0b954|1761724800|1761724810|0x32dac36e060115ab6b0c8904fe92c8588affd0fec146186f68a61902a2f89d7f20c5392feeb2db341616f71eb82f6309fde0c8f6bdd9cd0237f21e43482551a81c|0xfaeb40e95667f04e4e09fe927e6c73b5b32221ee7c69a6e8dab279af950a6fc27fac1d554458a73b32df4db8307345366f8e18a530335fa92d1ea7dc9e75740c1b|heap=256M;workers=4"
+  },
+  "rateBound": {
+    "rule": "a timed record is refused when its GFLOPS is above W / (t1 - t0 - A) x (1 + T) / 10^9, in integers gflops x 100 x (t1 - t0 - A) x 10^9 > W x (100 + T%); a window at or below A bounds nothing. W = rounds x workers x opsPerRound: rounds is benchmark.json's fullRounds for a trustedzone record and probeRounds for result field 13; a bench line's W is its region run's fixed work (bench-record.json benchChecks). The GFLOPS is measured on the enclave's clock, which the host supplies; the attested window bounds the real run from above. The writers apply the same bound before they sign.",
+    "benchmark": {
+      "cuv": 4,
+      "opsPerRound": 8388608,
+      "fullRounds": 50000,
+      "probeRounds": 50000
+    },
+    "allowanceSeconds": 4,
+    "tolerancePercent": 10,
+    "figuresStatus": "placeholders (OD16) to be calibrated on bare metal: A of a few seconds against the shortest honest run, T 10 %",
+    "recordWork": "1677721600000",
+    "examples": [
+      {
+        "window": 10,
+        "workers": 4,
+        "boundGflops": 307
+      },
+      {
+        "window": 12,
+        "workers": 4,
+        "boundGflops": 230
+      },
+      {
+        "window": 30,
+        "workers": 4,
+        "boundGflops": 70
+      }
+    ]
+  },
+  "admission": {
+    "rule": "which form each network kind admits (the reader tells the form by the record line's version, v1 or v2; in the request by the cus key; for result field 13 by its value count; a bench line by its tag)",
+    "forms": [
+      {
+        "form": "trustedzone record v1 (a request without cus)",
+        "matchingNetwork": "refused with reason 1: the v2 line is rebuilt and does not verify; the agent's disposition for 1 is a new integration test",
+        "otherNetwork": "admitted as at 52e36e0"
+      },
+      {
+        "form": "trustedzone record v2 (cus)",
+        "matchingNetwork": "admitted by the closing checks, the line rebuilt with cus and the rate bound",
+        "otherNetwork": "admitted by the same rules"
+      },
+      {
+        "form": "bench record etny-pb|v1",
+        "matchingNetwork": "admitted by bench-record.json benchChecks",
+        "otherNetwork": "not judged; the agent writes none there"
+      },
+      {
+        "form": "result field 13 with ten values (the salt the tenth)",
+        "matchingNetwork": "a probe",
+        "otherNetwork": "a probe"
+      },
+      {
+        "form": "result field 13 with nine values",
+        "matchingNetwork": "no probe: no strike and no admission",
+        "otherNetwork": "a probe as at 52e36e0"
+      }
+    ],
+    "matchingNetwork": "a network whose pricing names a PoxMatching (matching() is not zero)"
+  },
+  "closingChecks": {
+    "rule": "every reader of a timed record checks, in this order: the closing statement recovers over the n1 recomputed from n0, the salt and the outcome, not over n0 (closeNonce); t1 >= t0 (times); block1 >= block0 (blocks); the readers that hold both answers' bodies (both trustedzones, the probe, the agent on capability.time.etny and probe.time.<g>.etny) refuse a closing body equal to the opening one (equalBodies); the rate bound (rateBound). The members rebuild both statements from the request's keys and hold no body.",
+    "order": [
+      "closeNonce",
+      "times",
+      "blocks",
+      "equalBodies",
+      "rateBound"
+    ],
+    "cases": [
+      {
+        "name": "admitted",
+        "rule": "the record of this fixture: the closing statement over n1, t1 >= t0, block1 >= block0, the answers differ, within the rate bound",
+        "gflops": 250,
+        "salt": "0xb6df4b03ac8957c50dc55aa44db55bac8e28268c51ad8f7148650749b5d0b954",
+        "t0": 1761724800,
+        "t1": 1761724810,
+        "block0": 29000000,
+        "block1": 29000005,
+        "sig0": "0x32dac36e060115ab6b0c8904fe92c8588affd0fec146186f68a61902a2f89d7f20c5392feeb2db341616f71eb82f6309fde0c8f6bdd9cd0237f21e43482551a81c",
+        "sig1": "0xfaeb40e95667f04e4e09fe927e6c73b5b32221ee7c69a6e8dab279af950a6fc27fac1d554458a73b32df4db8307345366f8e18a530335fa92d1ea7dc9e75740c1b",
+        "closeAnswer": "{\"validator\":\"0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278\",\"node\":\"0x470d8b388f4a0ae6bd512b74038c7e87957bb8fe\",\"nonce\":\"0x12de19fd7d534c530111a36e55fc94e6cecf0353569123cad7964c7e7d9dd92a\",\"t\":1761724810,\"block\":29000005,\"sig\":\"0xfaeb40e95667f04e4e09fe927e6c73b5b32221ee7c69a6e8dab279af950a6fc27fac1d554458a73b32df4db8307345366f8e18a530335fa92d1ea7dc9e75740c1b\"}",
+        "openAnswer": "{\"validator\":\"0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278\",\"node\":\"0x470d8b388f4a0ae6bd512b74038c7e87957bb8fe\",\"nonce\":\"0xf9324b49b24c8561481ef6b84ec6cbeabd1ccd691e3e55f109d1243ea864e569\",\"t\":1761724800,\"block\":29000000,\"sig\":\"0x32dac36e060115ab6b0c8904fe92c8588affd0fec146186f68a61902a2f89d7f20c5392feeb2db341616f71eb82f6309fde0c8f6bdd9cd0237f21e43482551a81c\"}",
+        "appliesTo": "every reader",
+        "expected": {
+          "admitted": true
+        },
+        "outcome": "250|4|heap=256M;workers=4",
+        "n1": "0x12de19fd7d534c530111a36e55fc94e6cecf0353569123cad7964c7e7d9dd92a"
+      },
+      {
+        "name": "close-over-n0",
+        "rule": "the closing statement over the opening nonce n0, not over n1",
+        "gflops": 250,
+        "salt": "0xb6df4b03ac8957c50dc55aa44db55bac8e28268c51ad8f7148650749b5d0b954",
+        "t0": 1761724800,
+        "t1": 1761724810,
+        "block0": 29000000,
+        "block1": 29000005,
+        "sig0": "0x32dac36e060115ab6b0c8904fe92c8588affd0fec146186f68a61902a2f89d7f20c5392feeb2db341616f71eb82f6309fde0c8f6bdd9cd0237f21e43482551a81c",
+        "sig1": "0x72770a716f4c055f27b7c76b5de20fcf3c0dfeb78422c8946da171a6620c4895089d503fccc92f4e7d85df47091956bdac775c752a682336807ff675fc47e2f01b",
+        "closeAnswer": "{\"validator\":\"0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278\",\"node\":\"0x470d8b388f4a0ae6bd512b74038c7e87957bb8fe\",\"nonce\":\"0xf9324b49b24c8561481ef6b84ec6cbeabd1ccd691e3e55f109d1243ea864e569\",\"t\":1761724810,\"block\":29000005,\"sig\":\"0x72770a716f4c055f27b7c76b5de20fcf3c0dfeb78422c8946da171a6620c4895089d503fccc92f4e7d85df47091956bdac775c752a682336807ff675fc47e2f01b\"}",
+        "openAnswer": "{\"validator\":\"0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278\",\"node\":\"0x470d8b388f4a0ae6bd512b74038c7e87957bb8fe\",\"nonce\":\"0xf9324b49b24c8561481ef6b84ec6cbeabd1ccd691e3e55f109d1243ea864e569\",\"t\":1761724800,\"block\":29000000,\"sig\":\"0x32dac36e060115ab6b0c8904fe92c8588affd0fec146186f68a61902a2f89d7f20c5392feeb2db341616f71eb82f6309fde0c8f6bdd9cd0237f21e43482551a81c\"}",
+        "appliesTo": "every reader",
+        "expected": {
+          "admitted": false,
+          "refusedBy": "closeNonce"
+        },
+        "outcome": "250|4|heap=256M;workers=4",
+        "n1": "0x12de19fd7d534c530111a36e55fc94e6cecf0353569123cad7964c7e7d9dd92a"
+      },
+      {
+        "name": "close-over-first-attempt",
+        "rule": "a pair restarted with the next member: the record carries the last attempt's salt; a closing statement over the n1 of the first attempt's salt does not recover over the record's n1",
+        "gflops": 250,
+        "salt": "0xb6df4b03ac8957c50dc55aa44db55bac8e28268c51ad8f7148650749b5d0b954",
+        "t0": 1761724800,
+        "t1": 1761724810,
+        "block0": 29000000,
+        "block1": 29000005,
+        "sig0": "0x32dac36e060115ab6b0c8904fe92c8588affd0fec146186f68a61902a2f89d7f20c5392feeb2db341616f71eb82f6309fde0c8f6bdd9cd0237f21e43482551a81c",
+        "sig1": "0x0e941b3aa7f0eff24d8838c43113b31a349b0d7e263701d3ea288c6e636c01a446cffe5635ddf4ee2bffa1702ffbefbf0c84c5f21ada6a58956373f6c0967f271c",
+        "closeAnswer": "{\"validator\":\"0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278\",\"node\":\"0x470d8b388f4a0ae6bd512b74038c7e87957bb8fe\",\"nonce\":\"0x45a4395a4a1738de25f6fea4114b5123ee532f8f75f0c9490b0c8732ee761d6d\",\"t\":1761724810,\"block\":29000005,\"sig\":\"0x0e941b3aa7f0eff24d8838c43113b31a349b0d7e263701d3ea288c6e636c01a446cffe5635ddf4ee2bffa1702ffbefbf0c84c5f21ada6a58956373f6c0967f271c\"}",
+        "openAnswer": "{\"validator\":\"0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278\",\"node\":\"0x470d8b388f4a0ae6bd512b74038c7e87957bb8fe\",\"nonce\":\"0xf9324b49b24c8561481ef6b84ec6cbeabd1ccd691e3e55f109d1243ea864e569\",\"t\":1761724800,\"block\":29000000,\"sig\":\"0x32dac36e060115ab6b0c8904fe92c8588affd0fec146186f68a61902a2f89d7f20c5392feeb2db341616f71eb82f6309fde0c8f6bdd9cd0237f21e43482551a81c\"}",
+        "appliesTo": "every reader",
+        "expected": {
+          "admitted": false,
+          "refusedBy": "closeNonce"
+        },
+        "outcome": "250|4|heap=256M;workers=4",
+        "n1": "0x12de19fd7d534c530111a36e55fc94e6cecf0353569123cad7964c7e7d9dd92a"
+      },
+      {
+        "name": "t1-before-t0",
+        "rule": "t1 below t0",
+        "gflops": 250,
+        "salt": "0xb6df4b03ac8957c50dc55aa44db55bac8e28268c51ad8f7148650749b5d0b954",
+        "t0": 1761724810,
+        "t1": 1761724800,
+        "block0": 29000000,
+        "block1": 29000005,
+        "sig0": "0xe00c98d7c976395ac35fc49f57d1211f9a602e197a0a47017966aeb072f5ce471c7d31b137b89592dede49fdf7eb391c0fb7e06c0f42c6016293cd00e105aba71c",
+        "sig1": "0x8a559e2dd7ea9a2a068352cfece8c69b7e1be5b507c2ed52e423c9ac563f065f2421eb1ce52f3c148f8955e9bf5dd7515ba75814532ea3d7607f3605302ba3d61b",
+        "closeAnswer": "{\"validator\":\"0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278\",\"node\":\"0x470d8b388f4a0ae6bd512b74038c7e87957bb8fe\",\"nonce\":\"0x12de19fd7d534c530111a36e55fc94e6cecf0353569123cad7964c7e7d9dd92a\",\"t\":1761724800,\"block\":29000005,\"sig\":\"0x8a559e2dd7ea9a2a068352cfece8c69b7e1be5b507c2ed52e423c9ac563f065f2421eb1ce52f3c148f8955e9bf5dd7515ba75814532ea3d7607f3605302ba3d61b\"}",
+        "openAnswer": "{\"validator\":\"0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278\",\"node\":\"0x470d8b388f4a0ae6bd512b74038c7e87957bb8fe\",\"nonce\":\"0xf9324b49b24c8561481ef6b84ec6cbeabd1ccd691e3e55f109d1243ea864e569\",\"t\":1761724810,\"block\":29000000,\"sig\":\"0xe00c98d7c976395ac35fc49f57d1211f9a602e197a0a47017966aeb072f5ce471c7d31b137b89592dede49fdf7eb391c0fb7e06c0f42c6016293cd00e105aba71c\"}",
+        "appliesTo": "every reader",
+        "expected": {
+          "admitted": false,
+          "refusedBy": "times"
+        },
+        "outcome": "250|4|heap=256M;workers=4",
+        "n1": "0x12de19fd7d534c530111a36e55fc94e6cecf0353569123cad7964c7e7d9dd92a"
+      },
+      {
+        "name": "block1-before-block0",
+        "rule": "block1 below block0",
+        "gflops": 250,
+        "salt": "0xb6df4b03ac8957c50dc55aa44db55bac8e28268c51ad8f7148650749b5d0b954",
+        "t0": 1761724800,
+        "t1": 1761724810,
+        "block0": 29000005,
+        "block1": 29000000,
+        "sig0": "0xdb5f55e7df19e70b1b37bbae0b71b2165cb8295a0114119191841f09ce4793356697e0e9edcfddde8e1d140e976d73e0b4ede63a5724359aae4c3918e9015ef01b",
+        "sig1": "0xeb6823cffa613891a4b169ebb8ab823a5454b1006be76f74d6516c261f6c334d5a4b51f3201ef58cffa6a4ae1b1689964212f723af102f1967bfe7cb70df87df1b",
+        "closeAnswer": "{\"validator\":\"0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278\",\"node\":\"0x470d8b388f4a0ae6bd512b74038c7e87957bb8fe\",\"nonce\":\"0x12de19fd7d534c530111a36e55fc94e6cecf0353569123cad7964c7e7d9dd92a\",\"t\":1761724810,\"block\":29000000,\"sig\":\"0xeb6823cffa613891a4b169ebb8ab823a5454b1006be76f74d6516c261f6c334d5a4b51f3201ef58cffa6a4ae1b1689964212f723af102f1967bfe7cb70df87df1b\"}",
+        "openAnswer": "{\"validator\":\"0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278\",\"node\":\"0x470d8b388f4a0ae6bd512b74038c7e87957bb8fe\",\"nonce\":\"0xf9324b49b24c8561481ef6b84ec6cbeabd1ccd691e3e55f109d1243ea864e569\",\"t\":1761724800,\"block\":29000005,\"sig\":\"0xdb5f55e7df19e70b1b37bbae0b71b2165cb8295a0114119191841f09ce4793356697e0e9edcfddde8e1d140e976d73e0b4ede63a5724359aae4c3918e9015ef01b\"}",
+        "appliesTo": "every reader",
+        "expected": {
+          "admitted": false,
+          "refusedBy": "blocks"
+        },
+        "outcome": "250|4|heap=256M;workers=4",
+        "n1": "0x12de19fd7d534c530111a36e55fc94e6cecf0353569123cad7964c7e7d9dd92a"
+      },
+      {
+        "name": "equal-bodies",
+        "rule": "the closing answer's body equals the opening one's (checked by the readers that hold both bodies: the trustedzones, the probe and the agent; the members rebuild both statements and hold no body)",
+        "gflops": 250,
+        "salt": "0xb6df4b03ac8957c50dc55aa44db55bac8e28268c51ad8f7148650749b5d0b954",
+        "t0": 1761724800,
+        "t1": 1761724810,
+        "block0": 29000000,
+        "block1": 29000005,
+        "sig0": "0x32dac36e060115ab6b0c8904fe92c8588affd0fec146186f68a61902a2f89d7f20c5392feeb2db341616f71eb82f6309fde0c8f6bdd9cd0237f21e43482551a81c",
+        "sig1": "0xfaeb40e95667f04e4e09fe927e6c73b5b32221ee7c69a6e8dab279af950a6fc27fac1d554458a73b32df4db8307345366f8e18a530335fa92d1ea7dc9e75740c1b",
+        "closeAnswer": "{\"validator\":\"0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278\",\"node\":\"0x470d8b388f4a0ae6bd512b74038c7e87957bb8fe\",\"nonce\":\"0xf9324b49b24c8561481ef6b84ec6cbeabd1ccd691e3e55f109d1243ea864e569\",\"t\":1761724800,\"block\":29000000,\"sig\":\"0x32dac36e060115ab6b0c8904fe92c8588affd0fec146186f68a61902a2f89d7f20c5392feeb2db341616f71eb82f6309fde0c8f6bdd9cd0237f21e43482551a81c\"}",
+        "openAnswer": "{\"validator\":\"0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278\",\"node\":\"0x470d8b388f4a0ae6bd512b74038c7e87957bb8fe\",\"nonce\":\"0xf9324b49b24c8561481ef6b84ec6cbeabd1ccd691e3e55f109d1243ea864e569\",\"t\":1761724800,\"block\":29000000,\"sig\":\"0x32dac36e060115ab6b0c8904fe92c8588affd0fec146186f68a61902a2f89d7f20c5392feeb2db341616f71eb82f6309fde0c8f6bdd9cd0237f21e43482551a81c\"}",
+        "appliesTo": "the readers that hold both bodies",
+        "expected": {
+          "admitted": false,
+          "refusedBy": "equalBodies"
+        },
+        "outcome": "250|4|heap=256M;workers=4",
+        "n1": "0x12de19fd7d534c530111a36e55fc94e6cecf0353569123cad7964c7e7d9dd92a"
+      },
+      {
+        "name": "above-rate-bound",
+        "rule": "a window of 12 s bounds the record at 230 GFLOPS: 250 is refused; at 52e36e0 (one nonce, no rate bound) the same window passed every check",
+        "gflops": 250,
+        "salt": "0xb6df4b03ac8957c50dc55aa44db55bac8e28268c51ad8f7148650749b5d0b954",
+        "t0": 1761724800,
+        "t1": 1761724812,
+        "block0": 29000000,
+        "block1": 29000006,
+        "sig0": "0x32dac36e060115ab6b0c8904fe92c8588affd0fec146186f68a61902a2f89d7f20c5392feeb2db341616f71eb82f6309fde0c8f6bdd9cd0237f21e43482551a81c",
+        "sig1": "0x29db8f335fd60dba4d328ae45160054e04759b3c9acd15126a314715f871dd474fe29f477dee6475a1fb59071e9cf564fe0999aacda34b7e916b912deb8abdc91c",
+        "closeAnswer": "{\"validator\":\"0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278\",\"node\":\"0x470d8b388f4a0ae6bd512b74038c7e87957bb8fe\",\"nonce\":\"0x12de19fd7d534c530111a36e55fc94e6cecf0353569123cad7964c7e7d9dd92a\",\"t\":1761724812,\"block\":29000006,\"sig\":\"0x29db8f335fd60dba4d328ae45160054e04759b3c9acd15126a314715f871dd474fe29f477dee6475a1fb59071e9cf564fe0999aacda34b7e916b912deb8abdc91c\"}",
+        "openAnswer": "{\"validator\":\"0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278\",\"node\":\"0x470d8b388f4a0ae6bd512b74038c7e87957bb8fe\",\"nonce\":\"0xf9324b49b24c8561481ef6b84ec6cbeabd1ccd691e3e55f109d1243ea864e569\",\"t\":1761724800,\"block\":29000000,\"sig\":\"0x32dac36e060115ab6b0c8904fe92c8588affd0fec146186f68a61902a2f89d7f20c5392feeb2db341616f71eb82f6309fde0c8f6bdd9cd0237f21e43482551a81c\"}",
+        "appliesTo": "every reader",
+        "expected": {
+          "admitted": false,
+          "refusedBy": "rateBound"
+        },
+        "outcome": "250|4|heap=256M;workers=4",
+        "n1": "0x12de19fd7d534c530111a36e55fc94e6cecf0353569123cad7964c7e7d9dd92a"
+      },
+      {
+        "name": "at-rate-bound",
+        "rule": "a window of 12 s admits 230 GFLOPS",
+        "gflops": 230,
+        "salt": "0xb6df4b03ac8957c50dc55aa44db55bac8e28268c51ad8f7148650749b5d0b954",
+        "t0": 1761724800,
+        "t1": 1761724812,
+        "block0": 29000000,
+        "block1": 29000006,
+        "sig0": "0x32dac36e060115ab6b0c8904fe92c8588affd0fec146186f68a61902a2f89d7f20c5392feeb2db341616f71eb82f6309fde0c8f6bdd9cd0237f21e43482551a81c",
+        "sig1": "0x3d2c91efd9155a93903f3401837ffa7593f46a4de1571303ed21a5ab25265cff10a92dd3acb94e6ce36208ead1c355d55dab6a59e75c9f59c218459d7a71fc091b",
+        "closeAnswer": "{\"validator\":\"0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278\",\"node\":\"0x470d8b388f4a0ae6bd512b74038c7e87957bb8fe\",\"nonce\":\"0x9fa652284702a8396cd57a4cc7594af540c2786fee9c31d4793bb3acf2a9ccdf\",\"t\":1761724812,\"block\":29000006,\"sig\":\"0x3d2c91efd9155a93903f3401837ffa7593f46a4de1571303ed21a5ab25265cff10a92dd3acb94e6ce36208ead1c355d55dab6a59e75c9f59c218459d7a71fc091b\"}",
+        "openAnswer": "{\"validator\":\"0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278\",\"node\":\"0x470d8b388f4a0ae6bd512b74038c7e87957bb8fe\",\"nonce\":\"0xf9324b49b24c8561481ef6b84ec6cbeabd1ccd691e3e55f109d1243ea864e569\",\"t\":1761724800,\"block\":29000000,\"sig\":\"0x32dac36e060115ab6b0c8904fe92c8588affd0fec146186f68a61902a2f89d7f20c5392feeb2db341616f71eb82f6309fde0c8f6bdd9cd0237f21e43482551a81c\"}",
+        "appliesTo": "every reader",
+        "expected": {
+          "admitted": true
+        },
+        "outcome": "230|4|heap=256M;workers=4",
+        "n1": "0x9fa652284702a8396cd57a4cc7594af540c2786fee9c31d4793bb3acf2a9ccdf"
+      },
+      {
+        "name": "window-within-allowance",
+        "rule": "a window of 4 s (at A) bounds nothing",
+        "gflops": 6400,
+        "salt": "0xb6df4b03ac8957c50dc55aa44db55bac8e28268c51ad8f7148650749b5d0b954",
+        "t0": 1761724800,
+        "t1": 1761724804,
+        "block0": 29000000,
+        "block1": 29000002,
+        "sig0": "0x32dac36e060115ab6b0c8904fe92c8588affd0fec146186f68a61902a2f89d7f20c5392feeb2db341616f71eb82f6309fde0c8f6bdd9cd0237f21e43482551a81c",
+        "sig1": "0xaf43abab339e7abc97c0bb6f7aa382162b936873c98027a1b89faca752819c276a5320d6ca8e57024f873fe79f2d199557dc6a09bebd01577dcd45a7e08e6e7c1b",
+        "closeAnswer": "{\"validator\":\"0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278\",\"node\":\"0x470d8b388f4a0ae6bd512b74038c7e87957bb8fe\",\"nonce\":\"0x02d25cdcde208310fadfa3a3fcf57a357e8de1d726aa4383d36f686a222b3bbb\",\"t\":1761724804,\"block\":29000002,\"sig\":\"0xaf43abab339e7abc97c0bb6f7aa382162b936873c98027a1b89faca752819c276a5320d6ca8e57024f873fe79f2d199557dc6a09bebd01577dcd45a7e08e6e7c1b\"}",
+        "openAnswer": "{\"validator\":\"0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278\",\"node\":\"0x470d8b388f4a0ae6bd512b74038c7e87957bb8fe\",\"nonce\":\"0xf9324b49b24c8561481ef6b84ec6cbeabd1ccd691e3e55f109d1243ea864e569\",\"t\":1761724800,\"block\":29000000,\"sig\":\"0x32dac36e060115ab6b0c8904fe92c8588affd0fec146186f68a61902a2f89d7f20c5392feeb2db341616f71eb82f6309fde0c8f6bdd9cd0237f21e43482551a81c\"}",
+        "appliesTo": "every reader",
+        "expected": {
+          "admitted": true
+        },
+        "outcome": "6400|4|heap=256M;workers=4",
+        "n1": "0x02d25cdcde208310fadfa3a3fcf57a357e8de1d726aa4383d36f686a222b3bbb"
+      }
+    ]
+  },
+  "legacyV1": {
+    "rule": "the v1 record of before 52e36e0's successor: both statements over n0, the line signed in the plain form (ECDSA P-384 over SHA-256 of the UTF-8 line); no rate bound; result-v5.json's nine-value field 13 is made from it",
+    "lineLayout": "etny-cu|v1|<chainId>:<pox address>|<node address lower-case>|<gflops>|<cuv>|<validator address lower-case>|<run nonce 0x+64 hex>|<t0>|<t1>|<sig t0 0x+130 hex>|<sig t1 0x+130 hex>|heap=<SCONE_HEAP>;workers=<n>",
+    "measurement": {
+      "t0": 1761724800,
+      "t1": 1761724830,
+      "block0": 29000000,
+      "block1": 29000015
+    },
+    "timeStatements": {
+      "t0": {
+        "fields": {
+          "chainId": 80002,
+          "registry": "0x70bfdf41d4061592df509b9b46f91a8457f88483",
+          "node": "0x470d8b388f4a0ae6bd512b74038c7e87957bb8fe",
+          "nonce": "0xf9324b49b24c8561481ef6b84ec6cbeabd1ccd691e3e55f109d1243ea864e569",
+          "t": 1761724800,
+          "block": 29000000
+        },
+        "preimageHex": "0x656361732d74696d652d31000000000000000000000000000000000000000000000000000000000001388270bfdf41d4061592df509b9b46f91a8457f88483470d8b388f4a0ae6bd512b74038c7e87957bb8fef9324b49b24c8561481ef6b84ec6cbeabd1ccd691e3e55f109d1243ea864e569000000006901c9800000000001ba8140",
+        "digest": "0xa98144d067e4f7bf1fc78f1bd9bae7378daac8f8ea2fd3ef94e9cb30fff7b29a",
+        "signature": {
+          "r": "0x32dac36e060115ab6b0c8904fe92c8588affd0fec146186f68a61902a2f89d7f",
+          "s": "0x20c5392feeb2db341616f71eb82f6309fde0c8f6bdd9cd0237f21e43482551a8",
+          "v": 28,
+          "serialized": "0x32dac36e060115ab6b0c8904fe92c8588affd0fec146186f68a61902a2f89d7f20c5392feeb2db341616f71eb82f6309fde0c8f6bdd9cd0237f21e43482551a81c"
+        },
+        "answer": {
+          "validator": "0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278",
+          "node": "0x470d8b388f4a0ae6bd512b74038c7e87957bb8fe",
+          "nonce": "0xf9324b49b24c8561481ef6b84ec6cbeabd1ccd691e3e55f109d1243ea864e569",
+          "t": 1761724800,
+          "block": 29000000,
+          "sig": "0x32dac36e060115ab6b0c8904fe92c8588affd0fec146186f68a61902a2f89d7f20c5392feeb2db341616f71eb82f6309fde0c8f6bdd9cd0237f21e43482551a81c"
+        },
+        "recovered": "0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278"
+      },
+      "t1": {
+        "fields": {
+          "chainId": 80002,
+          "registry": "0x70bfdf41d4061592df509b9b46f91a8457f88483",
+          "node": "0x470d8b388f4a0ae6bd512b74038c7e87957bb8fe",
+          "nonce": "0xf9324b49b24c8561481ef6b84ec6cbeabd1ccd691e3e55f109d1243ea864e569",
+          "t": 1761724830,
+          "block": 29000015
+        },
+        "preimageHex": "0x656361732d74696d652d31000000000000000000000000000000000000000000000000000000000001388270bfdf41d4061592df509b9b46f91a8457f88483470d8b388f4a0ae6bd512b74038c7e87957bb8fef9324b49b24c8561481ef6b84ec6cbeabd1ccd691e3e55f109d1243ea864e569000000006901c99e0000000001ba814f",
+        "digest": "0x58a503b2654214dbccef1489b801782ac05edc741079c2a1e496b78310803b36",
+        "signature": {
+          "r": "0x00f6af616becd151b753b09ee4830c51df8449e840a57a135160facdccf410a8",
+          "s": "0x203b15fc4d879e3c9a9cd94befa207d5032f1ef951731f26d5db40bc0d85278c",
+          "v": 27,
+          "serialized": "0x00f6af616becd151b753b09ee4830c51df8449e840a57a135160facdccf410a8203b15fc4d879e3c9a9cd94befa207d5032f1ef951731f26d5db40bc0d85278c1b"
+        },
+        "answer": {
+          "validator": "0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278",
+          "node": "0x470d8b388f4a0ae6bd512b74038c7e87957bb8fe",
+          "nonce": "0xf9324b49b24c8561481ef6b84ec6cbeabd1ccd691e3e55f109d1243ea864e569",
+          "t": 1761724830,
+          "block": 29000015,
+          "sig": "0x00f6af616becd151b753b09ee4830c51df8449e840a57a135160facdccf410a8203b15fc4d879e3c9a9cd94befa207d5032f1ef951731f26d5db40bc0d85278c1b"
+        },
+        "recovered": "0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278"
+      }
+    },
+    "line": "etny-cu|v1|80002:0xB8f46D2B943fFbe2A061Ae8be087ef5055AD96A3|0x470d8b388f4a0ae6bd512b74038c7e87957bb8fe|250|4|0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278|0xf9324b49b24c8561481ef6b84ec6cbeabd1ccd691e3e55f109d1243ea864e569|1761724800|1761724830|0x32dac36e060115ab6b0c8904fe92c8588affd0fec146186f68a61902a2f89d7f20c5392feeb2db341616f71eb82f6309fde0c8f6bdd9cd0237f21e43482551a81c|0x00f6af616becd151b753b09ee4830c51df8449e840a57a135160facdccf410a8203b15fc4d879e3c9a9cd94befa207d5032f1ef951731f26d5db40bc0d85278c1b|heap=256M;workers=4",
+    "lineSha256": "91f5c4e30fd27030822f8fc5cff38e5574d38c71471e2224eb0785c5d48d2a2f",
+    "signatureScheme": "ECDSA secp384r1 over SHA-256 of the UTF-8 bytes of line (no trailing newline), DER encoded, lower-case hex without 0x",
+    "signatureDerHex": "30660231009ed1a9f357e9c1f5a1c47d972f39a9972f8d535bfbb02994bb7b26a5a416e2d76d0cc9bd655c2212698c628462a199fe023100a21975f8209b93d18bec1a6f6d1c4daf43010f9cdc97d292fff39b5ac9a2a880c1092ac048af8c937ec33044a8e49a26",
+    "metadata3": "44.4268,26.1025;cuval=0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278;cun=0xf9324b49b24c8561481ef6b84ec6cbeabd1ccd691e3e55f109d1243ea864e569;cut0=1761724800;cut1=1761724830;cub0=29000000;cub1=29000015;cusig0=0x32dac36e060115ab6b0c8904fe92c8588affd0fec146186f68a61902a2f89d7f20c5392feeb2db341616f71eb82f6309fde0c8f6bdd9cd0237f21e43482551a81c;cusig1=0x00f6af616becd151b753b09ee4830c51df8449e840a57a135160facdccf410a8203b15fc4d879e3c9a9cd94befa207d5032f1ef951731f26d5db40bc0d85278c1b",
+    "metadata4": "trustedzones=ecld-nodenithy-amoy,ecld-pynithy-amoy;ipfs=12D3KooWQYhTNQdmr3ArTeUHRYzFg94BKyTkoWBDWez9kSCVe2Xo;startrow=v1;cugflops=250;cuv=4;cuat=1761724830;cusig=30660231009ed1a9f357e9c1f5a1c47d972f39a9972f8d535bfbb02994bb7b26a5a416e2d76d0cc9bd655c2212698c628462a199fe023100a21975f8209b93d18bec1a6f6d1c4daf43010f9cdc97d292fff39b5ac9a2a880c1092ac048af8c937ec33044a8e49a26;cuheap=256M;cuworkers=4"
   }
 }

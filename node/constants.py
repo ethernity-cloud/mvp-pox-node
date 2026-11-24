@@ -33,6 +33,15 @@ CU_MAX_GFLOPS = 6400
 # The lowest benchmark version (benchmark.json cuv) a record may carry, 4
 # (ethernity-cas capability.rs CU_VERSION_MIN, reason CuVersionBelowMinimum).
 CU_VERSION_MIN = 4
+# The rate bound of a timed record (pox-smart-contract-litvm 2f600f6
+# spec/capability-record.json rateBound): a record is refused when
+# gflops x 100 x (t1 - t0 - A) x 10^9 > W x (100 + T), W = fullRounds x
+# workers x opsPerRound of benchmark.json at cuv 4; a window at or below A
+# bounds nothing. A and T are the spec's placeholders (OD16).
+BENCHMARK_FULL_ROUNDS = 50000
+BENCHMARK_OPS_PER_ROUND = 8388608
+RATE_ALLOWANCE_SECONDS = 4
+RATE_TOLERANCE_PERCENT = 10
 
 # A 2.0 DP request is refreshed when its expiry is this close.
 DP_REFRESH_MARGIN_SECONDS = 3600

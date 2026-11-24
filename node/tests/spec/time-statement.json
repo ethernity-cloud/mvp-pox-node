@@ -1,0 +1,114 @@
+{
+  "description": "Plan amendment 7 (validator timestamps): the statement GET /validator/time answers, the byte layout of its digest preimage, the keccak256 digest, the recoverable secp256k1 signature of the validator identity and the address a verifier recovers. The same statement is timeStatements.t0 of capability-record.json; `close` is the closing statement of that record over n1, timeStatements.t1.",
+  "generator": "spec/make/time-statement.js",
+  "request": {
+    "method": "GET",
+    "path": "/validator/time?node=0x470d8b388f4a0ae6bd512b74038c7e87957bb8fe&nonce=0xf9324b49b24c8561481ef6b84ec6cbeabd1ccd691e3e55f109d1243ea864e569",
+    "params": {
+      "node": "the node address, 0x hex, any case; echoed lower-case",
+      "nonce": "the 32-byte run nonce, 0x-prefixed 64 hex characters; echoed as given after lower-casing"
+    }
+  },
+  "preimage": {
+    "totalBytes": 131,
+    "layout": [
+      {
+        "offset": 0,
+        "bytes": 11,
+        "field": "tag",
+        "encoding": "ASCII \"ecas-time-1\", no terminator",
+        "value": "0x656361732d74696d652d31",
+        "ascii": "ecas-time-1"
+      },
+      {
+        "offset": 11,
+        "bytes": 32,
+        "field": "chainId",
+        "encoding": "uint256 big-endian",
+        "value": "0x0000000000000000000000000000000000000000000000000000000000013882",
+        "decimal": 80002
+      },
+      {
+        "offset": 43,
+        "bytes": 20,
+        "field": "registry",
+        "encoding": "the ValidatorRegistry address the enclave bakes, 20 raw bytes",
+        "value": "0x70bfdf41d4061592df509b9b46f91a8457f88483"
+      },
+      {
+        "offset": 63,
+        "bytes": 20,
+        "field": "node",
+        "encoding": "node address, 20 raw bytes",
+        "value": "0x470d8b388f4a0ae6bd512b74038c7e87957bb8fe"
+      },
+      {
+        "offset": 83,
+        "bytes": 32,
+        "field": "nonce",
+        "encoding": "run nonce, 32 raw bytes",
+        "value": "0xf9324b49b24c8561481ef6b84ec6cbeabd1ccd691e3e55f109d1243ea864e569"
+      },
+      {
+        "offset": 115,
+        "bytes": 8,
+        "field": "t",
+        "encoding": "uint64 big-endian, unix seconds of the validator clock",
+        "value": "0x000000006901c980",
+        "decimal": 1761724800
+      },
+      {
+        "offset": 123,
+        "bytes": 8,
+        "field": "block",
+        "encoding": "uint64 big-endian, the chain head the validator holds",
+        "value": "0x0000000001ba8140",
+        "decimal": 29000000
+      }
+    ],
+    "hex": "0x656361732d74696d652d31000000000000000000000000000000000000000000000000000000000001388270bfdf41d4061592df509b9b46f91a8457f88483470d8b388f4a0ae6bd512b74038c7e87957bb8fef9324b49b24c8561481ef6b84ec6cbeabd1ccd691e3e55f109d1243ea864e569000000006901c9800000000001ba8140"
+  },
+  "digest": "0xa98144d067e4f7bf1fc78f1bd9bae7378daac8f8ea2fd3ef94e9cb30fff7b29a",
+  "digestRule": "keccak256 of the 131 preimage bytes; the signature is over this digest directly, with no EIP-191 personal-sign prefix and no further hashing.",
+  "signature": {
+    "scheme": "secp256k1 ECDSA, RFC 6979 deterministic k, low-s, recoverable",
+    "r": "0x32dac36e060115ab6b0c8904fe92c8588affd0fec146186f68a61902a2f89d7f",
+    "s": "0x20c5392feeb2db341616f71eb82f6309fde0c8f6bdd9cd0237f21e43482551a8",
+    "v": 28,
+    "vRule": "v is 27 or 28 (recovery id + 27), the last byte of the serialization",
+    "serialized": "0x32dac36e060115ab6b0c8904fe92c8588affd0fec146186f68a61902a2f89d7f20c5392feeb2db341616f71eb82f6309fde0c8f6bdd9cd0237f21e43482551a81c",
+    "serializedRule": "65 bytes r || s || v as 0x-prefixed 130 hex characters; this is the sig field of the answer and the <sig t0> / <sig t1> fields of the capability record"
+  },
+  "answer": {
+    "validator": "0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278",
+    "node": "0x470d8b388f4a0ae6bd512b74038c7e87957bb8fe",
+    "nonce": "0xf9324b49b24c8561481ef6b84ec6cbeabd1ccd691e3e55f109d1243ea864e569",
+    "t": 1761724800,
+    "block": 29000000,
+    "sig": "0x32dac36e060115ab6b0c8904fe92c8588affd0fec146186f68a61902a2f89d7f20c5392feeb2db341616f71eb82f6309fde0c8f6bdd9cd0237f21e43482551a81c"
+  },
+  "answerRule": "JSON object with exactly these six keys; validator, node and nonce are lower-case 0x hex, t and block are JSON numbers, sig is the 65-byte serialization.",
+  "recovered": "0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278",
+  "verification": "rebuild the preimage from the answer with the baked chain id and registry, keccak256 it, recover the address from sig (ethers recoverAddress or the Rust k256 recovery), and require the lower-cased result to equal the answer.validator and a seated member of the registry.",
+  "close": {
+    "rule": "the closing statement of a timed record is the same statement over n1 = keccak256(abi.encodePacked(bytes(\"ecld-close-1\"), n0, salt, keccak256(utf8(outcome)))), requested after the run with the salt the trustedzone drew after it; a reader recomputes n1 from n0, the salt and the outcome and recovers the closing signature over the statement with nonce = n1, never n0. The statement layout does not change.",
+    "n0": "0xf9324b49b24c8561481ef6b84ec6cbeabd1ccd691e3e55f109d1243ea864e569",
+    "salt": "0xb6df4b03ac8957c50dc55aa44db55bac8e28268c51ad8f7148650749b5d0b954",
+    "outcome": "250|4|heap=256M;workers=4",
+    "closeNoncePreimageHex": "0x65636c642d636c6f73652d31f9324b49b24c8561481ef6b84ec6cbeabd1ccd691e3e55f109d1243ea864e569b6df4b03ac8957c50dc55aa44db55bac8e28268c51ad8f7148650749b5d0b9546449aa12f40bffbfd9b047d86cf376adea1905f47eae1eff9290f800ece5238b",
+    "n1": "0x12de19fd7d534c530111a36e55fc94e6cecf0353569123cad7964c7e7d9dd92a",
+    "request": "/validator/time?node=0x470d8b388f4a0ae6bd512b74038c7e87957bb8fe&nonce=0x12de19fd7d534c530111a36e55fc94e6cecf0353569123cad7964c7e7d9dd92a",
+    "preimageHex": "0x656361732d74696d652d31000000000000000000000000000000000000000000000000000000000001388270bfdf41d4061592df509b9b46f91a8457f88483470d8b388f4a0ae6bd512b74038c7e87957bb8fe12de19fd7d534c530111a36e55fc94e6cecf0353569123cad7964c7e7d9dd92a000000006901c98a0000000001ba8145",
+    "digest": "0x49545551fce3598320c690ae1530a08a6128e0920f4d8f1295219c73d1383c95",
+    "signature": "0xfaeb40e95667f04e4e09fe927e6c73b5b32221ee7c69a6e8dab279af950a6fc27fac1d554458a73b32df4db8307345366f8e18a530335fa92d1ea7dc9e75740c1b",
+    "answer": {
+      "validator": "0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278",
+      "node": "0x470d8b388f4a0ae6bd512b74038c7e87957bb8fe",
+      "nonce": "0x12de19fd7d534c530111a36e55fc94e6cecf0353569123cad7964c7e7d9dd92a",
+      "t": 1761724810,
+      "block": 29000005,
+      "sig": "0xfaeb40e95667f04e4e09fe927e6c73b5b32221ee7c69a6e8dab279af950a6fc27fac1d554458a73b32df4db8307345366f8e18a530335fa92d1ea7dc9e75740c1b"
+    },
+    "recovered": "0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278"
+  }
+}

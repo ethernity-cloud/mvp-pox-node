@@ -1,0 +1,5702 @@
+{
+  "description": "The selectors and topics of the ABIs the agent, the validators' members, the runners and the SDKs call (SF9): every function selector, event topic0 and error selector of the files of abi/ named in `abis`, the entries this line changed with their previous signature and value, the entries it added, and the two signals a client reads the generation from. Every consumer's ABI test checks the entries it uses against this file.",
+  "generator": "spec/make/abi-selectors.js",
+  "source": "abi/ (node scripts/export-abi.js after npx hardhat compile)",
+  "abis": [
+    "EthernityImplementationV2_2_0.json",
+    "IEthernityCloudV2.json",
+    "IPoxPricing.json",
+    "IPoxReader.json",
+    "IPoxMatching.json",
+    "IPoxMatchingTypes.json",
+    "IPoxMatchReader.json",
+    "IECImageRegistryV4.json",
+    "ECImageRegistryV4.json",
+    "IReservationBroker.json",
+    "ReservationBroker.json",
+    "IReservationResolver.json",
+    "IBrokerRegistry.json",
+    "IPerformanceOracle.json",
+    "EnclaveStateRegistry.json"
+  ],
+  "rule": "a function's and an error's selector is the first 4 bytes of keccak256 of its canonical signature (tuples as their component types in parentheses); an event's topic0 is the whole keccak256",
+  "signals": {
+    "rule": "the add form and doStamp's arity follow the PoX's VERSION(); the claims path and the strict stored-result grammar follow the pricing's matching() read from the chain, never a static descriptor (OD18 A)",
+    "version": {
+      "selector": "0xffa1ad74",
+      "answers": [
+        {
+          "value": "2.0",
+          "generation": "the PoX of this line (Ethernity20.sol VERSION)",
+          "addDPRequestV2": "gflops uint40",
+          "addDORequestV2": "maxGflops uint48",
+          "doStamp": "three values (basePriceWei, escrowGflops, epcUnits)"
+        },
+        {
+          "value": "1.2",
+          "generation": "the PoX 2.0 sets deployed on bloxberg testnet and Polygon Amoy (EthernityImplementationV2_1_2)",
+          "addDPRequestV2": "gflops uint32",
+          "addDORequestV2": "maxGflops uint32",
+          "doStamp": "two values (basePriceWei, escrowGflops)"
+        }
+      ]
+    },
+    "matching": {
+      "selector": "0xae5ec2e9",
+      "rule": "the pricing's PoxMatching; the zero address on a network whose pricing names none: no claims path, the stored result read as before the strict grammar"
+    }
+  },
+  "changed": [
+    {
+      "kind": "function",
+      "name": "addDPRequestV2",
+      "signature": "addDPRequestV2(uint8,uint8,uint8,uint8,uint16,uint40,uint256,string,string,string,string)",
+      "now": "0x72a6bda7",
+      "before": "addDPRequestV2(uint8,uint8,uint8,uint8,uint16,uint32,uint256,string,string,string,string)",
+      "beforeValue": "0x6e01d461",
+      "change": "gflops uint32 -> uint40: enclave memory in bits 16-23, EPC units in bits 24-39"
+    },
+    {
+      "kind": "function",
+      "name": "addDORequestV2",
+      "signature": "addDORequestV2(uint8,uint8,uint8,uint8,uint16,uint8,uint256,uint48,uint16,uint256,string,string,string,string)",
+      "now": "0x9f74fcce",
+      "before": "addDORequestV2(uint8,uint8,uint8,uint8,uint16,uint8,uint256,uint32,uint16,uint256,string,string,string,string)",
+      "beforeValue": "0x9fdaa26e",
+      "change": "maxGflops uint32 -> uint48: the minimum EPC in bits 32-47"
+    },
+    {
+      "kind": "function",
+      "name": "bidQuoteFor",
+      "signature": "bidQuoteFor(uint8,uint8,uint8,uint8,uint16,uint16,uint16,uint16,bytes32,uint16,uint8,uint256,uint256,uint256)",
+      "now": "0xd1d5decb",
+      "before": "bidQuoteFor(uint8,uint8,uint8,uint8,uint16,uint16,uint16,bytes32,uint16,uint8,uint256,uint256,uint256)",
+      "beforeValue": "0x060a67a2",
+      "change": "the minimum EPC units (uint16) after the GFLOPS ceiling"
+    },
+    {
+      "kind": "function",
+      "name": "escrowFor",
+      "signature": "escrowFor(uint16,uint256,uint48,uint16,uint256,string)",
+      "now": "0xdc4e3133",
+      "before": "escrowFor(uint16,uint256,uint32,uint16,uint256,string)",
+      "beforeValue": "0x886f66b1",
+      "change": "maxGflops uint32 -> uint48"
+    },
+    {
+      "kind": "event",
+      "name": "Announced",
+      "signature": "Announced(address,uint256,uint32,uint8,uint8,uint8,uint8,uint16,uint256,uint16,uint8,uint16)",
+      "now": "0xd3b318a1e99c3395d79424d596c72f8fe353d8510372e958846f833dc5ebca59",
+      "before": "Announced(address,uint256,uint32,uint8,uint8,uint8,uint8,uint16,uint256,uint16,uint8)",
+      "beforeValue": "0x777140628805c902c230402db4d26113ae0fff392491e89bf04bbaad6cc237ec",
+      "change": "epcUnits (uint16) appended"
+    },
+    {
+      "kind": "function",
+      "name": "committedOffers",
+      "signature": "committedOffers(uint256,uint256,uint8,uint8,uint8,uint8,uint32,uint32,uint16)",
+      "now": "0x35fda2c1",
+      "before": "committedOffers(uint256,uint256,uint8,uint8,uint8,uint8,uint32,uint32)",
+      "beforeValue": "0x42b2ec83",
+      "change": "the reserved placement's EPC need (uint16) appended; the enclave memory and the EPC tested (spec/matching.md section 16 item 42)"
+    }
+  ],
+  "added": [
+    {
+      "kind": "function",
+      "name": "farmJoinOf",
+      "abi": "EthernityImplementationV2_2_0.json",
+      "signature": "farmJoinOf(address)",
+      "value": "0x98e43b35"
+    },
+    {
+      "kind": "function",
+      "name": "accountInChain",
+      "abi": "IPoxMatching.json",
+      "signature": "accountInChain(address)",
+      "value": "0xdd87c2ed"
+    },
+    {
+      "kind": "function",
+      "name": "imageEpcUnits",
+      "abi": "ECImageRegistryV4.json",
+      "signature": "imageEpcUnits(string)",
+      "value": "0x41684018"
+    },
+    {
+      "kind": "function",
+      "name": "setImageEpcUnits",
+      "abi": "ECImageRegistryV4.json",
+      "signature": "setImageEpcUnits(string,uint16)",
+      "value": "0x7b6aef2b"
+    },
+    {
+      "kind": "function",
+      "name": "seedingOpen",
+      "abi": "ECImageRegistryV4.json",
+      "signature": "seedingOpen()",
+      "value": "0x17f8cdbd"
+    },
+    {
+      "kind": "event",
+      "name": "ParametersReplaced",
+      "abi": "IPoxMatching.json",
+      "signature": "ParametersReplaced(uint256,uint32)",
+      "value": "0x43ecbeed305302a5a88861988f275e320fef079578e9cfb2cb81a61f477be6ba"
+    },
+    {
+      "kind": "event",
+      "name": "ImageEpcSet",
+      "abi": "ECImageRegistryV4.json",
+      "signature": "ImageEpcSet(string,uint16)",
+      "value": "0xac1bfe6962facd1422621ed45f95aa4115f0cb1e62d142009a9e927259a9f0fa"
+    },
+    {
+      "kind": "error",
+      "name": "NotPendingOwner",
+      "abi": "IPoxMatching.json",
+      "signature": "NotPendingOwner(address)",
+      "value": "0xa09b9a43"
+    },
+    {
+      "kind": "error",
+      "name": "ImageEpcRefused",
+      "abi": "ECImageRegistryV4.json",
+      "signature": "ImageEpcRefused(string,uint8)",
+      "value": "0x0f4c0bd8"
+    },
+    {
+      "kind": "function",
+      "name": "failureStep",
+      "abi": "ReservationBroker.json",
+      "signature": "failureStep(uint256,address,uint8,uint256,uint256)",
+      "value": "0x616681e5"
+    },
+    {
+      "kind": "function",
+      "name": "reservedOffer",
+      "abi": "IPoxReader.json",
+      "signature": "reservedOffer(uint256,uint8,uint8,uint8,uint8,uint32,uint32,uint16)",
+      "value": "0x05fec4ce"
+    },
+    {
+      "kind": "function",
+      "name": "epcNeedOf",
+      "abi": "IPoxReader.json",
+      "signature": "epcNeedOf(string)",
+      "value": "0x0f2ea640"
+    }
+  ],
+  "entries": [
+    {
+      "abi": "ECImageRegistryV4.json",
+      "kind": "error",
+      "name": "ImageEpcRefused",
+      "signature": "ImageEpcRefused(string,uint8)",
+      "selector": "0x0f4c0bd8"
+    },
+    {
+      "abi": "ECImageRegistryV4.json",
+      "kind": "error",
+      "name": "ImageRecordsRefused",
+      "signature": "ImageRecordsRefused(string,uint8)",
+      "selector": "0xf4ab43e5"
+    },
+    {
+      "abi": "ECImageRegistryV4.json",
+      "kind": "error",
+      "name": "NotOwner",
+      "signature": "NotOwner()",
+      "selector": "0x30cd7471"
+    },
+    {
+      "abi": "ECImageRegistryV4.json",
+      "kind": "error",
+      "name": "NotPublisher",
+      "signature": "NotPublisher()",
+      "selector": "0x6cc8883a"
+    },
+    {
+      "abi": "ECImageRegistryV4.json",
+      "kind": "error",
+      "name": "ReleaseRefused",
+      "signature": "ReleaseRefused(uint8)",
+      "selector": "0x47507933"
+    },
+    {
+      "abi": "ECImageRegistryV4.json",
+      "kind": "error",
+      "name": "SeedSourceRefused",
+      "signature": "SeedSourceRefused(address)",
+      "selector": "0x91e8617d"
+    },
+    {
+      "abi": "ECImageRegistryV4.json",
+      "kind": "error",
+      "name": "SeedingOpen",
+      "signature": "SeedingOpen()",
+      "selector": "0x7ecbd515"
+    },
+    {
+      "abi": "ECImageRegistryV4.json",
+      "kind": "error",
+      "name": "SeedingRefused",
+      "signature": "SeedingRefused(uint8)",
+      "selector": "0x3b2303dd"
+    },
+    {
+      "abi": "ECImageRegistryV4.json",
+      "kind": "error",
+      "name": "SessionRegistryAlreadySet",
+      "signature": "SessionRegistryAlreadySet(address)",
+      "selector": "0x83d44c35"
+    },
+    {
+      "abi": "ECImageRegistryV4.json",
+      "kind": "error",
+      "name": "SessionRegistryRefused",
+      "signature": "SessionRegistryRefused(address)",
+      "selector": "0x5118e63f"
+    },
+    {
+      "abi": "ECImageRegistryV4.json",
+      "kind": "event",
+      "name": "AllowedWalletAdded",
+      "signature": "AllowedWalletAdded(address)",
+      "topic0": "0x5d99003d9c0cbe82ae9d9448fcfb13e529e587ad1b467eb05f304f7678a43e26"
+    },
+    {
+      "abi": "ECImageRegistryV4.json",
+      "kind": "event",
+      "name": "AllowedWalletRemoved",
+      "signature": "AllowedWalletRemoved(address)",
+      "topic0": "0x6061821c30906da15d62f88beb63469e9dbb1e5958a1498b5a909e1c623121cb"
+    },
+    {
+      "abi": "ECImageRegistryV4.json",
+      "kind": "event",
+      "name": "DefaultReleaseAdded",
+      "signature": "DefaultReleaseAdded(uint256,bytes32)",
+      "topic0": "0x2b2947c8ee408d8431c5d38ca32c712803c47e1f533370735be78b1d9404fffa"
+    },
+    {
+      "abi": "ECImageRegistryV4.json",
+      "kind": "event",
+      "name": "ImageAdded",
+      "signature": "ImageAdded(string,string,string)",
+      "topic0": "0xee9a8e916f621a19477457c632dd38f0a28ccc5f691adb53f9c7fe32d37e552f"
+    },
+    {
+      "abi": "ECImageRegistryV4.json",
+      "kind": "event",
+      "name": "ImageCertSet",
+      "signature": "ImageCertSet(string,string,string)",
+      "topic0": "0x0b0dfc05317360edacb6575c34923b2d27dbde0c2abb4e4fce192336c3d60f67"
+    },
+    {
+      "abi": "ECImageRegistryV4.json",
+      "kind": "event",
+      "name": "ImageEpcSet",
+      "signature": "ImageEpcSet(string,uint16)",
+      "topic0": "0xac1bfe6962facd1422621ed45f95aa4115f0cb1e62d142009a9e927259a9f0fa"
+    },
+    {
+      "abi": "ECImageRegistryV4.json",
+      "kind": "event",
+      "name": "ImageNameClaimed",
+      "signature": "ImageNameClaimed(bytes32,string,address)",
+      "topic0": "0xbccc8e2ab4960141438cf1090f50f27a77bd497299bbbe865b1595c58db6b1a2"
+    },
+    {
+      "abi": "ECImageRegistryV4.json",
+      "kind": "event",
+      "name": "ImageNameSeedingClosed",
+      "signature": "ImageNameSeedingClosed()",
+      "topic0": "0x90c030ce23a992ead63797cd28e8ff7a3f7e7a292888c6d11a19ab3ea087fffe"
+    },
+    {
+      "abi": "ECImageRegistryV4.json",
+      "kind": "event",
+      "name": "ImageNameTransferStarted",
+      "signature": "ImageNameTransferStarted(bytes32,string,address,address)",
+      "topic0": "0x840a8fa233816a18fde0f98ec57929aa0bb3000b6a08e7567b5a6511a586887f"
+    },
+    {
+      "abi": "ECImageRegistryV4.json",
+      "kind": "event",
+      "name": "ImageNameTransferred",
+      "signature": "ImageNameTransferred(bytes32,string,address,address)",
+      "topic0": "0xb64f813510fd7d2308b93497fb0bb4ac616f6460e3eaed0113a90f84cb559701"
+    },
+    {
+      "abi": "ECImageRegistryV4.json",
+      "kind": "event",
+      "name": "ImagePublished",
+      "signature": "ImagePublished(string)",
+      "topic0": "0x0424c8d2bbdf02d859820b5cf70ab8477cf601cd57538e8c82c2a4f638b51b3c"
+    },
+    {
+      "abi": "ECImageRegistryV4.json",
+      "kind": "event",
+      "name": "ImageRecordsSet",
+      "signature": "ImageRecordsSet(string,uint8)",
+      "topic0": "0x7d9144db82b7073192bb2f674d6361bccafc367f39e06f2bad4c1d57b6ce0035"
+    },
+    {
+      "abi": "ECImageRegistryV4.json",
+      "kind": "event",
+      "name": "ImageRegistered",
+      "signature": "ImageRegistered(string,string,string,address,string)",
+      "topic0": "0x0a82a73a734d0501bf018afe2f86d315f64f8e7da479139849f896f2a54a731b"
+    },
+    {
+      "abi": "ECImageRegistryV4.json",
+      "kind": "event",
+      "name": "ImageRewardAddressChanged",
+      "signature": "ImageRewardAddressChanged(string,address,address)",
+      "topic0": "0xfb7d978fea72142891cd4a3c983e90687bfac283730deec964d144aceba7b863"
+    },
+    {
+      "abi": "ECImageRegistryV4.json",
+      "kind": "event",
+      "name": "ImageValidated",
+      "signature": "ImageValidated(string)",
+      "topic0": "0x5044e25b8b7d0b24db050bf5215a92f9fab04a3154b386faac0d68c2dc03fe1b"
+    },
+    {
+      "abi": "ECImageRegistryV4.json",
+      "kind": "event",
+      "name": "OwnerChanged",
+      "signature": "OwnerChanged(address,address)",
+      "topic0": "0xb532073b38c83145e3e5135377a08bf9aab55bc0fd7c1179cd4fb995d2a5159c"
+    },
+    {
+      "abi": "ECImageRegistryV4.json",
+      "kind": "event",
+      "name": "OwnershipTransferStarted",
+      "signature": "OwnershipTransferStarted(address,address)",
+      "topic0": "0x38d16b8cac22d99fc7c124b9cd0de2d3fa1faef420bfe791d8c362d765e22700"
+    },
+    {
+      "abi": "ECImageRegistryV4.json",
+      "kind": "event",
+      "name": "SessionRegistrySet",
+      "signature": "SessionRegistrySet(address)",
+      "topic0": "0x9d06989f11b3cee0cee3dfb722e2af5d9cc6ed067c911fa937b00cefc12593d1"
+    },
+    {
+      "abi": "ECImageRegistryV4.json",
+      "kind": "event",
+      "name": "TrustedZoneImageAdded",
+      "signature": "TrustedZoneImageAdded(string)",
+      "topic0": "0x77d8d52be42272e5261c9e3e9cd5f254de45b9fca6876a2f305b77c930ef3bc0"
+    },
+    {
+      "abi": "ECImageRegistryV4.json",
+      "kind": "event",
+      "name": "TrustedZoneImageCertSet",
+      "signature": "TrustedZoneImageCertSet(string,string,string)",
+      "topic0": "0x7f46e65d782fa4835a5b92c0b8800f27e0f1af0119b0fab97b1c428eb1844956"
+    },
+    {
+      "abi": "ECImageRegistryV4.json",
+      "kind": "event",
+      "name": "TrustedZoneImageRegistered",
+      "signature": "TrustedZoneImageRegistered(string,string,string,address,string)",
+      "topic0": "0x34e321a2318af094f76272503a813947654d0d3d93a627aef8fde032252db520"
+    },
+    {
+      "abi": "ECImageRegistryV4.json",
+      "kind": "event",
+      "name": "TrustedZoneImageRewardAddressChanged",
+      "signature": "TrustedZoneImageRewardAddressChanged(string,address,address)",
+      "topic0": "0xaadf9a0375c83ff6a0d5cd58e99bfa27cf0206ff01d17d72b8a04a90ca9f2c2f"
+    },
+    {
+      "abi": "ECImageRegistryV4.json",
+      "kind": "function",
+      "name": "MAX_MIN_SCORE",
+      "signature": "MAX_MIN_SCORE()",
+      "selector": "0x0b726e92"
+    },
+    {
+      "abi": "ECImageRegistryV4.json",
+      "kind": "function",
+      "name": "SEED_BATCH_MAX",
+      "signature": "SEED_BATCH_MAX()",
+      "selector": "0xd0540f21"
+    },
+    {
+      "abi": "ECImageRegistryV4.json",
+      "kind": "function",
+      "name": "acceptImageName",
+      "signature": "acceptImageName(string)",
+      "selector": "0x54c1e639"
+    },
+    {
+      "abi": "ECImageRegistryV4.json",
+      "kind": "function",
+      "name": "acceptOwnership",
+      "signature": "acceptOwnership()",
+      "selector": "0x79ba5097"
+    },
+    {
+      "abi": "ECImageRegistryV4.json",
+      "kind": "function",
+      "name": "addAllowedWallet",
+      "signature": "addAllowedWallet(address)",
+      "selector": "0x9a8a42c6"
+    },
+    {
+      "abi": "ECImageRegistryV4.json",
+      "kind": "function",
+      "name": "addDefaultRelease",
+      "signature": "addDefaultRelease((uint8,string,bytes32,bytes32,bytes32,bytes32,bytes32,bytes32),uint8[],bytes32[],bytes32[])",
+      "selector": "0x72e659f0"
+    },
+    {
+      "abi": "ECImageRegistryV4.json",
+      "kind": "function",
+      "name": "addImage",
+      "signature": "addImage(string,string,string,string,string,string,uint8)",
+      "selector": "0x9117874f"
+    },
+    {
+      "abi": "ECImageRegistryV4.json",
+      "kind": "function",
+      "name": "addTrustedZoneImage",
+      "signature": "addTrustedZoneImage(string,string,string,string,string,string,uint8)",
+      "selector": "0xd3a7ae1c"
+    },
+    {
+      "abi": "ECImageRegistryV4.json",
+      "kind": "function",
+      "name": "allowedWallets",
+      "signature": "allowedWallets(address)",
+      "selector": "0x77c26915"
+    },
+    {
+      "abi": "ECImageRegistryV4.json",
+      "kind": "function",
+      "name": "changeImageRewardAddress",
+      "signature": "changeImageRewardAddress(string,address)",
+      "selector": "0xea5fe635"
+    },
+    {
+      "abi": "ECImageRegistryV4.json",
+      "kind": "function",
+      "name": "changeOwner",
+      "signature": "changeOwner(address)",
+      "selector": "0xa6f9dae1"
+    },
+    {
+      "abi": "ECImageRegistryV4.json",
+      "kind": "function",
+      "name": "changeTrustedZoneImageRewardAddress",
+      "signature": "changeTrustedZoneImageRewardAddress(string,address)",
+      "selector": "0x8eaed7bc"
+    },
+    {
+      "abi": "ECImageRegistryV4.json",
+      "kind": "function",
+      "name": "closeSeeding",
+      "signature": "closeSeeding()",
+      "selector": "0x9b852811"
+    },
+    {
+      "abi": "ECImageRegistryV4.json",
+      "kind": "function",
+      "name": "defaultRelease",
+      "signature": "defaultRelease(uint256)",
+      "selector": "0xbcf28476"
+    },
+    {
+      "abi": "ECImageRegistryV4.json",
+      "kind": "function",
+      "name": "defaultReleaseCount",
+      "signature": "defaultReleaseCount()",
+      "selector": "0x0a44a955"
+    },
+    {
+      "abi": "ECImageRegistryV4.json",
+      "kind": "function",
+      "name": "executorMrenclave",
+      "signature": "executorMrenclave(uint256,uint8)",
+      "selector": "0x138b213b"
+    },
+    {
+      "abi": "ECImageRegistryV4.json",
+      "kind": "function",
+      "name": "getImageCertPublicKey",
+      "signature": "getImageCertPublicKey(string)",
+      "selector": "0xfd83dccc"
+    },
+    {
+      "abi": "ECImageRegistryV4.json",
+      "kind": "function",
+      "name": "getImageSession",
+      "signature": "getImageSession(string)",
+      "selector": "0xd4cd39c4"
+    },
+    {
+      "abi": "ECImageRegistryV4.json",
+      "kind": "function",
+      "name": "getLatestImageVersionPublicKey",
+      "signature": "getLatestImageVersionPublicKey(string,string)",
+      "selector": "0xaf7a6098"
+    },
+    {
+      "abi": "ECImageRegistryV4.json",
+      "kind": "function",
+      "name": "getLatestTrustedZoneImageCertPublicKey",
+      "signature": "getLatestTrustedZoneImageCertPublicKey(string,string)",
+      "selector": "0x20349449"
+    },
+    {
+      "abi": "ECImageRegistryV4.json",
+      "kind": "function",
+      "name": "getRewardAddress",
+      "signature": "getRewardAddress(string)",
+      "selector": "0x667ae10c"
+    },
+    {
+      "abi": "ECImageRegistryV4.json",
+      "kind": "function",
+      "name": "getTrustedZoneImageCertPublicKey",
+      "signature": "getTrustedZoneImageCertPublicKey(string)",
+      "selector": "0x25027cd9"
+    },
+    {
+      "abi": "ECImageRegistryV4.json",
+      "kind": "function",
+      "name": "getTrustedZoneImageSession",
+      "signature": "getTrustedZoneImageSession(string)",
+      "selector": "0x0e8d872c"
+    },
+    {
+      "abi": "ECImageRegistryV4.json",
+      "kind": "function",
+      "name": "getTrustedZoneRewardAddress",
+      "signature": "getTrustedZoneRewardAddress(string)",
+      "selector": "0x325da673"
+    },
+    {
+      "abi": "ECImageRegistryV4.json",
+      "kind": "function",
+      "name": "hasDefaultRelease",
+      "signature": "hasDefaultRelease(string)",
+      "selector": "0x3ea50f7f"
+    },
+    {
+      "abi": "ECImageRegistryV4.json",
+      "kind": "function",
+      "name": "imageDetails",
+      "signature": "imageDetails(string)",
+      "selector": "0x038ef266"
+    },
+    {
+      "abi": "ECImageRegistryV4.json",
+      "kind": "function",
+      "name": "imageEpcUnits",
+      "signature": "imageEpcUnits(string)",
+      "selector": "0x41684018"
+    },
+    {
+      "abi": "ECImageRegistryV4.json",
+      "kind": "function",
+      "name": "imageNameKey",
+      "signature": "imageNameKey(string)",
+      "selector": "0xcf4e4db8"
+    },
+    {
+      "abi": "ECImageRegistryV4.json",
+      "kind": "function",
+      "name": "imageNameOwner",
+      "signature": "imageNameOwner(string)",
+      "selector": "0x56de7a0e"
+    },
+    {
+      "abi": "ECImageRegistryV4.json",
+      "kind": "function",
+      "name": "imageNamePendingOwner",
+      "signature": "imageNamePendingOwner(string)",
+      "selector": "0x1afc3ace"
+    },
+    {
+      "abi": "ECImageRegistryV4.json",
+      "kind": "function",
+      "name": "imageRecords",
+      "signature": "imageRecords(string)",
+      "selector": "0x6f8b5571"
+    },
+    {
+      "abi": "ECImageRegistryV4.json",
+      "kind": "function",
+      "name": "imageVersions",
+      "signature": "imageVersions(string,uint256)",
+      "selector": "0xcaa44f7d"
+    },
+    {
+      "abi": "ECImageRegistryV4.json",
+      "kind": "function",
+      "name": "imageVersionsHash",
+      "signature": "imageVersionsHash(string,string,uint256)",
+      "selector": "0x7fb3dcd6"
+    },
+    {
+      "abi": "ECImageRegistryV4.json",
+      "kind": "function",
+      "name": "images",
+      "signature": "images(uint256)",
+      "selector": "0x84856482"
+    },
+    {
+      "abi": "ECImageRegistryV4.json",
+      "kind": "function",
+      "name": "listedTemplate",
+      "signature": "listedTemplate(bytes32)",
+      "selector": "0xb74f714d"
+    },
+    {
+      "abi": "ECImageRegistryV4.json",
+      "kind": "function",
+      "name": "maximumFee",
+      "signature": "maximumFee()",
+      "selector": "0x35390714"
+    },
+    {
+      "abi": "ECImageRegistryV4.json",
+      "kind": "function",
+      "name": "owner",
+      "signature": "owner()",
+      "selector": "0x8da5cb5b"
+    },
+    {
+      "abi": "ECImageRegistryV4.json",
+      "kind": "function",
+      "name": "pendingImages",
+      "signature": "pendingImages()",
+      "selector": "0xeabdd796"
+    },
+    {
+      "abi": "ECImageRegistryV4.json",
+      "kind": "function",
+      "name": "pendingOwner",
+      "signature": "pendingOwner()",
+      "selector": "0xe30c3978"
+    },
+    {
+      "abi": "ECImageRegistryV4.json",
+      "kind": "function",
+      "name": "pendingTrustedZoneImages",
+      "signature": "pendingTrustedZoneImages()",
+      "selector": "0x6493db9c"
+    },
+    {
+      "abi": "ECImageRegistryV4.json",
+      "kind": "function",
+      "name": "probeMrenclave",
+      "signature": "probeMrenclave(uint256,uint8)",
+      "selector": "0xa0859734"
+    },
+    {
+      "abi": "ECImageRegistryV4.json",
+      "kind": "function",
+      "name": "publishImage",
+      "signature": "publishImage(string)",
+      "selector": "0xb4f821e7"
+    },
+    {
+      "abi": "ECImageRegistryV4.json",
+      "kind": "function",
+      "name": "registerImage",
+      "signature": "registerImage(string,string,string,string,string,uint8,string)",
+      "selector": "0x62aeddcc"
+    },
+    {
+      "abi": "ECImageRegistryV4.json",
+      "kind": "function",
+      "name": "registerTrustedZoneImage",
+      "signature": "registerTrustedZoneImage(string,string,string,string,string,uint8,string)",
+      "selector": "0xe10e1b79"
+    },
+    {
+      "abi": "ECImageRegistryV4.json",
+      "kind": "function",
+      "name": "registrationPeer",
+      "signature": "registrationPeer(string)",
+      "selector": "0x3846f6e8"
+    },
+    {
+      "abi": "ECImageRegistryV4.json",
+      "kind": "function",
+      "name": "removeAllowedWallet",
+      "signature": "removeAllowedWallet(address)",
+      "selector": "0xb25f357c"
+    },
+    {
+      "abi": "ECImageRegistryV4.json",
+      "kind": "function",
+      "name": "seedImageNames",
+      "signature": "seedImageNames(string[])",
+      "selector": "0x6edd7cff"
+    },
+    {
+      "abi": "ECImageRegistryV4.json",
+      "kind": "function",
+      "name": "seedSource",
+      "signature": "seedSource()",
+      "selector": "0x17afae43"
+    },
+    {
+      "abi": "ECImageRegistryV4.json",
+      "kind": "function",
+      "name": "seedingOpen",
+      "signature": "seedingOpen()",
+      "selector": "0x17f8cdbd"
+    },
+    {
+      "abi": "ECImageRegistryV4.json",
+      "kind": "function",
+      "name": "sessionRegistry",
+      "signature": "sessionRegistry()",
+      "selector": "0xa9a0d82b"
+    },
+    {
+      "abi": "ECImageRegistryV4.json",
+      "kind": "function",
+      "name": "setImageCert",
+      "signature": "setImageCert(string,string)",
+      "selector": "0xe68d61e1"
+    },
+    {
+      "abi": "ECImageRegistryV4.json",
+      "kind": "function",
+      "name": "setImageEpcUnits",
+      "signature": "setImageEpcUnits(string,uint16)",
+      "selector": "0x7b6aef2b"
+    },
+    {
+      "abi": "ECImageRegistryV4.json",
+      "kind": "function",
+      "name": "setImageRecords",
+      "signature": "setImageRecords(string,(uint8,uint32,bool,uint8,bool,uint16,bytes32,bytes32))",
+      "selector": "0xa2bf0e4f"
+    },
+    {
+      "abi": "ECImageRegistryV4.json",
+      "kind": "function",
+      "name": "setSessionRegistry",
+      "signature": "setSessionRegistry(address)",
+      "selector": "0x4fd9d24b"
+    },
+    {
+      "abi": "ECImageRegistryV4.json",
+      "kind": "function",
+      "name": "setTrustedZoneImageCert",
+      "signature": "setTrustedZoneImageCert(string,string)",
+      "selector": "0x81ade25b"
+    },
+    {
+      "abi": "ECImageRegistryV4.json",
+      "kind": "function",
+      "name": "transferImageName",
+      "signature": "transferImageName(string,address)",
+      "selector": "0xd5d4099c"
+    },
+    {
+      "abi": "ECImageRegistryV4.json",
+      "kind": "function",
+      "name": "trustedZoneImageDetails",
+      "signature": "trustedZoneImageDetails(string)",
+      "selector": "0x83622dec"
+    },
+    {
+      "abi": "ECImageRegistryV4.json",
+      "kind": "function",
+      "name": "trustedZoneImageVersions",
+      "signature": "trustedZoneImageVersions(string,uint256)",
+      "selector": "0x5899c4ee"
+    },
+    {
+      "abi": "ECImageRegistryV4.json",
+      "kind": "function",
+      "name": "trustedZoneVersionsHash",
+      "signature": "trustedZoneVersionsHash(string,string,uint256)",
+      "selector": "0xb4ef11d7"
+    },
+    {
+      "abi": "ECImageRegistryV4.json",
+      "kind": "function",
+      "name": "validateImage",
+      "signature": "validateImage(string)",
+      "selector": "0x6e4b8eb8"
+    },
+    {
+      "abi": "EnclaveStateRegistry.json",
+      "kind": "error",
+      "name": "BadSignature",
+      "signature": "BadSignature()",
+      "selector": "0x5cd5d233"
+    },
+    {
+      "abi": "EnclaveStateRegistry.json",
+      "kind": "error",
+      "name": "BatchEntryFailed",
+      "signature": "BatchEntryFailed(uint256,bytes)",
+      "selector": "0xf3e4ccc0"
+    },
+    {
+      "abi": "EnclaveStateRegistry.json",
+      "kind": "error",
+      "name": "BatchEntryOutOfGas",
+      "signature": "BatchEntryOutOfGas(uint256)",
+      "selector": "0x1d076046"
+    },
+    {
+      "abi": "EnclaveStateRegistry.json",
+      "kind": "error",
+      "name": "EmptyBatch",
+      "signature": "EmptyBatch()",
+      "selector": "0xc2e5347d"
+    },
+    {
+      "abi": "EnclaveStateRegistry.json",
+      "kind": "error",
+      "name": "EmptyCID",
+      "signature": "EmptyCID()",
+      "selector": "0x63ee91d0"
+    },
+    {
+      "abi": "EnclaveStateRegistry.json",
+      "kind": "error",
+      "name": "NonceOutOfOrder",
+      "signature": "NonceOutOfOrder(uint256,uint256)",
+      "selector": "0xbc13a1df"
+    },
+    {
+      "abi": "EnclaveStateRegistry.json",
+      "kind": "error",
+      "name": "RelayNonceMismatch",
+      "signature": "RelayNonceMismatch(uint256,uint256)",
+      "selector": "0xa69ebdc5"
+    },
+    {
+      "abi": "EnclaveStateRegistry.json",
+      "kind": "error",
+      "name": "VersionMismatch",
+      "signature": "VersionMismatch(uint256,uint256)",
+      "selector": "0x034e9fa8"
+    },
+    {
+      "abi": "EnclaveStateRegistry.json",
+      "kind": "event",
+      "name": "StateCommitted",
+      "signature": "StateCommitted(address,bytes32,string,uint256,uint256,uint256)",
+      "topic0": "0xd81b6507fef29869f73ffa29c22df83613804f04c676f99d26f14ef602b2edbd"
+    },
+    {
+      "abi": "EnclaveStateRegistry.json",
+      "kind": "function",
+      "name": "commit",
+      "signature": "commit(bytes32,string,uint256,uint256)",
+      "selector": "0x8e765329"
+    },
+    {
+      "abi": "EnclaveStateRegistry.json",
+      "kind": "function",
+      "name": "commitDigest",
+      "signature": "commitDigest(address,bytes32,string,uint256,uint256,uint256)",
+      "selector": "0xaddb1432"
+    },
+    {
+      "abi": "EnclaveStateRegistry.json",
+      "kind": "function",
+      "name": "commitFor",
+      "signature": "commitFor(address,bytes32,string,uint256,uint256,uint256,bytes)",
+      "selector": "0x831abe0b"
+    },
+    {
+      "abi": "EnclaveStateRegistry.json",
+      "kind": "function",
+      "name": "commitForBatch",
+      "signature": "commitForBatch(address,(bytes32,string,uint256,uint256,uint256,bytes)[])",
+      "selector": "0x0c1867a5"
+    },
+    {
+      "abi": "EnclaveStateRegistry.json",
+      "kind": "function",
+      "name": "commitSeq",
+      "signature": "commitSeq()",
+      "selector": "0xf6868f77"
+    },
+    {
+      "abi": "EnclaveStateRegistry.json",
+      "kind": "function",
+      "name": "entryAt",
+      "signature": "entryAt(uint256)",
+      "selector": "0x9c67a385"
+    },
+    {
+      "abi": "EnclaveStateRegistry.json",
+      "kind": "function",
+      "name": "entryCount",
+      "signature": "entryCount()",
+      "selector": "0x0cbb0f83"
+    },
+    {
+      "abi": "EnclaveStateRegistry.json",
+      "kind": "function",
+      "name": "exists",
+      "signature": "exists(address,bytes32)",
+      "selector": "0x45120511"
+    },
+    {
+      "abi": "EnclaveStateRegistry.json",
+      "kind": "function",
+      "name": "getEntriesFrom",
+      "signature": "getEntriesFrom(uint256,uint256)",
+      "selector": "0x886f2ee0"
+    },
+    {
+      "abi": "EnclaveStateRegistry.json",
+      "kind": "function",
+      "name": "getNonce",
+      "signature": "getNonce(address,bytes32)",
+      "selector": "0x9e2de5a6"
+    },
+    {
+      "abi": "EnclaveStateRegistry.json",
+      "kind": "function",
+      "name": "getState",
+      "signature": "getState(address,bytes32)",
+      "selector": "0x35c88b15"
+    },
+    {
+      "abi": "EnclaveStateRegistry.json",
+      "kind": "function",
+      "name": "getVersion",
+      "signature": "getVersion(address,bytes32)",
+      "selector": "0xe0411dc2"
+    },
+    {
+      "abi": "EnclaveStateRegistry.json",
+      "kind": "function",
+      "name": "relayNonce",
+      "signature": "relayNonce(address,bytes32)",
+      "selector": "0xa486a23b"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "event",
+      "name": "AcceptsReservedSet",
+      "signature": "AcceptsReservedSet(address,bool)",
+      "topic0": "0xac60385ca867c75e826f73e197afce372479bce62ba6238795e019212064a6a2"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "event",
+      "name": "AmbiguousEnd",
+      "signature": "AmbiguousEnd(uint256,uint64)",
+      "topic0": "0x469ead1e2f41294ba902af51553215b900d7f178736b8d22f7f5e05b8639f7c9"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "event",
+      "name": "BidIncreased",
+      "signature": "BidIncreased(uint256,uint256,uint256)",
+      "topic0": "0x530ca8c0843e05ae3ded39c68c1ce9724c8b4d019d63567d5b3311a1bdb17be3"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "event",
+      "name": "ChainFeeIncreased",
+      "signature": "ChainFeeIncreased(uint256,uint256,uint256,uint256,uint256,uint256,uint256)",
+      "topic0": "0xd041af83c4cb76185b25cbbeb4be5d3c947d17e9c957b3d73517cf8e09646a4f"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "event",
+      "name": "DPRequestCancelled",
+      "signature": "DPRequestCancelled(uint256,address,uint8)",
+      "topic0": "0xfdf41b25d26dda78edd0c339768ef39051d06a04c1e42fe61619918aeca7e669"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "event",
+      "name": "DPRequestRefreshed",
+      "signature": "DPRequestRefreshed(uint256,uint64)",
+      "topic0": "0x82fc0df9bf082922a5477b3e0f4f0dfcb895d88e6fcff60b78603286802930d5"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "event",
+      "name": "OrderExpired",
+      "signature": "OrderExpired(uint256,uint256)",
+      "topic0": "0x4b2d84db364a91e770868e6b301e0987c2210f5bf1b235bc37f0ef66abb7f3e2"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "event",
+      "name": "OrderInvalidatedLive",
+      "signature": "OrderInvalidatedLive(uint256,uint256)",
+      "topic0": "0xfb575de5c0264358423750bc2f0a02e7c7a78377f36bb79eaf928f60abe3d742"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "event",
+      "name": "OrderRejected",
+      "signature": "OrderRejected(uint256,uint256)",
+      "topic0": "0xe218f78bff94f9df663ad22845451073275faba86d1dfa730f681e0f3076ca75"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "event",
+      "name": "OrderSettled",
+      "signature": "OrderSettled(uint256,uint256,uint256,uint256,uint256)",
+      "topic0": "0xf3043574e4e688de96bb32680cac6b38afe7c07eb0d8ee410a7afe5b19abdc59"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "event",
+      "name": "OrderTerminated",
+      "signature": "OrderTerminated(uint256,uint64)",
+      "topic0": "0xade8059fdf6681a358a95a49a46338e521edf3033f46fcd42ed8aeb7c4f66b1e"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "event",
+      "name": "OutputRowAdded",
+      "signature": "OutputRowAdded(uint256,uint256)",
+      "topic0": "0x77f66993998ce5da9ac09a05a2bde41438f8cc596a4fd42b5efc4824af87328c"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "event",
+      "name": "OwnershipTransferred",
+      "signature": "OwnershipTransferred(address,address)",
+      "topic0": "0x8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e0"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "event",
+      "name": "PayoutAddressSet",
+      "signature": "PayoutAddressSet(address,address)",
+      "topic0": "0x86595dc4ed4838fd84eeed07a9f42ea9af43a730d94d90334e779b82264c0d7c"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "event",
+      "name": "SuccessorLinked",
+      "signature": "SuccessorLinked(uint256,uint256)",
+      "topic0": "0xb98b4fd0aeac058e6108c82d512566b613d0b6c42fd2800a67d4838ca558c4e3"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "event",
+      "name": "_addDORequestEV",
+      "signature": "_addDORequestEV(address,uint256)",
+      "topic0": "0xeccaef2766efce444edd10aa43fdedc15db863e63aaac53a1325b0e878e6bc7c"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "event",
+      "name": "_addDPRequestEV",
+      "signature": "_addDPRequestEV(address,uint256)",
+      "topic0": "0x4c8c70b2a4a4432c71bae55aa7d26fd87cad0deea0ba1aff77d2fb64c9136d8e"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "event",
+      "name": "_orderApprovedEV",
+      "signature": "_orderApprovedEV(address,address,uint256)",
+      "topic0": "0x9b30afe0f76574363e78b150c33c302dafe8c2a0dbe597cda7938b0ba721a2a5"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "event",
+      "name": "_orderClosedEV",
+      "signature": "_orderClosedEV(uint256)",
+      "topic0": "0x82c71af4e0a9a239768fac6f9df215013913a0cc66faa82cbc9acd3299b7fc32"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "event",
+      "name": "_orderInvalidatedEV",
+      "signature": "_orderInvalidatedEV(uint256)",
+      "topic0": "0x1d58276cd8287e9f5f935672f809d99bf1dc6efa93ef34c6fffb66b45dcda5b6"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "event",
+      "name": "_orderPlacedEV",
+      "signature": "_orderPlacedEV(uint256,uint256,uint256)",
+      "topic0": "0x52ec990a555aaad1a6395f34d1532ac11fa3c72139719d9469c880315c01806d"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "event",
+      "name": "_orderValidatedEV",
+      "signature": "_orderValidatedEV(uint256)",
+      "topic0": "0xb1c39ae9e5276f66f3a413fd02db269d80bbc55f61afd375917e7bbae368230f"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "event",
+      "name": "_placeOrderEV",
+      "signature": "_placeOrderEV(address,uint256)",
+      "topic0": "0xdc3a6d828aee9328544a5092f889da39f808a288f223812d4ab33b59c60867c6"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "function",
+      "name": "NETWORK_FEE_PERCENT",
+      "signature": "NETWORK_FEE_PERCENT()",
+      "selector": "0x806fff1c"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "function",
+      "name": "VALIDATOR_FEE_PERCENT",
+      "signature": "VALIDATOR_FEE_PERCENT()",
+      "selector": "0x3178d3fd"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "function",
+      "name": "VERSION",
+      "signature": "VERSION()",
+      "selector": "0xffa1ad74"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "function",
+      "name": "_addDORequest",
+      "signature": "_addDORequest(uint8,uint8,uint8,uint8,uint16,uint8,uint8,string,string,string,string)",
+      "selector": "0x92b93774"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "function",
+      "name": "_addDPRequest",
+      "signature": "_addDPRequest(uint8,uint8,uint8,uint8,uint16,uint8,string,string,string,string)",
+      "selector": "0x3701f582"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "function",
+      "name": "_addMetadataToDPRequest",
+      "signature": "_addMetadataToDPRequest(uint256,string,string)",
+      "selector": "0xb5d11dfa"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "function",
+      "name": "_addMetadataToDPRequestBatch",
+      "signature": "_addMetadataToDPRequestBatch(uint256,string[],string[])",
+      "selector": "0x56f06b1d"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "function",
+      "name": "_addMetadataToRequest",
+      "signature": "_addMetadataToRequest(uint256,string,string)",
+      "selector": "0x44cc3c7f"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "function",
+      "name": "_addProcessorToOrder",
+      "signature": "_addProcessorToOrder(uint256,address)",
+      "selector": "0x4509b7e0"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "function",
+      "name": "_addResultToOrder",
+      "signature": "_addResultToOrder(uint256,string)",
+      "selector": "0x14e9f384"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "function",
+      "name": "_addResultToOrderV2",
+      "signature": "_addResultToOrderV2(uint256,string,uint16,uint256)",
+      "selector": "0xd2ea1d51"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "function",
+      "name": "_approveOrder",
+      "signature": "_approveOrder(uint256)",
+      "selector": "0xefa09d85"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "function",
+      "name": "_cancelDORequest",
+      "signature": "_cancelDORequest(uint256)",
+      "selector": "0x9ecbec41"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "function",
+      "name": "_cancelDPRequest",
+      "signature": "_cancelDPRequest(uint256)",
+      "selector": "0x676a96d8"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "function",
+      "name": "_getDORequest",
+      "signature": "_getDORequest(uint256)",
+      "selector": "0x4f74787b"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "function",
+      "name": "_getDORequestMetadata",
+      "signature": "_getDORequestMetadata(uint256)",
+      "selector": "0xd9edc139"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "function",
+      "name": "_getDORequestsCount",
+      "signature": "_getDORequestsCount()",
+      "selector": "0x7aed1214"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "function",
+      "name": "_getDPRequest",
+      "signature": "_getDPRequest(uint256)",
+      "selector": "0x00d74970"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "function",
+      "name": "_getDPRequestMetadata",
+      "signature": "_getDPRequestMetadata(uint256)",
+      "selector": "0x98455999"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "function",
+      "name": "_getDPRequestWithCreationDate",
+      "signature": "_getDPRequestWithCreationDate(uint256)",
+      "selector": "0xb251425b"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "function",
+      "name": "_getDPRequestsCount",
+      "signature": "_getDPRequestsCount()",
+      "selector": "0xe780ada1"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "function",
+      "name": "_getMetadataCountForDPRequest",
+      "signature": "_getMetadataCountForDPRequest(uint256)",
+      "selector": "0xe2eef9c3"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "function",
+      "name": "_getMetadataCountForRequest",
+      "signature": "_getMetadataCountForRequest(uint256)",
+      "selector": "0x5d87b6e6"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "function",
+      "name": "_getMetadataValueForDPRequest",
+      "signature": "_getMetadataValueForDPRequest(uint256,uint256)",
+      "selector": "0x2118c02c"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "function",
+      "name": "_getMetadataValueForRequest",
+      "signature": "_getMetadataValueForRequest(uint256,uint256)",
+      "selector": "0xf4de5305"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "function",
+      "name": "_getMyDOOrders",
+      "signature": "_getMyDOOrders()",
+      "selector": "0xa8203abb"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "function",
+      "name": "_getMyDORequests",
+      "signature": "_getMyDORequests()",
+      "selector": "0x93132366"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "function",
+      "name": "_getMyDPRequests",
+      "signature": "_getMyDPRequests()",
+      "selector": "0x4c1782e5"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "function",
+      "name": "_getOrder",
+      "signature": "_getOrder(uint256)",
+      "selector": "0xb3bb3da3"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "function",
+      "name": "_getOrdersCount",
+      "signature": "_getOrdersCount()",
+      "selector": "0x246439e6"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "function",
+      "name": "_getRequiredValidators",
+      "signature": "_getRequiredValidators(uint256)",
+      "selector": "0x3ea5b5ed"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "function",
+      "name": "_getResultFromOrder",
+      "signature": "_getResultFromOrder(uint256)",
+      "selector": "0x008a81a6"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "function",
+      "name": "_placeOrder",
+      "signature": "_placeOrder(uint256,uint256)",
+      "selector": "0x9818e66c"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "function",
+      "name": "acceptOwnership",
+      "signature": "acceptOwnership()",
+      "selector": "0x79ba5097"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "function",
+      "name": "acceptsReserved",
+      "signature": "acceptsReserved(address)",
+      "selector": "0xaeaa5bde"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "function",
+      "name": "addDORequestReserved",
+      "signature": "addDORequestReserved(uint8,uint8,uint8,uint8,uint16,uint256,uint32,uint16,uint256,uint8,uint8,string,string,string)",
+      "selector": "0xb5933193"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "function",
+      "name": "addDORequestV2",
+      "signature": "addDORequestV2(uint8,uint8,uint8,uint8,uint16,uint8,uint256,uint48,uint16,uint256,string,string,string,string)",
+      "selector": "0x9f74fcce"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "function",
+      "name": "addDPRequestV2",
+      "signature": "addDPRequestV2(uint8,uint8,uint8,uint8,uint16,uint40,uint256,string,string,string,string)",
+      "selector": "0x72a6bda7"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "function",
+      "name": "approveFarm",
+      "signature": "approveFarm(address,address)",
+      "selector": "0x9656cbc0"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "function",
+      "name": "cancelDPRequestByValidators",
+      "signature": "cancelDPRequestByValidators(uint256,uint8)",
+      "selector": "0x3408d444"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "function",
+      "name": "chainSpent",
+      "signature": "chainSpent(uint256)",
+      "selector": "0x7664acda"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "function",
+      "name": "changePayoutAddress",
+      "signature": "changePayoutAddress(address,address)",
+      "selector": "0x74bd3671"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "function",
+      "name": "devAddress",
+      "signature": "devAddress()",
+      "selector": "0x3ad10ef6"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "function",
+      "name": "doFees",
+      "signature": "doFees(uint256)",
+      "selector": "0x8cc895f1"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "function",
+      "name": "doStamp",
+      "signature": "doStamp(uint256)",
+      "selector": "0x3aa05ebf"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "function",
+      "name": "doTerms",
+      "signature": "doTerms(uint256)",
+      "selector": "0xe0aa6465"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "function",
+      "name": "dpRequestCancellerAddress",
+      "signature": "dpRequestCancellerAddress()",
+      "selector": "0x2a3145c8"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "function",
+      "name": "dpTerms",
+      "signature": "dpTerms(uint256)",
+      "selector": "0x5ca60c7d"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "function",
+      "name": "ecAddress",
+      "signature": "ecAddress()",
+      "selector": "0x7ba01176"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "function",
+      "name": "erc20Address",
+      "signature": "erc20Address()",
+      "selector": "0x276184ae"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "function",
+      "name": "escrowOf",
+      "signature": "escrowOf(uint256)",
+      "selector": "0x2d2a8d9c"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "function",
+      "name": "ethStorageAddress",
+      "signature": "ethStorageAddress()",
+      "selector": "0x9a8babce"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "function",
+      "name": "expireOrder",
+      "signature": "expireOrder(uint256)",
+      "selector": "0x43d9332d"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "function",
+      "name": "expireUnstarted",
+      "signature": "expireUnstarted(uint256)",
+      "selector": "0x5c658d66"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "function",
+      "name": "farmApprovalOf",
+      "signature": "farmApprovalOf(address,address)",
+      "selector": "0x7c314329"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "function",
+      "name": "farmJoinOf",
+      "signature": "farmJoinOf(address)",
+      "selector": "0x98e43b35"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "function",
+      "name": "imageRegistryAddress",
+      "signature": "imageRegistryAddress()",
+      "selector": "0xe9ccd237"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "function",
+      "name": "increaseBid",
+      "signature": "increaseBid(uint256,uint256)",
+      "selector": "0x1dd92a66"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "function",
+      "name": "increaseChainFee",
+      "signature": "increaseChainFee(uint256,uint256,uint256)",
+      "selector": "0x5343d5ab"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "function",
+      "name": "invalidate",
+      "signature": "invalidate(uint256)",
+      "selector": "0x1ea1afdb"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "function",
+      "name": "invalidateLive",
+      "signature": "invalidateLive(uint256)",
+      "selector": "0xe3809059"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "function",
+      "name": "linkSuccessor",
+      "signature": "linkSuccessor(uint256,uint256)",
+      "selector": "0xc688559a"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "function",
+      "name": "linkedSuccessorOf",
+      "signature": "linkedSuccessorOf(uint256)",
+      "selector": "0x02b8ee9a"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "function",
+      "name": "liveOrders",
+      "signature": "liveOrders(uint256)",
+      "selector": "0xd4225ffa"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "function",
+      "name": "markAmbiguous",
+      "signature": "markAmbiguous(uint256,uint64)",
+      "selector": "0x6fa49235"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "function",
+      "name": "newOwner",
+      "signature": "newOwner()",
+      "selector": "0xd4ee1d90"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "function",
+      "name": "onFarmJoin",
+      "signature": "onFarmJoin(address,address,address)",
+      "selector": "0xdb30f763"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "function",
+      "name": "onFarmLeave",
+      "signature": "onFarmLeave(address)",
+      "selector": "0x7404115c"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "function",
+      "name": "orderApprovedAt",
+      "signature": "orderApprovedAt(uint256)",
+      "selector": "0x7ad12da4"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "function",
+      "name": "orderFees",
+      "signature": "orderFees(uint256)",
+      "selector": "0xdc16584c"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "function",
+      "name": "orderLastOutputAt",
+      "signature": "orderLastOutputAt(uint256)",
+      "selector": "0xa6a3eb3a"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "function",
+      "name": "orderOfDPRequest",
+      "signature": "orderOfDPRequest(uint256)",
+      "selector": "0x8ab5d47f"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "function",
+      "name": "orderPaidUntil",
+      "signature": "orderPaidUntil(uint256)",
+      "selector": "0x0f16e56e"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "function",
+      "name": "orderPlacedAt",
+      "signature": "orderPlacedAt(uint256)",
+      "selector": "0x811d1c41"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "function",
+      "name": "orderReport",
+      "signature": "orderReport(uint256)",
+      "selector": "0x6c1af05d"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "function",
+      "name": "orderResultAt",
+      "signature": "orderResultAt(uint256)",
+      "selector": "0xca4ee1c3"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "function",
+      "name": "orderSettlement",
+      "signature": "orderSettlement(uint256)",
+      "selector": "0xe1b1437e"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "function",
+      "name": "orderStartedAt",
+      "signature": "orderStartedAt(uint256)",
+      "selector": "0x494b8d90"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "function",
+      "name": "orderTerminatedAt",
+      "signature": "orderTerminatedAt(uint256)",
+      "selector": "0x3bed2ab5"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "function",
+      "name": "orderTerms",
+      "signature": "orderTerms(uint256)",
+      "selector": "0xa564c0af"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "function",
+      "name": "owner",
+      "signature": "owner()",
+      "selector": "0x8da5cb5b"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "function",
+      "name": "paidOut",
+      "signature": "paidOut(uint256)",
+      "selector": "0xf02dec3b"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "function",
+      "name": "payoutAddressOf",
+      "signature": "payoutAddressOf(address)",
+      "selector": "0x9fcdede2"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "function",
+      "name": "pricingAddress",
+      "signature": "pricingAddress()",
+      "selector": "0x4e3751d6"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "function",
+      "name": "pricingVersion",
+      "signature": "pricingVersion()",
+      "selector": "0xe44ce5a7"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "function",
+      "name": "publisherFees",
+      "signature": "publisherFees(string)",
+      "selector": "0xe7b79c9a"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "function",
+      "name": "readerAddress",
+      "signature": "readerAddress()",
+      "selector": "0x51c75a7e"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "function",
+      "name": "refreshDPRequest",
+      "signature": "refreshDPRequest(uint256,uint256)",
+      "selector": "0x38db06b0"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "function",
+      "name": "rejectOrder",
+      "signature": "rejectOrder(uint256)",
+      "selector": "0x24f63894"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "function",
+      "name": "reservationBrokerAddress",
+      "signature": "reservationBrokerAddress()",
+      "selector": "0x0d456e30"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "function",
+      "name": "setAcceptsReserved",
+      "signature": "setAcceptsReserved(bool)",
+      "selector": "0x79de7149"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "function",
+      "name": "setDPRequestCanceller",
+      "signature": "setDPRequestCanceller(address)",
+      "selector": "0x2fbe4074"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "function",
+      "name": "setDevAddress",
+      "signature": "setDevAddress(address)",
+      "selector": "0xd0d41fe1"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "function",
+      "name": "setEcAddress",
+      "signature": "setEcAddress(address)",
+      "selector": "0x8935a1c8"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "function",
+      "name": "setEthernityCloudERC20Address",
+      "signature": "setEthernityCloudERC20Address(address)",
+      "selector": "0x3971b773"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "function",
+      "name": "setEthernityCloudStorageAddress",
+      "signature": "setEthernityCloudStorageAddress(address)",
+      "selector": "0x04fb540e"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "function",
+      "name": "setImageRegistryAddress",
+      "signature": "setImageRegistryAddress(address)",
+      "selector": "0xad5ff387"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "function",
+      "name": "setPayoutAddress",
+      "signature": "setPayoutAddress(address)",
+      "selector": "0x33ea51a8"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "function",
+      "name": "setPricing",
+      "signature": "setPricing(address)",
+      "selector": "0x023fc47d"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "function",
+      "name": "setReader",
+      "signature": "setReader(address)",
+      "selector": "0x9598da7f"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "function",
+      "name": "setReservationBroker",
+      "signature": "setReservationBroker(address)",
+      "selector": "0x1132d7cb"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "function",
+      "name": "setValidatorRegistryAddress",
+      "signature": "setValidatorRegistryAddress(address)",
+      "selector": "0x10bdebcf"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "function",
+      "name": "settlementOutcome",
+      "signature": "settlementOutcome(uint256)",
+      "selector": "0xa24e13c7"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "function",
+      "name": "terminateOrder",
+      "signature": "terminateOrder(uint256)",
+      "selector": "0x9d2ae42b"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "function",
+      "name": "transferOwnership",
+      "signature": "transferOwnership(address)",
+      "selector": "0xf2fde38b"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "function",
+      "name": "validate",
+      "signature": "validate(uint256,address)",
+      "selector": "0x14fad66d"
+    },
+    {
+      "abi": "EthernityImplementationV2_2_0.json",
+      "kind": "function",
+      "name": "validatorRegistryAddress",
+      "signature": "validatorRegistryAddress()",
+      "selector": "0x0f53d567"
+    },
+    {
+      "abi": "IBrokerRegistry.json",
+      "kind": "function",
+      "name": "brokerAt",
+      "signature": "brokerAt(uint256)",
+      "selector": "0x8aa7f1f8"
+    },
+    {
+      "abi": "IBrokerRegistry.json",
+      "kind": "function",
+      "name": "brokerCount",
+      "signature": "brokerCount()",
+      "selector": "0x6e37b6ef"
+    },
+    {
+      "abi": "IBrokerRegistry.json",
+      "kind": "function",
+      "name": "isBroker",
+      "signature": "isBroker(address)",
+      "selector": "0x22b31d9f"
+    },
+    {
+      "abi": "IBrokerRegistry.json",
+      "kind": "function",
+      "name": "operatorOf",
+      "signature": "operatorOf(address)",
+      "selector": "0x636f35d3"
+    },
+    {
+      "abi": "IBrokerRegistry.json",
+      "kind": "function",
+      "name": "rewardsAddressOf",
+      "signature": "rewardsAddressOf(address)",
+      "selector": "0x72c65752"
+    },
+    {
+      "abi": "IECImageRegistryV4.json",
+      "kind": "error",
+      "name": "SessionRegistryAlreadySet",
+      "signature": "SessionRegistryAlreadySet(address)",
+      "selector": "0x83d44c35"
+    },
+    {
+      "abi": "IECImageRegistryV4.json",
+      "kind": "event",
+      "name": "SessionRegistrySet",
+      "signature": "SessionRegistrySet(address)",
+      "topic0": "0x9d06989f11b3cee0cee3dfb722e2af5d9cc6ed067c911fa937b00cefc12593d1"
+    },
+    {
+      "abi": "IECImageRegistryV4.json",
+      "kind": "function",
+      "name": "allowedWallets",
+      "signature": "allowedWallets(address)",
+      "selector": "0x77c26915"
+    },
+    {
+      "abi": "IECImageRegistryV4.json",
+      "kind": "function",
+      "name": "defaultRelease",
+      "signature": "defaultRelease(uint256)",
+      "selector": "0xbcf28476"
+    },
+    {
+      "abi": "IECImageRegistryV4.json",
+      "kind": "function",
+      "name": "defaultReleaseCount",
+      "signature": "defaultReleaseCount()",
+      "selector": "0x0a44a955"
+    },
+    {
+      "abi": "IECImageRegistryV4.json",
+      "kind": "function",
+      "name": "executorMrenclave",
+      "signature": "executorMrenclave(uint256,uint8)",
+      "selector": "0x138b213b"
+    },
+    {
+      "abi": "IECImageRegistryV4.json",
+      "kind": "function",
+      "name": "getImageSession",
+      "signature": "getImageSession(string)",
+      "selector": "0xd4cd39c4"
+    },
+    {
+      "abi": "IECImageRegistryV4.json",
+      "kind": "function",
+      "name": "getTrustedZoneImageSession",
+      "signature": "getTrustedZoneImageSession(string)",
+      "selector": "0x0e8d872c"
+    },
+    {
+      "abi": "IECImageRegistryV4.json",
+      "kind": "function",
+      "name": "hasDefaultRelease",
+      "signature": "hasDefaultRelease(string)",
+      "selector": "0x3ea50f7f"
+    },
+    {
+      "abi": "IECImageRegistryV4.json",
+      "kind": "function",
+      "name": "imageEpcUnits",
+      "signature": "imageEpcUnits(string)",
+      "selector": "0x41684018"
+    },
+    {
+      "abi": "IECImageRegistryV4.json",
+      "kind": "function",
+      "name": "imageNameOwner",
+      "signature": "imageNameOwner(string)",
+      "selector": "0x56de7a0e"
+    },
+    {
+      "abi": "IECImageRegistryV4.json",
+      "kind": "function",
+      "name": "imageRecords",
+      "signature": "imageRecords(string)",
+      "selector": "0x6f8b5571"
+    },
+    {
+      "abi": "IECImageRegistryV4.json",
+      "kind": "function",
+      "name": "listedTemplate",
+      "signature": "listedTemplate(bytes32)",
+      "selector": "0xb74f714d"
+    },
+    {
+      "abi": "IECImageRegistryV4.json",
+      "kind": "function",
+      "name": "owner",
+      "signature": "owner()",
+      "selector": "0x8da5cb5b"
+    },
+    {
+      "abi": "IECImageRegistryV4.json",
+      "kind": "function",
+      "name": "probeMrenclave",
+      "signature": "probeMrenclave(uint256,uint8)",
+      "selector": "0xa0859734"
+    },
+    {
+      "abi": "IECImageRegistryV4.json",
+      "kind": "function",
+      "name": "sessionRegistry",
+      "signature": "sessionRegistry()",
+      "selector": "0xa9a0d82b"
+    },
+    {
+      "abi": "IECImageRegistryV4.json",
+      "kind": "function",
+      "name": "setSessionRegistry",
+      "signature": "setSessionRegistry(address)",
+      "selector": "0x4fd9d24b"
+    },
+    {
+      "abi": "IEthernityCloudV2.json",
+      "kind": "event",
+      "name": "AcceptsReservedSet",
+      "signature": "AcceptsReservedSet(address,bool)",
+      "topic0": "0xac60385ca867c75e826f73e197afce372479bce62ba6238795e019212064a6a2"
+    },
+    {
+      "abi": "IEthernityCloudV2.json",
+      "kind": "event",
+      "name": "AmbiguousEnd",
+      "signature": "AmbiguousEnd(uint256,uint64)",
+      "topic0": "0x469ead1e2f41294ba902af51553215b900d7f178736b8d22f7f5e05b8639f7c9"
+    },
+    {
+      "abi": "IEthernityCloudV2.json",
+      "kind": "event",
+      "name": "BidIncreased",
+      "signature": "BidIncreased(uint256,uint256,uint256)",
+      "topic0": "0x530ca8c0843e05ae3ded39c68c1ce9724c8b4d019d63567d5b3311a1bdb17be3"
+    },
+    {
+      "abi": "IEthernityCloudV2.json",
+      "kind": "event",
+      "name": "ChainFeeIncreased",
+      "signature": "ChainFeeIncreased(uint256,uint256,uint256,uint256,uint256,uint256,uint256)",
+      "topic0": "0xd041af83c4cb76185b25cbbeb4be5d3c947d17e9c957b3d73517cf8e09646a4f"
+    },
+    {
+      "abi": "IEthernityCloudV2.json",
+      "kind": "event",
+      "name": "DPRequestCancelled",
+      "signature": "DPRequestCancelled(uint256,address,uint8)",
+      "topic0": "0xfdf41b25d26dda78edd0c339768ef39051d06a04c1e42fe61619918aeca7e669"
+    },
+    {
+      "abi": "IEthernityCloudV2.json",
+      "kind": "event",
+      "name": "DPRequestRefreshed",
+      "signature": "DPRequestRefreshed(uint256,uint64)",
+      "topic0": "0x82fc0df9bf082922a5477b3e0f4f0dfcb895d88e6fcff60b78603286802930d5"
+    },
+    {
+      "abi": "IEthernityCloudV2.json",
+      "kind": "event",
+      "name": "OrderExpired",
+      "signature": "OrderExpired(uint256,uint256)",
+      "topic0": "0x4b2d84db364a91e770868e6b301e0987c2210f5bf1b235bc37f0ef66abb7f3e2"
+    },
+    {
+      "abi": "IEthernityCloudV2.json",
+      "kind": "event",
+      "name": "OrderInvalidatedLive",
+      "signature": "OrderInvalidatedLive(uint256,uint256)",
+      "topic0": "0xfb575de5c0264358423750bc2f0a02e7c7a78377f36bb79eaf928f60abe3d742"
+    },
+    {
+      "abi": "IEthernityCloudV2.json",
+      "kind": "event",
+      "name": "OrderRejected",
+      "signature": "OrderRejected(uint256,uint256)",
+      "topic0": "0xe218f78bff94f9df663ad22845451073275faba86d1dfa730f681e0f3076ca75"
+    },
+    {
+      "abi": "IEthernityCloudV2.json",
+      "kind": "event",
+      "name": "OrderSettled",
+      "signature": "OrderSettled(uint256,uint256,uint256,uint256,uint256)",
+      "topic0": "0xf3043574e4e688de96bb32680cac6b38afe7c07eb0d8ee410a7afe5b19abdc59"
+    },
+    {
+      "abi": "IEthernityCloudV2.json",
+      "kind": "event",
+      "name": "OrderTerminated",
+      "signature": "OrderTerminated(uint256,uint64)",
+      "topic0": "0xade8059fdf6681a358a95a49a46338e521edf3033f46fcd42ed8aeb7c4f66b1e"
+    },
+    {
+      "abi": "IEthernityCloudV2.json",
+      "kind": "event",
+      "name": "OutputRowAdded",
+      "signature": "OutputRowAdded(uint256,uint256)",
+      "topic0": "0x77f66993998ce5da9ac09a05a2bde41438f8cc596a4fd42b5efc4824af87328c"
+    },
+    {
+      "abi": "IEthernityCloudV2.json",
+      "kind": "event",
+      "name": "PayoutAddressSet",
+      "signature": "PayoutAddressSet(address,address)",
+      "topic0": "0x86595dc4ed4838fd84eeed07a9f42ea9af43a730d94d90334e779b82264c0d7c"
+    },
+    {
+      "abi": "IEthernityCloudV2.json",
+      "kind": "event",
+      "name": "SuccessorLinked",
+      "signature": "SuccessorLinked(uint256,uint256)",
+      "topic0": "0xb98b4fd0aeac058e6108c82d512566b613d0b6c42fd2800a67d4838ca558c4e3"
+    },
+    {
+      "abi": "IEthernityCloudV2.json",
+      "kind": "event",
+      "name": "_addDORequestEV",
+      "signature": "_addDORequestEV(address,uint256)",
+      "topic0": "0xeccaef2766efce444edd10aa43fdedc15db863e63aaac53a1325b0e878e6bc7c"
+    },
+    {
+      "abi": "IEthernityCloudV2.json",
+      "kind": "event",
+      "name": "_addDPRequestEV",
+      "signature": "_addDPRequestEV(address,uint256)",
+      "topic0": "0x4c8c70b2a4a4432c71bae55aa7d26fd87cad0deea0ba1aff77d2fb64c9136d8e"
+    },
+    {
+      "abi": "IEthernityCloudV2.json",
+      "kind": "event",
+      "name": "_orderApprovedEV",
+      "signature": "_orderApprovedEV(address,address,uint256)",
+      "topic0": "0x9b30afe0f76574363e78b150c33c302dafe8c2a0dbe597cda7938b0ba721a2a5"
+    },
+    {
+      "abi": "IEthernityCloudV2.json",
+      "kind": "event",
+      "name": "_orderClosedEV",
+      "signature": "_orderClosedEV(uint256)",
+      "topic0": "0x82c71af4e0a9a239768fac6f9df215013913a0cc66faa82cbc9acd3299b7fc32"
+    },
+    {
+      "abi": "IEthernityCloudV2.json",
+      "kind": "event",
+      "name": "_orderInvalidatedEV",
+      "signature": "_orderInvalidatedEV(uint256)",
+      "topic0": "0x1d58276cd8287e9f5f935672f809d99bf1dc6efa93ef34c6fffb66b45dcda5b6"
+    },
+    {
+      "abi": "IEthernityCloudV2.json",
+      "kind": "event",
+      "name": "_orderPlacedEV",
+      "signature": "_orderPlacedEV(uint256,uint256,uint256)",
+      "topic0": "0x52ec990a555aaad1a6395f34d1532ac11fa3c72139719d9469c880315c01806d"
+    },
+    {
+      "abi": "IEthernityCloudV2.json",
+      "kind": "event",
+      "name": "_orderValidatedEV",
+      "signature": "_orderValidatedEV(uint256)",
+      "topic0": "0xb1c39ae9e5276f66f3a413fd02db269d80bbc55f61afd375917e7bbae368230f"
+    },
+    {
+      "abi": "IEthernityCloudV2.json",
+      "kind": "event",
+      "name": "_placeOrderEV",
+      "signature": "_placeOrderEV(address,uint256)",
+      "topic0": "0xdc3a6d828aee9328544a5092f889da39f808a288f223812d4ab33b59c60867c6"
+    },
+    {
+      "abi": "IEthernityCloudV2.json",
+      "kind": "function",
+      "name": "_addMetadataToDPRequestBatch",
+      "signature": "_addMetadataToDPRequestBatch(uint256,string[],string[])",
+      "selector": "0x56f06b1d"
+    },
+    {
+      "abi": "IEthernityCloudV2.json",
+      "kind": "function",
+      "name": "_addResultToOrderV2",
+      "signature": "_addResultToOrderV2(uint256,string,uint16,uint256)",
+      "selector": "0xd2ea1d51"
+    },
+    {
+      "abi": "IEthernityCloudV2.json",
+      "kind": "function",
+      "name": "acceptsReserved",
+      "signature": "acceptsReserved(address)",
+      "selector": "0xaeaa5bde"
+    },
+    {
+      "abi": "IEthernityCloudV2.json",
+      "kind": "function",
+      "name": "addDORequestReserved",
+      "signature": "addDORequestReserved(uint8,uint8,uint8,uint8,uint16,uint256,uint32,uint16,uint256,uint8,uint8,string,string,string)",
+      "selector": "0xb5933193"
+    },
+    {
+      "abi": "IEthernityCloudV2.json",
+      "kind": "function",
+      "name": "addDORequestV2",
+      "signature": "addDORequestV2(uint8,uint8,uint8,uint8,uint16,uint8,uint256,uint48,uint16,uint256,string,string,string,string)",
+      "selector": "0x9f74fcce"
+    },
+    {
+      "abi": "IEthernityCloudV2.json",
+      "kind": "function",
+      "name": "addDPRequestV2",
+      "signature": "addDPRequestV2(uint8,uint8,uint8,uint8,uint16,uint40,uint256,string,string,string,string)",
+      "selector": "0x72a6bda7"
+    },
+    {
+      "abi": "IEthernityCloudV2.json",
+      "kind": "function",
+      "name": "approveFarm",
+      "signature": "approveFarm(address,address)",
+      "selector": "0x9656cbc0"
+    },
+    {
+      "abi": "IEthernityCloudV2.json",
+      "kind": "function",
+      "name": "cancelDPRequestByValidators",
+      "signature": "cancelDPRequestByValidators(uint256,uint8)",
+      "selector": "0x3408d444"
+    },
+    {
+      "abi": "IEthernityCloudV2.json",
+      "kind": "function",
+      "name": "chainSpent",
+      "signature": "chainSpent(uint256)",
+      "selector": "0x7664acda"
+    },
+    {
+      "abi": "IEthernityCloudV2.json",
+      "kind": "function",
+      "name": "changePayoutAddress",
+      "signature": "changePayoutAddress(address,address)",
+      "selector": "0x74bd3671"
+    },
+    {
+      "abi": "IEthernityCloudV2.json",
+      "kind": "function",
+      "name": "doFees",
+      "signature": "doFees(uint256)",
+      "selector": "0x8cc895f1"
+    },
+    {
+      "abi": "IEthernityCloudV2.json",
+      "kind": "function",
+      "name": "doStamp",
+      "signature": "doStamp(uint256)",
+      "selector": "0x3aa05ebf"
+    },
+    {
+      "abi": "IEthernityCloudV2.json",
+      "kind": "function",
+      "name": "dpRequestCancellerAddress",
+      "signature": "dpRequestCancellerAddress()",
+      "selector": "0x2a3145c8"
+    },
+    {
+      "abi": "IEthernityCloudV2.json",
+      "kind": "function",
+      "name": "expireOrder",
+      "signature": "expireOrder(uint256)",
+      "selector": "0x43d9332d"
+    },
+    {
+      "abi": "IEthernityCloudV2.json",
+      "kind": "function",
+      "name": "expireUnstarted",
+      "signature": "expireUnstarted(uint256)",
+      "selector": "0x5c658d66"
+    },
+    {
+      "abi": "IEthernityCloudV2.json",
+      "kind": "function",
+      "name": "farmApprovalOf",
+      "signature": "farmApprovalOf(address,address)",
+      "selector": "0x7c314329"
+    },
+    {
+      "abi": "IEthernityCloudV2.json",
+      "kind": "function",
+      "name": "farmJoinOf",
+      "signature": "farmJoinOf(address)",
+      "selector": "0x98e43b35"
+    },
+    {
+      "abi": "IEthernityCloudV2.json",
+      "kind": "function",
+      "name": "increaseBid",
+      "signature": "increaseBid(uint256,uint256)",
+      "selector": "0x1dd92a66"
+    },
+    {
+      "abi": "IEthernityCloudV2.json",
+      "kind": "function",
+      "name": "increaseChainFee",
+      "signature": "increaseChainFee(uint256,uint256,uint256)",
+      "selector": "0x5343d5ab"
+    },
+    {
+      "abi": "IEthernityCloudV2.json",
+      "kind": "function",
+      "name": "invalidateLive",
+      "signature": "invalidateLive(uint256)",
+      "selector": "0xe3809059"
+    },
+    {
+      "abi": "IEthernityCloudV2.json",
+      "kind": "function",
+      "name": "linkSuccessor",
+      "signature": "linkSuccessor(uint256,uint256)",
+      "selector": "0xc688559a"
+    },
+    {
+      "abi": "IEthernityCloudV2.json",
+      "kind": "function",
+      "name": "linkedSuccessorOf",
+      "signature": "linkedSuccessorOf(uint256)",
+      "selector": "0x02b8ee9a"
+    },
+    {
+      "abi": "IEthernityCloudV2.json",
+      "kind": "function",
+      "name": "markAmbiguous",
+      "signature": "markAmbiguous(uint256,uint64)",
+      "selector": "0x6fa49235"
+    },
+    {
+      "abi": "IEthernityCloudV2.json",
+      "kind": "function",
+      "name": "onFarmJoin",
+      "signature": "onFarmJoin(address,address,address)",
+      "selector": "0xdb30f763"
+    },
+    {
+      "abi": "IEthernityCloudV2.json",
+      "kind": "function",
+      "name": "onFarmLeave",
+      "signature": "onFarmLeave(address)",
+      "selector": "0x7404115c"
+    },
+    {
+      "abi": "IEthernityCloudV2.json",
+      "kind": "function",
+      "name": "orderApprovedAt",
+      "signature": "orderApprovedAt(uint256)",
+      "selector": "0x7ad12da4"
+    },
+    {
+      "abi": "IEthernityCloudV2.json",
+      "kind": "function",
+      "name": "orderLastOutputAt",
+      "signature": "orderLastOutputAt(uint256)",
+      "selector": "0xa6a3eb3a"
+    },
+    {
+      "abi": "IEthernityCloudV2.json",
+      "kind": "function",
+      "name": "orderOfDPRequest",
+      "signature": "orderOfDPRequest(uint256)",
+      "selector": "0x8ab5d47f"
+    },
+    {
+      "abi": "IEthernityCloudV2.json",
+      "kind": "function",
+      "name": "orderPaidUntil",
+      "signature": "orderPaidUntil(uint256)",
+      "selector": "0x0f16e56e"
+    },
+    {
+      "abi": "IEthernityCloudV2.json",
+      "kind": "function",
+      "name": "orderPlacedAt",
+      "signature": "orderPlacedAt(uint256)",
+      "selector": "0x811d1c41"
+    },
+    {
+      "abi": "IEthernityCloudV2.json",
+      "kind": "function",
+      "name": "orderResultAt",
+      "signature": "orderResultAt(uint256)",
+      "selector": "0xca4ee1c3"
+    },
+    {
+      "abi": "IEthernityCloudV2.json",
+      "kind": "function",
+      "name": "orderStartedAt",
+      "signature": "orderStartedAt(uint256)",
+      "selector": "0x494b8d90"
+    },
+    {
+      "abi": "IEthernityCloudV2.json",
+      "kind": "function",
+      "name": "orderTerminatedAt",
+      "signature": "orderTerminatedAt(uint256)",
+      "selector": "0x3bed2ab5"
+    },
+    {
+      "abi": "IEthernityCloudV2.json",
+      "kind": "function",
+      "name": "orderTerms",
+      "signature": "orderTerms(uint256)",
+      "selector": "0xa564c0af"
+    },
+    {
+      "abi": "IEthernityCloudV2.json",
+      "kind": "function",
+      "name": "payoutAddressOf",
+      "signature": "payoutAddressOf(address)",
+      "selector": "0x9fcdede2"
+    },
+    {
+      "abi": "IEthernityCloudV2.json",
+      "kind": "function",
+      "name": "pricingAddress",
+      "signature": "pricingAddress()",
+      "selector": "0x4e3751d6"
+    },
+    {
+      "abi": "IEthernityCloudV2.json",
+      "kind": "function",
+      "name": "pricingVersion",
+      "signature": "pricingVersion()",
+      "selector": "0xe44ce5a7"
+    },
+    {
+      "abi": "IEthernityCloudV2.json",
+      "kind": "function",
+      "name": "publisherFees",
+      "signature": "publisherFees(string)",
+      "selector": "0xe7b79c9a"
+    },
+    {
+      "abi": "IEthernityCloudV2.json",
+      "kind": "function",
+      "name": "readerAddress",
+      "signature": "readerAddress()",
+      "selector": "0x51c75a7e"
+    },
+    {
+      "abi": "IEthernityCloudV2.json",
+      "kind": "function",
+      "name": "refreshDPRequest",
+      "signature": "refreshDPRequest(uint256,uint256)",
+      "selector": "0x38db06b0"
+    },
+    {
+      "abi": "IEthernityCloudV2.json",
+      "kind": "function",
+      "name": "rejectOrder",
+      "signature": "rejectOrder(uint256)",
+      "selector": "0x24f63894"
+    },
+    {
+      "abi": "IEthernityCloudV2.json",
+      "kind": "function",
+      "name": "reservationBrokerAddress",
+      "signature": "reservationBrokerAddress()",
+      "selector": "0x0d456e30"
+    },
+    {
+      "abi": "IEthernityCloudV2.json",
+      "kind": "function",
+      "name": "setAcceptsReserved",
+      "signature": "setAcceptsReserved(bool)",
+      "selector": "0x79de7149"
+    },
+    {
+      "abi": "IEthernityCloudV2.json",
+      "kind": "function",
+      "name": "setDPRequestCanceller",
+      "signature": "setDPRequestCanceller(address)",
+      "selector": "0x2fbe4074"
+    },
+    {
+      "abi": "IEthernityCloudV2.json",
+      "kind": "function",
+      "name": "setPayoutAddress",
+      "signature": "setPayoutAddress(address)",
+      "selector": "0x33ea51a8"
+    },
+    {
+      "abi": "IEthernityCloudV2.json",
+      "kind": "function",
+      "name": "setPricing",
+      "signature": "setPricing(address)",
+      "selector": "0x023fc47d"
+    },
+    {
+      "abi": "IEthernityCloudV2.json",
+      "kind": "function",
+      "name": "setReader",
+      "signature": "setReader(address)",
+      "selector": "0x9598da7f"
+    },
+    {
+      "abi": "IEthernityCloudV2.json",
+      "kind": "function",
+      "name": "setReservationBroker",
+      "signature": "setReservationBroker(address)",
+      "selector": "0x1132d7cb"
+    },
+    {
+      "abi": "IEthernityCloudV2.json",
+      "kind": "function",
+      "name": "settlementOutcome",
+      "signature": "settlementOutcome(uint256)",
+      "selector": "0xa24e13c7"
+    },
+    {
+      "abi": "IEthernityCloudV2.json",
+      "kind": "function",
+      "name": "terminateOrder",
+      "signature": "terminateOrder(uint256)",
+      "selector": "0x9d2ae42b"
+    },
+    {
+      "abi": "IPerformanceOracle.json",
+      "kind": "event",
+      "name": "NodeStruck",
+      "signature": "NodeStruck(address,uint256,uint32,uint32)",
+      "topic0": "0xdac2e3c42235a28ffa49012ad7ca8b7ee5f5e0633df7717efb0d279784dc44b4"
+    },
+    {
+      "abi": "IPerformanceOracle.json",
+      "kind": "function",
+      "name": "standing",
+      "signature": "standing(address)",
+      "selector": "0x58616803"
+    },
+    {
+      "abi": "IPerformanceOracle.json",
+      "kind": "function",
+      "name": "strikes",
+      "signature": "strikes(address)",
+      "selector": "0x7794e3fd"
+    },
+    {
+      "abi": "IPoxMatchReader.json",
+      "kind": "error",
+      "name": "RoundRefused",
+      "signature": "RoundRefused(uint256,uint8)",
+      "selector": "0xe27a8c30"
+    },
+    {
+      "abi": "IPoxMatchReader.json",
+      "kind": "function",
+      "name": "bandLengths",
+      "signature": "bandLengths(uint32)",
+      "selector": "0x9b00ad41"
+    },
+    {
+      "abi": "IPoxMatchReader.json",
+      "kind": "function",
+      "name": "bidQuote",
+      "signature": "bidQuote(uint256,uint16,uint8,uint256,uint256,uint256)",
+      "selector": "0x3eff4fc7"
+    },
+    {
+      "abi": "IPoxMatchReader.json",
+      "kind": "function",
+      "name": "bidQuoteFor",
+      "signature": "bidQuoteFor(uint8,uint8,uint8,uint8,uint16,uint16,uint16,uint16,bytes32,uint16,uint8,uint256,uint256,uint256)",
+      "selector": "0xd1d5decb"
+    },
+    {
+      "abi": "IPoxMatchReader.json",
+      "kind": "function",
+      "name": "canClaimOf",
+      "signature": "canClaimOf(uint256,address[])",
+      "selector": "0xd54f5f7c"
+    },
+    {
+      "abi": "IPoxMatchReader.json",
+      "kind": "function",
+      "name": "candidates",
+      "signature": "candidates(uint256,uint8,uint8,uint256,uint256,bytes32,uint8,bool)",
+      "selector": "0x9493e449"
+    },
+    {
+      "abi": "IPoxMatchReader.json",
+      "kind": "function",
+      "name": "claimersOf",
+      "signature": "claimersOf(uint256,uint256,uint256)",
+      "selector": "0x5923fc23"
+    },
+    {
+      "abi": "IPoxMatchReader.json",
+      "kind": "function",
+      "name": "claimsOf",
+      "signature": "claimsOf(uint256,address[])",
+      "selector": "0x4d0c3005"
+    },
+    {
+      "abi": "IPoxMatchReader.json",
+      "kind": "function",
+      "name": "escrowFor",
+      "signature": "escrowFor(uint16,uint256,uint48,uint16,uint256,string)",
+      "selector": "0xdc4e3133"
+    },
+    {
+      "abi": "IPoxMatchReader.json",
+      "kind": "function",
+      "name": "mandateOutcomes",
+      "signature": "mandateOutcomes(uint256,uint8)",
+      "selector": "0x41f95fca"
+    },
+    {
+      "abi": "IPoxMatchReader.json",
+      "kind": "function",
+      "name": "mandatesOfNode",
+      "signature": "mandatesOfNode(address,uint256,uint256)",
+      "selector": "0xeb5c11f4"
+    },
+    {
+      "abi": "IPoxMatchReader.json",
+      "kind": "function",
+      "name": "requestInfo",
+      "signature": "requestInfo(uint256)",
+      "selector": "0x4f588bf1"
+    },
+    {
+      "abi": "IPoxMatchReader.json",
+      "kind": "function",
+      "name": "rollPage",
+      "signature": "rollPage(uint32,uint8,uint256,uint256)",
+      "selector": "0xe0b53f33"
+    },
+    {
+      "abi": "IPoxMatchReader.json",
+      "kind": "function",
+      "name": "roundAt",
+      "signature": "roundAt(uint256,uint8)",
+      "selector": "0xe2d9f45a"
+    },
+    {
+      "abi": "IPoxMatchReader.json",
+      "kind": "function",
+      "name": "scanMax",
+      "signature": "scanMax()",
+      "selector": "0x4f5b487b"
+    },
+    {
+      "abi": "IPoxMatchReader.json",
+      "kind": "function",
+      "name": "scheduleOf",
+      "signature": "scheduleOf(uint256)",
+      "selector": "0x169cadc9"
+    },
+    {
+      "abi": "IPoxMatchReader.json",
+      "kind": "function",
+      "name": "tierScore",
+      "signature": "tierScore(uint256,uint8,uint256,uint256,uint256[7])",
+      "selector": "0x4287bbf9"
+    },
+    {
+      "abi": "IPoxMatchReader.json",
+      "kind": "function",
+      "name": "turnOf",
+      "signature": "turnOf(uint256,uint8,address,uint8,uint256,uint8,uint256,uint256,uint256)",
+      "selector": "0x73edbdda"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "error",
+      "name": "BanRefused",
+      "signature": "BanRefused(uint256,uint8)",
+      "selector": "0xe234e433"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "error",
+      "name": "BeatNotCounted",
+      "signature": "BeatNotCounted(address)",
+      "selector": "0x2fa7b32c"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "error",
+      "name": "ClaimRefused",
+      "signature": "ClaimRefused(uint256,uint8)",
+      "selector": "0xd32bd89e"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "error",
+      "name": "CorrectionRefused",
+      "signature": "CorrectionRefused(address,uint8)",
+      "selector": "0x8d467f28"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "error",
+      "name": "ExpireRefused",
+      "signature": "ExpireRefused(address,uint8)",
+      "selector": "0xdb27db99"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "error",
+      "name": "NodeBanned",
+      "signature": "NodeBanned(address,uint32)",
+      "selector": "0xa5fd937f"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "error",
+      "name": "NodeFaultRefused",
+      "signature": "NodeFaultRefused(uint256,uint8)",
+      "selector": "0x8f345d00"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "error",
+      "name": "NotAmbiguous",
+      "signature": "NotAmbiguous(uint256,uint8)",
+      "selector": "0xdcb236ec"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "error",
+      "name": "NotJudge",
+      "signature": "NotJudge(address)",
+      "selector": "0x5061ecaf"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "error",
+      "name": "NotOwner",
+      "signature": "NotOwner(address)",
+      "selector": "0x245aecd3"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "error",
+      "name": "NotPendingOwner",
+      "signature": "NotPendingOwner(address)",
+      "selector": "0xa09b9a43"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "error",
+      "name": "NotPricing",
+      "signature": "NotPricing(address)",
+      "selector": "0xe389c82e"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "error",
+      "name": "NotRunRefused",
+      "signature": "NotRunRefused(uint256,uint8)",
+      "selector": "0xccb3ec71"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "error",
+      "name": "NotUnstarted",
+      "signature": "NotUnstarted(uint256,uint8)",
+      "selector": "0x8732aa26"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "error",
+      "name": "OfferRefused",
+      "signature": "OfferRefused(uint256,uint8)",
+      "selector": "0xbb39ce25"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "error",
+      "name": "ParameterSetRefused",
+      "signature": "ParameterSetRefused(uint256,uint8)",
+      "selector": "0x8cc6815f"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "error",
+      "name": "PauseRefused",
+      "signature": "PauseRefused(address)",
+      "selector": "0x847db08b"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "error",
+      "name": "PlacementRefused",
+      "signature": "PlacementRefused(uint256,uint8)",
+      "selector": "0xbec805c5"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "error",
+      "name": "PointerRefused",
+      "signature": "PointerRefused(uint8,address)",
+      "selector": "0x4ed8e98c"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "error",
+      "name": "RaiseRefused",
+      "signature": "RaiseRefused(uint256,uint8)",
+      "selector": "0xbae2ccdd"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "error",
+      "name": "RecordRefused",
+      "signature": "RecordRefused(uint256,uint8,uint8)",
+      "selector": "0x523c6bd9"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "error",
+      "name": "RefundRefused",
+      "signature": "RefundRefused(uint256,uint8)",
+      "selector": "0xb10f3472"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "error",
+      "name": "SkipRefused",
+      "signature": "SkipRefused(bytes31,uint8)",
+      "selector": "0xb75d02f5"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "error",
+      "name": "TemplateRefused",
+      "signature": "TemplateRefused(bytes32,uint8)",
+      "selector": "0xf58038db"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "error",
+      "name": "WideRefused",
+      "signature": "WideRefused(uint256,uint8)",
+      "selector": "0xd983ac41"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "event",
+      "name": "AmbiguousNoted",
+      "signature": "AmbiguousNoted(uint256,uint8,uint64,bool)",
+      "topic0": "0xc042654d66e0352faa21157df23fbee2cfd4a7f88039d1cdac3b643512ce2e74"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "event",
+      "name": "Announced",
+      "signature": "Announced(address,uint256,uint32,uint8,uint8,uint8,uint8,uint16,uint256,uint16,uint8,uint16)",
+      "topic0": "0xd3b318a1e99c3395d79424d596c72f8fe353d8510372e958846f833dc5ebca59"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "event",
+      "name": "Approved",
+      "signature": "Approved(uint256,address,uint256,uint8,uint8)",
+      "topic0": "0xab8ffc010e994b88ccb2120caf12a3dfe408c8887f9431732a7ec490ef055c50"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "event",
+      "name": "Banned",
+      "signature": "Banned(address,uint256,uint32)",
+      "topic0": "0xe26f3b67dbeae2e58170d0bb51fb7205c1f92f43bcc5d658c76f8aec1ff49d74"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "event",
+      "name": "Beat",
+      "signature": "Beat(address,uint32,uint16,uint8,uint256)",
+      "topic0": "0x546574069dc4db872961c630e13cc7057e3c181e9b868df23a1cb1cb536adb3d"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "event",
+      "name": "ChargeSkipped",
+      "signature": "ChargeSkipped(uint256,uint8,address,uint8)",
+      "topic0": "0x2c2180242f4043da9f7aba8005a3508b56449edd5b086145bfad176809d678ae"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "event",
+      "name": "Charged",
+      "signature": "Charged(uint256,uint8,address,uint8,uint8,uint8,uint16,uint16,uint16)",
+      "topic0": "0x36edfa0b9e45e5ed0068a38ab30e7bd4984cc2d127bcc7bfb5e6db8457db559c"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "event",
+      "name": "Claimed",
+      "signature": "Claimed(uint256,address,uint256,uint8,uint8,uint48,uint24)",
+      "topic0": "0x7536e01bf6070c73e91e9c80cc28c50acffd388f771f4b17b6b84e8a64f2d505"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "event",
+      "name": "Corrected",
+      "signature": "Corrected(address,uint256,uint16,uint16)",
+      "topic0": "0xe15b691e1e3bd8e633f14ca7b0d8f450071f49a3afedf4b5d115f192106ce9d6"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "event",
+      "name": "CorrectionAsked",
+      "signature": "CorrectionAsked(address,uint256[])",
+      "topic0": "0x18bd419b4a5b898822127ecb68905279e3fb20007c4932f6cf91819132647a1a"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "event",
+      "name": "FarmMinimumOn",
+      "signature": "FarmMinimumOn(uint32)",
+      "topic0": "0x9c90f9ffb6b968be223e283948fe1e58b23d7080ed9b57c8111b2fc1582720d5"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "event",
+      "name": "HealthCounted",
+      "signature": "HealthCounted(bytes31,uint256,bool,uint16,uint16,bool)",
+      "topic0": "0x075c141fd906d6fd66547f23ad896e3cc4208b75209fb4d13c57df277d34cd3a"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "event",
+      "name": "Left",
+      "signature": "Left(address,uint8,uint32)",
+      "topic0": "0x93fd16d7e01274b766d008745aa4e4090858fa4e13856d40cf2435fef6c5a440"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "event",
+      "name": "ListJudged",
+      "signature": "ListJudged(uint256,uint8,bytes32)",
+      "topic0": "0x0b40ecc823d6fc9cddd31568eaa5fa3ce6e12ac091ee72cc37030a3bb5d8f1d8"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "event",
+      "name": "MinimumOn",
+      "signature": "MinimumOn(uint32)",
+      "topic0": "0x6d31c153f594c5b39ea1db0e19241c23579cdc005aea0d6fd8892fd7bb7c97e2"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "event",
+      "name": "OrderFailed",
+      "signature": "OrderFailed(uint256,address,uint8,uint16,uint16)",
+      "topic0": "0x9d9ebe81c8729c39428d0fd58a9b7b7c9ad8e7641146d4dd178781f68522e135"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "event",
+      "name": "OwnershipTransferStarted",
+      "signature": "OwnershipTransferStarted(address,address)",
+      "topic0": "0x38d16b8cac22d99fc7c124b9cd0de2d3fa1faef420bfe791d8c362d765e22700"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "event",
+      "name": "OwnershipTransferred",
+      "signature": "OwnershipTransferred(address,address)",
+      "topic0": "0x8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e0"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "event",
+      "name": "ParametersAdded",
+      "signature": "ParametersAdded(uint256,uint32)",
+      "topic0": "0xd446cd63375d40184a05e7fbfc2cc30c78764ff81863d9eeb2c6e9f32184cb3e"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "event",
+      "name": "ParametersReplaced",
+      "signature": "ParametersReplaced(uint256,uint32)",
+      "topic0": "0x43ecbeed305302a5a88861988f275e320fef079578e9cfb2cb81a61f477be6ba"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "event",
+      "name": "Recounted",
+      "signature": "Recounted(uint256,uint8,address,uint16,uint16)",
+      "topic0": "0x9395e113a30b5a33d9b5479b7e680d09c0e900d7ec548ef9270f1ba89a9e5421"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "event",
+      "name": "RoundOpened",
+      "signature": "RoundOpened(uint256,uint8,uint48,uint256,uint256)",
+      "topic0": "0xc0f74dff2c02577e5ae13df088bd82b613d6f2b8bc8dec4d9af9bce4114c56dd"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "event",
+      "name": "Skipped",
+      "signature": "Skipped(address,bytes31,uint32,uint32,uint32,uint32)",
+      "topic0": "0x741a6b4c1ee17b3ef65d00f69c4ab6f57528616f11d5937f03f28398a46317aa"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "event",
+      "name": "TemplateRegistered",
+      "signature": "TemplateRegistered(bytes32,uint8,uint32)",
+      "topic0": "0x9b39a123ff8912eee9f8483f9e4aaaeb4b58cbae0e9a5f755316c2318f823bf1"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "event",
+      "name": "WideProven",
+      "signature": "WideProven(uint256)",
+      "topic0": "0x6a935c6ee57fed0b3bf47cbdb024480c6646bb00b5d5fc5a13c963d73337c1d3"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "function",
+      "name": "acceptOwnership",
+      "signature": "acceptOwnership()",
+      "selector": "0x79ba5097"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "function",
+      "name": "accountInChain",
+      "signature": "accountInChain(address)",
+      "selector": "0xdd87c2ed"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "function",
+      "name": "accountOf",
+      "signature": "accountOf(address)",
+      "selector": "0x8086b8ba"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "function",
+      "name": "accountsOfNodes",
+      "signature": "accountsOfNodes(address[])",
+      "selector": "0xdd2226a2"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "function",
+      "name": "addParameterSet",
+      "signature": "addParameterSet((uint32,bool,uint8,uint8,uint8,uint8,uint8,uint8,uint8,uint16,uint16,uint16,uint16,uint16,uint16,uint16,uint32,uint32,uint32,uint32,uint32,uint32,uint32,uint32,uint32,uint32,uint64,uint64,uint64,uint64))",
+      "selector": "0x0dd2e1b4"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "function",
+      "name": "ambiguousOf",
+      "signature": "ambiguousOf(uint256)",
+      "selector": "0x27337269"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "function",
+      "name": "announce",
+      "signature": "announce(uint256,uint16)",
+      "selector": "0xe1c69e88"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "function",
+      "name": "askCorrection",
+      "signature": "askCorrection(uint256[])",
+      "selector": "0x364f3ee7"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "function",
+      "name": "ban",
+      "signature": "ban(uint256)",
+      "selector": "0x6b6ece26"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "function",
+      "name": "beat",
+      "signature": "beat()",
+      "selector": "0x7a259dba"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "function",
+      "name": "beatCounts",
+      "signature": "beatCounts(address)",
+      "selector": "0x4c8cb9c9"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "function",
+      "name": "chargeOf",
+      "signature": "chargeOf(uint256,uint8,address)",
+      "selector": "0x453138df"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "function",
+      "name": "chargedInOf",
+      "signature": "chargedInOf(address,uint32)",
+      "selector": "0x2a5e9b52"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "function",
+      "name": "claim",
+      "signature": "claim(uint256,uint256,bytes32,uint24)",
+      "selector": "0x33223d52"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "function",
+      "name": "claimerSlice",
+      "signature": "claimerSlice(uint256,uint256,uint256)",
+      "selector": "0xb72b4486"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "function",
+      "name": "claimsOfNodes",
+      "signature": "claimsOfNodes(uint256,address[])",
+      "selector": "0x5b35615e"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "function",
+      "name": "claimsOn",
+      "signature": "claimsOn()",
+      "selector": "0xd708df9b"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "function",
+      "name": "correct",
+      "signature": "correct(address,uint256[],uint256)",
+      "selector": "0x95c4b6f3"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "function",
+      "name": "early33",
+      "signature": "early33(uint256)",
+      "selector": "0x19485f9c"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "function",
+      "name": "ethStorage",
+      "signature": "ethStorage()",
+      "selector": "0xd8611116"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "function",
+      "name": "expire",
+      "signature": "expire(address)",
+      "selector": "0xc8db233e"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "function",
+      "name": "failureOf",
+      "signature": "failureOf(uint256)",
+      "selector": "0xcfd88a92"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "function",
+      "name": "farmMinimumOn",
+      "signature": "farmMinimumOn()",
+      "selector": "0xa6edd19e"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "function",
+      "name": "fillOf",
+      "signature": "fillOf(uint256)",
+      "selector": "0xec9efa83"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "function",
+      "name": "healthOf",
+      "signature": "healthOf(bytes31)",
+      "selector": "0x19bdc479"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "function",
+      "name": "imageHealth",
+      "signature": "imageHealth(bytes31)",
+      "selector": "0xd76deeda"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "function",
+      "name": "imageRegistry",
+      "signature": "imageRegistry()",
+      "selector": "0xabd36149"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "function",
+      "name": "judge",
+      "signature": "judge()",
+      "selector": "0x573255f4"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "function",
+      "name": "listHashOf",
+      "signature": "listHashOf(uint256,uint8)",
+      "selector": "0xb9b670d5"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "function",
+      "name": "minimumOn",
+      "signature": "minimumOn()",
+      "selector": "0x8fb07ce2"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "function",
+      "name": "nodeFault",
+      "signature": "nodeFault(uint256,uint256[])",
+      "selector": "0x4bbb8044"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "function",
+      "name": "nodeStanding",
+      "signature": "nodeStanding(address)",
+      "selector": "0xb6507654"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "function",
+      "name": "notRun",
+      "signature": "notRun(uint256,bool)",
+      "selector": "0x4fb88948"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "function",
+      "name": "noteAmbiguous",
+      "signature": "noteAmbiguous(uint256,uint256[])",
+      "selector": "0xbbe0052b"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "function",
+      "name": "noteRefund",
+      "signature": "noteRefund(uint256)",
+      "selector": "0xc80bb92b"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "function",
+      "name": "onBidRaised",
+      "signature": "onBidRaised(uint256,uint256,uint256)",
+      "selector": "0x8512066e"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "function",
+      "name": "onOfferRemoved",
+      "signature": "onOfferRemoved(uint256)",
+      "selector": "0xecda7d6a"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "function",
+      "name": "onOrderClosed",
+      "signature": "onOrderClosed(uint256)",
+      "selector": "0xc18b4aad"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "function",
+      "name": "onOrderPlaced",
+      "signature": "onOrderPlaced(uint256,uint256,uint256,uint8)",
+      "selector": "0xd888fcda"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "function",
+      "name": "onOrderRejected",
+      "signature": "onOrderRejected(uint256)",
+      "selector": "0xaf9672fc"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "function",
+      "name": "onOrderSettled",
+      "signature": "onOrderSettled(uint256,uint32,uint16)",
+      "selector": "0x37aad410"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "function",
+      "name": "onOrderUnstarted",
+      "signature": "onOrderUnstarted(uint256)",
+      "selector": "0x47bb5ac2"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "function",
+      "name": "onRequestAdded",
+      "signature": "onRequestAdded(uint256)",
+      "selector": "0x87d0c070"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "function",
+      "name": "owner",
+      "signature": "owner()",
+      "selector": "0x8da5cb5b"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "function",
+      "name": "paidWorkOf",
+      "signature": "paidWorkOf(address)",
+      "selector": "0x2e095b57"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "function",
+      "name": "paidWorkOfNodes",
+      "signature": "paidWorkOfNodes(address[])",
+      "selector": "0xe83e8e90"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "function",
+      "name": "parameterSet",
+      "signature": "parameterSet(uint256)",
+      "selector": "0x7ed5a9ba"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "function",
+      "name": "parameterSetCount",
+      "signature": "parameterSetCount()",
+      "selector": "0x4c2306a9"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "function",
+      "name": "pause",
+      "signature": "pause()",
+      "selector": "0x8456cb59"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "function",
+      "name": "pendingOf",
+      "signature": "pendingOf(address,uint256,uint256)",
+      "selector": "0x16a0d8a3"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "function",
+      "name": "pendingOwner",
+      "signature": "pendingOwner()",
+      "selector": "0xe30c3978"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "function",
+      "name": "periodAt",
+      "signature": "periodAt(address,uint256)",
+      "selector": "0x3ffe5649"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "function",
+      "name": "periodsOf",
+      "signature": "periodsOf(address[])",
+      "selector": "0x170c8998"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "function",
+      "name": "pox",
+      "signature": "pox()",
+      "selector": "0x6e4ece25"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "function",
+      "name": "predecessor",
+      "signature": "predecessor()",
+      "selector": "0xb719d032"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "function",
+      "name": "pricing",
+      "signature": "pricing()",
+      "selector": "0x7ce91411"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "function",
+      "name": "proveWide",
+      "signature": "proveWide(uint256,uint256[])",
+      "selector": "0xaf9de94c"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "function",
+      "name": "reader",
+      "signature": "reader()",
+      "selector": "0xd4fc42c6"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "function",
+      "name": "recordMisses",
+      "signature": "recordMisses(uint256,uint8,bytes32,bytes32,address,uint8,address[],uint8[],uint8[],uint256[])",
+      "selector": "0x49d0566a"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "function",
+      "name": "recordOf",
+      "signature": "recordOf(address)",
+      "selector": "0xc06ac6a3"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "function",
+      "name": "registerTemplate",
+      "signature": "registerTemplate(string,bool,uint16[5],string)",
+      "selector": "0x7e44a78e"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "function",
+      "name": "registryMarks",
+      "signature": "registryMarks(string,bool)",
+      "selector": "0x85eb2fee"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "function",
+      "name": "replaceParameterSet",
+      "signature": "replaceParameterSet((uint32,bool,uint8,uint8,uint8,uint8,uint8,uint8,uint8,uint16,uint16,uint16,uint16,uint16,uint16,uint16,uint32,uint32,uint32,uint32,uint32,uint32,uint32,uint32,uint32,uint32,uint64,uint64,uint64,uint64))",
+      "selector": "0xa9cf5717"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "function",
+      "name": "requestImageOf",
+      "signature": "requestImageOf(uint256)",
+      "selector": "0xac1e2cfe"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "function",
+      "name": "requestOf",
+      "signature": "requestOf(uint256)",
+      "selector": "0x324e03be"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "function",
+      "name": "rollLengths",
+      "signature": "rollLengths(uint32)",
+      "selector": "0xf34e2077"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "function",
+      "name": "rollPeriodsOf",
+      "signature": "rollPeriodsOf(uint32,uint8,uint256,uint256,bytes31)",
+      "selector": "0xaebc9820"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "function",
+      "name": "rollSlice",
+      "signature": "rollSlice(uint32,uint8,uint256,uint256)",
+      "selector": "0x864a9c98"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "function",
+      "name": "roundOf",
+      "signature": "roundOf(uint256,uint8)",
+      "selector": "0xcd14de3c"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "function",
+      "name": "sameSecondBlocks",
+      "signature": "sameSecondBlocks()",
+      "selector": "0x48f1c747"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "function",
+      "name": "servingOf",
+      "signature": "servingOf(address)",
+      "selector": "0xe759a80f"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "function",
+      "name": "setImageRegistry",
+      "signature": "setImageRegistry(address)",
+      "selector": "0x09b4a32c"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "function",
+      "name": "setJudge",
+      "signature": "setJudge(address)",
+      "selector": "0xb157c5cd"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "function",
+      "name": "setPricing",
+      "signature": "setPricing(address)",
+      "selector": "0x023fc47d"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "function",
+      "name": "setReader",
+      "signature": "setReader(address)",
+      "selector": "0x9598da7f"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "function",
+      "name": "skipImage",
+      "signature": "skipImage(bytes31,uint32,uint256[3])",
+      "selector": "0x55346841"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "function",
+      "name": "skipOf",
+      "signature": "skipOf(address,bytes31)",
+      "selector": "0x11bb1d2d"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "function",
+      "name": "slotSeconds",
+      "signature": "slotSeconds()",
+      "selector": "0x6738bc6a"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "function",
+      "name": "strike",
+      "signature": "strike(address,uint256)",
+      "selector": "0xcaf1edce"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "function",
+      "name": "templateOf",
+      "signature": "templateOf(bytes32)",
+      "selector": "0xc9c3c70b"
+    },
+    {
+      "abi": "IPoxMatching.json",
+      "kind": "function",
+      "name": "transferOwnership",
+      "signature": "transferOwnership(address)",
+      "selector": "0xf2fde38b"
+    },
+    {
+      "abi": "IPoxMatchingTypes.json",
+      "kind": "error",
+      "name": "BanRefused",
+      "signature": "BanRefused(uint256,uint8)",
+      "selector": "0xe234e433"
+    },
+    {
+      "abi": "IPoxMatchingTypes.json",
+      "kind": "error",
+      "name": "BeatNotCounted",
+      "signature": "BeatNotCounted(address)",
+      "selector": "0x2fa7b32c"
+    },
+    {
+      "abi": "IPoxMatchingTypes.json",
+      "kind": "error",
+      "name": "ClaimRefused",
+      "signature": "ClaimRefused(uint256,uint8)",
+      "selector": "0xd32bd89e"
+    },
+    {
+      "abi": "IPoxMatchingTypes.json",
+      "kind": "error",
+      "name": "CorrectionRefused",
+      "signature": "CorrectionRefused(address,uint8)",
+      "selector": "0x8d467f28"
+    },
+    {
+      "abi": "IPoxMatchingTypes.json",
+      "kind": "error",
+      "name": "ExpireRefused",
+      "signature": "ExpireRefused(address,uint8)",
+      "selector": "0xdb27db99"
+    },
+    {
+      "abi": "IPoxMatchingTypes.json",
+      "kind": "error",
+      "name": "NodeBanned",
+      "signature": "NodeBanned(address,uint32)",
+      "selector": "0xa5fd937f"
+    },
+    {
+      "abi": "IPoxMatchingTypes.json",
+      "kind": "error",
+      "name": "NodeFaultRefused",
+      "signature": "NodeFaultRefused(uint256,uint8)",
+      "selector": "0x8f345d00"
+    },
+    {
+      "abi": "IPoxMatchingTypes.json",
+      "kind": "error",
+      "name": "NotAmbiguous",
+      "signature": "NotAmbiguous(uint256,uint8)",
+      "selector": "0xdcb236ec"
+    },
+    {
+      "abi": "IPoxMatchingTypes.json",
+      "kind": "error",
+      "name": "NotJudge",
+      "signature": "NotJudge(address)",
+      "selector": "0x5061ecaf"
+    },
+    {
+      "abi": "IPoxMatchingTypes.json",
+      "kind": "error",
+      "name": "NotOwner",
+      "signature": "NotOwner(address)",
+      "selector": "0x245aecd3"
+    },
+    {
+      "abi": "IPoxMatchingTypes.json",
+      "kind": "error",
+      "name": "NotPendingOwner",
+      "signature": "NotPendingOwner(address)",
+      "selector": "0xa09b9a43"
+    },
+    {
+      "abi": "IPoxMatchingTypes.json",
+      "kind": "error",
+      "name": "NotPricing",
+      "signature": "NotPricing(address)",
+      "selector": "0xe389c82e"
+    },
+    {
+      "abi": "IPoxMatchingTypes.json",
+      "kind": "error",
+      "name": "NotRunRefused",
+      "signature": "NotRunRefused(uint256,uint8)",
+      "selector": "0xccb3ec71"
+    },
+    {
+      "abi": "IPoxMatchingTypes.json",
+      "kind": "error",
+      "name": "NotUnstarted",
+      "signature": "NotUnstarted(uint256,uint8)",
+      "selector": "0x8732aa26"
+    },
+    {
+      "abi": "IPoxMatchingTypes.json",
+      "kind": "error",
+      "name": "OfferRefused",
+      "signature": "OfferRefused(uint256,uint8)",
+      "selector": "0xbb39ce25"
+    },
+    {
+      "abi": "IPoxMatchingTypes.json",
+      "kind": "error",
+      "name": "ParameterSetRefused",
+      "signature": "ParameterSetRefused(uint256,uint8)",
+      "selector": "0x8cc6815f"
+    },
+    {
+      "abi": "IPoxMatchingTypes.json",
+      "kind": "error",
+      "name": "PauseRefused",
+      "signature": "PauseRefused(address)",
+      "selector": "0x847db08b"
+    },
+    {
+      "abi": "IPoxMatchingTypes.json",
+      "kind": "error",
+      "name": "PlacementRefused",
+      "signature": "PlacementRefused(uint256,uint8)",
+      "selector": "0xbec805c5"
+    },
+    {
+      "abi": "IPoxMatchingTypes.json",
+      "kind": "error",
+      "name": "PointerRefused",
+      "signature": "PointerRefused(uint8,address)",
+      "selector": "0x4ed8e98c"
+    },
+    {
+      "abi": "IPoxMatchingTypes.json",
+      "kind": "error",
+      "name": "RaiseRefused",
+      "signature": "RaiseRefused(uint256,uint8)",
+      "selector": "0xbae2ccdd"
+    },
+    {
+      "abi": "IPoxMatchingTypes.json",
+      "kind": "error",
+      "name": "RecordRefused",
+      "signature": "RecordRefused(uint256,uint8,uint8)",
+      "selector": "0x523c6bd9"
+    },
+    {
+      "abi": "IPoxMatchingTypes.json",
+      "kind": "error",
+      "name": "RefundRefused",
+      "signature": "RefundRefused(uint256,uint8)",
+      "selector": "0xb10f3472"
+    },
+    {
+      "abi": "IPoxMatchingTypes.json",
+      "kind": "error",
+      "name": "SkipRefused",
+      "signature": "SkipRefused(bytes31,uint8)",
+      "selector": "0xb75d02f5"
+    },
+    {
+      "abi": "IPoxMatchingTypes.json",
+      "kind": "error",
+      "name": "TemplateRefused",
+      "signature": "TemplateRefused(bytes32,uint8)",
+      "selector": "0xf58038db"
+    },
+    {
+      "abi": "IPoxMatchingTypes.json",
+      "kind": "error",
+      "name": "WideRefused",
+      "signature": "WideRefused(uint256,uint8)",
+      "selector": "0xd983ac41"
+    },
+    {
+      "abi": "IPoxMatchingTypes.json",
+      "kind": "event",
+      "name": "AmbiguousNoted",
+      "signature": "AmbiguousNoted(uint256,uint8,uint64,bool)",
+      "topic0": "0xc042654d66e0352faa21157df23fbee2cfd4a7f88039d1cdac3b643512ce2e74"
+    },
+    {
+      "abi": "IPoxMatchingTypes.json",
+      "kind": "event",
+      "name": "Announced",
+      "signature": "Announced(address,uint256,uint32,uint8,uint8,uint8,uint8,uint16,uint256,uint16,uint8,uint16)",
+      "topic0": "0xd3b318a1e99c3395d79424d596c72f8fe353d8510372e958846f833dc5ebca59"
+    },
+    {
+      "abi": "IPoxMatchingTypes.json",
+      "kind": "event",
+      "name": "Approved",
+      "signature": "Approved(uint256,address,uint256,uint8,uint8)",
+      "topic0": "0xab8ffc010e994b88ccb2120caf12a3dfe408c8887f9431732a7ec490ef055c50"
+    },
+    {
+      "abi": "IPoxMatchingTypes.json",
+      "kind": "event",
+      "name": "Banned",
+      "signature": "Banned(address,uint256,uint32)",
+      "topic0": "0xe26f3b67dbeae2e58170d0bb51fb7205c1f92f43bcc5d658c76f8aec1ff49d74"
+    },
+    {
+      "abi": "IPoxMatchingTypes.json",
+      "kind": "event",
+      "name": "Beat",
+      "signature": "Beat(address,uint32,uint16,uint8,uint256)",
+      "topic0": "0x546574069dc4db872961c630e13cc7057e3c181e9b868df23a1cb1cb536adb3d"
+    },
+    {
+      "abi": "IPoxMatchingTypes.json",
+      "kind": "event",
+      "name": "ChargeSkipped",
+      "signature": "ChargeSkipped(uint256,uint8,address,uint8)",
+      "topic0": "0x2c2180242f4043da9f7aba8005a3508b56449edd5b086145bfad176809d678ae"
+    },
+    {
+      "abi": "IPoxMatchingTypes.json",
+      "kind": "event",
+      "name": "Charged",
+      "signature": "Charged(uint256,uint8,address,uint8,uint8,uint8,uint16,uint16,uint16)",
+      "topic0": "0x36edfa0b9e45e5ed0068a38ab30e7bd4984cc2d127bcc7bfb5e6db8457db559c"
+    },
+    {
+      "abi": "IPoxMatchingTypes.json",
+      "kind": "event",
+      "name": "Claimed",
+      "signature": "Claimed(uint256,address,uint256,uint8,uint8,uint48,uint24)",
+      "topic0": "0x7536e01bf6070c73e91e9c80cc28c50acffd388f771f4b17b6b84e8a64f2d505"
+    },
+    {
+      "abi": "IPoxMatchingTypes.json",
+      "kind": "event",
+      "name": "Corrected",
+      "signature": "Corrected(address,uint256,uint16,uint16)",
+      "topic0": "0xe15b691e1e3bd8e633f14ca7b0d8f450071f49a3afedf4b5d115f192106ce9d6"
+    },
+    {
+      "abi": "IPoxMatchingTypes.json",
+      "kind": "event",
+      "name": "CorrectionAsked",
+      "signature": "CorrectionAsked(address,uint256[])",
+      "topic0": "0x18bd419b4a5b898822127ecb68905279e3fb20007c4932f6cf91819132647a1a"
+    },
+    {
+      "abi": "IPoxMatchingTypes.json",
+      "kind": "event",
+      "name": "FarmMinimumOn",
+      "signature": "FarmMinimumOn(uint32)",
+      "topic0": "0x9c90f9ffb6b968be223e283948fe1e58b23d7080ed9b57c8111b2fc1582720d5"
+    },
+    {
+      "abi": "IPoxMatchingTypes.json",
+      "kind": "event",
+      "name": "HealthCounted",
+      "signature": "HealthCounted(bytes31,uint256,bool,uint16,uint16,bool)",
+      "topic0": "0x075c141fd906d6fd66547f23ad896e3cc4208b75209fb4d13c57df277d34cd3a"
+    },
+    {
+      "abi": "IPoxMatchingTypes.json",
+      "kind": "event",
+      "name": "Left",
+      "signature": "Left(address,uint8,uint32)",
+      "topic0": "0x93fd16d7e01274b766d008745aa4e4090858fa4e13856d40cf2435fef6c5a440"
+    },
+    {
+      "abi": "IPoxMatchingTypes.json",
+      "kind": "event",
+      "name": "ListJudged",
+      "signature": "ListJudged(uint256,uint8,bytes32)",
+      "topic0": "0x0b40ecc823d6fc9cddd31568eaa5fa3ce6e12ac091ee72cc37030a3bb5d8f1d8"
+    },
+    {
+      "abi": "IPoxMatchingTypes.json",
+      "kind": "event",
+      "name": "MinimumOn",
+      "signature": "MinimumOn(uint32)",
+      "topic0": "0x6d31c153f594c5b39ea1db0e19241c23579cdc005aea0d6fd8892fd7bb7c97e2"
+    },
+    {
+      "abi": "IPoxMatchingTypes.json",
+      "kind": "event",
+      "name": "OrderFailed",
+      "signature": "OrderFailed(uint256,address,uint8,uint16,uint16)",
+      "topic0": "0x9d9ebe81c8729c39428d0fd58a9b7b7c9ad8e7641146d4dd178781f68522e135"
+    },
+    {
+      "abi": "IPoxMatchingTypes.json",
+      "kind": "event",
+      "name": "OwnershipTransferStarted",
+      "signature": "OwnershipTransferStarted(address,address)",
+      "topic0": "0x38d16b8cac22d99fc7c124b9cd0de2d3fa1faef420bfe791d8c362d765e22700"
+    },
+    {
+      "abi": "IPoxMatchingTypes.json",
+      "kind": "event",
+      "name": "OwnershipTransferred",
+      "signature": "OwnershipTransferred(address,address)",
+      "topic0": "0x8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e0"
+    },
+    {
+      "abi": "IPoxMatchingTypes.json",
+      "kind": "event",
+      "name": "ParametersAdded",
+      "signature": "ParametersAdded(uint256,uint32)",
+      "topic0": "0xd446cd63375d40184a05e7fbfc2cc30c78764ff81863d9eeb2c6e9f32184cb3e"
+    },
+    {
+      "abi": "IPoxMatchingTypes.json",
+      "kind": "event",
+      "name": "ParametersReplaced",
+      "signature": "ParametersReplaced(uint256,uint32)",
+      "topic0": "0x43ecbeed305302a5a88861988f275e320fef079578e9cfb2cb81a61f477be6ba"
+    },
+    {
+      "abi": "IPoxMatchingTypes.json",
+      "kind": "event",
+      "name": "Recounted",
+      "signature": "Recounted(uint256,uint8,address,uint16,uint16)",
+      "topic0": "0x9395e113a30b5a33d9b5479b7e680d09c0e900d7ec548ef9270f1ba89a9e5421"
+    },
+    {
+      "abi": "IPoxMatchingTypes.json",
+      "kind": "event",
+      "name": "RoundOpened",
+      "signature": "RoundOpened(uint256,uint8,uint48,uint256,uint256)",
+      "topic0": "0xc0f74dff2c02577e5ae13df088bd82b613d6f2b8bc8dec4d9af9bce4114c56dd"
+    },
+    {
+      "abi": "IPoxMatchingTypes.json",
+      "kind": "event",
+      "name": "Skipped",
+      "signature": "Skipped(address,bytes31,uint32,uint32,uint32,uint32)",
+      "topic0": "0x741a6b4c1ee17b3ef65d00f69c4ab6f57528616f11d5937f03f28398a46317aa"
+    },
+    {
+      "abi": "IPoxMatchingTypes.json",
+      "kind": "event",
+      "name": "TemplateRegistered",
+      "signature": "TemplateRegistered(bytes32,uint8,uint32)",
+      "topic0": "0x9b39a123ff8912eee9f8483f9e4aaaeb4b58cbae0e9a5f755316c2318f823bf1"
+    },
+    {
+      "abi": "IPoxMatchingTypes.json",
+      "kind": "event",
+      "name": "WideProven",
+      "signature": "WideProven(uint256)",
+      "topic0": "0x6a935c6ee57fed0b3bf47cbdb024480c6646bb00b5d5fc5a13c963d73337c1d3"
+    },
+    {
+      "abi": "IPoxPricing.json",
+      "kind": "event",
+      "name": "BasePriceUpdated",
+      "signature": "BasePriceUpdated(uint256,uint256,uint256,uint256,uint256)",
+      "topic0": "0x76e724ecef26fbff0e51741159309e0d39eb16ae35d21eff92c30ff3329641e3"
+    },
+    {
+      "abi": "IPoxPricing.json",
+      "kind": "event",
+      "name": "OracleDivergence",
+      "signature": "OracleDivergence(uint256,uint256,uint256)",
+      "topic0": "0x323d3cf9577725bd6466bd877afba89f61933b5f6b569c41bd123e32ec7a469f"
+    },
+    {
+      "abi": "IPoxPricing.json",
+      "kind": "event",
+      "name": "OracleStale",
+      "signature": "OracleStale(uint256)",
+      "topic0": "0x9169b05ea9aa1cf5e8f3d167702fc16c700a52546a6a4abd28f3e3f2ab052da1"
+    },
+    {
+      "abi": "IPoxPricing.json",
+      "kind": "event",
+      "name": "PricingParamsScheduled",
+      "signature": "PricingParamsScheduled(uint256,(uint256,uint256,uint256,uint256,uint256,uint256,uint8,uint8,uint32,uint32,uint32,uint32,uint16,uint32,uint32,uint32,uint32,uint64,uint32,uint8,uint32,uint32))",
+      "topic0": "0x71dc8a96ad65bfdfd24625e296017d6f662ce87850681b3559e13ee08e7f5529"
+    },
+    {
+      "abi": "IPoxPricing.json",
+      "kind": "function",
+      "name": "avgGasPriceWei",
+      "signature": "avgGasPriceWei()",
+      "selector": "0xb6847530"
+    },
+    {
+      "abi": "IPoxPricing.json",
+      "kind": "function",
+      "name": "capacityGflops",
+      "signature": "capacityGflops()",
+      "selector": "0x33ec4913"
+    },
+    {
+      "abi": "IPoxPricing.json",
+      "kind": "function",
+      "name": "chainFeeWei",
+      "signature": "chainFeeWei(uint16,uint16,uint256)",
+      "selector": "0x1c67e49f"
+    },
+    {
+      "abi": "IPoxPricing.json",
+      "kind": "function",
+      "name": "currentPricePerCuHourWei",
+      "signature": "currentPricePerCuHourWei()",
+      "selector": "0x8d56765d"
+    },
+    {
+      "abi": "IPoxPricing.json",
+      "kind": "function",
+      "name": "emaPricePerCuHourWei",
+      "signature": "emaPricePerCuHourWei()",
+      "selector": "0xfa3f6a7b"
+    },
+    {
+      "abi": "IPoxPricing.json",
+      "kind": "function",
+      "name": "epochIndex",
+      "signature": "epochIndex()",
+      "selector": "0x06c106f9"
+    },
+    {
+      "abi": "IPoxPricing.json",
+      "kind": "function",
+      "name": "epochTokenPerPol",
+      "signature": "epochTokenPerPol()",
+      "selector": "0x96cabad8"
+    },
+    {
+      "abi": "IPoxPricing.json",
+      "kind": "function",
+      "name": "implementation",
+      "signature": "implementation()",
+      "selector": "0x5c60da1b"
+    },
+    {
+      "abi": "IPoxPricing.json",
+      "kind": "function",
+      "name": "initializePricing",
+      "signature": "initializePricing((uint256,uint256,uint256,uint256,uint256,uint256,uint8,uint8,uint32,uint32,uint32,uint32,uint16,uint32,uint32,uint32,uint32,uint64,uint32,uint8,uint32,uint32),uint256,uint256)",
+      "selector": "0xeca185c2"
+    },
+    {
+      "abi": "IPoxPricing.json",
+      "kind": "function",
+      "name": "loadGflops",
+      "signature": "loadGflops()",
+      "selector": "0x30b0dc9a"
+    },
+    {
+      "abi": "IPoxPricing.json",
+      "kind": "function",
+      "name": "matching",
+      "signature": "matching()",
+      "selector": "0xae5ec2e9"
+    },
+    {
+      "abi": "IPoxPricing.json",
+      "kind": "function",
+      "name": "onBidRaised",
+      "signature": "onBidRaised(uint256,uint256)",
+      "selector": "0x70738cce"
+    },
+    {
+      "abi": "IPoxPricing.json",
+      "kind": "function",
+      "name": "onDPRequestAdded",
+      "signature": "onDPRequestAdded(uint256,uint32,bool)",
+      "selector": "0xfb59b3bf"
+    },
+    {
+      "abi": "IPoxPricing.json",
+      "kind": "function",
+      "name": "onDPRequestRefreshed",
+      "signature": "onDPRequestRefreshed(uint256)",
+      "selector": "0xdbcd2619"
+    },
+    {
+      "abi": "IPoxPricing.json",
+      "kind": "function",
+      "name": "onDPRequestRemoved",
+      "signature": "onDPRequestRemoved(uint256)",
+      "selector": "0x5e251646"
+    },
+    {
+      "abi": "IPoxPricing.json",
+      "kind": "function",
+      "name": "onOrderClosed",
+      "signature": "onOrderClosed(uint256)",
+      "selector": "0xc18b4aad"
+    },
+    {
+      "abi": "IPoxPricing.json",
+      "kind": "function",
+      "name": "onOrderPlaced",
+      "signature": "onOrderPlaced(uint256,uint256,uint256,uint8,uint64)",
+      "selector": "0xc71089c4"
+    },
+    {
+      "abi": "IPoxPricing.json",
+      "kind": "function",
+      "name": "onOrderRejected",
+      "signature": "onOrderRejected(uint256)",
+      "selector": "0xaf9672fc"
+    },
+    {
+      "abi": "IPoxPricing.json",
+      "kind": "function",
+      "name": "onOrderSettled",
+      "signature": "onOrderSettled(uint256,uint32,uint16)",
+      "selector": "0x37aad410"
+    },
+    {
+      "abi": "IPoxPricing.json",
+      "kind": "function",
+      "name": "onOrderUnstarted",
+      "signature": "onOrderUnstarted(uint256)",
+      "selector": "0x47bb5ac2"
+    },
+    {
+      "abi": "IPoxPricing.json",
+      "kind": "function",
+      "name": "params",
+      "signature": "params()",
+      "selector": "0xcff0ab96"
+    },
+    {
+      "abi": "IPoxPricing.json",
+      "kind": "function",
+      "name": "priceOracle",
+      "signature": "priceOracle()",
+      "selector": "0x2630c12f"
+    },
+    {
+      "abi": "IPoxPricing.json",
+      "kind": "function",
+      "name": "referenceOracle",
+      "signature": "referenceOracle()",
+      "selector": "0x337cceb9"
+    },
+    {
+      "abi": "IPoxPricing.json",
+      "kind": "function",
+      "name": "reservedCapacityGflops",
+      "signature": "reservedCapacityGflops()",
+      "selector": "0x67302f8c"
+    },
+    {
+      "abi": "IPoxPricing.json",
+      "kind": "function",
+      "name": "reservedOfferAt",
+      "signature": "reservedOfferAt(uint256)",
+      "selector": "0xd316a342"
+    },
+    {
+      "abi": "IPoxPricing.json",
+      "kind": "function",
+      "name": "reservedOfferCount",
+      "signature": "reservedOfferCount()",
+      "selector": "0x7789570f"
+    },
+    {
+      "abi": "IPoxPricing.json",
+      "kind": "function",
+      "name": "setImplementation",
+      "signature": "setImplementation(address)",
+      "selector": "0xd784d426"
+    },
+    {
+      "abi": "IPoxPricing.json",
+      "kind": "function",
+      "name": "setMatching",
+      "signature": "setMatching(address)",
+      "selector": "0x51f9093f"
+    },
+    {
+      "abi": "IPoxPricing.json",
+      "kind": "function",
+      "name": "setPriceOracle",
+      "signature": "setPriceOracle(address)",
+      "selector": "0x530e784f"
+    },
+    {
+      "abi": "IPoxPricing.json",
+      "kind": "function",
+      "name": "setPricingParams",
+      "signature": "setPricingParams((uint256,uint256,uint256,uint256,uint256,uint256,uint8,uint8,uint32,uint32,uint32,uint32,uint16,uint32,uint32,uint32,uint32,uint64,uint32,uint8,uint32,uint32))",
+      "selector": "0xeecf51b8"
+    },
+    {
+      "abi": "IPoxPricing.json",
+      "kind": "function",
+      "name": "setReferenceOracle",
+      "signature": "setReferenceOracle(address)",
+      "selector": "0xca89184e"
+    },
+    {
+      "abi": "IPoxPricing.json",
+      "kind": "function",
+      "name": "smoothedUtilization",
+      "signature": "smoothedUtilization()",
+      "selector": "0x51b29d39"
+    },
+    {
+      "abi": "IPoxPricing.json",
+      "kind": "function",
+      "name": "stampRequest",
+      "signature": "stampRequest(uint256)",
+      "selector": "0xa7009c1f"
+    },
+    {
+      "abi": "IPoxReader.json",
+      "kind": "function",
+      "name": "_getDORequestV2",
+      "signature": "_getDORequestV2(uint256)",
+      "selector": "0xc7d4a322"
+    },
+    {
+      "abi": "IPoxReader.json",
+      "kind": "function",
+      "name": "_getDPRequestV2",
+      "signature": "_getDPRequestV2(uint256)",
+      "selector": "0x621ce543"
+    },
+    {
+      "abi": "IPoxReader.json",
+      "kind": "function",
+      "name": "_getOrderTerms",
+      "signature": "_getOrderTerms(uint256)",
+      "selector": "0x327da2ce"
+    },
+    {
+      "abi": "IPoxReader.json",
+      "kind": "function",
+      "name": "cheapestOffer",
+      "signature": "cheapestOffer(uint256,uint256,uint8,uint8,uint8,uint8,uint32)",
+      "selector": "0x3d1bf126"
+    },
+    {
+      "abi": "IPoxReader.json",
+      "kind": "function",
+      "name": "committedOffers",
+      "signature": "committedOffers(uint256,uint256,uint8,uint8,uint8,uint8,uint32,uint32,uint16)",
+      "selector": "0x35fda2c1"
+    },
+    {
+      "abi": "IPoxReader.json",
+      "kind": "function",
+      "name": "epcNeedOf",
+      "signature": "epcNeedOf(string)",
+      "selector": "0x0f2ea640"
+    },
+    {
+      "abi": "IPoxReader.json",
+      "kind": "function",
+      "name": "publisherFees",
+      "signature": "publisherFees(string)",
+      "selector": "0xe7b79c9a"
+    },
+    {
+      "abi": "IPoxReader.json",
+      "kind": "function",
+      "name": "quote",
+      "signature": "quote()",
+      "selector": "0x999b93af"
+    },
+    {
+      "abi": "IPoxReader.json",
+      "kind": "function",
+      "name": "reservedOffer",
+      "signature": "reservedOffer(uint256,uint8,uint8,uint8,uint8,uint32,uint32,uint16)",
+      "selector": "0x05fec4ce"
+    },
+    {
+      "abi": "IPoxReader.json",
+      "kind": "function",
+      "name": "settlementOf",
+      "signature": "settlementOf(uint256)",
+      "selector": "0x9dd72c9d"
+    },
+    {
+      "abi": "IReservationBroker.json",
+      "kind": "event",
+      "name": "BrokerAssigned",
+      "signature": "BrokerAssigned(uint256,address,address)",
+      "topic0": "0x28ee3dee0623232b5ed5283772ea85a8f2f71d31c9a361d40ee2f398d0432d6a"
+    },
+    {
+      "abi": "IReservationBroker.json",
+      "kind": "event",
+      "name": "BrokerMissed",
+      "signature": "BrokerMissed(uint256,address,address,uint8)",
+      "topic0": "0x4eeac56414543bd1478f7bea99d504f39832c0422179df35eea19aad4aecc15b"
+    },
+    {
+      "abi": "IReservationBroker.json",
+      "kind": "event",
+      "name": "BrokerRewardsWithdrawn",
+      "signature": "BrokerRewardsWithdrawn(address,address,uint256)",
+      "topic0": "0x0c60e634999a93e2bead77cacc8f3a5db051402d9b02706a7b4b0786ced9dbb8"
+    },
+    {
+      "abi": "IReservationBroker.json",
+      "kind": "event",
+      "name": "Called",
+      "signature": "Called(uint256,uint256,uint32,uint256)",
+      "topic0": "0xff52078708886e138d64d507e42943ff67a01923cde4f7b7d7c0fb4d3fb6cddc"
+    },
+    {
+      "abi": "IReservationBroker.json",
+      "kind": "event",
+      "name": "CommitmentBreached",
+      "signature": "CommitmentBreached(address,uint256,uint8,uint64)",
+      "topic0": "0x334ac62563e5709b36e6a711a5b9fd173cac003043834a00bdca404b281a14ec"
+    },
+    {
+      "abi": "IReservationBroker.json",
+      "kind": "event",
+      "name": "Committed",
+      "signature": "Committed(address,uint64)",
+      "topic0": "0xb909fa32da02a5e1f1faf2347a5e0ef105f8fc806efc8aab7488fbb96539231a"
+    },
+    {
+      "abi": "IReservationBroker.json",
+      "kind": "event",
+      "name": "EndWindowRecorded",
+      "signature": "EndWindowRecorded(uint256,uint256,uint64,uint64)",
+      "topic0": "0x7f31b377d268655ad237f9748e5014396d3356d75d73ffb207aeacf186b49a0c"
+    },
+    {
+      "abi": "IReservationBroker.json",
+      "kind": "event",
+      "name": "Ended",
+      "signature": "Ended(uint256,uint256,uint256)",
+      "topic0": "0x94942738dac5813db86bc09e12c382aaa6824a675cfd6f834a8e2d5a964ac3c4"
+    },
+    {
+      "abi": "IReservationBroker.json",
+      "kind": "event",
+      "name": "Exhausted",
+      "signature": "Exhausted(uint256,uint256,uint256,uint256)",
+      "topic0": "0x6fd991dcda56255d8b4c5d0fe0e928e50549fc0c7fdf4a674024700204022910"
+    },
+    {
+      "abi": "IReservationBroker.json",
+      "kind": "event",
+      "name": "FarmJoined",
+      "signature": "FarmJoined(address,address)",
+      "topic0": "0x1fd73afd5eb3db8b3bee7f711b9abc51228c83d1b6fd4976c2cd1db29d593f59"
+    },
+    {
+      "abi": "IReservationBroker.json",
+      "kind": "event",
+      "name": "FarmLeft",
+      "signature": "FarmLeft(address,address)",
+      "topic0": "0x0bcbfcbe43bb56f271050e5abd373df4f3315daeb91f3883f99fdae3d8e0079b"
+    },
+    {
+      "abi": "IReservationBroker.json",
+      "kind": "event",
+      "name": "FarmRewardSet",
+      "signature": "FarmRewardSet(address,address)",
+      "topic0": "0xab76e9749476db7ff7877a419a4eacadf44ee5eb60e36f0a7e20dfad48a24fdf"
+    },
+    {
+      "abi": "IReservationBroker.json",
+      "kind": "event",
+      "name": "GasWait",
+      "signature": "GasWait(uint256,uint256,uint64)",
+      "topic0": "0x25bd13829738e2b0c5da94c07d9139c07f8a1882df28045783b8de9458f7793a"
+    },
+    {
+      "abi": "IReservationBroker.json",
+      "kind": "event",
+      "name": "HandedOver",
+      "signature": "HandedOver(uint256,uint256,uint256,bool)",
+      "topic0": "0xddf1478b627714e70a7555787c8798fd5f163158011469f7689c7af250543966"
+    },
+    {
+      "abi": "IReservationBroker.json",
+      "kind": "event",
+      "name": "HandoverAcceptanceVoided",
+      "signature": "HandoverAcceptanceVoided(uint256,uint256,address)",
+      "topic0": "0x3b3d152b6dee18b8ccb23a6a8863d8e0d88dbfb9fc651fc7cc9a9f5c96687ae5"
+    },
+    {
+      "abi": "IReservationBroker.json",
+      "kind": "event",
+      "name": "HandoverAccepted",
+      "signature": "HandoverAccepted(uint256,uint256,address)",
+      "topic0": "0x7d3c2f4df95a43b8453f1a317b7ed737d8927fef9547b16949eb80f341720350"
+    },
+    {
+      "abi": "IReservationBroker.json",
+      "kind": "event",
+      "name": "HandoverGasSettled",
+      "signature": "HandoverGasSettled(uint256,uint256,address,uint256,uint256)",
+      "topic0": "0xf13ee066764159caf32d1974f7beaed11a58ee9fdfceacfe7542f619a64ea8c4"
+    },
+    {
+      "abi": "IReservationBroker.json",
+      "kind": "event",
+      "name": "HandoverRequested",
+      "signature": "HandoverRequested(uint256,uint256,address,uint64,uint64,address,address)",
+      "topic0": "0x5d2ca5d2c74167abefaa474b2569a077b5891d50f6b0a026ad18a70c8fc8acd5"
+    },
+    {
+      "abi": "IReservationBroker.json",
+      "kind": "event",
+      "name": "KeeperRefunded",
+      "signature": "KeeperRefunded(uint256,address,uint256)",
+      "topic0": "0xb5ab00246cf8f7b2960cd477ce43d3439476bc91b9392c0111d3b2be60422485"
+    },
+    {
+      "abi": "IReservationBroker.json",
+      "kind": "event",
+      "name": "NodeFailureRecorded",
+      "signature": "NodeFailureRecorded(address,uint256,uint8,uint8)",
+      "topic0": "0x6ffbca6528310bb08d7ce81391a46cd0592236343144905bb7c009c7714e2a93"
+    },
+    {
+      "abi": "IReservationBroker.json",
+      "kind": "event",
+      "name": "NodeSwapped",
+      "signature": "NodeSwapped(uint256,uint256,address,uint8,uint64)",
+      "topic0": "0x34da697181d85d782a19319b86622365546348bc040add9ad16932dcf4a0f516"
+    },
+    {
+      "abi": "IReservationBroker.json",
+      "kind": "event",
+      "name": "OrderApproved",
+      "signature": "OrderApproved(uint256,uint256,address,uint64)",
+      "topic0": "0x86523805983d4df6a67489a10b523004f3086bc944cdd80f1b6eff819c4a11f7"
+    },
+    {
+      "abi": "IReservationBroker.json",
+      "kind": "event",
+      "name": "OrderChainFeeRaised",
+      "signature": "OrderChainFeeRaised(uint256,uint256,uint256,uint256)",
+      "topic0": "0x2ca1008b59bec123bc6d2ba1239882f21cf1a52d4960df8fe7b08d434ba3e8ee"
+    },
+    {
+      "abi": "IReservationBroker.json",
+      "kind": "event",
+      "name": "OrderEnded",
+      "signature": "OrderEnded(uint256,uint256,uint8,uint256,uint256,uint256,uint256,uint256)",
+      "topic0": "0x5bb0b133b7e2bf2e025a1537a2064647eceb091e25f40c29d7e1dc16ab665cf0"
+    },
+    {
+      "abi": "IReservationBroker.json",
+      "kind": "event",
+      "name": "OrderPlaced",
+      "signature": "OrderPlaced(uint256,uint256,address,uint256,uint256,uint32,uint16,uint64,uint256)",
+      "topic0": "0x1db190a51bd0b7aaff6e9d80086e23e4bf5e1bf58c62289e6f310ef0ae772459"
+    },
+    {
+      "abi": "IReservationBroker.json",
+      "kind": "event",
+      "name": "OrderRejected",
+      "signature": "OrderRejected(uint256,uint256,address)",
+      "topic0": "0x9d2a0fc3fb05ac46a47680d07a1786979e80422d6f753e96b6819eb70a5487ef"
+    },
+    {
+      "abi": "IReservationBroker.json",
+      "kind": "event",
+      "name": "PremiumRetained",
+      "signature": "PremiumRetained(uint256,uint256,address,uint256)",
+      "topic0": "0x489788363e08b0469c7f9e2fbcb8b912fdeaada071d921dbc799b8c7ad6c6824"
+    },
+    {
+      "abi": "IReservationBroker.json",
+      "kind": "event",
+      "name": "ReservationParamsSet",
+      "signature": "ReservationParamsSet((uint32,uint32,uint256,uint256,uint256,uint16,uint8,uint32,uint32,uint32,uint32,uint32,uint32,uint32,uint32,uint32,uint32,uint32,uint256,uint32,uint32,uint32,uint32,uint32,uint32,uint256,uint256,uint256,uint32,uint8,uint16))",
+      "topic0": "0x7648933d9b206821b3865ce4bc5842063a79b7ac2674be716e3edc9e64d434c9"
+    },
+    {
+      "abi": "IReservationBroker.json",
+      "kind": "event",
+      "name": "ReservationTransferred",
+      "signature": "ReservationTransferred(uint256,address,address)",
+      "topic0": "0x6778fbe6fb827f5c3c7e00ae4fb48f225b4adb569692355e16e9209c131f659c"
+    },
+    {
+      "abi": "IReservationBroker.json",
+      "kind": "event",
+      "name": "Reserved",
+      "signature": "Reserved(uint256,address,bytes32,uint32,uint64,uint64,uint256,uint256,uint8,uint256)",
+      "topic0": "0xf53d0e07406d48d5e492bb8038434236aba1b8d7e0e8774dd5a49a201c9c0429"
+    },
+    {
+      "abi": "IReservationBroker.json",
+      "kind": "event",
+      "name": "StateChanged",
+      "signature": "StateChanged(uint256,uint8)",
+      "topic0": "0xfafe884515ca1fa5e0bf815ce87ef00b2cdaa0eee590d20376604937937a10bf"
+    },
+    {
+      "abi": "IReservationBroker.json",
+      "kind": "event",
+      "name": "TemplateSet",
+      "signature": "TemplateSet(uint256,bytes32,uint8,uint256)",
+      "topic0": "0x6ccdce598aca1b7781ebd963fbfd8b837e620be3ad93dba7eec0e959321baa4a"
+    },
+    {
+      "abi": "IReservationBroker.json",
+      "kind": "event",
+      "name": "TermExtended",
+      "signature": "TermExtended(uint256,uint64,uint64)",
+      "topic0": "0x3c9420a537f2fd4b348148a114c260e8745ca5219bbfd5989e841fd647fb8ea7"
+    },
+    {
+      "abi": "IReservationBroker.json",
+      "kind": "event",
+      "name": "ToppedUp",
+      "signature": "ToppedUp(uint256,address,uint256,uint256,uint32)",
+      "topic0": "0xeb1fadfd0670d6ff30e3aa18fc62277fbd40325be5054318d11411bc6d68bf28"
+    },
+    {
+      "abi": "IReservationBroker.json",
+      "kind": "event",
+      "name": "Unmatched",
+      "signature": "Unmatched(uint256,uint64)",
+      "topic0": "0x3b65e3a3d80ae0eec604db8d098ebc943b28c55d409b60e319749281ec3c4b7c"
+    },
+    {
+      "abi": "IReservationBroker.json",
+      "kind": "function",
+      "name": "acceptHandover",
+      "signature": "acceptHandover(uint256)",
+      "selector": "0x46336aaa"
+    },
+    {
+      "abi": "IReservationBroker.json",
+      "kind": "function",
+      "name": "assignBroker",
+      "signature": "assignBroker(uint256)",
+      "selector": "0xd69cbe4f"
+    },
+    {
+      "abi": "IReservationBroker.json",
+      "kind": "function",
+      "name": "brokerRegistry",
+      "signature": "brokerRegistry()",
+      "selector": "0x38629a0c"
+    },
+    {
+      "abi": "IReservationBroker.json",
+      "kind": "function",
+      "name": "brokerRewardsWei",
+      "signature": "brokerRewardsWei(address)",
+      "selector": "0xffe07b61"
+    },
+    {
+      "abi": "IReservationBroker.json",
+      "kind": "function",
+      "name": "call",
+      "signature": "call(uint256,string,bytes32)",
+      "selector": "0xd294e1f9"
+    },
+    {
+      "abi": "IReservationBroker.json",
+      "kind": "function",
+      "name": "closeCall",
+      "signature": "closeCall(uint256)",
+      "selector": "0x0fc983d9"
+    },
+    {
+      "abi": "IReservationBroker.json",
+      "kind": "function",
+      "name": "commitReserved",
+      "signature": "commitReserved(uint64)",
+      "selector": "0x695dfb28"
+    },
+    {
+      "abi": "IReservationBroker.json",
+      "kind": "function",
+      "name": "commitmentOf",
+      "signature": "commitmentOf(address)",
+      "selector": "0xf662b881"
+    },
+    {
+      "abi": "IReservationBroker.json",
+      "kind": "function",
+      "name": "doRequestReservation",
+      "signature": "doRequestReservation(uint256)",
+      "selector": "0x3ac327cd"
+    },
+    {
+      "abi": "IReservationBroker.json",
+      "kind": "function",
+      "name": "excludedUntil",
+      "signature": "excludedUntil(uint256,address)",
+      "selector": "0x01f7a115"
+    },
+    {
+      "abi": "IReservationBroker.json",
+      "kind": "function",
+      "name": "farmOf",
+      "signature": "farmOf(address)",
+      "selector": "0x2a3d5cd8"
+    },
+    {
+      "abi": "IReservationBroker.json",
+      "kind": "function",
+      "name": "farmRewardOf",
+      "signature": "farmRewardOf(address)",
+      "selector": "0x321d96fc"
+    },
+    {
+      "abi": "IReservationBroker.json",
+      "kind": "function",
+      "name": "handoverOf",
+      "signature": "handoverOf(uint256)",
+      "selector": "0xe040c72c"
+    },
+    {
+      "abi": "IReservationBroker.json",
+      "kind": "function",
+      "name": "holderOf",
+      "signature": "holderOf(uint256)",
+      "selector": "0xdbacc237"
+    },
+    {
+      "abi": "IReservationBroker.json",
+      "kind": "function",
+      "name": "joinFarm",
+      "signature": "joinFarm(address,uint64,bytes)",
+      "selector": "0x072341e7"
+    },
+    {
+      "abi": "IReservationBroker.json",
+      "kind": "function",
+      "name": "leaveFarm",
+      "signature": "leaveFarm()",
+      "selector": "0x336d9d0c"
+    },
+    {
+      "abi": "IReservationBroker.json",
+      "kind": "function",
+      "name": "nextDue",
+      "signature": "nextDue(uint256)",
+      "selector": "0x7965809c"
+    },
+    {
+      "abi": "IReservationBroker.json",
+      "kind": "function",
+      "name": "nodeFailures",
+      "signature": "nodeFailures(address)",
+      "selector": "0x5fde5d4c"
+    },
+    {
+      "abi": "IReservationBroker.json",
+      "kind": "function",
+      "name": "orderEndSlot",
+      "signature": "orderEndSlot(uint256)",
+      "selector": "0x5c5bc7b9"
+    },
+    {
+      "abi": "IReservationBroker.json",
+      "kind": "function",
+      "name": "orderReservation",
+      "signature": "orderReservation(uint256)",
+      "selector": "0x30c00286"
+    },
+    {
+      "abi": "IReservationBroker.json",
+      "kind": "function",
+      "name": "params",
+      "signature": "params()",
+      "selector": "0xcff0ab96"
+    },
+    {
+      "abi": "IReservationBroker.json",
+      "kind": "function",
+      "name": "pause",
+      "signature": "pause(uint256)",
+      "selector": "0x136439dd"
+    },
+    {
+      "abi": "IReservationBroker.json",
+      "kind": "function",
+      "name": "pendingOrdersOf",
+      "signature": "pendingOrdersOf(uint256)",
+      "selector": "0x4458120b"
+    },
+    {
+      "abi": "IReservationBroker.json",
+      "kind": "function",
+      "name": "performanceOracle",
+      "signature": "performanceOracle()",
+      "selector": "0x185685d4"
+    },
+    {
+      "abi": "IReservationBroker.json",
+      "kind": "function",
+      "name": "pox",
+      "signature": "pox()",
+      "selector": "0x6e4ece25"
+    },
+    {
+      "abi": "IReservationBroker.json",
+      "kind": "function",
+      "name": "pricing",
+      "signature": "pricing()",
+      "selector": "0x7ce91411"
+    },
+    {
+      "abi": "IReservationBroker.json",
+      "kind": "function",
+      "name": "quoteReservation",
+      "signature": "quoteReservation(uint32,uint32,(bytes32,uint8,uint8,uint8,uint8,uint16,uint32,uint32,uint8,uint8,uint32,uint32,address,uint16,uint256,bool,string,string,string))",
+      "selector": "0x12de2bbd"
+    },
+    {
+      "abi": "IReservationBroker.json",
+      "kind": "function",
+      "name": "reader",
+      "signature": "reader()",
+      "selector": "0xd4fc42c6"
+    },
+    {
+      "abi": "IReservationBroker.json",
+      "kind": "function",
+      "name": "remainingHours",
+      "signature": "remainingHours(uint256)",
+      "selector": "0xe79bf963"
+    },
+    {
+      "abi": "IReservationBroker.json",
+      "kind": "function",
+      "name": "rematch",
+      "signature": "rematch(uint256,address)",
+      "selector": "0x25487326"
+    },
+    {
+      "abi": "IReservationBroker.json",
+      "kind": "function",
+      "name": "removeFromFarm",
+      "signature": "removeFromFarm(address)",
+      "selector": "0xd04b3373"
+    },
+    {
+      "abi": "IReservationBroker.json",
+      "kind": "function",
+      "name": "reportFailure",
+      "signature": "reportFailure(address,uint256,uint8)",
+      "selector": "0x35e61d7e"
+    },
+    {
+      "abi": "IReservationBroker.json",
+      "kind": "function",
+      "name": "requestHandover",
+      "signature": "requestHandover(uint256,uint64,uint64,address)",
+      "selector": "0x87dbd71d"
+    },
+    {
+      "abi": "IReservationBroker.json",
+      "kind": "function",
+      "name": "reservationByLabel",
+      "signature": "reservationByLabel(address,bytes32)",
+      "selector": "0x312d32cb"
+    },
+    {
+      "abi": "IReservationBroker.json",
+      "kind": "function",
+      "name": "reservationCount",
+      "signature": "reservationCount()",
+      "selector": "0xe84f756e"
+    },
+    {
+      "abi": "IReservationBroker.json",
+      "kind": "function",
+      "name": "reservationOf",
+      "signature": "reservationOf(uint256)",
+      "selector": "0x0da94ab6"
+    },
+    {
+      "abi": "IReservationBroker.json",
+      "kind": "function",
+      "name": "reservationsOf",
+      "signature": "reservationsOf(address)",
+      "selector": "0xfbc7b6d3"
+    },
+    {
+      "abi": "IReservationBroker.json",
+      "kind": "function",
+      "name": "reserve",
+      "signature": "reserve(uint32,uint32,uint256,(bytes32,uint8,uint8,uint8,uint8,uint16,uint32,uint32,uint8,uint8,uint32,uint32,address,uint16,uint256,bool,string,string,string),uint256)",
+      "selector": "0x698a9791"
+    },
+    {
+      "abi": "IReservationBroker.json",
+      "kind": "function",
+      "name": "reservedGflops",
+      "signature": "reservedGflops()",
+      "selector": "0x3a787410"
+    },
+    {
+      "abi": "IReservationBroker.json",
+      "kind": "function",
+      "name": "setBrokerRegistry",
+      "signature": "setBrokerRegistry(address)",
+      "selector": "0xa04758bd"
+    },
+    {
+      "abi": "IReservationBroker.json",
+      "kind": "function",
+      "name": "setFarmReward",
+      "signature": "setFarmReward(address)",
+      "selector": "0xcec7cadd"
+    },
+    {
+      "abi": "IReservationBroker.json",
+      "kind": "function",
+      "name": "setPerformanceOracle",
+      "signature": "setPerformanceOracle(address)",
+      "selector": "0x4d0fb053"
+    },
+    {
+      "abi": "IReservationBroker.json",
+      "kind": "function",
+      "name": "setReservationParams",
+      "signature": "setReservationParams((uint32,uint32,uint256,uint256,uint256,uint16,uint8,uint32,uint32,uint32,uint32,uint32,uint32,uint32,uint32,uint32,uint32,uint32,uint256,uint32,uint32,uint32,uint32,uint32,uint32,uint256,uint256,uint256,uint32,uint8,uint16))",
+      "selector": "0x70b7cec2"
+    },
+    {
+      "abi": "IReservationBroker.json",
+      "kind": "function",
+      "name": "setTemplate",
+      "signature": "setTemplate(uint256,(bytes32,uint8,uint8,uint8,uint8,uint16,uint32,uint32,uint8,uint8,uint32,uint32,address,uint16,uint256,bool,string,string,string))",
+      "selector": "0xd896ebe5"
+    },
+    {
+      "abi": "IReservationBroker.json",
+      "kind": "function",
+      "name": "setValidatorTrigger",
+      "signature": "setValidatorTrigger(address)",
+      "selector": "0xe363f576"
+    },
+    {
+      "abi": "IReservationBroker.json",
+      "kind": "function",
+      "name": "start",
+      "signature": "start(uint256)",
+      "selector": "0x95805dad"
+    },
+    {
+      "abi": "IReservationBroker.json",
+      "kind": "function",
+      "name": "supervise",
+      "signature": "supervise(uint256)",
+      "selector": "0x64c96833"
+    },
+    {
+      "abi": "IReservationBroker.json",
+      "kind": "function",
+      "name": "superviseWith",
+      "signature": "superviseWith(uint256,uint256)",
+      "selector": "0xf5b8d42b"
+    },
+    {
+      "abi": "IReservationBroker.json",
+      "kind": "function",
+      "name": "supportsInterface",
+      "signature": "supportsInterface(bytes4)",
+      "selector": "0x01ffc9a7"
+    },
+    {
+      "abi": "IReservationBroker.json",
+      "kind": "function",
+      "name": "sweep",
+      "signature": "sweep(uint256)",
+      "selector": "0xaa60e733"
+    },
+    {
+      "abi": "IReservationBroker.json",
+      "kind": "function",
+      "name": "templateOf",
+      "signature": "templateOf(uint256)",
+      "selector": "0xbfacd7e8"
+    },
+    {
+      "abi": "IReservationBroker.json",
+      "kind": "function",
+      "name": "token",
+      "signature": "token()",
+      "selector": "0xfc0c546a"
+    },
+    {
+      "abi": "IReservationBroker.json",
+      "kind": "function",
+      "name": "topUp",
+      "signature": "topUp(uint256,uint256)",
+      "selector": "0xde643a71"
+    },
+    {
+      "abi": "IReservationBroker.json",
+      "kind": "function",
+      "name": "transfer",
+      "signature": "transfer(uint256,address)",
+      "selector": "0xb7760c8f"
+    },
+    {
+      "abi": "IReservationBroker.json",
+      "kind": "function",
+      "name": "validatorTriggerAddress",
+      "signature": "validatorTriggerAddress()",
+      "selector": "0xe978e7cc"
+    },
+    {
+      "abi": "IReservationBroker.json",
+      "kind": "function",
+      "name": "withdrawAcceptance",
+      "signature": "withdrawAcceptance(uint256)",
+      "selector": "0x467da4d7"
+    },
+    {
+      "abi": "IReservationBroker.json",
+      "kind": "function",
+      "name": "withdrawBrokerRewards",
+      "signature": "withdrawBrokerRewards(address,uint256)",
+      "selector": "0x823b4ff8"
+    },
+    {
+      "abi": "IReservationResolver.json",
+      "kind": "function",
+      "name": "handoverOf",
+      "signature": "handoverOf(uint256)",
+      "selector": "0xe040c72c"
+    },
+    {
+      "abi": "IReservationResolver.json",
+      "kind": "function",
+      "name": "holderOf",
+      "signature": "holderOf(uint256)",
+      "selector": "0xdbacc237"
+    },
+    {
+      "abi": "ReservationBroker.json",
+      "kind": "event",
+      "name": "BrokerAssigned",
+      "signature": "BrokerAssigned(uint256,address,address)",
+      "topic0": "0x28ee3dee0623232b5ed5283772ea85a8f2f71d31c9a361d40ee2f398d0432d6a"
+    },
+    {
+      "abi": "ReservationBroker.json",
+      "kind": "event",
+      "name": "BrokerMissed",
+      "signature": "BrokerMissed(uint256,address,address,uint8)",
+      "topic0": "0x4eeac56414543bd1478f7bea99d504f39832c0422179df35eea19aad4aecc15b"
+    },
+    {
+      "abi": "ReservationBroker.json",
+      "kind": "event",
+      "name": "BrokerRewardsWithdrawn",
+      "signature": "BrokerRewardsWithdrawn(address,address,uint256)",
+      "topic0": "0x0c60e634999a93e2bead77cacc8f3a5db051402d9b02706a7b4b0786ced9dbb8"
+    },
+    {
+      "abi": "ReservationBroker.json",
+      "kind": "event",
+      "name": "Called",
+      "signature": "Called(uint256,uint256,uint32,uint256)",
+      "topic0": "0xff52078708886e138d64d507e42943ff67a01923cde4f7b7d7c0fb4d3fb6cddc"
+    },
+    {
+      "abi": "ReservationBroker.json",
+      "kind": "event",
+      "name": "CommitmentBreached",
+      "signature": "CommitmentBreached(address,uint256,uint8,uint64)",
+      "topic0": "0x334ac62563e5709b36e6a711a5b9fd173cac003043834a00bdca404b281a14ec"
+    },
+    {
+      "abi": "ReservationBroker.json",
+      "kind": "event",
+      "name": "Committed",
+      "signature": "Committed(address,uint64)",
+      "topic0": "0xb909fa32da02a5e1f1faf2347a5e0ef105f8fc806efc8aab7488fbb96539231a"
+    },
+    {
+      "abi": "ReservationBroker.json",
+      "kind": "event",
+      "name": "EndWindowRecorded",
+      "signature": "EndWindowRecorded(uint256,uint256,uint64,uint64)",
+      "topic0": "0x7f31b377d268655ad237f9748e5014396d3356d75d73ffb207aeacf186b49a0c"
+    },
+    {
+      "abi": "ReservationBroker.json",
+      "kind": "event",
+      "name": "Ended",
+      "signature": "Ended(uint256,uint256,uint256)",
+      "topic0": "0x94942738dac5813db86bc09e12c382aaa6824a675cfd6f834a8e2d5a964ac3c4"
+    },
+    {
+      "abi": "ReservationBroker.json",
+      "kind": "event",
+      "name": "Exhausted",
+      "signature": "Exhausted(uint256,uint256,uint256,uint256)",
+      "topic0": "0x6fd991dcda56255d8b4c5d0fe0e928e50549fc0c7fdf4a674024700204022910"
+    },
+    {
+      "abi": "ReservationBroker.json",
+      "kind": "event",
+      "name": "FarmJoined",
+      "signature": "FarmJoined(address,address)",
+      "topic0": "0x1fd73afd5eb3db8b3bee7f711b9abc51228c83d1b6fd4976c2cd1db29d593f59"
+    },
+    {
+      "abi": "ReservationBroker.json",
+      "kind": "event",
+      "name": "FarmLeft",
+      "signature": "FarmLeft(address,address)",
+      "topic0": "0x0bcbfcbe43bb56f271050e5abd373df4f3315daeb91f3883f99fdae3d8e0079b"
+    },
+    {
+      "abi": "ReservationBroker.json",
+      "kind": "event",
+      "name": "FarmRewardSet",
+      "signature": "FarmRewardSet(address,address)",
+      "topic0": "0xab76e9749476db7ff7877a419a4eacadf44ee5eb60e36f0a7e20dfad48a24fdf"
+    },
+    {
+      "abi": "ReservationBroker.json",
+      "kind": "event",
+      "name": "GasWait",
+      "signature": "GasWait(uint256,uint256,uint64)",
+      "topic0": "0x25bd13829738e2b0c5da94c07d9139c07f8a1882df28045783b8de9458f7793a"
+    },
+    {
+      "abi": "ReservationBroker.json",
+      "kind": "event",
+      "name": "HandedOver",
+      "signature": "HandedOver(uint256,uint256,uint256,bool)",
+      "topic0": "0xddf1478b627714e70a7555787c8798fd5f163158011469f7689c7af250543966"
+    },
+    {
+      "abi": "ReservationBroker.json",
+      "kind": "event",
+      "name": "HandoverAcceptanceVoided",
+      "signature": "HandoverAcceptanceVoided(uint256,uint256,address)",
+      "topic0": "0x3b3d152b6dee18b8ccb23a6a8863d8e0d88dbfb9fc651fc7cc9a9f5c96687ae5"
+    },
+    {
+      "abi": "ReservationBroker.json",
+      "kind": "event",
+      "name": "HandoverAccepted",
+      "signature": "HandoverAccepted(uint256,uint256,address)",
+      "topic0": "0x7d3c2f4df95a43b8453f1a317b7ed737d8927fef9547b16949eb80f341720350"
+    },
+    {
+      "abi": "ReservationBroker.json",
+      "kind": "event",
+      "name": "HandoverGasSettled",
+      "signature": "HandoverGasSettled(uint256,uint256,address,uint256,uint256)",
+      "topic0": "0xf13ee066764159caf32d1974f7beaed11a58ee9fdfceacfe7542f619a64ea8c4"
+    },
+    {
+      "abi": "ReservationBroker.json",
+      "kind": "event",
+      "name": "HandoverRequested",
+      "signature": "HandoverRequested(uint256,uint256,address,uint64,uint64,address,address)",
+      "topic0": "0x5d2ca5d2c74167abefaa474b2569a077b5891d50f6b0a026ad18a70c8fc8acd5"
+    },
+    {
+      "abi": "ReservationBroker.json",
+      "kind": "event",
+      "name": "KeeperRefunded",
+      "signature": "KeeperRefunded(uint256,address,uint256)",
+      "topic0": "0xb5ab00246cf8f7b2960cd477ce43d3439476bc91b9392c0111d3b2be60422485"
+    },
+    {
+      "abi": "ReservationBroker.json",
+      "kind": "event",
+      "name": "NodeFailureRecorded",
+      "signature": "NodeFailureRecorded(address,uint256,uint8,uint8)",
+      "topic0": "0x6ffbca6528310bb08d7ce81391a46cd0592236343144905bb7c009c7714e2a93"
+    },
+    {
+      "abi": "ReservationBroker.json",
+      "kind": "event",
+      "name": "NodeSwapped",
+      "signature": "NodeSwapped(uint256,uint256,address,uint8,uint64)",
+      "topic0": "0x34da697181d85d782a19319b86622365546348bc040add9ad16932dcf4a0f516"
+    },
+    {
+      "abi": "ReservationBroker.json",
+      "kind": "event",
+      "name": "OrderApproved",
+      "signature": "OrderApproved(uint256,uint256,address,uint64)",
+      "topic0": "0x86523805983d4df6a67489a10b523004f3086bc944cdd80f1b6eff819c4a11f7"
+    },
+    {
+      "abi": "ReservationBroker.json",
+      "kind": "event",
+      "name": "OrderChainFeeRaised",
+      "signature": "OrderChainFeeRaised(uint256,uint256,uint256,uint256)",
+      "topic0": "0x2ca1008b59bec123bc6d2ba1239882f21cf1a52d4960df8fe7b08d434ba3e8ee"
+    },
+    {
+      "abi": "ReservationBroker.json",
+      "kind": "event",
+      "name": "OrderEnded",
+      "signature": "OrderEnded(uint256,uint256,uint8,uint256,uint256,uint256,uint256,uint256)",
+      "topic0": "0x5bb0b133b7e2bf2e025a1537a2064647eceb091e25f40c29d7e1dc16ab665cf0"
+    },
+    {
+      "abi": "ReservationBroker.json",
+      "kind": "event",
+      "name": "OrderPlaced",
+      "signature": "OrderPlaced(uint256,uint256,address,uint256,uint256,uint32,uint16,uint64,uint256)",
+      "topic0": "0x1db190a51bd0b7aaff6e9d80086e23e4bf5e1bf58c62289e6f310ef0ae772459"
+    },
+    {
+      "abi": "ReservationBroker.json",
+      "kind": "event",
+      "name": "OrderRejected",
+      "signature": "OrderRejected(uint256,uint256,address)",
+      "topic0": "0x9d2a0fc3fb05ac46a47680d07a1786979e80422d6f753e96b6819eb70a5487ef"
+    },
+    {
+      "abi": "ReservationBroker.json",
+      "kind": "event",
+      "name": "OwnershipTransferred",
+      "signature": "OwnershipTransferred(address,address)",
+      "topic0": "0x8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e0"
+    },
+    {
+      "abi": "ReservationBroker.json",
+      "kind": "event",
+      "name": "PremiumRetained",
+      "signature": "PremiumRetained(uint256,uint256,address,uint256)",
+      "topic0": "0x489788363e08b0469c7f9e2fbcb8b912fdeaada071d921dbc799b8c7ad6c6824"
+    },
+    {
+      "abi": "ReservationBroker.json",
+      "kind": "event",
+      "name": "ReservationParamsSet",
+      "signature": "ReservationParamsSet((uint32,uint32,uint256,uint256,uint256,uint16,uint8,uint32,uint32,uint32,uint32,uint32,uint32,uint32,uint32,uint32,uint32,uint32,uint256,uint32,uint32,uint32,uint32,uint32,uint32,uint256,uint256,uint256,uint32,uint8,uint16))",
+      "topic0": "0x7648933d9b206821b3865ce4bc5842063a79b7ac2674be716e3edc9e64d434c9"
+    },
+    {
+      "abi": "ReservationBroker.json",
+      "kind": "event",
+      "name": "ReservationTransferred",
+      "signature": "ReservationTransferred(uint256,address,address)",
+      "topic0": "0x6778fbe6fb827f5c3c7e00ae4fb48f225b4adb569692355e16e9209c131f659c"
+    },
+    {
+      "abi": "ReservationBroker.json",
+      "kind": "event",
+      "name": "Reserved",
+      "signature": "Reserved(uint256,address,bytes32,uint32,uint64,uint64,uint256,uint256,uint8,uint256)",
+      "topic0": "0xf53d0e07406d48d5e492bb8038434236aba1b8d7e0e8774dd5a49a201c9c0429"
+    },
+    {
+      "abi": "ReservationBroker.json",
+      "kind": "event",
+      "name": "StateChanged",
+      "signature": "StateChanged(uint256,uint8)",
+      "topic0": "0xfafe884515ca1fa5e0bf815ce87ef00b2cdaa0eee590d20376604937937a10bf"
+    },
+    {
+      "abi": "ReservationBroker.json",
+      "kind": "event",
+      "name": "TemplateSet",
+      "signature": "TemplateSet(uint256,bytes32,uint8,uint256)",
+      "topic0": "0x6ccdce598aca1b7781ebd963fbfd8b837e620be3ad93dba7eec0e959321baa4a"
+    },
+    {
+      "abi": "ReservationBroker.json",
+      "kind": "event",
+      "name": "TermExtended",
+      "signature": "TermExtended(uint256,uint64,uint64)",
+      "topic0": "0x3c9420a537f2fd4b348148a114c260e8745ca5219bbfd5989e841fd647fb8ea7"
+    },
+    {
+      "abi": "ReservationBroker.json",
+      "kind": "event",
+      "name": "ToppedUp",
+      "signature": "ToppedUp(uint256,address,uint256,uint256,uint32)",
+      "topic0": "0xeb1fadfd0670d6ff30e3aa18fc62277fbd40325be5054318d11411bc6d68bf28"
+    },
+    {
+      "abi": "ReservationBroker.json",
+      "kind": "event",
+      "name": "Unmatched",
+      "signature": "Unmatched(uint256,uint64)",
+      "topic0": "0x3b65e3a3d80ae0eec604db8d098ebc943b28c55d409b60e319749281ec3c4b7c"
+    },
+    {
+      "abi": "ReservationBroker.json",
+      "kind": "function",
+      "name": "acceptHandover",
+      "signature": "acceptHandover(uint256)",
+      "selector": "0x46336aaa"
+    },
+    {
+      "abi": "ReservationBroker.json",
+      "kind": "function",
+      "name": "acceptOwnership",
+      "signature": "acceptOwnership()",
+      "selector": "0x79ba5097"
+    },
+    {
+      "abi": "ReservationBroker.json",
+      "kind": "function",
+      "name": "assignBroker",
+      "signature": "assignBroker(uint256)",
+      "selector": "0xd69cbe4f"
+    },
+    {
+      "abi": "ReservationBroker.json",
+      "kind": "function",
+      "name": "bookStep",
+      "signature": "bookStep(uint256,uint256,uint8,uint64,uint64,bool)",
+      "selector": "0x634a0b71"
+    },
+    {
+      "abi": "ReservationBroker.json",
+      "kind": "function",
+      "name": "brokerRegistry",
+      "signature": "brokerRegistry()",
+      "selector": "0x38629a0c"
+    },
+    {
+      "abi": "ReservationBroker.json",
+      "kind": "function",
+      "name": "brokerRewardsWei",
+      "signature": "brokerRewardsWei(address)",
+      "selector": "0xffe07b61"
+    },
+    {
+      "abi": "ReservationBroker.json",
+      "kind": "function",
+      "name": "call",
+      "signature": "call(uint256,string,bytes32)",
+      "selector": "0xd294e1f9"
+    },
+    {
+      "abi": "ReservationBroker.json",
+      "kind": "function",
+      "name": "closeCall",
+      "signature": "closeCall(uint256)",
+      "selector": "0x0fc983d9"
+    },
+    {
+      "abi": "ReservationBroker.json",
+      "kind": "function",
+      "name": "commitReserved",
+      "signature": "commitReserved(uint64)",
+      "selector": "0x695dfb28"
+    },
+    {
+      "abi": "ReservationBroker.json",
+      "kind": "function",
+      "name": "commitmentOf",
+      "signature": "commitmentOf(address)",
+      "selector": "0xf662b881"
+    },
+    {
+      "abi": "ReservationBroker.json",
+      "kind": "function",
+      "name": "doRequestReservation",
+      "signature": "doRequestReservation(uint256)",
+      "selector": "0x3ac327cd"
+    },
+    {
+      "abi": "ReservationBroker.json",
+      "kind": "function",
+      "name": "dueOf",
+      "signature": "dueOf(uint256,bool)",
+      "selector": "0x502a6390"
+    },
+    {
+      "abi": "ReservationBroker.json",
+      "kind": "function",
+      "name": "eligibleOffer",
+      "signature": "eligibleOffer(uint256,address)",
+      "selector": "0x62c9eab9"
+    },
+    {
+      "abi": "ReservationBroker.json",
+      "kind": "function",
+      "name": "endStep",
+      "signature": "endStep(uint256)",
+      "selector": "0x3d26bf4d"
+    },
+    {
+      "abi": "ReservationBroker.json",
+      "kind": "function",
+      "name": "endWindowStep",
+      "signature": "endWindowStep(uint256,uint256,address)",
+      "selector": "0xa016f784"
+    },
+    {
+      "abi": "ReservationBroker.json",
+      "kind": "function",
+      "name": "excludedUntil",
+      "signature": "excludedUntil(uint256,address)",
+      "selector": "0x01f7a115"
+    },
+    {
+      "abi": "ReservationBroker.json",
+      "kind": "function",
+      "name": "failureStep",
+      "signature": "failureStep(uint256,address,uint8,uint256,uint256)",
+      "selector": "0x616681e5"
+    },
+    {
+      "abi": "ReservationBroker.json",
+      "kind": "function",
+      "name": "farmOf",
+      "signature": "farmOf(address)",
+      "selector": "0x2a3d5cd8"
+    },
+    {
+      "abi": "ReservationBroker.json",
+      "kind": "function",
+      "name": "farmRewardOf",
+      "signature": "farmRewardOf(address)",
+      "selector": "0x321d96fc"
+    },
+    {
+      "abi": "ReservationBroker.json",
+      "kind": "function",
+      "name": "gasStep",
+      "signature": "gasStep(uint256,uint256,uint64,uint8)",
+      "selector": "0x59a72cba"
+    },
+    {
+      "abi": "ReservationBroker.json",
+      "kind": "function",
+      "name": "handoverOf",
+      "signature": "handoverOf(uint256)",
+      "selector": "0xe040c72c"
+    },
+    {
+      "abi": "ReservationBroker.json",
+      "kind": "function",
+      "name": "holderOf",
+      "signature": "holderOf(uint256)",
+      "selector": "0xdbacc237"
+    },
+    {
+      "abi": "ReservationBroker.json",
+      "kind": "function",
+      "name": "joinFarm",
+      "signature": "joinFarm(address,uint64,bytes)",
+      "selector": "0x072341e7"
+    },
+    {
+      "abi": "ReservationBroker.json",
+      "kind": "function",
+      "name": "leaveFarm",
+      "signature": "leaveFarm()",
+      "selector": "0x336d9d0c"
+    },
+    {
+      "abi": "ReservationBroker.json",
+      "kind": "function",
+      "name": "newOwner",
+      "signature": "newOwner()",
+      "selector": "0xd4ee1d90"
+    },
+    {
+      "abi": "ReservationBroker.json",
+      "kind": "function",
+      "name": "nextDue",
+      "signature": "nextDue(uint256)",
+      "selector": "0x7965809c"
+    },
+    {
+      "abi": "ReservationBroker.json",
+      "kind": "function",
+      "name": "nodeFailures",
+      "signature": "nodeFailures(address)",
+      "selector": "0x5fde5d4c"
+    },
+    {
+      "abi": "ReservationBroker.json",
+      "kind": "function",
+      "name": "orderEndSlot",
+      "signature": "orderEndSlot(uint256)",
+      "selector": "0x5c5bc7b9"
+    },
+    {
+      "abi": "ReservationBroker.json",
+      "kind": "function",
+      "name": "orderReservation",
+      "signature": "orderReservation(uint256)",
+      "selector": "0x30c00286"
+    },
+    {
+      "abi": "ReservationBroker.json",
+      "kind": "function",
+      "name": "owner",
+      "signature": "owner()",
+      "selector": "0x8da5cb5b"
+    },
+    {
+      "abi": "ReservationBroker.json",
+      "kind": "function",
+      "name": "params",
+      "signature": "params()",
+      "selector": "0xcff0ab96"
+    },
+    {
+      "abi": "ReservationBroker.json",
+      "kind": "function",
+      "name": "pause",
+      "signature": "pause(uint256)",
+      "selector": "0x136439dd"
+    },
+    {
+      "abi": "ReservationBroker.json",
+      "kind": "function",
+      "name": "pendingOrdersOf",
+      "signature": "pendingOrdersOf(uint256)",
+      "selector": "0x4458120b"
+    },
+    {
+      "abi": "ReservationBroker.json",
+      "kind": "function",
+      "name": "performanceOracle",
+      "signature": "performanceOracle()",
+      "selector": "0x185685d4"
+    },
+    {
+      "abi": "ReservationBroker.json",
+      "kind": "function",
+      "name": "placementStep",
+      "signature": "placementStep(uint256,uint256,uint256,bool)",
+      "selector": "0xdd3974e8"
+    },
+    {
+      "abi": "ReservationBroker.json",
+      "kind": "function",
+      "name": "pox",
+      "signature": "pox()",
+      "selector": "0x6e4ece25"
+    },
+    {
+      "abi": "ReservationBroker.json",
+      "kind": "function",
+      "name": "pricing",
+      "signature": "pricing()",
+      "selector": "0x7ce91411"
+    },
+    {
+      "abi": "ReservationBroker.json",
+      "kind": "function",
+      "name": "quoteReservation",
+      "signature": "quoteReservation(uint32,uint32,(bytes32,uint8,uint8,uint8,uint8,uint16,uint32,uint32,uint8,uint8,uint32,uint32,address,uint16,uint256,bool,string,string,string))",
+      "selector": "0x12de2bbd"
+    },
+    {
+      "abi": "ReservationBroker.json",
+      "kind": "function",
+      "name": "reader",
+      "signature": "reader()",
+      "selector": "0xd4fc42c6"
+    },
+    {
+      "abi": "ReservationBroker.json",
+      "kind": "function",
+      "name": "remainingHours",
+      "signature": "remainingHours(uint256)",
+      "selector": "0xe79bf963"
+    },
+    {
+      "abi": "ReservationBroker.json",
+      "kind": "function",
+      "name": "rematch",
+      "signature": "rematch(uint256,address)",
+      "selector": "0x25487326"
+    },
+    {
+      "abi": "ReservationBroker.json",
+      "kind": "function",
+      "name": "removeFromFarm",
+      "signature": "removeFromFarm(address)",
+      "selector": "0xd04b3373"
+    },
+    {
+      "abi": "ReservationBroker.json",
+      "kind": "function",
+      "name": "reportFailure",
+      "signature": "reportFailure(address,uint256,uint8)",
+      "selector": "0x35e61d7e"
+    },
+    {
+      "abi": "ReservationBroker.json",
+      "kind": "function",
+      "name": "requestHandover",
+      "signature": "requestHandover(uint256,uint64,uint64,address)",
+      "selector": "0x87dbd71d"
+    },
+    {
+      "abi": "ReservationBroker.json",
+      "kind": "function",
+      "name": "reservationByLabel",
+      "signature": "reservationByLabel(address,bytes32)",
+      "selector": "0x312d32cb"
+    },
+    {
+      "abi": "ReservationBroker.json",
+      "kind": "function",
+      "name": "reservationCount",
+      "signature": "reservationCount()",
+      "selector": "0xe84f756e"
+    },
+    {
+      "abi": "ReservationBroker.json",
+      "kind": "function",
+      "name": "reservationOf",
+      "signature": "reservationOf(uint256)",
+      "selector": "0x0da94ab6"
+    },
+    {
+      "abi": "ReservationBroker.json",
+      "kind": "function",
+      "name": "reservationsOf",
+      "signature": "reservationsOf(address)",
+      "selector": "0xfbc7b6d3"
+    },
+    {
+      "abi": "ReservationBroker.json",
+      "kind": "function",
+      "name": "reserve",
+      "signature": "reserve(uint32,uint32,uint256,(bytes32,uint8,uint8,uint8,uint8,uint16,uint32,uint32,uint8,uint8,uint32,uint32,address,uint16,uint256,bool,string,string,string),uint256)",
+      "selector": "0x698a9791"
+    },
+    {
+      "abi": "ReservationBroker.json",
+      "kind": "function",
+      "name": "reservedGflops",
+      "signature": "reservedGflops()",
+      "selector": "0x3a787410"
+    },
+    {
+      "abi": "ReservationBroker.json",
+      "kind": "function",
+      "name": "setBrokerRegistry",
+      "signature": "setBrokerRegistry(address)",
+      "selector": "0xa04758bd"
+    },
+    {
+      "abi": "ReservationBroker.json",
+      "kind": "function",
+      "name": "setFarmReward",
+      "signature": "setFarmReward(address)",
+      "selector": "0xcec7cadd"
+    },
+    {
+      "abi": "ReservationBroker.json",
+      "kind": "function",
+      "name": "setPerformanceOracle",
+      "signature": "setPerformanceOracle(address)",
+      "selector": "0x4d0fb053"
+    },
+    {
+      "abi": "ReservationBroker.json",
+      "kind": "function",
+      "name": "setReservationParams",
+      "signature": "setReservationParams((uint32,uint32,uint256,uint256,uint256,uint16,uint8,uint32,uint32,uint32,uint32,uint32,uint32,uint32,uint32,uint32,uint32,uint32,uint256,uint32,uint32,uint32,uint32,uint32,uint32,uint256,uint256,uint256,uint32,uint8,uint16))",
+      "selector": "0x70b7cec2"
+    },
+    {
+      "abi": "ReservationBroker.json",
+      "kind": "function",
+      "name": "setTemplate",
+      "signature": "setTemplate(uint256,(bytes32,uint8,uint8,uint8,uint8,uint16,uint32,uint32,uint8,uint8,uint32,uint32,address,uint16,uint256,bool,string,string,string))",
+      "selector": "0xd896ebe5"
+    },
+    {
+      "abi": "ReservationBroker.json",
+      "kind": "function",
+      "name": "setValidatorTrigger",
+      "signature": "setValidatorTrigger(address)",
+      "selector": "0xe363f576"
+    },
+    {
+      "abi": "ReservationBroker.json",
+      "kind": "function",
+      "name": "settleDepositStep",
+      "signature": "settleDepositStep(uint256,uint256,uint64,uint64)",
+      "selector": "0x27ce0468"
+    },
+    {
+      "abi": "ReservationBroker.json",
+      "kind": "function",
+      "name": "start",
+      "signature": "start(uint256)",
+      "selector": "0x95805dad"
+    },
+    {
+      "abi": "ReservationBroker.json",
+      "kind": "function",
+      "name": "supervise",
+      "signature": "supervise(uint256)",
+      "selector": "0x64c96833"
+    },
+    {
+      "abi": "ReservationBroker.json",
+      "kind": "function",
+      "name": "superviseWith",
+      "signature": "superviseWith(uint256,uint256)",
+      "selector": "0xf5b8d42b"
+    },
+    {
+      "abi": "ReservationBroker.json",
+      "kind": "function",
+      "name": "supportsInterface",
+      "signature": "supportsInterface(bytes4)",
+      "selector": "0x01ffc9a7"
+    },
+    {
+      "abi": "ReservationBroker.json",
+      "kind": "function",
+      "name": "sweep",
+      "signature": "sweep(uint256)",
+      "selector": "0xaa60e733"
+    },
+    {
+      "abi": "ReservationBroker.json",
+      "kind": "function",
+      "name": "templateOf",
+      "signature": "templateOf(uint256)",
+      "selector": "0xbfacd7e8"
+    },
+    {
+      "abi": "ReservationBroker.json",
+      "kind": "function",
+      "name": "token",
+      "signature": "token()",
+      "selector": "0xfc0c546a"
+    },
+    {
+      "abi": "ReservationBroker.json",
+      "kind": "function",
+      "name": "topUp",
+      "signature": "topUp(uint256,uint256)",
+      "selector": "0xde643a71"
+    },
+    {
+      "abi": "ReservationBroker.json",
+      "kind": "function",
+      "name": "transfer",
+      "signature": "transfer(uint256,address)",
+      "selector": "0xb7760c8f"
+    },
+    {
+      "abi": "ReservationBroker.json",
+      "kind": "function",
+      "name": "transferOwnership",
+      "signature": "transferOwnership(address)",
+      "selector": "0xf2fde38b"
+    },
+    {
+      "abi": "ReservationBroker.json",
+      "kind": "function",
+      "name": "validatorTriggerAddress",
+      "signature": "validatorTriggerAddress()",
+      "selector": "0xe978e7cc"
+    },
+    {
+      "abi": "ReservationBroker.json",
+      "kind": "function",
+      "name": "withdrawAcceptance",
+      "signature": "withdrawAcceptance(uint256)",
+      "selector": "0x467da4d7"
+    },
+    {
+      "abi": "ReservationBroker.json",
+      "kind": "function",
+      "name": "withdrawBrokerRewards",
+      "signature": "withdrawBrokerRewards(address,uint256)",
+      "selector": "0x823b4ff8"
+    }
+  ]
+}

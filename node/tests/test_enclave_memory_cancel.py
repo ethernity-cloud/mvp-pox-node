@@ -109,6 +109,8 @@ def node_with(agent, tmp_path, record):
     node._EtnyPoXNode__record_missing_hold = capability.RecordMissingHold(tmp_path / "broker_cursor.json")
     node._EtnyPoXNode__enclave_memory = capability.enclave_memory_book(tmp_path / "broker_cursor.json")
     node._EtnyPoXNode__offer_storage = capability.storage_book(tmp_path / "broker_cursor.json")
+    node._EtnyPoXNode__offer_epc = capability.epc_book(tmp_path / "broker_cursor.json")
+    node._EtnyPoXNode__offer_gflops = capability.gflops_book(tmp_path / "broker_cursor.json")
     node._EtnyPoXNode__dprequest = 12
     node._EtnyPoXNode__dprequest_record_key = KEY
     node.dpreq_cache = Cache()
@@ -167,3 +169,76 @@ def test_a_reason_11_cancel_never_states_the_refused_storage_again_on_that_recor
     assert store.get(CAS) is None and CAS not in agent.integration_test_passed
     assert node._EtnyPoXNode__record_missing_hold.held is False
     assert offer_shape.bounded(offer_shape.Shape(60, 480), None, 400, 400).storage_gib == 399
+
+
+@pytest.mark.parametrize("proven, setting, refused, units", [
+    (None, 0, None, 0),
+    (16, 0, None, 16),
+    (16, 512, None, 8),
+    (16, 63, None, 0),
+    (16, 0, 16, 15),
+    (16, 0, 1, 0),
+    (16, 2048, 10, 9),
+    (70000, 0, None, 65535),
+])
+def test_the_epc_units_the_bench_record_the_setting_and_a_reason_12_refusal_admit(proven, setting, refused, units):
+    assert capability.offer_epc_units(proven, setting, refused) == units
+
+
+def test_the_record_proves_floor_epc_over_64_units():
+    assert capability.EPC_UNIT_MIB == 64
+    assert capability.record_epc_units(None) is None
+    assert capability.record_epc_units({"epc": "1024"}) == 16
+    assert capability.record_epc_units({"epc": "1087"}) == 16
+    assert capability.record_epc_units({"epc": "63"}) == 0
+    assert capability.record_epc_units({"epc": str(2**31 - 1)}) == 65535
+    assert capability.record_epc_units(RECORD) is None
+
+
+def test_a_reason_12_cancel_refuses_the_units_and_the_next_request_states_the_records(agent, tmp_path):
+    node, store = node_with(agent, tmp_path, {**RECORD, "epc": "1024"})
+    node._EtnyPoXNode__offer_epc.record_stated(12, 20)
+    assert node._EtnyPoXNode__dp_request_cancelled(12, 12) is True
+    book = node._EtnyPoXNode__offer_epc
+    assert book.refused(KEY) == 20
+    assert node._EtnyPoXNode__record_missing_hold.held is False
+    assert store.get(CAS) is not None
+    proven = capability.record_epc_units(store.get(CAS)["record"])
+    assert capability.offer_epc_units(proven, 0, book.refused(KEY)) == 16
+    assert node._EtnyPoXNode__enclave_memory.refused(KEY) is None
+    assert node.dpreq_cache.added == [12]
+
+
+def test_a_reason_12_cancel_never_states_the_refused_units_again_on_that_record(agent, tmp_path):
+    node, store = node_with(agent, tmp_path, {**RECORD, "epc": "1024"})
+    node._EtnyPoXNode__offer_epc.record_stated(12, 16)
+    with agent.integration_test_lock:
+        agent.integration_test_passed[CAS] = 1761724900
+    assert node._EtnyPoXNode__dp_request_cancelled(12, 12) is True
+    assert node._EtnyPoXNode__offer_epc.refused(KEY) == 16
+    assert store.get(CAS) is None and CAS not in agent.integration_test_passed
+    assert node._EtnyPoXNode__record_missing_hold.held is False
+    assert capability.offer_epc_units(16, 0, 16) == 15
+
+
+def test_a_reason_13_cancel_refuses_the_gflops_and_runs_the_integration_test_again(agent, tmp_path):
+    node, store = node_with(agent, tmp_path, RECORD)
+    node._EtnyPoXNode__offer_gflops.record_stated(12, 250)
+    with agent.integration_test_lock:
+        agent.integration_test_passed[CAS] = 1761724900
+    assert node._EtnyPoXNode__dp_request_cancelled(12, 13) is True
+    assert node._EtnyPoXNode__offer_gflops.refused(KEY) == 250
+    assert capability.offer_gflops(250, node._EtnyPoXNode__offer_gflops.refused(KEY)) == 249
+    assert store.get(CAS) is None
+    assert CAS not in agent.integration_test_passed
+    assert agent.integration_test_retry[CAS] == (0, 0.0)
+    assert node._EtnyPoXNode__record_missing_hold.held is False
+    assert node.dpreq_cache.added == [12]
+
+
+def test_the_offer_states_the_records_gflops_below_a_reason_13_refusal():
+    assert capability.offer_gflops(250, None) == 250
+    assert capability.offer_gflops(250, 250) == 249
+    assert capability.offer_gflops(250, 300) == 250
+    assert capability.offer_gflops(250, 0) == 0
+    assert capability.offer_gflops(0, None) == 0

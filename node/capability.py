@@ -1,10 +1,13 @@
 """The capability record of a trustedzone's integration test (PHASE-E-PLAN.md
-WS-C, E1-E3, E8, E15, E40; tests/spec/capability-record.json): the two
-integration-bucket objects parsed, the record admitted, persisted per network
-in capability.json, expired, and the DP request's metadata3 and metadata4
-built from it (tests/spec/metadata-keys.md); the validators' cancel reasons,
-the RecordMissing hold a reason-9 cancel sets, and the enclave memory an
-offer states with the sizes a reason-10 cancel refused."""
+WS-C, E1-E3, E8, E15, E40; tests/spec/capability-record.json at
+pox-smart-contract-litvm 2f600f6): the two integration-bucket objects parsed,
+the record admitted in its v1 or v2 form by the network kind (the closing
+nonce, the closing checks and the rate bound of a v2 record), persisted per
+network in capability.json, expired, and the DP request's metadata3 and
+metadata4 built from it (tests/spec/metadata-keys.md); the validators' cancel
+reasons 1 to 13, the RecordMissing hold a reason-9 cancel sets, and the
+enclave memory, EPC units and GFLOPS an offer states with the figures a
+reason-10, 12 or 13 cancel refused."""
 import json
 import os
 import re
@@ -20,13 +23,31 @@ from eth_keys.exceptions import BadSignature
 from eth_utils import keccak
 
 import offer_shape
-from constants import BENCHMARK_MAX_SECONDS, CU_MAX_GFLOPS, CU_REMEASURE_MARGIN_SECONDS, CU_TTL_SECONDS, CU_VERSION_MIN
+from constants import (BENCHMARK_FULL_ROUNDS, BENCHMARK_MAX_SECONDS, BENCHMARK_OPS_PER_ROUND, CU_MAX_GFLOPS,
+                       CU_REMEASURE_MARGIN_SECONDS, CU_TTL_SECONDS, CU_VERSION_MIN, RATE_ALLOWANCE_SECONDS,
+                       RATE_TOLERANCE_PERCENT)
 from utils import DP_STARTED_ROW_CAPABILITY, UNSAFE_TRUSTEDZONE_SUFFIX, read_cursor, record_key, write_cursor
 
 RECORD_TAG = 'etny-cu'
-RECORD_VERSION = 'v1'
-# The | fields of the record line (capability-record.json lineLayout).
-LINE_FIELDS = 13
+# The two forms of the trustedzone record line (pox-smart-contract-litvm
+# 2f600f6 spec/capability-record.json): v1 both time statements over the run
+# nonce n0, thirteen | fields (legacyV1.lineLayout); v2 the closing statement
+# over n1 (close_nonce), fourteen fields, the salt in field 8 (lineLayout).
+RECORD_VERSION_V1 = 'v1'
+RECORD_VERSION_V2 = 'v2'
+LINE_FIELDS = {RECORD_VERSION_V1: 13, RECORD_VERSION_V2: 14}
+# The names of the record line's fields of each form, in order.
+LINE_FIELD_NAMES = {
+    RECORD_VERSION_V1: ('tag', 'version', 'network', 'node', 'gflops', 'cuv', 'validator', 'nonce', 't0', 't1',
+                        'sig0', 'sig1', 'last'),
+    RECORD_VERSION_V2: ('tag', 'version', 'network', 'node', 'gflops', 'cuv', 'validator', 'nonce', 'salt', 't0',
+                        't1', 'sig0', 'sig1', 'last'),
+}
+# The tag of the closing nonce's preimage: n1 = keccak256("ecld-close-1" ||
+# n0 || salt || keccak256(utf8(outcome))) (capability-record.json closeNonce).
+CLOSE_NONCE_TAG = b'ecld-close-1'
+# A plain decimal: "0" or a digit 1-9 followed by digits, ASCII only.
+PLAIN_DECIMAL_RE = re.compile(r'0|[1-9][0-9]*', re.ASCII)
 CAPABILITY_OBJECT = 'capability.etny'
 CAPABILITY_TIME_OBJECT = 'capability.time.etny'
 # The keys of a GET /validator/time answer, one JSON object per line of
@@ -45,12 +66,14 @@ SIG_RE = re.compile(r'^0x[0-9a-fA-F]{130}$')
 DER_HEX_RE = re.compile(r'^[0-9a-f]+$')
 
 # The reason codes of PoX.cancelDPRequestByValidators (ethernity-cas
-# capability.rs Reason; CasCapacity admits 1..11), and whether the agent
-# re-tests before it re-adds: the faults of the record (1..6 and 8) and its
-# absence (9) call for a new record, the strike rule (7) for a new request
-# alone, and an offer stating more enclave memory (10, D147) or more storage
-# (11) than the bench record in its DP request shows for a request with the
-# figure the record states (figure_after_cancel).
+# capability.rs Reason; pox-smart-contract-litvm 2f600f6 spec/metadata-keys.md
+# reasons 1 to 13), and whether the agent re-tests before it re-adds: the
+# faults of the record (1..6 and 8), its absence (9) and an offer stating
+# more GFLOPS than its record (13, OD7) call for a new record, the strike
+# rule (7) for a new request alone, and an offer stating more enclave memory
+# (10, D147), more storage (11) or more EPC (12, D191) than the bench record
+# in its DP request shows for a request with the figure the record states
+# (figure_after_cancel).
 CANCEL_REASONS = {
     1: 'RecordSignatureInvalid',
     2: 'RecordNodeMismatch',
@@ -63,10 +86,19 @@ CANCEL_REASONS = {
     9: 'RecordMissing',
     10: 'EnclaveMemoryAboveRecord',
     11: 'StorageAboveRecord',
+    12: 'EpcAboveRecord',
+    13: 'GflopsAboveRecord',
 }
-RETEST_REASONS = frozenset({1, 2, 3, 4, 5, 6, 8, 9})
+RETEST_REASONS = frozenset({1, 2, 3, 4, 5, 6, 8, 9, 13})
 REASON_ENCLAVE_MEMORY_ABOVE_RECORD = 10
 REASON_STORAGE_ABOVE_RECORD = 11
+REASON_EPC_ABOVE_RECORD = 12
+REASON_GFLOPS_ABOVE_RECORD = 13
+# The EPC unit of an offer and a request, MiB (D191): an offer states at
+# most floor(epc / EPC_UNIT_MIB) units of a bench record's epc= MiB, in bits
+# 24 to 39 of the V2 add's gflops argument.
+EPC_UNIT_MIB = 64
+EPC_UNITS_MAX = 65535
 # The enclave sizes an offer states, in GiB (D150): the probe of each size is
 # its own measurement.
 ENCLAVE_SIZES_GIB = (1, 2, 4, 8, 16, 32, 64)
@@ -76,13 +108,17 @@ ENCLAVE_SIZES_GIB = (1, 2, 4, 8, 16, 32, 64)
 # the DP request's metadata4 beside the record's cu keys.
 RECORD_ENCLAVE_MEMORY_KEY = 'encmem'
 RECORD_STORAGE_KEY = 'custorage'
-# The broker_cursor.json keys of the enclave memory and the storage each DP
-# request of the node stated, and of the figures refused under each record
-# (OfferFigureBook).
+# The broker_cursor.json keys of the enclave memory, the storage, the EPC
+# units and the GFLOPS each DP request of the node stated, and of the
+# figures refused under each record (OfferFigureBook).
 OFFER_ENCLAVE_MEMORY = 'offer_enclave_memory'
 ENCLAVE_MEMORY_REFUSED = 'enclave_memory_refused'
 OFFER_STORAGE = 'offer_storage'
 STORAGE_REFUSED = 'storage_refused'
+OFFER_EPC = 'offer_epc'
+EPC_REFUSED = 'epc_refused'
+OFFER_GFLOPS = 'offer_gflops'
+GFLOPS_REFUSED = 'gflops_refused'
 # The reason of an offer that carries no capability record and is not passed
 # over (tests/spec/metadata-keys.md): its trustedzones= list names none, names
 # a trustedzone that can carry one (without the -unsafe suffix), or the
@@ -101,18 +137,21 @@ def cancel_reason_name(code):
 
 
 def cancel_disposition(code):
-    """'retest' when the reason faults the record or its absence (1..6, 8 and
-    9: the test runs again before the next request), 'memory' for an offer
-    that stated more enclave memory than its record (10) and 'storage' for
-    one that stated more storage (11): the next request states the record's
-    figure (figure_after_cancel); 'readd' otherwise (7, and any code outside
-    the table: the request alone is replaced)."""
+    """'retest' when the reason faults the record or its absence (1..6, 8, 9
+    and 13: the test runs again before the next request), 'memory' for an
+    offer that stated more enclave memory than its bench record (10),
+    'storage' for one that stated more storage (11) and 'epc' for one that
+    stated more EPC (12): the next request states the record's figure
+    (figure_after_cancel); 'readd' otherwise (7, and any code outside the
+    table: the request alone is replaced)."""
     if int(code) in RETEST_REASONS:
         return 'retest'
     if int(code) == REASON_ENCLAVE_MEMORY_ABOVE_RECORD:
         return 'memory'
     if int(code) == REASON_STORAGE_ABOVE_RECORD:
         return 'storage'
+    if int(code) == REASON_EPC_ABOVE_RECORD:
+        return 'epc'
     return 'readd'
 
 
@@ -140,14 +179,53 @@ def record_storage(record):
     return storage if storage >= 0 else None
 
 
+def record_epc_units(record):
+    """The EPC units a bench record proves, floor(epc / EPC_UNIT_MIB) of its
+    epc= MiB, at most EPC_UNITS_MAX; None for a record that carries no
+    epc."""
+    if not record:
+        return None
+    try:
+        epc = int(record.get('epc'))
+    except (TypeError, ValueError):
+        return None
+    return min(EPC_UNITS_MAX, epc // EPC_UNIT_MIB) if epc >= 0 else None
+
+
+def offer_epc_units(proven_units, setting_mib, refused):
+    """The EPC units an offer states in bits 24 to 39 (D191, OD21 A): the
+    units its bench record proves (`proven_units`, record_epc_units; None:
+    no record, 0 units), at most floor(`setting_mib` / EPC_UNIT_MIB) when the
+    operator's setting is above 0, and below `refused`, the units a
+    reason-12 cancel refused under that record (None for none)."""
+    if proven_units is None:
+        return 0
+    units = int(proven_units)
+    if int(setting_mib) > 0:
+        units = min(units, int(setting_mib) // EPC_UNIT_MIB)
+    if refused is not None:
+        units = min(units, int(refused) - 1)
+    return max(0, min(EPC_UNITS_MAX, units))
+
+
+def offer_gflops(record_gflops, refused):
+    """The GFLOPS an offer states in bits 0 to 15: its trustedzone record's
+    (`record_gflops`, 0 without a record), below `refused`, the GFLOPS a
+    reason-13 cancel refused under that record (None for none)."""
+    gflops = int(record_gflops)
+    if refused is not None:
+        gflops = min(gflops, int(refused) - 1)
+    return max(0, gflops)
+
+
 def figure_after_cancel(stated, record_figure):
-    """What follows a cancel for reason 10 (enclave memory) or 11 (storage)
-    of an offer that stated `stated` GiB under a record whose bench reading
-    is `record_figure` (None: none): (figure, rerun). A reading below the
-    refused figure gives it, the bench standing; a record with no reading,
-    or one not below the refused figure, gives none and the bench runs again
-    (rerun), so that the refused figure is never stated again on that
-    record."""
+    """What follows a cancel for reason 10 (enclave memory), 11 (storage) or
+    12 (EPC units) of an offer that stated `stated` under a record whose
+    bench reading is `record_figure` (None: none): (figure, rerun). A
+    reading below the refused figure gives it, the bench standing; a record
+    with no reading, or one not below the refused figure, gives none and the
+    bench runs again (rerun), so that the refused figure is never stated
+    again on that record."""
     if record_figure is not None and record_figure < int(stated):
         return record_figure, False
     return None, True
@@ -230,6 +308,18 @@ def storage_book(filepath):
     return OfferFigureBook(filepath, OFFER_STORAGE, STORAGE_REFUSED)
 
 
+def epc_book(filepath):
+    """The EPC units each DP request stated and the units reason 12 refused
+    (OFFER_EPC, EPC_REFUSED)."""
+    return OfferFigureBook(filepath, OFFER_EPC, EPC_REFUSED)
+
+
+def gflops_book(filepath):
+    """The GFLOPS each DP request stated and the GFLOPS reason 13 refused
+    (OFFER_GFLOPS, GFLOPS_REFUSED)."""
+    return OfferFigureBook(filepath, OFFER_GFLOPS, GFLOPS_REFUSED)
+
+
 def cancel_reaction(code, request_key):
     """What a validators' cancel of one of the node's DP requests asks of the
     agent, from its reason `code` and `request_key`, the cusig the cancelled
@@ -239,8 +329,8 @@ def cancel_reaction(code, request_key):
     faults the record (cancel_disposition 'retest') on a request that
     carried one drops that record (RecordStore.image_of `request_key`) and
     its integration test runs again before the next request; a request
-    without a record has none to drop. Reasons 10 and 11 are neither: their
-    reaction is figure_after_cancel's."""
+    without a record has none to drop. Reasons 10, 11 and 12 are neither:
+    their reaction is figure_after_cancel's."""
     return int(code) == REASON_RECORD_MISSING, request_key is not None and cancel_disposition(code) == 'retest'
 
 
@@ -297,25 +387,115 @@ class RecordMissingHold:
         return self.held and requirement == ADMITTED_REQUIREMENT and record is None
 
 
-def parse_capability_etny(text):
-    """capability.etny parsed: {line, fields, sig_der_hex, platform_line}.
-    The object is three LF-terminated lines: the record line of LINE_FIELDS
-    | fields tagged etny-cu|v1, its DER signature as lower-case hex, the
-    platform line. Raises ValueError on any other shape."""
+def parse_record_object(text, name, forms):
+    """A record object parsed: {line, fields, version, sig_der_hex,
+    platform_line}. The object `name` is three LF-terminated lines: the
+    record line, its DER signature as lower-case hex, the platform line.
+    `forms` is {(tag, version): field count} of the line forms admitted.
+    Raises ValueError on any other shape."""
     if not isinstance(text, str):
-        raise ValueError('capability.etny is not text')
+        raise ValueError(f'{name} is not text')
     lines = text.split('\n')
     if len(lines) < 3:
-        raise ValueError('capability.etny does not have three lines')
+        raise ValueError(f'{name} does not have three lines')
     line, sig_der_hex, platform_line = lines[0], lines[1].strip(), lines[2]
     fields = line.split('|')
-    if len(fields) != LINE_FIELDS:
-        raise ValueError(f'the record line has {len(fields)} fields, not {LINE_FIELDS}')
-    if fields[0] != RECORD_TAG or fields[1] != RECORD_VERSION:
-        raise ValueError(f'the record line is not tagged {RECORD_TAG}|{RECORD_VERSION}')
+    count = forms.get(tuple(fields[:2]))
+    if count is None:
+        tags = ', '.join(f'{tag}|{version}' for tag, version in forms)
+        raise ValueError(f'the record line is not tagged {tags}')
+    if len(fields) != count:
+        raise ValueError(f'the record line has {len(fields)} fields, not {count}')
     if not sig_der_hex or not DER_HEX_RE.match(sig_der_hex) or len(sig_der_hex) % 2:
         raise ValueError('the record signature is not lower-case hex')
-    return {'line': line, 'fields': fields, 'sig_der_hex': sig_der_hex, 'platform_line': platform_line}
+    return {'line': line, 'fields': fields, 'version': fields[1], 'sig_der_hex': sig_der_hex,
+            'platform_line': platform_line}
+
+
+def parse_capability_etny(text):
+    """capability.etny parsed (parse_record_object): the record line tagged
+    etny-cu|v1 with LINE_FIELDS['v1'] fields or etny-cu|v2 with
+    LINE_FIELDS['v2'], plus {named}: {field name: text} by LINE_FIELD_NAMES.
+    Raises ValueError on any other shape."""
+    parsed = parse_record_object(text, CAPABILITY_OBJECT,
+                                 {(RECORD_TAG, version): count for version, count in LINE_FIELDS.items()})
+    parsed['named'] = dict(zip(LINE_FIELD_NAMES[parsed['version']], parsed['fields']))
+    return parsed
+
+
+def close_nonce(n0, salt, outcome):
+    """n1 = keccak256("ecld-close-1" || n0 || salt || keccak256(utf8(outcome)))
+    as 0x-prefixed lower-case hex (capability-record.json closeNonce): the
+    nonce of the closing time statement of a v2 record or a bench line,
+    `n0` and `salt` 0x-prefixed 32-byte hex, `outcome` the record's
+    <gflops>|<cuv>|<last field>."""
+    preimage = (CLOSE_NONCE_TAG + bytes.fromhex(str(n0)[2:]) + bytes.fromhex(str(salt)[2:])
+                + keccak(str(outcome).encode('utf-8')))
+    return '0x' + keccak(preimage).hex()
+
+
+def record_work(workers):
+    """The fixed work of the trustedzone record's benchmark: BENCHMARK_FULL_ROUNDS
+    x `workers` x BENCHMARK_OPS_PER_ROUND (capability-record.json rateBound
+    recordWork)."""
+    return BENCHMARK_FULL_ROUNDS * int(workers) * BENCHMARK_OPS_PER_ROUND
+
+
+def above_rate_bound(gflops, window, work):
+    """Whether `gflops` measured over an attested window of `window` seconds
+    is above the rate bound of work `work` (capability-record.json
+    rateBound): gflops x 100 x (window - A) x 10^9 > work x (100 + T), A
+    RATE_ALLOWANCE_SECONDS and T RATE_TOLERANCE_PERCENT; a window at or below
+    A bounds nothing."""
+    span = int(window) - RATE_ALLOWANCE_SECONDS
+    if span <= 0:
+        return False
+    return int(gflops) * 100 * span * 10**9 > int(work) * (100 + RATE_TOLERANCE_PERCENT)
+
+
+def time_statement_bodies(text, name):
+    """The two lines of a time object (capability.time.etny,
+    probe.time.<g>.etny) as written: [opening, closing], each line with a
+    trailing CR removed. Raises ValueError unless it holds exactly two
+    non-empty lines."""
+    if not isinstance(text, str):
+        raise ValueError(f'{name} is not text')
+    lines = [line.rstrip('\r') for line in text.split('\n') if line.strip()]
+    if len(lines) != 2:
+        raise ValueError(f'{name} has {len(lines)} statements, not 2')
+    return lines
+
+
+def closing_check(statements, bodies, chain_id, registry, node, validator, n0, salt, outcome, t0, t1, sig0, sig1):
+    """The closing checks of a timed record in the close nonce's form, as a
+    reader that holds both answers' bodies makes them
+    (capability-record.json closingChecks): None when they pass, else
+    '<check>: <why>' naming the first that fails, in this order:
+    equalBodies, the closing answer's body (`bodies[1]`) equal to the
+    opening one's; the two answers (`statements`) naming the record's node,
+    validator, times and signatures; closeNonce, the opening statement over
+    `n0` and the closing one over n1 = close_nonce(n0, salt, outcome), each
+    recovering to `validator` over `chain_id` and `registry`; times, t1 at
+    least t0; blocks, the closing answer's block at least the opening
+    one's."""
+    if bodies[0] == bodies[1]:
+        return 'equalBodies: the closing answer is the opening one'
+    n1 = close_nonce(n0, salt, outcome)
+    for index, (statement, nonce, t, sig) in enumerate(zip(statements, (n0, n1), (t0, t1), (sig0, sig1))):
+        if (statement['validator'].lower() != validator or statement['node'].lower() != node
+                or statement['t'] != t or statement['sig'].lower() != sig.lower()):
+            return f'statements: time statement {index} does not match the record line'
+        if statement['nonce'].lower() != nonce.lower():
+            return (f'closeNonce: time statement {index} is over {statement["nonce"].lower()}, not over '
+                    f'{"n0" if index == 0 else "n1"} {nonce.lower()}')
+        recovered = recover_time_statement_signer(chain_id, registry, statement)
+        if recovered != validator:
+            return f'closeNonce: time statement {index} recovers to {recovered}, not to {validator}'
+    if t1 < t0:
+        return f'times: t1 {t1} is below t0 {t0}'
+    if statements[1]['block'] < statements[0]['block']:
+        return f'blocks: block1 {statements[1]["block"]} is below block0 {statements[0]["block"]}'
+    return None
 
 
 def _time_answer(raw, index):
@@ -338,15 +518,12 @@ def _time_answer(raw, index):
     return answer
 
 
-def parse_capability_time_etny(text):
-    """capability.time.etny parsed: [t0, t1], the two GET /validator/time
-    answers (the six keys of TIME_ANSWER_KEYS each), one JSON object per
-    LF-terminated line, t0 first. Raises ValueError on any other shape."""
-    if not isinstance(text, str):
-        raise ValueError('capability.time.etny is not text')
-    lines = [line for line in text.split('\n') if line.strip()]
-    if len(lines) != 2:
-        raise ValueError(f'capability.time.etny has {len(lines)} statements, not 2')
+def parse_capability_time_etny(text, name=CAPABILITY_TIME_OBJECT):
+    """A time object (capability.time.etny, probe.time.<g>.etny) parsed:
+    [t0, t1], the two GET /validator/time answers (the six keys of
+    TIME_ANSWER_KEYS each), one JSON object per LF-terminated line, t0
+    first. Raises ValueError on any other shape."""
+    lines = time_statement_bodies(text, name)
     return [_time_answer(lines[0], 0), _time_answer(lines[1], 1)]
 
 
@@ -385,21 +562,28 @@ def remeasure_due(passed_at, now):
     return int(passed_at) + CU_TTL_SECONDS - CU_REMEASURE_MARGIN_SECONDS <= int(now)
 
 
-def _int_field(fields, index, name):
-    value = fields[index]
-    if not value.isdigit():
+def _int_field(named, name):
+    value = named[name]
+    if not value.isdigit() or not value.isascii():
         raise ValueError(f'{name} is not a decimal integer')
     return int(value)
 
 
-def _heap_and_workers(field):
-    heap, _, workers = field.partition(';')
-    if not heap.startswith('heap=') or not workers.startswith('workers='):
+def heap_and_workers(field):
+    """(heap, workers) of a trustedzone record line's last field, which is
+    exactly the two entries heap=<SCONE_HEAP>;workers=<n>, the heap not
+    empty and the worker count a plain decimal (capability-record.json
+    lineLayout; bench-record.json readings.trustedzoneField). Raises
+    ValueError on any other field, a bench line's five readings
+    included."""
+    entries = field.split(';')
+    if (len(entries) != 2 or not entries[0].startswith('heap=') or not entries[1].startswith('workers=')
+            or entries[0] == 'heap='):
         raise ValueError('the last field is not heap=<heap>;workers=<n>')
-    workers = workers[len('workers='):]
-    if not workers.isdigit():
-        raise ValueError('workers is not a decimal integer')
-    return heap[len('heap='):], int(workers)
+    workers = entries[1][len('workers='):]
+    if not PLAIN_DECIMAL_RE.fullmatch(workers):
+        raise ValueError('workers is not a plain decimal')
+    return entries[0][len('heap='):], int(workers)
 
 
 def network_field(chain_id, pox):
@@ -409,24 +593,35 @@ def network_field(chain_id, pox):
 
 
 def capability_record_from(capability_etny, capability_time_etny, node_address, requirement, has_validator_set,
-                           now, chain_id, pox, registry, is_seated):
+                           now, chain_id, pox, registry, is_seated, matching_network=False):
     """(record, None) when the integration test's objects make an admitted
-    record, (None, reason) otherwise. Admitted: capability.etny parses, the
-    line's node is `node_address` lower-cased, its network is `chain_id`
-    and `pox` (network_field, the address compared case-insensitively), t1
-    is at least t0 and at most BENCHMARK_MAX_SECONDS after it, its validator
-    and both signature fields are non-empty, capability.time.etny exists
-    with two statements whose node, nonce, validator and t match the line's,
-    each signature recovers over `chain_id` and `registry` to the validator,
-    `is_seated(validator)` holds, t1 is within CU_TTL_SECONDS of `now`,
-    gflops is at most CU_MAX_GFLOPS, cuv is at least CU_VERSION_MIN,
-    `requirement` is dcap and `has_validator_set` holds.
+    record, (None, reason) otherwise. `matching_network` is whether the
+    network's pricing names a PoxMatching (matching() is not zero), where
+    a v1 record is refused (capability-record.json admission). Admitted:
+    capability.etny parses (parse_capability_etny), the line's node is
+    `node_address` lower-cased, its network is `chain_id` and `pox`
+    (network_field, the address compared case-insensitively), its
+    validator and both signature fields are non-empty, capability.time.etny
+    exists with two statements naming the line's node, validator, times and
+    signatures, each recovering over `chain_id` and `registry` to the
+    validator, `is_seated(validator)` holds, t1 is within CU_TTL_SECONDS of
+    `now`, gflops is at most CU_MAX_GFLOPS, cuv is at least CU_VERSION_MIN,
+    `requirement` is dcap and `has_validator_set` holds; and by its form:
 
-    The record: the line's fields (network, node, gflops, cuv, validator,
-    nonce, t0, t1, sig0, sig1, heap, workers), line, sig_der_hex,
-    platform_line, block0 and block1 from the statements, and the two raw
-    texts. gflops (field 4) is the node's attested GFLOPS; one CU is 100
-    GFLOPS."""
+    - v1: both statements over the run nonce, t1 at least t0 and at most
+      BENCHMARK_MAX_SECONDS after it, as at pox-smart-contract-litvm
+      52e36e0;
+    - v2: the closing checks (closing_check, the outcome
+      <gflops>|<cuv>|<last field>), t1 - t0 at most BENCHMARK_MAX_SECONDS
+      and gflops within the rate bound of the window (above_rate_bound over
+      record_work(workers)); a refusal by a closing check or the rate bound
+      reads '<check>: <why>' (closingChecks names).
+
+    The record: the line's fields (version, network, node, gflops, cuv,
+    validator, nonce, salt (None on v1), t0, t1, sig0, sig1, heap, workers),
+    line, sig_der_hex, platform_line, block0 and block1 from the
+    statements, and the two raw texts. gflops (field 4) is the node's
+    attested GFLOPS; one CU is 100 GFLOPS."""
     if requirement != ADMITTED_REQUIREMENT:
         return None, f'the image requires {requirement}, not {ADMITTED_REQUIREMENT}'
     if not has_validator_set:
@@ -435,20 +630,27 @@ def capability_record_from(capability_etny, capability_time_etny, node_address, 
         return None, f'no {CAPABILITY_OBJECT}'
     try:
         parsed = parse_capability_etny(capability_etny)
-        fields = parsed['fields']
-        network, node, validator, nonce, sig0, sig1 = fields[2], fields[3], fields[6], fields[7], fields[10], fields[11]
-        gflops = _int_field(fields, 4, 'gflops')
-        cuv = _int_field(fields, 5, 'cuv')
-        t0 = _int_field(fields, 8, 't0')
-        t1 = _int_field(fields, 9, 't1')
-        heap, workers = _heap_and_workers(fields[12])
+        named = parsed['named']
+        version = parsed['version']
+        network, node, validator, nonce = named['network'], named['node'], named['validator'], named['nonce']
+        sig0, sig1, salt = named['sig0'], named['sig1'], named.get('salt')
+        gflops = _int_field(named, 'gflops')
+        cuv = _int_field(named, 'cuv')
+        t0 = _int_field(named, 't0')
+        t1 = _int_field(named, 't1')
+        heap, workers = heap_and_workers(named['last'])
+        if salt is not None and not NONCE_RE.match(salt):
+            raise ValueError('the salt is not 32 bytes of 0x hex')
     except ValueError as e:
         return None, f'{CAPABILITY_OBJECT}: {e}'
+    if version == RECORD_VERSION_V1 and matching_network:
+        return None, ('admission: a v1 record is refused on a network whose pricing names a PoxMatching (its line is '
+                      'rebuilt as v2 and does not verify)')
     if node != str(node_address).lower():
         return None, f'the record names node {node}, not {str(node_address).lower()}'
     if network.lower() != network_field(chain_id, pox):
         return None, f'the record names network {network}, not {network_field(chain_id, pox)}'
-    if t1 < t0 or t1 - t0 > BENCHMARK_MAX_SECONDS:
+    if version == RECORD_VERSION_V1 and (t1 < t0 or t1 - t0 > BENCHMARK_MAX_SECONDS):
         return None, f'run too long: t0 {t0}, t1 {t1} (at most BENCHMARK_MAX_SECONDS {BENCHMARK_MAX_SECONDS})'
     if not validator:
         return None, 'the record carries no validator (host time)'
@@ -457,17 +659,30 @@ def capability_record_from(capability_etny, capability_time_etny, node_address, 
     if capability_time_etny is None:
         return None, f'no {CAPABILITY_TIME_OBJECT}'
     try:
+        bodies = time_statement_bodies(capability_time_etny, CAPABILITY_TIME_OBJECT)
         statements = parse_capability_time_etny(capability_time_etny)
     except ValueError as e:
         return None, f'{CAPABILITY_TIME_OBJECT}: {e}'
-    for index, (statement, t, sig) in enumerate(zip(statements, (t0, t1), (sig0, sig1))):
-        if (statement['validator'].lower() != validator or statement['node'].lower() != node
-                or statement['nonce'].lower() != nonce.lower() or statement['t'] != t
-                or statement['sig'].lower() != sig.lower()):
-            return None, f'time statement {index} does not match the record line'
-        recovered = recover_time_statement_signer(chain_id, registry, statement)
-        if recovered != validator:
-            return None, f'time statement {index} recovers to {recovered}, not to {validator}'
+    if version == RECORD_VERSION_V2:
+        outcome = f"{named['gflops']}|{named['cuv']}|{named['last']}"
+        refused = closing_check(statements, bodies, chain_id, registry, node, validator, nonce, salt, outcome,
+                                t0, t1, sig0, sig1)
+        if refused is not None:
+            return None, refused
+        if t1 - t0 > BENCHMARK_MAX_SECONDS:
+            return None, f'run too long: t0 {t0}, t1 {t1} (at most BENCHMARK_MAX_SECONDS {BENCHMARK_MAX_SECONDS})'
+        if above_rate_bound(gflops, t1 - t0, record_work(workers)):
+            return None, (f'rateBound: gflops {gflops} over a window of {t1 - t0} s is above the rate bound of '
+                          f'{workers} workers')
+    else:
+        for index, (statement, t, sig) in enumerate(zip(statements, (t0, t1), (sig0, sig1))):
+            if (statement['validator'].lower() != validator or statement['node'].lower() != node
+                    or statement['nonce'].lower() != nonce.lower() or statement['t'] != t
+                    or statement['sig'].lower() != sig.lower()):
+                return None, f'time statement {index} does not match the record line'
+            recovered = recover_time_statement_signer(chain_id, registry, statement)
+            if recovered != validator:
+                return None, f'time statement {index} recovers to {recovered}, not to {validator}'
     if not is_seated(validator):
         return None, f'validator {validator} is not seated'
     if abs(int(now) - t1) > CU_TTL_SECONDS:
@@ -478,12 +693,14 @@ def capability_record_from(capability_etny, capability_time_etny, node_address, 
         return None, f'cuv {cuv} is below CU_VERSION_MIN {CU_VERSION_MIN}'
     record = {
         'line': parsed['line'],
+        'version': version,
         'network': network,
         'node': node,
         'gflops': gflops,
         'cuv': cuv,
         'validator': validator,
         'nonce': nonce,
+        'salt': salt,
         't0': t0,
         't1': t1,
         'sig0': sig0,
@@ -504,6 +721,19 @@ def record_current(record):
     """Whether a stored record is one the agent advertises: it carries gflops
     and its cuv is at least CU_VERSION_MIN."""
     return 'gflops' in record and int(record.get('cuv') or 0) >= CU_VERSION_MIN
+
+
+def record_version(record):
+    """The form of a stored record, v1 for one stored without a version (a
+    record stored before v2 existed is a v1 record)."""
+    return (record or {}).get('version') or RECORD_VERSION_V1
+
+
+def record_admitted_on(record, matching_network):
+    """Whether a stored record is admitted on a network: a v1 record is not
+    where the pricing names a PoxMatching (capability-record.json
+    admission), every other record is."""
+    return not (matching_network and record_version(record) == RECORD_VERSION_V1)
 
 
 class RecordStore:
@@ -660,12 +890,14 @@ def metadata4(trustedzones_runnable, record_image, peer_id, record):
 
 def metadata3(geo, record):
     """A DP request's metadata3: the geography (possibly empty) first and,
-    with `record`, the eight keys cuval, cun, cut0, cut1, cub0, cub1, cusig0,
-    cusig1."""
+    with `record`, the keys cuval, cun, cus (a v2 record's salt; none for a
+    v1 record), cut0, cut1, cub0, cub1, cusig0, cusig1 (metadata-keys.md
+    metadata3)."""
     geo = geo or ''
     if record is None:
         return geo
-    return (f"{geo};cuval={record['validator']};cun={record['nonce']};cut0={record['t0']};cut1={record['t1']}"
+    salt = f";cus={record['salt']}" if record_version(record) == RECORD_VERSION_V2 else ''
+    return (f"{geo};cuval={record['validator']};cun={record['nonce']}{salt};cut0={record['t0']};cut1={record['t1']}"
             f";cub0={record['block0']};cub1={record['block1']};cusig0={record['sig0']};cusig1={record['sig1']}")
 
 

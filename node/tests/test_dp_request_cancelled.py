@@ -1,10 +1,13 @@
 """capability.cancel_reason_name / cancel_disposition (PHASE-E-PLAN.md E15,
-C.5): the reason table of cancelDPRequestByValidators 1..11, 're-test then
-re-add' for the record's faults 1..6 and 8 and for 9, each applied to a
-request that carried a record (capability.cancel_reaction,
-test_record_missing_hold.py), 'memory' for 10, EnclaveMemoryAboveRecord,
-and 'storage' for 11, StorageAboveRecord (test_enclave_memory_cancel.py),
-and 're-add' for the strike reason 7 and any code outside the table."""
+C.5; MATCHING-SYNC-PLAN.md A15, A16): the reason table of
+cancelDPRequestByValidators 1..13 (pox-smart-contract-litvm 2f600f6
+spec/metadata-keys.md), 're-test then re-add' for the record's faults 1..6
+and 8, for 9 and for 13, GflopsAboveRecord, each applied to a request that
+carried a record (capability.cancel_reaction, test_record_missing_hold.py),
+'memory' for 10, EnclaveMemoryAboveRecord, 'storage' for 11,
+StorageAboveRecord, and 'epc' for 12, EpcAboveRecord
+(test_enclave_memory_cancel.py), and 're-add' for the strike reason 7 and
+any code outside the table, which starts at 14."""
 import pytest
 
 import capability
@@ -22,13 +25,15 @@ import capability
     (9, "RecordMissing"),
     (10, "EnclaveMemoryAboveRecord"),
     (11, "StorageAboveRecord"),
+    (12, "EpcAboveRecord"),
+    (13, "GflopsAboveRecord"),
 ])
 def test_the_reason_table(code, name):
     assert capability.cancel_reason_name(code) == name
     assert capability.CANCEL_REASONS[code] == name
 
 
-@pytest.mark.parametrize("code", [1, 2, 3, 4, 5, 6, 8, 9])
+@pytest.mark.parametrize("code", [1, 2, 3, 4, 5, 6, 8, 9, 13])
 def test_a_record_fault_re_tests_before_the_re_add(code):
     assert capability.cancel_disposition(code) == "retest"
 
@@ -66,8 +71,24 @@ def test_a_storage_above_the_record_is_reason_11_and_neither_holds_nor_re_tests_
     assert capability.cancel_reaction(11, None) == (False, False)
 
 
+def test_an_epc_above_the_record_is_reason_12_and_neither_holds_nor_re_tests_by_itself():
+    assert capability.REASON_EPC_ABOVE_RECORD == 12
+    assert capability.cancel_disposition(12) == "epc"
+    assert 12 not in capability.RETEST_REASONS
+    assert capability.cancel_reaction(12, "3065ab") == (False, False)
+    assert capability.cancel_reaction(12, None) == (False, False)
+
+
+def test_gflops_above_the_record_is_reason_13_and_re_tests_the_record_without_the_hold():
+    assert capability.REASON_GFLOPS_ABOVE_RECORD == 13
+    assert capability.cancel_disposition(13) == "retest"
+    assert capability.cancel_reaction(13, "3065ab") == (False, True)
+    assert capability.cancel_reaction(13, None) == (False, False)
+
+
 def test_a_code_outside_the_table_re_adds_without_a_re_test():
     assert capability.cancel_disposition(0) == "readd"
-    assert capability.cancel_disposition(12) == "readd"
+    assert capability.cancel_disposition(14) == "readd"
     assert capability.cancel_reason_name(0) == "Unknown(0)"
-    assert capability.cancel_reason_name(12) == "Unknown(12)"
+    assert capability.cancel_reason_name(14) == "Unknown(14)"
+    assert max(capability.CANCEL_REASONS) == 13

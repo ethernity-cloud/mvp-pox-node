@@ -1,7 +1,8 @@
 """The stored result's grammar (MATCHING-SYNC-PLAN.md A11; OD11 A and the
 agent's (a); pox-smart-contract-litvm spec/matching.md section 17 "The
-stored result" at 52e36e0): utils.stored_result_status reads each of the 53
-stored vectors of spec/matching/result-fields.json as PoxMatching's decoder
+stored result" at 2f600f6, the grammar of 52e36e0): utils.stored_result_status
+reads each of the 53 stored vectors of spec/matching/result-fields.json,
+regenerated at 2f600f6 over v6 strings, as PoxMatching's decoder
 does, and the stored strings of its accepted and refused vectors as decoded
 with their codes; utils.canonical_transaction_text brings the three
 spellings of the same bytes the grammar refuses (no 0x, 0X, upper-case

@@ -9,11 +9,13 @@ implementation that computes them, and `test/SpecFixtures.test.js` replays
 them with an implementation of its own. Section numbers in parentheses are
 MATCHING-DESIGN.md's; "line N" is a line of that file. Section 16 lists every
 point where the design is silent or ambiguous and the reading this
-specification takes. Section 17 pins the form of the three result fields
-after v5 that PoxMatching decodes and the grammar of the stored result that
-carries them, with its vectors in `result-fields.json`.
+specification takes. Section 17 pins the form of the five result fields
+after v5 that PoxMatching and the members read and the grammar of the stored
+result that carries them, with its vectors in `result-fields.json`.
 Section 18 states the inputs a node's copy of the roll holds and where it
-takes them, with the reader's answers on them in `ranking.json`.
+takes them, with the reader's answers on them in `ranking.json`. Section 19
+gives the stored words' layouts (`words.json`) and section 20 the grammar of
+a session's rows (`session-rows.json`).
 
 ## 1. Conventions
 
@@ -171,6 +173,26 @@ Every case of the `ranking` group carries `seedPreimage` and
   `base` as stored. The PoX refuses a V2 add, a reserved add and a raise
   whose bid is above 2^128 - 1 (`price invalid`), so the bound changes no
   bid the PoX holds. A raise does not change `seed`.
+
+**The PoX's refusals of a request's terms** (SF11), each with the call that
+raises it; the runners and the SDKs refuse the same terms before they send
+(`runner-terms.json`):
+
+| revert string | refused | call |
+|---|---|---|
+| `price invalid` | a bid of 0 or above 2^128 - 1 | the V2 add, the reserved add, `increaseBid` |
+| `gasLevel invalid` | a gasLevel above 2^128 - 1 | the V2 add, `increaseChainFee` |
+| `gasLevel below average` | a gasLevel below 1e18 | the pricing's `chainFeeWei`, inside the V2 add |
+| `maxGflops invalid` | a ceiling above the pricing's `gflopsMax`, or a required GFLOPS above a stated ceiling; on the reserved add a word of 0 or above 16 bits | the V2 add, the reserved add |
+| `instance invalid` | any instance count but 1 on the V2 add (0 or above 10 on the legacy add) | the V2 add, the legacy add |
+| `duration invalid` | 0 hours or above the pricing's `maxOrderHours` | the V2 add, the legacy add |
+| `cpu invalid`, `mem invalid`, `strg invalid`, `bw invalid` | a resource of 0 (or above 255) | every add |
+| `metadata1 too long`, `metadata too long` | a metadata string above 2,048 bytes on a DO add or a reserved template; DP adds are not bounded | DO adds, the reserved add |
+| `tip invalid`, `metadata2 required` | a tip above 2^128 - 1; an empty metadata2 | the DP V2 add (`_insertDPRequest`) |
+| `payout invalid`, `broker only`, `placement out of gas`, `SeedingOpen` | a payout address of the zero address or the node; a reserved add from another than the broker; a placement whose hook ran out of gas; a securelock registration while V4's seeding is open | `setPayoutAddress`, the reserved add, `_placeOrder`, V4 `registerImage` |
+
+The node agent bounds a DP add's metadata strings itself (its own rule, not
+the contract's).
 
 ## 5. Whether the request is ranked (4.3)
 
@@ -394,6 +416,22 @@ the number of its claimers, from at most `scanMax` roll entries, and
 down to its stop band. A caller then reads the list in pages with
 `candidates` (section 8) and applies this section to it.
 
+**The reads of a round's ballot** (SF18, OD15 A). A member reads, for a
+round's ballot, the claims of the mandated nodes and of the fill's node
+(`mandateOutcomes`, one call) always, and a LATE record only for a claim that
+states a step for the round. It reads those records in claim order (the
+order PoxMatching recorded the claims, `claimerSlice`), at most 64 a tick
+(`recounts` of the fixture: `bound` 64): a tick reads the first 64 not read
+yet, and the claims above the bound are carried to the next tick's read and
+never dropped, so a late claim above the bound is still recounted. Every
+address is a claim of its own, whoever operates it. A round whose reads are
+not complete is not judged and keeps its charges open: `recordMisses` takes
+one ballot per request and round (`RecordRefused` reason 4 for a second), so
+a round's ballot is sent only once every read it depends on has answered,
+and an entry it skips or an upward recount it does not name is never sent
+again (item 38). Every member reads the same set, so their ballot ids agree.
+The contract applies no such bound; the bound is the members'.
+
 **The ballot** (`recordMisses`): none when the request is not judgeable, or
 when it has no entry and round `r` was not filled or `fill.step == aj`.
 `approvedNode` = the fill's node when `fill.round == r`, else zero;
@@ -412,10 +450,10 @@ scores, the requests' `createdAt` and blocks). It does not rank: ballots give
 their entries. `slot(id) = createdAt / slotSeconds`; `step_r` is `step` on
 round `r`'s clock. State: per node `score`, `pending` (request ids),
 `settleAt`, `beats`, `lates`, `misses`, `failures`, `bannedUntil`,
-`firstBeatSlot`, `lastBeatSlot`, `lastFailureSlot`, `lastAskAt`; per node and
-slot `chargedIn = {sum, taken, failures}` (`failures`: the node's failed
-orders charged in the slot and not corrected); per (request, round, node) a
-charge record
+`firstBeatSlot`, `lastBeatSlot`, `lastFailureSlot`, `failuresInLastSlot`
+(the node's charged failed orders recorded in slot `lastFailureSlot` and
+not corrected, item 36), `lastAskAt`; per node and slot `chargedIn = {sum,
+taken}`; per (request, round, node) a charge record
 `{kind LATE|MISS|FALSE, step, passed (at most 255), units, at, undone}`; per
 order a failure record `{kind, slot, at, units, corrected, charged}`
 (`charged`: its charge was added to the slot's sum; `units`: what the cap
@@ -493,12 +531,15 @@ askCorrection(n, time, entries): refused more than correctionMaxEntries (entries
 correct(n, entries, stand, time): each entry i with bit i set that is still admitted:
     kind 1:  undone |= 1 << (q - k.step); units = lessUndone(k.passed, undone);
              giveBack(k.units - units, k.at); k.units = units; lates -= 1 when units == 0
-    kinds 2 to 4: corrected; giveBack(missUnits, f.slot, f.at); failures -= 1; chargedIn[f.slot].failures -= 1;
-             lastFailureSlot = 0 when it is f.slot and chargedIn[f.slot].failures is 0
+    kinds 2 to 4: corrected; giveBack(missUnits, f.slot, f.at); failures -= 1;
+             when lastFailureSlot == f.at / slotSeconds: failuresInLastSlot -= 1, and lastFailureSlot = 0 at 0
     kind 5:  corrected; score = min(50,000, score + gain)
-fail(n, orderId, kind, id): apply(n, slot(id), missUnits) (a STRIKE: the slot of its time); the record's units =
-  what apply took; charged; failures += 1; chargedIn[slot].failures += 1; lastFailureSlot = that slot
-ban(n, time): score = 0; bannedUntil = time + banSlots * slotSeconds; pending emptied; settleAt = 0
+fail(n, orderId, kind, id, time): apply(n, slot(id), missUnits) (a STRIKE: the slot of its time); the record's
+  units = what apply took; charged; failures += 1; s = time / slotSeconds;
+  failuresInLastSlot += 1 when lastFailureSlot == s, else lastFailureSlot = s and failuresInLastSlot = 1
+ban(n, time[, orderId]): refused when a failure other than a STRIKE is recorded for orderId; the order's record
+  BANNED (no units, not charged) in place of a strike's; score = 0; bannedUntil = time + banSlots * slotSeconds;
+  pending emptied; settleAt = 0
 ```
 
 Each step of a sequence gives the op's `result` and, after it, every node's
@@ -548,6 +589,7 @@ from: `keccak256("matching-rank node <label>")`, its last 20 bytes), `groups`
 | `sequences` | `setup`, `ops` | `steps` (`result`, `after`), `final` |
 | `approvals` | `setup`, `readBlock`, `claims`, `nodes`, `minimumOn`, `developerMinScore`, `slotNow`, `recentFailureSlots` | `closedStep`, `approve`, `rule`, `inTime` or `wait` |
 | `quotes` | `setup`, `readTime`, `baseNowWei`, `minScore`, `carry`, `currentScores`, `status` (the request's status at the read, AVAILABLE when absent), `terms`, `gflopsMaxDefault` | section 9 |
+| `recounts` | `bound`, `claims` (each its `node`, `claimOrder`, `statesStep`, `lateRecord`, `recordedLate`, `late`) | `reads` per tick, `readsPerTick`, `ballotTick`, `recounts` (section 10, "The reads of a round's ballot") |
 
 The design's worked examples are the cases `example-1` (3.8 Example 1, and
 `example-1-bid-0.95`, `example-1-bid-0.65` for its lower bids, and the
@@ -776,25 +818,38 @@ specification and the fixture take.
     it to the quorum. On a request with `tz = 0` (a template not registered
     before the add) no node declares the template and no proof holds:
     `WideRefused` reason 3.
-35. **One failure record per order.** An order holds one failure record
-    (`failureOf`). The call that records it first, `strike`, `noteRefund`,
-    the hook of `expireUnstarted`, `nodeFault`, `notRun` or `ban`, makes each
-    later one refuse the order (`NodeFaultRefused` reason 7, `NotRunRefused`
-    2, `BanRefused` 3, `RefundRefused` 3, `NotUnstarted` 3) or return
-    without effect (`strike`, and `noteRefund` from the judge); `notRun`
-    alone charges the never-started record `expireUnstarted` left
-    uncharged. A strike recorded first is therefore followed by no ban, node
-    fault or not-run charge of that order. The design names, for the ban,
-    only an order "already charged as a node fault" and, for the node fault,
-    "an order it was banned for" (6.1): the wider rule is PoxMatching's, and
-    it is open with the owner.
-36. **`lastFailureSlot`** is the slot of the last failed order's charge: the
-    slot of its request's add (`createdAt / slotSeconds`, item 15), a
-    strike's the slot of its record. A later failure writes it whatever its
-    slot, so the value can move to an earlier slot, and an order's failure
-    recorded `recentFailureSlots` slots or more after its request's add is
-    at no time recent for the runner's rule (item 28). A correction clears
-    it by the rule of item 13.
+35. **One failure record per order, and the ban over a strike** (OD13). An
+    order holds one failure record (`failureOf`). The call that records it
+    first, `strike`, `noteRefund`, the hook of `expireUnstarted`,
+    `nodeFault`, `notRun` or `ban`, makes each later one refuse the order
+    (`NodeFaultRefused` reason 7, `NotRunRefused` 2, `BanRefused` 3,
+    `RefundRefused` 3, `NotUnstarted` 3) or return without effect
+    (`strike`, and `noteRefund` from the judge), with one exception: `ban`
+    writes over a STRIKE record of the same order. The ban's record (kind
+    BANNED, no units, `charged` false) takes the strike record's place; the
+    strike's charge stays in its slot's sum, and the node's count of failed
+    orders and the count of `lastFailureSlot` (item 36) keep it, since no
+    correction undoes a strike or a ban. A strike recorded first therefore
+    does not shield its order from the ban; it still shields it from a node
+    fault and a not-run charge. `notRun` alone charges the never-started
+    record `expireUnstarted` left uncharged (`strike-then-ban`).
+36. **`lastFailureSlot`** (OD12) is the slot of the block that recorded the
+    node's last charged failed order, `block.timestamp / slotSeconds` at the
+    record; the charge itself counts in the slot of its request's add
+    (`createdAt / slotSeconds`, item 15; a strike's in the slot of its
+    record), whose cap it takes. The recorded slot never moves back, so an
+    order's failure recorded `recentFailureSlots` slots or more after its
+    request's add is recent for the runner's rule (item 28) from its record
+    on (`failure-recorded-slots-after-add`, the approval
+    `recent-failure-recorded-after-add`). Beside it the node's serving word
+    counts its charged failed orders recorded in that slot and not corrected
+    (`failuresInLastSlot`, bits 144 to 159 of `servingOf`). A correction of
+    kinds 2 to 4 of a failure recorded in the slot `lastFailureSlot` names
+    takes it off that count, and `lastFailureSlot` is cleared when the count
+    reaches 0; a correction of a failure recorded in an earlier slot leaves
+    both. A successor that copies a nonzero `lastFailureSlot` from its
+    predecessor (`accountInChain`) counts one failed order in it, which no
+    correction of the successor undoes.
 37. **`counted` before and after the ballot.** `counted` (D120) reads the
     fill record's step, which is the approved claim's own statement until
     the round's ballot writes the list's step into it (`approvedStep`,
@@ -811,11 +866,13 @@ specification and the fixture take.
     `recordMisses` and the proof of item 34 have no time limit: a hint for a
     round whose time lies inside an entry already dropped reads the node as
     not skipped at that round.
-40. **Paid work** is each PoxMatching's own count: a successor neither
-    copies it nor reads it through the chain of predecessors, where it
-    copies a node's account (MATCHING-DESIGN.md 6.1 names the account, not
-    the paid work). `paidWorkOf` of a successor starts at 0 for every node,
-    and with it the floor of paid work the tier reads.
+40. **Paid work is carried over a cut** (OD14). Each PoxMatching counts the
+    paid work of the orders it settles (`onOrderSettled`, at most 2^32 - 1
+    CU-hours); `paidWorkOf(node)` and `paidWorkOfNodes(nodes)` answer that
+    count plus the predecessor's answer for the node, so through the whole
+    chain of predecessors, the sum at most 2^32 - 1. The floor of 100
+    CU-hours of paid work the tier reads (`tierScore`, through
+    `paidWorkOfNodes`) holds across a cut as the account does.
 41. **The minimum EPC a runner states** (D200: 64 MiB on every request it
     adds, and the dApp's recorded need when that is larger). The design
     names the record, "with its image in ECImageRegistryV4 at publish", and
@@ -834,19 +891,60 @@ specification and the fixture take.
     47 of the V2 add's `maxGflops` (section 3),
     `max(1, imageEpcUnits(image), client)`: `image` is field 1 of the
     request's metadata1 and `client` the client's own figure in whole units
-    of 64 MiB, 0 when it gives none. No contract reads the record or tests
-    a request's minimum against it: a request added with a minimum of 0 (a
-    reserved order, a legacy add) stays one that every offer's EPC covers
-    (item 33).
+    of 64 MiB, 0 when it gives none. No contract tests a request's minimum
+    against the record: a request added with a minimum of 0 (a reserved
+    order, a legacy add) stays one that every offer's EPC covers (item 33).
+    The reservation broker reads the record for its placements (item 42).
+42. **The enclave memory and the EPC of a reserved placement** (OD49; EPC-C
+    Q4). A reserved order's DO request states no minimum EPC, so the PoX and
+    PoxMatching test none at its placement; the broker tests them when it
+    chooses the offer. Its need is the template's enclave memory, the
+    template's `mem` (the request's memory field carries the dApp's enclave
+    memory, item 4), and `max(1, imageEpcUnits(image))` units of EPC for
+    `image` field 1 of the template's metadata1, read within its first 512
+    bytes from the image registry the PoX names; a registry that is not set
+    or does not answer `imageEpcUnits` gives 1 (PoxReader `epcNeedOf`, read
+    at each placement and by `eligibleOffer`). An offer is placed on only
+    when its enclave memory is at least the template's `mem` and its EPC
+    units at least the need, beside the tests it passed before (AVAILABLE,
+    unexpired, the resources, the GFLOPS band, accepting reserved orders):
+    PoxReader's `committedOffers` (its ninth argument, the need) and
+    `reservedOffer` (superviseWith's hint) apply both. The matching rule's
+    ranking of the offers that pass is unchanged (no fit on the EPC). An
+    offer one unit short of the need, or below the enclave memory, is
+    skipped; the reservation stays unmatched until an offer covers it.
+43. **The templates a passed-over offer declares** (OD9 part ii; weakness
+    (d)). An offer without a trustedzone record is passed over only while
+    every name of its `trustedzones=` list ends in `-unsafe`
+    (spec/metadata-keys.md). On a network where a PoxMatching judges the
+    offers, the members also read the open period's `tzMask` (the templates
+    the node declared at `announce`, section 6) and pass the offer over only
+    while every template whose bit it holds is registered under the name of
+    a trustedzone of that list; a bit of any other template makes the offer
+    one that is not passed over (reason 9). A passed-over offer's enclave
+    memory, storage and EPC are unproven, so it is judged on reason 13 above
+    100 GFLOPS and on no reason of 10 to 12, and the `-unsafe` templates it
+    declares are its only list membership.
 
 ## 17. The result fields after v5 (3.19; SECURELOCK-HARDENING-SPEC.md 13.4)
 
 The result string the trustedzone signs (`_addResultToOrder(orderId,
-result)`, spec/result-v5.json) carries three fields after the fifteen of v5,
-in this order: field 15 `landedAt`, field 16 `ranUntil`, field 17 `slClass`.
-Fields are split at `:`; field `i` is the bytes after the `i`-th colon up to
-the next colon or the end of the string, so the eighteenth colon ends field
-17 and anything after it is not read.
+result)`, spec/result-v5.json) carries five fields after the fifteen of v5,
+in this order: field 15 `landedAt`, field 16 `ranUntil`, field 17
+`slClass`, field 18 `closeBlock`, field 19 `closeRows`. Fields are split at
+`:`; field `i` is the bytes after the `i`-th colon up to the next colon or
+the end of the string. Who reads what:
+
+| v6 string | PoxMatching | members | node agent | runners |
+|---|---|---|---|---|
+| fewer than 18 fields | fields 15 to 17 not read (`absent`) | no closing position | code and ESR fields read as v5; no class | the task code |
+| 18 or 19 fields | fields 15 to 17 read | no closing position | fields 15 to 17 read | the task code |
+| 20 fields or more | fields 15 to 17 read; nothing after field 17 | fields 18 and 19 read (below) | as for 18 | the task code |
+
+The round's writers (both trustedzones) write twenty fields. No
+trustedzone at etny-nodenithy 54cb347 or etny-pynithy 536e50e writes v6, so
+no deployed result changes. Positions 20 and 21 are reserved for the first
+and last block of a relay wait in a later version.
 
 **The version.** A result that carries the three fields is version `v6`:
 field 0 is `v6`, and fields 1 to 14 are those of v5. A `v5` result has the
@@ -887,6 +985,70 @@ most its bound; otherwise it carries none of them: it has no class, the
 default-class rules of `nodeFault` do not apply to it, and `noteAmbiguous`
 refuses it (`NotAmbiguous`, reason 4). The task code is read whatever fields
 15 to 17 hold.
+
+**The closing position** (fields 18 and 19; OD4, OD6, OD52, OD53). Field 18
+`closeBlock` is a block at which the DO request's row count is at least
+`closeRows`: the final input sweep's closing read; field 19 `closeRows` is
+the enclave's row cursor over all metadata rows of the DO request when its
+input side ended. Both are plain decimal of the form above, at most
+2^64 - 1. The pair 0/0 is no closing position. `closeBlock` 0 with
+`closeRows` above 0 is an invalid form, as is a non-zero pair on an order
+whose field 11 is `0f`. A DO request is a session request when its
+metadata3, fixed at the add, begins `v3s:`; field 11 must agree with it (`0f`
+on another request, a session status on a session request), and a result
+that disagrees is an invalid form, not a ban cause. The enclave states, per
+session status (result-v5.json `sessionStatusCodes`):
+
+| field 11 | final input sweep | fields 18 / 19 | the members' lower bound on `closeRows` |
+|---|---|---|---|
+| 0 closed | runs | closing read / cursor | the position of the order's first close row in the request's row list, plus one |
+| 1 complete-at-timeout, 2 expired-idle, 3 expired-unprocessed | runs | closing read / cursor | the row count at the first block whose timestamp reaches the input cutoff (the time the enclave's loop ends: `securelockCloseAt`, or the input cutoff after which rows are answered with late notices) |
+| 4 flooded | runs | closing read / cursor | the position of the row that met the bound, plus one |
+| 5 unsupported-securelock | runs (rows consumed and answered with notices) | closing read / cursor | as 0 or 1 by how the session ended |
+| 6 transferred, 7 transfer-forced | does not run | the window's `toBlock` / the cursor at the transfer | the row count at `toBlock` |
+| `0f` no session | none | 0 / 0 | not read |
+
+The enclave reads the closing block before any pump of the final sweep, and
+when the count at it is below the cursor (a lagging replica answered the
+earlier pump) it reads the head again until it is not; it consumes no row at
+or past the count at `closeBlock`; a final sweep that gets no closing read,
+or does not read to the count at its closing block, ends the order
+SESSION_RELAY_FAULT (39), never a stated short cursor or a block 0. The rows
+a session reads, of every key, are bounded at 1,024 (OD53): a flood of rows
+by the data owner ends the session as flooded (4), a dApp fault, never
+charged to the node. Input rows are read at the network's landing depth
+(`session_landed_depth_blocks`, OD52).
+
+The members read fields 18 and 19 only after the signer is established, and
+in this order: an invalid form; `closeBlock` above the block the result
+landed in (`orderResultAt`, read for every judged order): invalid session;
+`closeRows` above the request's row count at the judged block (no read at an
+older block): invalid session; a lower bound that needs a read at an older
+block (statuses 1 to 3, 6, 7) that does not answer: retried, never a
+verdict; `closeRows` below the lower bound: invalid session, a node fault
+(inputs withheld), a ban cause on the terms of an input mismatch; the input
+root over the first `closeRows` rows, by the row grammar of section 20,
+differing from field 7: invalid session, a ban cause. An input-side mismatch
+is a ban cause only for rows at or below the landing depth. The members
+read no `etny-si` row of a non-session order. A result with no closing
+position decides neither a ban nor an invalid verdict from its input side
+(OD6 part i); a session request of a dApp whose image bundles an older
+trustedzone takes claims on a matching network only where V4's records name
+a default release at or after the first release whose trustedzone writes
+the closing position (no such release is listed at the time of writing;
+this specification names its index once it is), and its input side decides
+nothing otherwise (OD6 part ii).
+
+**Field 13 in the round's writers** (OD3). Field 13 is
+`etny-cu-delivered-gflops=<gflops>|<n0>|<t0>|<t1>|<validator>|<sig t0>|<sig t1>|<block0>|<block1>|<salt>`:
+ten values, the salt the tenth, `sig t1` over the statement with nonce
+`closeNonce(n0, salt, "<gflops>")` (capability-record.json `closeNonce`). A
+reader tells it from the nine-value form of v5 (both statements over n0) by
+its value count, not by the version word: on a network whose pricing names
+a PoxMatching a nine-value field 13 is no probe (no strike, no admission);
+elsewhere it is a probe as at 52e36e0. The rate bound of capability-record.json
+applies to it with W = probeRounds x the node's record's `cuworkers` x
+opsPerRound.
 
 **The stored result.** The node adds the trustedzone's signed transaction to
 its order with `_addResultToOrder(orderId, stored)`, inside one string.
@@ -970,7 +1132,16 @@ and v 27 or 28); `no-rest`, `empty-rest`, `rest-not-read`, `length-bound`
 that carry a transaction. `space-before-hex`, `one-byte-string-v` and
 `upper-case-prefix` carry none, as do the other white space, prefix,
 digit, length, RLP, signature and calldata forms of the group.
-`storedGrammar` states the rule in the fixture's own words.
+`storedGrammar` states the rule in the fixture's own words. The stored
+vectors carry the writers' v6 result of twenty fields with task code 39.
+
+`v6` holds the twenty-field form: `writers` (results of 18, 19 and 20
+fields and the invalid forms, each with the closing position
+`readClosingPosition` of `make/result-fields.js` reads for a session or
+another request), `sessionStatuses` (one vector per status with fields 18
+and 19, the lower bound's input and the members' verdict), and `field13`
+(the ten- and nine-value forms and a ten-value one whose window is too long
+for its GFLOPS).
 
 ## 18. A node's copy of the roll it ranks on (4.7, 7.5, 7.6; O92, D183)
 
@@ -1029,3 +1200,51 @@ of the rule that holds the inputs computes the same eligible words, list
 hash, matching count and turns. The round stamps are `matching-rank.json`'s.
 `test/RankingVectors.test.js` regenerates the file and compares it byte for
 byte.
+
+## 19. The stored words (SF10)
+
+PoxMatching's views answer some records as stored words, read from the
+least significant bit (`words.json`, `make/words.js` run under Hardhat):
+
+| view | bits |
+|---|---|
+| `failureOf` | kind 0-7, units 8-23, slot 24-55 (the request's slot, a strike's the slot of its time), at 56-87, corrected 88-95, code 96-103, uncharged 104-111, charged 112-119 |
+| `chargedInOf` | sum 0-31, taken 32-47 |
+| `servingOf` | orderId 0-47, orderHours 48-63, lastFailureSlot 64-95 (the slot of the block that recorded the last charged failed order, item 36), lastAskAt 96-127, settleAt 128-135, placed 136-143, failuresInLastSlot 144-159 |
+| `accountOf`, `accountInChain`'s word | score 0-15, lastBeatSlot 16-47, firstBeatSlot 48-79, beats 80-103, lates 104-127, misses 128-151, failures 152-175, claims 176-199, pending 200-223, bannedUntil 224-255 |
+| a claim's word (`claimsOfNodes`) | dpRequestId 0-47, blockNumber 48-95, time 96-127, then `packed`: round 128-131, step 132-135, state 136-139, the stated steps 140-159; tipWei 160-255 |
+| `periodsOf`, first word | from 0-31, to 32-63, toBlock 64-111, dpRequestId 112-159, gflops 160-175, cpu 176-183, memGB 184-191, storageGB 192-199, bandwidth 200-207, tzMask 208-223, endReason 224-231, pastCount 232-255 |
+| `periodsOf`, second word | tip 0-127, chainFirst 128-151, enclave memory 152-159, EPC units 160-175 |
+
+`chargedInOf` holds no count of failed orders: the count of the failed
+orders recorded in `lastFailureSlot` is `servingOf`'s `failuresInLastSlot`.
+`words.json` holds, for three sequences of `matching-rank.json` replayed on
+the in-process network, each word's fields decoded by these layouts (slots
+in the case's coordinates; times, blocks and order ids left out).
+`test/WordsVectors.test.js` regenerates it and compares it byte for byte,
+and holds the layouts to the suites' decoders.
+
+## 20. The rows of a session (SF20)
+
+Both trustedzones, the validators' members and the runners' session clients
+read a session's `etny-si` input rows and close rows by one grammar
+(`session-rows.json`, `make/session-rows.js`):
+
+```
+input-row = "v1" ":" seq ":" orderId ":" cid ":" sha256    ; exactly five fields
+close-row = "v1" ":" "close" ":" orderId [ ":" depth ]
+seq, orderId = plain decimal (section 17), at most 2^64 - 1, nothing trimmed
+depth = 1*9 digit
+cid, sha256 = any bytes but ":"
+```
+
+A row's value is read as its bytes stand. An input row is taken for an
+order when it is in the grammar, names the order and its `seq` is the next
+expected one (from 0); a gap or a duplicate is skipped on every side. A row
+outside the grammar is answered by the enclave with the malformed notice and
+is kept out of the input root on every side; `cid` and `sha256` are not part
+of the acceptance, and the root is over the whole value. A close row's depth
+is at most the network's `session_landed_depth_max_blocks`. The runners
+write integers into their rows, so none of the refused forms comes from
+them. Until all three readers hold to the vectors, an input-side mismatch
+decides no ban.

@@ -1,0 +1,215 @@
+{
+  "description": "The reserved statement prefixes (SF5): client data whose bytes begin with one is refused by both trustedzones, so no trustedzone key signs client text that reads as one of its own statements; the refusals both write at etny-nodenithy 54cb347 and etny-pynithy 536e50e, with etny-pb| added; vectors of the byte comparison. The statement form (SF19, OD10 B): the bytes a trustedzone identity key signs for its own statements, which are never the UTF-8 bytes of a text, one signed statement of each kind, and which form verifies on which network. Test keys only (capability-record.json trustedzoneKey).",
+  "generator": "spec/make/reserved-prefixes.js",
+  "source": "capability-record.json (trustedzoneKey, line, signatureDerHex, legacyV1.line), result-v5.json (session.taskWalletPrivateKey)",
+  "prefixes": [
+    {
+      "prefix": "ecld-handover-v2:",
+      "of": "the hand-over signatures",
+      "signer": "trustedzone identity key",
+      "statement": "the text of every version 2 hand-over signature (forward_handover.binding)"
+    },
+    {
+      "prefix": "etny-cu|",
+      "of": "the capability record",
+      "signer": "trustedzone identity key",
+      "statement": "the trustedzone record line (capability-record.json)"
+    },
+    {
+      "prefix": "etny-sw|",
+      "of": "the task wallet attestation",
+      "signer": "trustedzone identity key",
+      "statement": "the etny-sw row's text etny-sw|<orderId>|<taskWallet>"
+    },
+    {
+      "prefix": "etny-pb|",
+      "of": "the bench record",
+      "signer": "probe key",
+      "statement": "the bench line (bench-record.json)"
+    }
+  ],
+  "rule": "client data (a payload, an input, a session input, a replayed input) whose bytes begin with a listed prefix is refused: a byte comparison of the prefix's UTF-8 bytes with the data's first bytes, case-sensitive, nothing trimmed or decoded; data holding a prefix elsewhere is not refused",
+  "refusals": {
+    "payload": {
+      "code": 6,
+      "template": "PAYLOAD BEGINS WITH THE RESERVED PREFIX <prefix>"
+    },
+    "input": {
+      "code": 7,
+      "template": "INPUT BEGINS WITH THE RESERVED PREFIX <prefix>"
+    },
+    "sessionInput": {
+      "code": 7,
+      "row": "the session input's error row",
+      "template": "SESSION_INPUT_RESERVED_PREFIX: the input begins with <prefix>, the prefix of <of>; not processed."
+    },
+    "replay": {
+      "code": 54,
+      "row": "the replay's notice",
+      "template": "it begins with <prefix>, the prefix of <of>"
+    }
+  },
+  "refusalTexts": [
+    {
+      "prefix": "ecld-handover-v2:",
+      "payload": "PAYLOAD BEGINS WITH THE RESERVED PREFIX ecld-handover-v2:",
+      "input": "INPUT BEGINS WITH THE RESERVED PREFIX ecld-handover-v2:",
+      "sessionInput": "SESSION_INPUT_RESERVED_PREFIX: the input begins with ecld-handover-v2:, the prefix of the hand-over signatures; not processed.",
+      "replay": "it begins with ecld-handover-v2:, the prefix of the hand-over signatures"
+    },
+    {
+      "prefix": "etny-cu|",
+      "payload": "PAYLOAD BEGINS WITH THE RESERVED PREFIX etny-cu|",
+      "input": "INPUT BEGINS WITH THE RESERVED PREFIX etny-cu|",
+      "sessionInput": "SESSION_INPUT_RESERVED_PREFIX: the input begins with etny-cu|, the prefix of the capability record; not processed.",
+      "replay": "it begins with etny-cu|, the prefix of the capability record"
+    },
+    {
+      "prefix": "etny-sw|",
+      "payload": "PAYLOAD BEGINS WITH THE RESERVED PREFIX etny-sw|",
+      "input": "INPUT BEGINS WITH THE RESERVED PREFIX etny-sw|",
+      "sessionInput": "SESSION_INPUT_RESERVED_PREFIX: the input begins with etny-sw|, the prefix of the task wallet attestation; not processed.",
+      "replay": "it begins with etny-sw|, the prefix of the task wallet attestation"
+    },
+    {
+      "prefix": "etny-pb|",
+      "payload": "PAYLOAD BEGINS WITH THE RESERVED PREFIX etny-pb|",
+      "input": "INPUT BEGINS WITH THE RESERVED PREFIX etny-pb|",
+      "sessionInput": "SESSION_INPUT_RESERVED_PREFIX: the input begins with etny-pb|, the prefix of the bench record; not processed.",
+      "replay": "it begins with etny-pb|, the prefix of the bench record"
+    }
+  ],
+  "vectors": [
+    {
+      "name": "record-v1",
+      "dataHex": "65746e792d63757c76317c38303030323a3078423866343644324239343366466265324130363141653862653038376566353035354144393641337c3078343730643862333838663461306165366264353132623734303338633765383739353762623866657c3235307c347c3078326130373037646532336332633039643666663766616462646533346330366364623065363237387c3078663933323462343962323463383536313438316566366238346563366362656162643163636436393165336535356631303964313234336561383634653536397c313736313732343830307c313736313732343833307c3078333264616333366530363031313561623662306338393034666539326338353838616666643066656331343631383666363861363139303261326638396437663230633533393266656562326462333431363136663731656238326636333039666465306338663662646439636430323337663231653433343832353531613831637c3078303066366166363136626563643135316237353362303965653438333063353164663834343965383430613537613133353136306661636463636634313061383230336231356663346438373965336339613963643934626566613230376435303332663165663935313733316632366435646234306263306438353237386331627c686561703d3235364d3b776f726b6572733d34",
+      "text": "etny-cu|v1|80002:0xB8f46D2B943fFbe2A061Ae8be087ef5055AD96A3|0x470d8b388f4a0ae6bd512b74038c7e87957bb8fe|250|4|0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278|0xf9324b49b24c8561481ef6b84ec6cbeabd1ccd691e3e55f109d1243ea864e569|1761724800|1761724830|0x32dac36e060115ab6b0c8904fe92c8588affd0fec146186f68a61902a2f89d7f20c5392feeb2db341616f71eb82f6309fde0c8f6bdd9cd0237f21e43482551a81c|0x00f6af616becd151b753b09ee4830c51df8449e840a57a135160facdccf410a8203b15fc4d879e3c9a9cd94befa207d5032f1ef951731f26d5db40bc0d85278c1b|heap=256M;workers=4",
+      "reserved": "etny-cu|"
+    },
+    {
+      "name": "record-v2",
+      "dataHex": "65746e792d63757c76327c38303030323a3078423866343644324239343366466265324130363141653862653038376566353035354144393641337c3078343730643862333838663461306165366264353132623734303338633765383739353762623866657c3235307c347c3078326130373037646532336332633039643666663766616462646533346330366364623065363237387c3078663933323462343962323463383536313438316566366238346563366362656162643163636436393165336535356631303964313234336561383634653536397c3078623664663462303361633839353763353064633535616134346462353562616338653238323638633531616438663731343836353037343962356430623935347c313736313732343830307c313736313732343831307c3078333264616333366530363031313561623662306338393034666539326338353838616666643066656331343631383666363861363139303261326638396437663230633533393266656562326462333431363136663731656238326636333039666465306338663662646439636430323337663231653433343832353531613831637c3078666165623430653935363637663034653465303966653932376536633733623562333232323165653763363961366538646162323739616639353061366663323766616331643535343435386137336233326466346462383330373334353336366638653138613533303333356661393264316561376463396537353734306331627c686561703d3235364d3b776f726b6572733d34",
+      "text": "etny-cu|v2|80002:0xB8f46D2B943fFbe2A061Ae8be087ef5055AD96A3|0x470d8b388f4a0ae6bd512b74038c7e87957bb8fe|250|4|0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278|0xf9324b49b24c8561481ef6b84ec6cbeabd1ccd691e3e55f109d1243ea864e569|0xb6df4b03ac8957c50dc55aa44db55bac8e28268c51ad8f7148650749b5d0b954|1761724800|1761724810|0x32dac36e060115ab6b0c8904fe92c8588affd0fec146186f68a61902a2f89d7f20c5392feeb2db341616f71eb82f6309fde0c8f6bdd9cd0237f21e43482551a81c|0xfaeb40e95667f04e4e09fe927e6c73b5b32221ee7c69a6e8dab279af950a6fc27fac1d554458a73b32df4db8307345366f8e18a530335fa92d1ea7dc9e75740c1b|heap=256M;workers=4",
+      "reserved": "etny-cu|"
+    },
+    {
+      "name": "record-tag-without-bar",
+      "dataHex": "65746e792d6375",
+      "text": "etny-cu",
+      "reserved": null
+    },
+    {
+      "name": "leading-space",
+      "dataHex": "2065746e792d73777c78",
+      "text": " etny-sw|x",
+      "reserved": null
+    },
+    {
+      "name": "handover-prefix-alone",
+      "dataHex": "65636c642d68616e646f7665722d76323a",
+      "text": "ecld-handover-v2:",
+      "reserved": "ecld-handover-v2:"
+    },
+    {
+      "name": "handover-without-colon",
+      "dataHex": "65636c642d68616e646f7665722d7632",
+      "text": "ecld-handover-v2",
+      "reserved": null
+    },
+    {
+      "name": "wallet-row-text",
+      "dataHex": "65746e792d73777c343130317c307830303030303030303030303030303030303030303030303030303030303030303030303030303030",
+      "text": "etny-sw|4101|0x0000000000000000000000000000000000000000",
+      "reserved": "etny-sw|"
+    },
+    {
+      "name": "bench-line",
+      "dataHex": "65746e792d70627c76317c",
+      "text": "etny-pb|v1|",
+      "reserved": "etny-pb|"
+    },
+    {
+      "name": "upper-case",
+      "dataHex": "45544e592d43557c76317c",
+      "text": "ETNY-CU|v1|",
+      "reserved": null
+    },
+    {
+      "name": "prefix-inside",
+      "dataHex": "646174612065746e792d63757c76317c",
+      "text": "data etny-cu|v1|",
+      "reserved": null
+    },
+    {
+      "name": "statement-form-bytes",
+      "dataHex": "ff65636c642d73746d742d310065746e792d63757c76327c",
+      "text": null,
+      "reserved": null
+    },
+    {
+      "name": "empty",
+      "dataHex": "",
+      "text": "",
+      "reserved": null
+    }
+  ],
+  "statementForm": {
+    "tag": "ecld-stmt-1",
+    "layout": "0xFF || \"ecld-stmt-1\" || 0x00 || UTF-8(statement); ECDSA P-384 over SHA-256 of these bytes, DER, lower-case hex without 0x",
+    "prefixHex": "ff65636c642d73746d742d3100",
+    "why": "the byte 0xFF occurs in no UTF-8 encoding, and every hand-over signature is over the UTF-8 bytes of a text, so no statement's signed bytes are a hand-over's",
+    "scope": "statements signed by a trustedzone identity key: etny-cu|v2 record lines and etny-sw rows; the probe key signs its etny-pb lines in the plain form (it signs no client text)",
+    "handoverText": "no hand-over signature is made over bytes that are not valid UTF-8, and none begins with 0xFF: a trustedzone refuses a text it cannot encode as strict UTF-8 (a lone surrogate) rather than sign replacement bytes",
+    "examples": [
+      {
+        "name": "etny-cu-v2",
+        "statement": "etny-cu|v2|80002:0xB8f46D2B943fFbe2A061Ae8be087ef5055AD96A3|0x470d8b388f4a0ae6bd512b74038c7e87957bb8fe|250|4|0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278|0xf9324b49b24c8561481ef6b84ec6cbeabd1ccd691e3e55f109d1243ea864e569|0xb6df4b03ac8957c50dc55aa44db55bac8e28268c51ad8f7148650749b5d0b954|1761724800|1761724810|0x32dac36e060115ab6b0c8904fe92c8588affd0fec146186f68a61902a2f89d7f20c5392feeb2db341616f71eb82f6309fde0c8f6bdd9cd0237f21e43482551a81c|0xfaeb40e95667f04e4e09fe927e6c73b5b32221ee7c69a6e8dab279af950a6fc27fac1d554458a73b32df4db8307345366f8e18a530335fa92d1ea7dc9e75740c1b|heap=256M;workers=4",
+        "statementBytesSha256": "81fa348fe8bbf4e902ec433ed4c7af61d76120f447202517d2b2d72b9d452826",
+        "signatureDerHex": "306402300696d5835fffb8b950811294f210626e90d1b18c8b47f97fa64e4ef70e4ecd3334198eb09485b8c9d1ba50a3b829ac2e023054527a77efec630239a424aded6f3124ca98f506428efb797229848c8168d6a56f049bf9b8429ee35a5d32bd1a0c4770",
+        "form": "statement",
+        "verifies": true,
+        "source": "capability-record.json line and signatureDerHex"
+      },
+      {
+        "name": "etny-sw",
+        "statement": "etny-sw|4101|0x40680ca06d992501822586eb6bf65db227f105d8",
+        "statementBytesSha256": "368f9c8a6295a4aa821d4c539254b33200dfb90853c5cac021494e5339ff8ab9",
+        "signatureDerHex": "30650231009f3500007a569945e6b5c1f983e51b037f41b202ccc533c29cc57808266fe5f6b01629b7d7f4cf576ed180f7dda8663602303bd19088a25d09c2fa790e5e3920470c1f659ecd282e841fac72d0e3f948fb3089977b890e571545cdda7367d6d9e708",
+        "form": "statement",
+        "verifies": true,
+        "row": "v1:4101:0x40680ca06d992501822586eb6bf65db227f105d8:30650231009f3500007a569945e6b5c1f983e51b037f41b202ccc533c29cc57808266fe5f6b01629b7d7f4cf576ed180f7dda8663602303bd19088a25d09c2fa790e5e3920470c1f659ecd282e841fac72d0e3f948fb3089977b890e571545cdda7367d6d9e708",
+        "source": "result-v5.json session.taskWalletPrivateKey (order 4101, as liveness-message.json)"
+      },
+      {
+        "name": "etny-cu-v2-plain",
+        "statement": "etny-cu|v2|80002:0xB8f46D2B943fFbe2A061Ae8be087ef5055AD96A3|0x470d8b388f4a0ae6bd512b74038c7e87957bb8fe|250|4|0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278|0xf9324b49b24c8561481ef6b84ec6cbeabd1ccd691e3e55f109d1243ea864e569|0xb6df4b03ac8957c50dc55aa44db55bac8e28268c51ad8f7148650749b5d0b954|1761724800|1761724810|0x32dac36e060115ab6b0c8904fe92c8588affd0fec146186f68a61902a2f89d7f20c5392feeb2db341616f71eb82f6309fde0c8f6bdd9cd0237f21e43482551a81c|0xfaeb40e95667f04e4e09fe927e6c73b5b32221ee7c69a6e8dab279af950a6fc27fac1d554458a73b32df4db8307345366f8e18a530335fa92d1ea7dc9e75740c1b|heap=256M;workers=4",
+        "signatureDerHex": "3066023100d0447b7cea4965d9e50bd37f81a6a4d296775f559641cc59b93066e10d6a51236b385b830ecf56567ba8ea5c680fedd5023100f44f0c5285fd96c7a9781cb39e4d7bca267203d1947ecdadd83cc1bfb81a4bde92226e6ffe8bd0f1d16e1f3ed6053e07",
+        "form": "plain",
+        "verifies": false,
+        "rule": "the plain-form signature of a v2 record: valid over the UTF-8 line, refused as a statement on every network (a v2 record verifies in the statement form alone)"
+      }
+    ],
+    "cutRule": {
+      "rule": "by network and form, never by when a certificate was registered (no registry records that)",
+      "matchingNetwork": "a network whose pricing names a PoxMatching",
+      "rows": [
+        {
+          "statement": "etny-cu|v2 record",
+          "matchingNetwork": "the statement form only, under every certificate of the name",
+          "otherNetwork": "the statement form only"
+        },
+        {
+          "statement": "etny-cu|v1 record",
+          "matchingNetwork": "refused (capability-record.json admission)",
+          "otherNetwork": "the plain form, as at 52e36e0"
+        },
+        {
+          "statement": "etny-sw row",
+          "matchingNetwork": "the statement form only",
+          "otherNetwork": "the plain form and the statement form"
+        }
+      ],
+      "consequence": "a build that predates the reserved-prefix refusal signs only plain-form statements, so no statement of it verifies on a matching network, whatever name the node lists first"
+    }
+  }
+}

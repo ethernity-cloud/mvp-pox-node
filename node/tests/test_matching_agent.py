@@ -247,6 +247,8 @@ def params_node(agent, monkeypatch, tmp_path, stub, record, memory=(64 * GIB, 60
     node._EtnyPoXNode__matching = stub
     node._EtnyPoXNode__enclave_memory = capability.enclave_memory_book(tmp_path / "broker_cursor.json")
     node._EtnyPoXNode__offer_storage = capability.storage_book(tmp_path / "broker_cursor.json")
+    node._EtnyPoXNode__offer_epc = capability.epc_book(tmp_path / "broker_cursor.json")
+    node._EtnyPoXNode__offer_gflops = capability.gflops_book(tmp_path / "broker_cursor.json")
     node.cache_config = SimpleNamespace(base_path=tmp_path)
     node.storage = SimpleNamespace(peer_id=lambda: "peer")
     node._EtnyPoXNode__price = 1

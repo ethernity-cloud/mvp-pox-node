@@ -1,0 +1,1033 @@
+{
+  "description": "The bench record (MATCHING-DESIGN.md 3.7, D147, D188 to D191, D197; spec/metadata-keys.md \"The bench record\"): the line a node's memory probe of one enclave size signs with its probe key, its two time statements, the objects it writes to the integration bucket, the DP-request keys of the pb family the node agent appends after the cu keys, the line a validator rebuilds from them, the grammar of the readings field, the key sets that carry no record, the probe's inputs, session, key path and identity, and the members' bench checks with their placeholder figures and vectors. The network, node, validator and trustedzone record are capability-record.json's. Test keys only.",
+  "generator": "spec/make/bench-record.js",
+  "source": "capability-record.json (network, node, validator, trustedzoneKey, metadata3 and metadata4 values)",
+  "tag": "etny-pb",
+  "version": "v1",
+  "lineLayout": "etny-pb|v1|<chainId>:<pox>|<node lower-case>|<gflops>|<cuv>|<validator lower-case>|<n0 0x+64>|<salt 0x+64>|<t0>|<t1>|<sig t0 0x+130>|<sig t1 0x+130>|heap=<h>;workers=<n>;encmem=<g>;custorage=<s>;epc=<e>",
+  "lineFields": 14,
+  "measurement": {
+    "gflops": 118,
+    "cuv": 4,
+    "heap": "3G",
+    "workers": 4,
+    "encmem": 2,
+    "custorage": 37,
+    "epc": 1024,
+    "t0": 1761724900,
+    "t1": 1761724920,
+    "block0": 29000050,
+    "block1": 29000060,
+    "n0": "0xa81f48dd8790155f485518f51675243601f539a9ee6854446124e32dd1a62e11",
+    "salt": "0x82b8f32190208a87c42266c3ec0b8a2793f5c37cb57dbf7944bfe8073afd16e0",
+    "n0Rule": "keccak256 of the label \"spec bench-record run nonce\"; a probe draws 32 random bytes before the run",
+    "saltRule": "keccak256 of the label \"spec bench-record close salt\"; a probe draws 32 random bytes after the region run and before it asks for the closing statement"
+  },
+  "readings": {
+    "field": "heap=3G;workers=4;encmem=2;custorage=37;epc=1024",
+    "grammar": {
+      "entries": "exactly five entries separated by \";\", in the order heap, workers, encmem, custorage, epc, each key=value",
+      "heap": "a digit 1-9, digits, then M or G: the probe's SCONE_HEAP",
+      "workers": "plain decimal: the worker count",
+      "encmem": "one of 1 2 4 8 16 32 64 (D150): the listed enclave size the probe ran at, GiB",
+      "custorage": "plain decimal at most 2^53 - 1: floor(ETNY_STORAGE_FREE_BYTES / 2^30)",
+      "epc": "plain decimal, 1 to 2^31 - 1: the EPC claim proven, MiB (region plus allowance); an offer states at most floor(epc / 64) units",
+      "plainDecimal": "\"0\" or a digit 1-9 followed by digits, ASCII only"
+    },
+    "accepted": [
+      "heap=3G;workers=4;encmem=2;custorage=37;epc=1024",
+      "heap=65G;workers=64;encmem=64;custorage=0;epc=1"
+    ],
+    "refused": [
+      {
+        "field": "heap=3G;workers=4",
+        "why": "entries"
+      },
+      {
+        "field": "heap=3G;workers=4;encmem=2;custorage=37",
+        "why": "entries"
+      },
+      {
+        "field": "heap=3G;workers=4;encmem=2;custorage=37;epc=1024;x=1",
+        "why": "entries"
+      },
+      {
+        "field": "heap=3G;workers=4;custorage=37;encmem=2;epc=1024",
+        "why": "order"
+      },
+      {
+        "field": "workers=4;heap=3G;encmem=2;custorage=37;epc=1024",
+        "why": "order"
+      },
+      {
+        "field": "heap=3G;workers=4;encmem=2;epc=1024;custorage=37",
+        "why": "order"
+      },
+      {
+        "field": "heap=3G;workers=4;encmem=3;custorage=37;epc=1024",
+        "why": "encmemNotListed"
+      },
+      {
+        "field": "heap=3G;workers=4;encmem=02;custorage=37;epc=1024",
+        "why": "notPlainDecimal"
+      },
+      {
+        "field": "heap=3G;workers=4;encmem=2;custorage=-1;epc=1024",
+        "why": "notPlainDecimal"
+      },
+      {
+        "field": "heap=3G;workers=4;encmem=2;custorage=3.5;epc=1024",
+        "why": "notPlainDecimal"
+      },
+      {
+        "field": "heap=3G;workers=4;encmem=2;custorage= 37;epc=1024",
+        "why": "notPlainDecimal"
+      },
+      {
+        "field": "heap=3G;workers=4;encmem=2;custorage;epc=1024",
+        "why": "notPlainDecimal"
+      },
+      {
+        "field": "heap=3G;workers=4;encmem=2;custorage=37;epc=0",
+        "why": "epcBelowOne"
+      },
+      {
+        "field": "heap=3G;workers=4;encmem=2;custorage=37;epc=01024",
+        "why": "notPlainDecimal"
+      },
+      {
+        "field": "heap=3G;workers=4;encmem=2;custorage=37;epc=1G",
+        "why": "notPlainDecimal"
+      },
+      {
+        "field": "heap=3G;workers=4;encmem=2;custorage=37;epc=",
+        "why": "notPlainDecimal"
+      },
+      {
+        "field": "heap=3g;workers=4;encmem=2;custorage=37;epc=1024",
+        "why": "heapForm"
+      },
+      {
+        "field": "heap=3G;workers=x;encmem=2;custorage=37;epc=1024",
+        "why": "notPlainDecimal"
+      }
+    ],
+    "trustedzoneField": "the trustedzone line's last field stays exactly heap=<h>;workers=<n> (capability-record.json); a bench field of two entries is refused"
+  },
+  "closeNonce": {
+    "outcome": "118|4|heap=3G;workers=4;encmem=2;custorage=37;epc=1024",
+    "outcomeRule": "<gflops>|<cuv>|<readings>",
+    "n1": "0xff81fba2d2b0b3db361de26732c09c381de3220e0067fbc2e0253f00925b235c"
+  },
+  "timeStatements": {
+    "t0": {
+      "fields": {
+        "chainId": 80002,
+        "registry": "0x70bfdf41d4061592df509b9b46f91a8457f88483",
+        "node": "0x470d8b388f4a0ae6bd512b74038c7e87957bb8fe",
+        "nonce": "0xa81f48dd8790155f485518f51675243601f539a9ee6854446124e32dd1a62e11",
+        "t": 1761724900,
+        "block": 29000050
+      },
+      "preimageHex": "0x656361732d74696d652d31000000000000000000000000000000000000000000000000000000000001388270bfdf41d4061592df509b9b46f91a8457f88483470d8b388f4a0ae6bd512b74038c7e87957bb8fea81f48dd8790155f485518f51675243601f539a9ee6854446124e32dd1a62e11000000006901c9e40000000001ba8172",
+      "digest": "0x6a9594daf92740426a46fcaa119eb1e6cf367ea79a336b4f11727111d9b9c1b7",
+      "signature": {
+        "r": "0xd560111fd34312678e5648c5f86e99229bf9d01dc6f7166bbe8f8f617cba2240",
+        "s": "0x773aa1e06b5f82f7ecfe7a2c7da61b1e48cfbacbc835caf48f7ba10f624b4dbf",
+        "v": 27,
+        "serialized": "0xd560111fd34312678e5648c5f86e99229bf9d01dc6f7166bbe8f8f617cba2240773aa1e06b5f82f7ecfe7a2c7da61b1e48cfbacbc835caf48f7ba10f624b4dbf1b"
+      },
+      "answer": {
+        "validator": "0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278",
+        "node": "0x470d8b388f4a0ae6bd512b74038c7e87957bb8fe",
+        "nonce": "0xa81f48dd8790155f485518f51675243601f539a9ee6854446124e32dd1a62e11",
+        "t": 1761724900,
+        "block": 29000050,
+        "sig": "0xd560111fd34312678e5648c5f86e99229bf9d01dc6f7166bbe8f8f617cba2240773aa1e06b5f82f7ecfe7a2c7da61b1e48cfbacbc835caf48f7ba10f624b4dbf1b"
+      },
+      "recovered": "0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278"
+    },
+    "t1": {
+      "fields": {
+        "chainId": 80002,
+        "registry": "0x70bfdf41d4061592df509b9b46f91a8457f88483",
+        "node": "0x470d8b388f4a0ae6bd512b74038c7e87957bb8fe",
+        "nonce": "0xff81fba2d2b0b3db361de26732c09c381de3220e0067fbc2e0253f00925b235c",
+        "t": 1761724920,
+        "block": 29000060
+      },
+      "preimageHex": "0x656361732d74696d652d31000000000000000000000000000000000000000000000000000000000001388270bfdf41d4061592df509b9b46f91a8457f88483470d8b388f4a0ae6bd512b74038c7e87957bb8feff81fba2d2b0b3db361de26732c09c381de3220e0067fbc2e0253f00925b235c000000006901c9f80000000001ba817c",
+      "digest": "0x4ba44c30d42ff48a6a3106b1b358be25a0727da94bff583b8b67a77452684cc2",
+      "signature": {
+        "r": "0x1ea630eebc9b12b4e4f19f6fb547d1e59d2968a9aed4b4701e0b64806935cc1d",
+        "s": "0x12d797c6216d82f4c2581a14f5d1bbb4a6edae98f6896a4264a6a81007c2dad0",
+        "v": 27,
+        "serialized": "0x1ea630eebc9b12b4e4f19f6fb547d1e59d2968a9aed4b4701e0b64806935cc1d12d797c6216d82f4c2581a14f5d1bbb4a6edae98f6896a4264a6a81007c2dad01b"
+      },
+      "answer": {
+        "validator": "0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278",
+        "node": "0x470d8b388f4a0ae6bd512b74038c7e87957bb8fe",
+        "nonce": "0xff81fba2d2b0b3db361de26732c09c381de3220e0067fbc2e0253f00925b235c",
+        "t": 1761724920,
+        "block": 29000060,
+        "sig": "0x1ea630eebc9b12b4e4f19f6fb547d1e59d2968a9aed4b4701e0b64806935cc1d12d797c6216d82f4c2581a14f5d1bbb4a6edae98f6896a4264a6a81007c2dad01b"
+      },
+      "recovered": "0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278"
+    }
+  },
+  "probeKey": {
+    "curve": "secp384r1",
+    "sizeGib": 2,
+    "privateKeyPem": "-----BEGIN PRIVATE KEY-----\nMIG2AgEAMBAGByqGSM49AgEGBSuBBAAiBIGeMIGbAgEBBDAGC//NCGDMpddQawL7\n3Y9/Z7IjyUXdB90+sg9Z8gXjpO8aBPyE0cawOGLJYQ9Xgl+hZANiAASyrrOEf23g\n+ea2g9A3b/7pHWQVli54QlZfgy+tdsZmbzYmVnQJKJOmDChO7vtNBYW70pGFuFzF\nSDw3yCmf4dSFtUKFBDxqp2N4s+P0TbICIGw6rXcWJ3Eo9k9d41fxgi4=\n-----END PRIVATE KEY-----\n",
+    "publicKeyPem": "-----BEGIN PUBLIC KEY-----\nMHYwEAYHKoZIzj0CAQYFK4EEACIDYgAEsq6zhH9t4PnmtoPQN2/+6R1kFZYueEJW\nX4MvrXbGZm82JlZ0CSiTpgwoTu77TQWFu9KRhbhcxUg8N8gpn+HUhbVChQQ8aqdj\neLPj9E2yAiBsOq13FidxKPZPXeNX8YIu\n-----END PUBLIC KEY-----\n",
+    "note": "test key only; stands for the key the network's CAS gives the probe of size encmem under that size's session, which admits the non-EDMM measurement alone"
+  },
+  "edmmProbeKey": {
+    "curve": "secp384r1",
+    "privateKeyPem": "-----BEGIN PRIVATE KEY-----\nMIG2AgEAMBAGByqGSM49AgEGBSuBBAAiBIGeMIGbAgEBBDBtsvIFjTRdl9mdkJfj\nyP4P9WVZ5SILEP9IP8HTGsOZlFmUgoPiOvg103bOO4PNFWihZANiAAR2E30Tm2eI\n2wiYlSuSS3Er5txyJdKGTSUFOEdZDiTUFd6U+6FSRWM53VFfcx+oYyBxVZisWQwd\nM9mjCTmR1JKA+siV0PKgUxTOHmx2usH7CY7g58oiDCxN97JTzvhUZ+k=\n-----END PRIVATE KEY-----\n",
+    "publicKeyPem": "-----BEGIN PUBLIC KEY-----\nMHYwEAYHKoZIzj0CAQYFK4EEACIDYgAEdhN9E5tniNsImJUrkktxK+bcciXShk0l\nBThHWQ4k1BXelPuhUkVjOd1RX3MfqGMgcVWYrFkMHTPZowk5kdSSgPrIldDyoFMU\nzh5sdrrB+wmO4OfKIgwsTfeyU874VGfp\n-----END PUBLIC KEY-----\n",
+    "note": "test key only; stands for a key a session admitting the probe image's EDMM measurement would give: no reader takes it"
+  },
+  "line": "etny-pb|v1|80002:0xB8f46D2B943fFbe2A061Ae8be087ef5055AD96A3|0x470d8b388f4a0ae6bd512b74038c7e87957bb8fe|118|4|0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278|0xa81f48dd8790155f485518f51675243601f539a9ee6854446124e32dd1a62e11|0x82b8f32190208a87c42266c3ec0b8a2793f5c37cb57dbf7944bfe8073afd16e0|1761724900|1761724920|0xd560111fd34312678e5648c5f86e99229bf9d01dc6f7166bbe8f8f617cba2240773aa1e06b5f82f7ecfe7a2c7da61b1e48cfbacbc835caf48f7ba10f624b4dbf1b|0x1ea630eebc9b12b4e4f19f6fb547d1e59d2968a9aed4b4701e0b64806935cc1d12d797c6216d82f4c2581a14f5d1bbb4a6edae98f6896a4264a6a81007c2dad01b|heap=3G;workers=4;encmem=2;custorage=37;epc=1024",
+  "lineSha256": "9cab38dffd56c6605779e1ab51774fcff77e3d1a60f5b7cb7e5691a51d3fc28b",
+  "signatureScheme": "ECDSA secp384r1 over SHA-256 of the UTF-8 bytes of line (no trailing newline), DER, lower-case hex without 0x, under the probe key of size encmem; the plain form whatever the trustedzones' statement form: the probe key signs no client text (reserved-prefixes.json lists etny-pb| so that no trustedzone key signs client text that begins with it)",
+  "signatureDerHex": "3066023100f7aca8d9f7e4c85ddb79b36f091bc109307ee32ca6afa5cdd31038ec1af3b82de42cddc720c53acf56763026b3a5dc8b023100963fff19b333eb74bb81b84ae9908927dd8edeeb311b0c6b0a97d1bbaec97111cf76b98909bd214109afe2edace86995",
+  "probeEtny": {
+    "bucket": "etny-bucket-integration",
+    "object": "probe.2.etny",
+    "layout": "three LF-terminated lines: the bench line, its DER hex signature, an unsigned platform line",
+    "content": "etny-pb|v1|80002:0xB8f46D2B943fFbe2A061Ae8be087ef5055AD96A3|0x470d8b388f4a0ae6bd512b74038c7e87957bb8fe|118|4|0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278|0xa81f48dd8790155f485518f51675243601f539a9ee6854446124e32dd1a62e11|0x82b8f32190208a87c42266c3ec0b8a2793f5c37cb57dbf7944bfe8073afd16e0|1761724900|1761724920|0xd560111fd34312678e5648c5f86e99229bf9d01dc6f7166bbe8f8f617cba2240773aa1e06b5f82f7ecfe7a2c7da61b1e48cfbacbc835caf48f7ba10f624b4dbf1b|0x1ea630eebc9b12b4e4f19f6fb547d1e59d2968a9aed4b4701e0b64806935cc1d12d797c6216d82f4c2581a14f5d1bbb4a6edae98f6896a4264a6a81007c2dad01b|heap=3G;workers=4;encmem=2;custorage=37;epc=1024\n3066023100f7aca8d9f7e4c85ddb79b36f091bc109307ee32ca6afa5cdd31038ec1af3b82de42cddc720c53acf56763026b3a5dc8b023100963fff19b333eb74bb81b84ae9908927dd8edeeb311b0c6b0a97d1bbaec97111cf76b98909bd214109afe2edace86995\nplatform|cpu=Intel(R) Xeon(R) E-2288G CPU @ 3.70GHz|cores=8|mhz=3700\n"
+  },
+  "probeTimeEtny": {
+    "bucket": "etny-bucket-integration",
+    "object": "probe.time.2.etny",
+    "layout": "two LF-terminated lines: the opening (over n0) and the closing (over n1) GET /validator/time answers as JSON; the agent takes pbb0 and pbb1 from their block fields",
+    "content": "{\"validator\":\"0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278\",\"node\":\"0x470d8b388f4a0ae6bd512b74038c7e87957bb8fe\",\"nonce\":\"0xa81f48dd8790155f485518f51675243601f539a9ee6854446124e32dd1a62e11\",\"t\":1761724900,\"block\":29000050,\"sig\":\"0xd560111fd34312678e5648c5f86e99229bf9d01dc6f7166bbe8f8f617cba2240773aa1e06b5f82f7ecfe7a2c7da61b1e48cfbacbc835caf48f7ba10f624b4dbf1b\"}\n{\"validator\":\"0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278\",\"node\":\"0x470d8b388f4a0ae6bd512b74038c7e87957bb8fe\",\"nonce\":\"0xff81fba2d2b0b3db361de26732c09c381de3220e0067fbc2e0253f00925b235c\",\"t\":1761724920,\"block\":29000060,\"sig\":\"0x1ea630eebc9b12b4e4f19f6fb547d1e59d2968a9aed4b4701e0b64806935cc1d12d797c6216d82f4c2581a14f5d1bbb4a6edae98f6896a4264a6a81007c2dad01b\"}\n"
+  },
+  "metadata4": {
+    "keys": [
+      "pbgflops",
+      "pbcuv",
+      "pbsig",
+      "pbheap",
+      "pbworkers",
+      "pbencmem",
+      "pbstorage",
+      "pbepc"
+    ],
+    "appended": "pbgflops=118;pbcuv=4;pbsig=3066023100f7aca8d9f7e4c85ddb79b36f091bc109307ee32ca6afa5cdd31038ec1af3b82de42cddc720c53acf56763026b3a5dc8b023100963fff19b333eb74bb81b84ae9908927dd8edeeb311b0c6b0a97d1bbaec97111cf76b98909bd214109afe2edace86995;pbheap=3G;pbworkers=4;pbencmem=2;pbstorage=37;pbepc=1024",
+    "value": "trustedzones=ecld-nodenithy-amoy,ecld-pynithy-amoy;ipfs=12D3KooWQYhTNQdmr3ArTeUHRYzFg94BKyTkoWBDWez9kSCVe2Xo;startrow=v1;cugflops=250;cuv=4;cuat=1761724810;cusig=306402300696d5835fffb8b950811294f210626e90d1b18c8b47f97fa64e4ef70e4ecd3334198eb09485b8c9d1ba50a3b829ac2e023054527a77efec630239a424aded6f3124ca98f506428efb797229848c8168d6a56f049bf9b8429ee35a5d32bd1a0c4770;cuheap=256M;cuworkers=4;pbgflops=118;pbcuv=4;pbsig=3066023100f7aca8d9f7e4c85ddb79b36f091bc109307ee32ca6afa5cdd31038ec1af3b82de42cddc720c53acf56763026b3a5dc8b023100963fff19b333eb74bb81b84ae9908927dd8edeeb311b0c6b0a97d1bbaec97111cf76b98909bd214109afe2edace86995;pbheap=3G;pbworkers=4;pbencmem=2;pbstorage=37;pbepc=1024",
+    "rule": "appended after the cu keys of the same string (capability-record.json metadata4); pbgflops, pbcuv, pbworkers, pbencmem, pbstorage and pbepc decimal, pbheap as heap=, pbsig the DER hex without 0x"
+  },
+  "metadata3": {
+    "keys": [
+      "pbval",
+      "pbn",
+      "pbs",
+      "pbt0",
+      "pbt1",
+      "pbb0",
+      "pbb1",
+      "pbsig0",
+      "pbsig1"
+    ],
+    "appended": "pbval=0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278;pbn=0xa81f48dd8790155f485518f51675243601f539a9ee6854446124e32dd1a62e11;pbs=0x82b8f32190208a87c42266c3ec0b8a2793f5c37cb57dbf7944bfe8073afd16e0;pbt0=1761724900;pbt1=1761724920;pbb0=29000050;pbb1=29000060;pbsig0=0xd560111fd34312678e5648c5f86e99229bf9d01dc6f7166bbe8f8f617cba2240773aa1e06b5f82f7ecfe7a2c7da61b1e48cfbacbc835caf48f7ba10f624b4dbf1b;pbsig1=0x1ea630eebc9b12b4e4f19f6fb547d1e59d2968a9aed4b4701e0b64806935cc1d12d797c6216d82f4c2581a14f5d1bbb4a6edae98f6896a4264a6a81007c2dad01b",
+    "value": "44.4268,26.1025;cuval=0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278;cun=0xf9324b49b24c8561481ef6b84ec6cbeabd1ccd691e3e55f109d1243ea864e569;cus=0xb6df4b03ac8957c50dc55aa44db55bac8e28268c51ad8f7148650749b5d0b954;cut0=1761724800;cut1=1761724810;cub0=29000000;cub1=29000005;cusig0=0x32dac36e060115ab6b0c8904fe92c8588affd0fec146186f68a61902a2f89d7f20c5392feeb2db341616f71eb82f6309fde0c8f6bdd9cd0237f21e43482551a81c;cusig1=0xfaeb40e95667f04e4e09fe927e6c73b5b32221ee7c69a6e8dab279af950a6fc27fac1d554458a73b32df4db8307345366f8e18a530335fa92d1ea7dc9e75740c1b;pbval=0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278;pbn=0xa81f48dd8790155f485518f51675243601f539a9ee6854446124e32dd1a62e11;pbs=0x82b8f32190208a87c42266c3ec0b8a2793f5c37cb57dbf7944bfe8073afd16e0;pbt0=1761724900;pbt1=1761724920;pbb0=29000050;pbb1=29000060;pbsig0=0xd560111fd34312678e5648c5f86e99229bf9d01dc6f7166bbe8f8f617cba2240773aa1e06b5f82f7ecfe7a2c7da61b1e48cfbacbc835caf48f7ba10f624b4dbf1b;pbsig1=0x1ea630eebc9b12b4e4f19f6fb547d1e59d2968a9aed4b4701e0b64806935cc1d12d797c6216d82f4c2581a14f5d1bbb4a6edae98f6896a4264a6a81007c2dad01b",
+    "rule": "appended after the cu keys of the same string; pbval 0x+40 lower-case, pbn and pbs 0x+64, pbt0, pbt1, pbb0 and pbb1 decimal (the blocks from lines 1 and 2 of probe.time.<g>.etny), pbsig0 and pbsig1 0x+130"
+  },
+  "keyRules": {
+    "orderFree": "readers take the entries of metadata3 and metadata4 order-free, each up to its first =",
+    "allKeys": "a request carries a bench record only when all seventeen pb keys are present",
+    "duplicates": "a request in which any key of the pb family appears twice carries no bench record; one in which any key of the cu family appears twice carries no trustedzone record",
+    "noAgentForm": "a request with encmem=, custorage= or epc= in the cu family and no pb keys (the agent's form at 52e36e0) carries no bench record"
+  },
+  "lineFromMetadata": {
+    "rule": "a validator rebuilds etny-pb|v1|<baked chainId>:<baked pox>|<dproc lower-case>|<pbgflops>|<pbcuv>|<pbval>|<pbn>|<pbs>|<pbt0>|<pbt1>|<pbsig0>|<pbsig1>|heap=<pbheap>;workers=<pbworkers>;encmem=<pbencmem>;custorage=<pbstorage>;epc=<pbepc> and verifies pbsig over it under the probe key of size pbencmem",
+    "rebuilt": "etny-pb|v1|80002:0xB8f46D2B943fFbe2A061Ae8be087ef5055AD96A3|0x470d8b388f4a0ae6bd512b74038c7e87957bb8fe|118|4|0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278|0xa81f48dd8790155f485518f51675243601f539a9ee6854446124e32dd1a62e11|0x82b8f32190208a87c42266c3ec0b8a2793f5c37cb57dbf7944bfe8073afd16e0|1761724900|1761724920|0xd560111fd34312678e5648c5f86e99229bf9d01dc6f7166bbe8f8f617cba2240773aa1e06b5f82f7ecfe7a2c7da61b1e48cfbacbc835caf48f7ba10f624b4dbf1b|0x1ea630eebc9b12b4e4f19f6fb547d1e59d2968a9aed4b4701e0b64806935cc1d12d797c6216d82f4c2581a14f5d1bbb4a6edae98f6896a4264a6a81007c2dad01b|heap=3G;workers=4;encmem=2;custorage=37;epc=1024"
+  },
+  "keySets": [
+    {
+      "name": "without-pbgflops",
+      "rule": "the request carries the other sixteen keys and not pbgflops",
+      "metadata4": "trustedzones=ecld-nodenithy-amoy,ecld-pynithy-amoy;ipfs=12D3KooWQYhTNQdmr3ArTeUHRYzFg94BKyTkoWBDWez9kSCVe2Xo;startrow=v1;cugflops=250;cuv=4;cuat=1761724810;cusig=306402300696d5835fffb8b950811294f210626e90d1b18c8b47f97fa64e4ef70e4ecd3334198eb09485b8c9d1ba50a3b829ac2e023054527a77efec630239a424aded6f3124ca98f506428efb797229848c8168d6a56f049bf9b8429ee35a5d32bd1a0c4770;cuheap=256M;cuworkers=4;pbcuv=4;pbsig=3066023100f7aca8d9f7e4c85ddb79b36f091bc109307ee32ca6afa5cdd31038ec1af3b82de42cddc720c53acf56763026b3a5dc8b023100963fff19b333eb74bb81b84ae9908927dd8edeeb311b0c6b0a97d1bbaec97111cf76b98909bd214109afe2edace86995;pbheap=3G;pbworkers=4;pbencmem=2;pbstorage=37;pbepc=1024",
+      "metadata3": "44.4268,26.1025;cuval=0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278;cun=0xf9324b49b24c8561481ef6b84ec6cbeabd1ccd691e3e55f109d1243ea864e569;cus=0xb6df4b03ac8957c50dc55aa44db55bac8e28268c51ad8f7148650749b5d0b954;cut0=1761724800;cut1=1761724810;cub0=29000000;cub1=29000005;cusig0=0x32dac36e060115ab6b0c8904fe92c8588affd0fec146186f68a61902a2f89d7f20c5392feeb2db341616f71eb82f6309fde0c8f6bdd9cd0237f21e43482551a81c;cusig1=0xfaeb40e95667f04e4e09fe927e6c73b5b32221ee7c69a6e8dab279af950a6fc27fac1d554458a73b32df4db8307345366f8e18a530335fa92d1ea7dc9e75740c1b;pbval=0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278;pbn=0xa81f48dd8790155f485518f51675243601f539a9ee6854446124e32dd1a62e11;pbs=0x82b8f32190208a87c42266c3ec0b8a2793f5c37cb57dbf7944bfe8073afd16e0;pbt0=1761724900;pbt1=1761724920;pbb0=29000050;pbb1=29000060;pbsig0=0xd560111fd34312678e5648c5f86e99229bf9d01dc6f7166bbe8f8f617cba2240773aa1e06b5f82f7ecfe7a2c7da61b1e48cfbacbc835caf48f7ba10f624b4dbf1b;pbsig1=0x1ea630eebc9b12b4e4f19f6fb547d1e59d2968a9aed4b4701e0b64806935cc1d12d797c6216d82f4c2581a14f5d1bbb4a6edae98f6896a4264a6a81007c2dad01b",
+      "expected": {
+        "benchRecord": false,
+        "trustedzoneRecord": true
+      }
+    },
+    {
+      "name": "without-pbcuv",
+      "rule": "the request carries the other sixteen keys and not pbcuv",
+      "metadata4": "trustedzones=ecld-nodenithy-amoy,ecld-pynithy-amoy;ipfs=12D3KooWQYhTNQdmr3ArTeUHRYzFg94BKyTkoWBDWez9kSCVe2Xo;startrow=v1;cugflops=250;cuv=4;cuat=1761724810;cusig=306402300696d5835fffb8b950811294f210626e90d1b18c8b47f97fa64e4ef70e4ecd3334198eb09485b8c9d1ba50a3b829ac2e023054527a77efec630239a424aded6f3124ca98f506428efb797229848c8168d6a56f049bf9b8429ee35a5d32bd1a0c4770;cuheap=256M;cuworkers=4;pbgflops=118;pbsig=3066023100f7aca8d9f7e4c85ddb79b36f091bc109307ee32ca6afa5cdd31038ec1af3b82de42cddc720c53acf56763026b3a5dc8b023100963fff19b333eb74bb81b84ae9908927dd8edeeb311b0c6b0a97d1bbaec97111cf76b98909bd214109afe2edace86995;pbheap=3G;pbworkers=4;pbencmem=2;pbstorage=37;pbepc=1024",
+      "metadata3": "44.4268,26.1025;cuval=0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278;cun=0xf9324b49b24c8561481ef6b84ec6cbeabd1ccd691e3e55f109d1243ea864e569;cus=0xb6df4b03ac8957c50dc55aa44db55bac8e28268c51ad8f7148650749b5d0b954;cut0=1761724800;cut1=1761724810;cub0=29000000;cub1=29000005;cusig0=0x32dac36e060115ab6b0c8904fe92c8588affd0fec146186f68a61902a2f89d7f20c5392feeb2db341616f71eb82f6309fde0c8f6bdd9cd0237f21e43482551a81c;cusig1=0xfaeb40e95667f04e4e09fe927e6c73b5b32221ee7c69a6e8dab279af950a6fc27fac1d554458a73b32df4db8307345366f8e18a530335fa92d1ea7dc9e75740c1b;pbval=0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278;pbn=0xa81f48dd8790155f485518f51675243601f539a9ee6854446124e32dd1a62e11;pbs=0x82b8f32190208a87c42266c3ec0b8a2793f5c37cb57dbf7944bfe8073afd16e0;pbt0=1761724900;pbt1=1761724920;pbb0=29000050;pbb1=29000060;pbsig0=0xd560111fd34312678e5648c5f86e99229bf9d01dc6f7166bbe8f8f617cba2240773aa1e06b5f82f7ecfe7a2c7da61b1e48cfbacbc835caf48f7ba10f624b4dbf1b;pbsig1=0x1ea630eebc9b12b4e4f19f6fb547d1e59d2968a9aed4b4701e0b64806935cc1d12d797c6216d82f4c2581a14f5d1bbb4a6edae98f6896a4264a6a81007c2dad01b",
+      "expected": {
+        "benchRecord": false,
+        "trustedzoneRecord": true
+      }
+    },
+    {
+      "name": "without-pbsig",
+      "rule": "the request carries the other sixteen keys and not pbsig",
+      "metadata4": "trustedzones=ecld-nodenithy-amoy,ecld-pynithy-amoy;ipfs=12D3KooWQYhTNQdmr3ArTeUHRYzFg94BKyTkoWBDWez9kSCVe2Xo;startrow=v1;cugflops=250;cuv=4;cuat=1761724810;cusig=306402300696d5835fffb8b950811294f210626e90d1b18c8b47f97fa64e4ef70e4ecd3334198eb09485b8c9d1ba50a3b829ac2e023054527a77efec630239a424aded6f3124ca98f506428efb797229848c8168d6a56f049bf9b8429ee35a5d32bd1a0c4770;cuheap=256M;cuworkers=4;pbgflops=118;pbcuv=4;pbheap=3G;pbworkers=4;pbencmem=2;pbstorage=37;pbepc=1024",
+      "metadata3": "44.4268,26.1025;cuval=0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278;cun=0xf9324b49b24c8561481ef6b84ec6cbeabd1ccd691e3e55f109d1243ea864e569;cus=0xb6df4b03ac8957c50dc55aa44db55bac8e28268c51ad8f7148650749b5d0b954;cut0=1761724800;cut1=1761724810;cub0=29000000;cub1=29000005;cusig0=0x32dac36e060115ab6b0c8904fe92c8588affd0fec146186f68a61902a2f89d7f20c5392feeb2db341616f71eb82f6309fde0c8f6bdd9cd0237f21e43482551a81c;cusig1=0xfaeb40e95667f04e4e09fe927e6c73b5b32221ee7c69a6e8dab279af950a6fc27fac1d554458a73b32df4db8307345366f8e18a530335fa92d1ea7dc9e75740c1b;pbval=0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278;pbn=0xa81f48dd8790155f485518f51675243601f539a9ee6854446124e32dd1a62e11;pbs=0x82b8f32190208a87c42266c3ec0b8a2793f5c37cb57dbf7944bfe8073afd16e0;pbt0=1761724900;pbt1=1761724920;pbb0=29000050;pbb1=29000060;pbsig0=0xd560111fd34312678e5648c5f86e99229bf9d01dc6f7166bbe8f8f617cba2240773aa1e06b5f82f7ecfe7a2c7da61b1e48cfbacbc835caf48f7ba10f624b4dbf1b;pbsig1=0x1ea630eebc9b12b4e4f19f6fb547d1e59d2968a9aed4b4701e0b64806935cc1d12d797c6216d82f4c2581a14f5d1bbb4a6edae98f6896a4264a6a81007c2dad01b",
+      "expected": {
+        "benchRecord": false,
+        "trustedzoneRecord": true
+      }
+    },
+    {
+      "name": "without-pbheap",
+      "rule": "the request carries the other sixteen keys and not pbheap",
+      "metadata4": "trustedzones=ecld-nodenithy-amoy,ecld-pynithy-amoy;ipfs=12D3KooWQYhTNQdmr3ArTeUHRYzFg94BKyTkoWBDWez9kSCVe2Xo;startrow=v1;cugflops=250;cuv=4;cuat=1761724810;cusig=306402300696d5835fffb8b950811294f210626e90d1b18c8b47f97fa64e4ef70e4ecd3334198eb09485b8c9d1ba50a3b829ac2e023054527a77efec630239a424aded6f3124ca98f506428efb797229848c8168d6a56f049bf9b8429ee35a5d32bd1a0c4770;cuheap=256M;cuworkers=4;pbgflops=118;pbcuv=4;pbsig=3066023100f7aca8d9f7e4c85ddb79b36f091bc109307ee32ca6afa5cdd31038ec1af3b82de42cddc720c53acf56763026b3a5dc8b023100963fff19b333eb74bb81b84ae9908927dd8edeeb311b0c6b0a97d1bbaec97111cf76b98909bd214109afe2edace86995;pbworkers=4;pbencmem=2;pbstorage=37;pbepc=1024",
+      "metadata3": "44.4268,26.1025;cuval=0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278;cun=0xf9324b49b24c8561481ef6b84ec6cbeabd1ccd691e3e55f109d1243ea864e569;cus=0xb6df4b03ac8957c50dc55aa44db55bac8e28268c51ad8f7148650749b5d0b954;cut0=1761724800;cut1=1761724810;cub0=29000000;cub1=29000005;cusig0=0x32dac36e060115ab6b0c8904fe92c8588affd0fec146186f68a61902a2f89d7f20c5392feeb2db341616f71eb82f6309fde0c8f6bdd9cd0237f21e43482551a81c;cusig1=0xfaeb40e95667f04e4e09fe927e6c73b5b32221ee7c69a6e8dab279af950a6fc27fac1d554458a73b32df4db8307345366f8e18a530335fa92d1ea7dc9e75740c1b;pbval=0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278;pbn=0xa81f48dd8790155f485518f51675243601f539a9ee6854446124e32dd1a62e11;pbs=0x82b8f32190208a87c42266c3ec0b8a2793f5c37cb57dbf7944bfe8073afd16e0;pbt0=1761724900;pbt1=1761724920;pbb0=29000050;pbb1=29000060;pbsig0=0xd560111fd34312678e5648c5f86e99229bf9d01dc6f7166bbe8f8f617cba2240773aa1e06b5f82f7ecfe7a2c7da61b1e48cfbacbc835caf48f7ba10f624b4dbf1b;pbsig1=0x1ea630eebc9b12b4e4f19f6fb547d1e59d2968a9aed4b4701e0b64806935cc1d12d797c6216d82f4c2581a14f5d1bbb4a6edae98f6896a4264a6a81007c2dad01b",
+      "expected": {
+        "benchRecord": false,
+        "trustedzoneRecord": true
+      }
+    },
+    {
+      "name": "without-pbworkers",
+      "rule": "the request carries the other sixteen keys and not pbworkers",
+      "metadata4": "trustedzones=ecld-nodenithy-amoy,ecld-pynithy-amoy;ipfs=12D3KooWQYhTNQdmr3ArTeUHRYzFg94BKyTkoWBDWez9kSCVe2Xo;startrow=v1;cugflops=250;cuv=4;cuat=1761724810;cusig=306402300696d5835fffb8b950811294f210626e90d1b18c8b47f97fa64e4ef70e4ecd3334198eb09485b8c9d1ba50a3b829ac2e023054527a77efec630239a424aded6f3124ca98f506428efb797229848c8168d6a56f049bf9b8429ee35a5d32bd1a0c4770;cuheap=256M;cuworkers=4;pbgflops=118;pbcuv=4;pbsig=3066023100f7aca8d9f7e4c85ddb79b36f091bc109307ee32ca6afa5cdd31038ec1af3b82de42cddc720c53acf56763026b3a5dc8b023100963fff19b333eb74bb81b84ae9908927dd8edeeb311b0c6b0a97d1bbaec97111cf76b98909bd214109afe2edace86995;pbheap=3G;pbencmem=2;pbstorage=37;pbepc=1024",
+      "metadata3": "44.4268,26.1025;cuval=0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278;cun=0xf9324b49b24c8561481ef6b84ec6cbeabd1ccd691e3e55f109d1243ea864e569;cus=0xb6df4b03ac8957c50dc55aa44db55bac8e28268c51ad8f7148650749b5d0b954;cut0=1761724800;cut1=1761724810;cub0=29000000;cub1=29000005;cusig0=0x32dac36e060115ab6b0c8904fe92c8588affd0fec146186f68a61902a2f89d7f20c5392feeb2db341616f71eb82f6309fde0c8f6bdd9cd0237f21e43482551a81c;cusig1=0xfaeb40e95667f04e4e09fe927e6c73b5b32221ee7c69a6e8dab279af950a6fc27fac1d554458a73b32df4db8307345366f8e18a530335fa92d1ea7dc9e75740c1b;pbval=0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278;pbn=0xa81f48dd8790155f485518f51675243601f539a9ee6854446124e32dd1a62e11;pbs=0x82b8f32190208a87c42266c3ec0b8a2793f5c37cb57dbf7944bfe8073afd16e0;pbt0=1761724900;pbt1=1761724920;pbb0=29000050;pbb1=29000060;pbsig0=0xd560111fd34312678e5648c5f86e99229bf9d01dc6f7166bbe8f8f617cba2240773aa1e06b5f82f7ecfe7a2c7da61b1e48cfbacbc835caf48f7ba10f624b4dbf1b;pbsig1=0x1ea630eebc9b12b4e4f19f6fb547d1e59d2968a9aed4b4701e0b64806935cc1d12d797c6216d82f4c2581a14f5d1bbb4a6edae98f6896a4264a6a81007c2dad01b",
+      "expected": {
+        "benchRecord": false,
+        "trustedzoneRecord": true
+      }
+    },
+    {
+      "name": "without-pbencmem",
+      "rule": "the request carries the other sixteen keys and not pbencmem",
+      "metadata4": "trustedzones=ecld-nodenithy-amoy,ecld-pynithy-amoy;ipfs=12D3KooWQYhTNQdmr3ArTeUHRYzFg94BKyTkoWBDWez9kSCVe2Xo;startrow=v1;cugflops=250;cuv=4;cuat=1761724810;cusig=306402300696d5835fffb8b950811294f210626e90d1b18c8b47f97fa64e4ef70e4ecd3334198eb09485b8c9d1ba50a3b829ac2e023054527a77efec630239a424aded6f3124ca98f506428efb797229848c8168d6a56f049bf9b8429ee35a5d32bd1a0c4770;cuheap=256M;cuworkers=4;pbgflops=118;pbcuv=4;pbsig=3066023100f7aca8d9f7e4c85ddb79b36f091bc109307ee32ca6afa5cdd31038ec1af3b82de42cddc720c53acf56763026b3a5dc8b023100963fff19b333eb74bb81b84ae9908927dd8edeeb311b0c6b0a97d1bbaec97111cf76b98909bd214109afe2edace86995;pbheap=3G;pbworkers=4;pbstorage=37;pbepc=1024",
+      "metadata3": "44.4268,26.1025;cuval=0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278;cun=0xf9324b49b24c8561481ef6b84ec6cbeabd1ccd691e3e55f109d1243ea864e569;cus=0xb6df4b03ac8957c50dc55aa44db55bac8e28268c51ad8f7148650749b5d0b954;cut0=1761724800;cut1=1761724810;cub0=29000000;cub1=29000005;cusig0=0x32dac36e060115ab6b0c8904fe92c8588affd0fec146186f68a61902a2f89d7f20c5392feeb2db341616f71eb82f6309fde0c8f6bdd9cd0237f21e43482551a81c;cusig1=0xfaeb40e95667f04e4e09fe927e6c73b5b32221ee7c69a6e8dab279af950a6fc27fac1d554458a73b32df4db8307345366f8e18a530335fa92d1ea7dc9e75740c1b;pbval=0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278;pbn=0xa81f48dd8790155f485518f51675243601f539a9ee6854446124e32dd1a62e11;pbs=0x82b8f32190208a87c42266c3ec0b8a2793f5c37cb57dbf7944bfe8073afd16e0;pbt0=1761724900;pbt1=1761724920;pbb0=29000050;pbb1=29000060;pbsig0=0xd560111fd34312678e5648c5f86e99229bf9d01dc6f7166bbe8f8f617cba2240773aa1e06b5f82f7ecfe7a2c7da61b1e48cfbacbc835caf48f7ba10f624b4dbf1b;pbsig1=0x1ea630eebc9b12b4e4f19f6fb547d1e59d2968a9aed4b4701e0b64806935cc1d12d797c6216d82f4c2581a14f5d1bbb4a6edae98f6896a4264a6a81007c2dad01b",
+      "expected": {
+        "benchRecord": false,
+        "trustedzoneRecord": true
+      }
+    },
+    {
+      "name": "without-pbstorage",
+      "rule": "the request carries the other sixteen keys and not pbstorage",
+      "metadata4": "trustedzones=ecld-nodenithy-amoy,ecld-pynithy-amoy;ipfs=12D3KooWQYhTNQdmr3ArTeUHRYzFg94BKyTkoWBDWez9kSCVe2Xo;startrow=v1;cugflops=250;cuv=4;cuat=1761724810;cusig=306402300696d5835fffb8b950811294f210626e90d1b18c8b47f97fa64e4ef70e4ecd3334198eb09485b8c9d1ba50a3b829ac2e023054527a77efec630239a424aded6f3124ca98f506428efb797229848c8168d6a56f049bf9b8429ee35a5d32bd1a0c4770;cuheap=256M;cuworkers=4;pbgflops=118;pbcuv=4;pbsig=3066023100f7aca8d9f7e4c85ddb79b36f091bc109307ee32ca6afa5cdd31038ec1af3b82de42cddc720c53acf56763026b3a5dc8b023100963fff19b333eb74bb81b84ae9908927dd8edeeb311b0c6b0a97d1bbaec97111cf76b98909bd214109afe2edace86995;pbheap=3G;pbworkers=4;pbencmem=2;pbepc=1024",
+      "metadata3": "44.4268,26.1025;cuval=0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278;cun=0xf9324b49b24c8561481ef6b84ec6cbeabd1ccd691e3e55f109d1243ea864e569;cus=0xb6df4b03ac8957c50dc55aa44db55bac8e28268c51ad8f7148650749b5d0b954;cut0=1761724800;cut1=1761724810;cub0=29000000;cub1=29000005;cusig0=0x32dac36e060115ab6b0c8904fe92c8588affd0fec146186f68a61902a2f89d7f20c5392feeb2db341616f71eb82f6309fde0c8f6bdd9cd0237f21e43482551a81c;cusig1=0xfaeb40e95667f04e4e09fe927e6c73b5b32221ee7c69a6e8dab279af950a6fc27fac1d554458a73b32df4db8307345366f8e18a530335fa92d1ea7dc9e75740c1b;pbval=0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278;pbn=0xa81f48dd8790155f485518f51675243601f539a9ee6854446124e32dd1a62e11;pbs=0x82b8f32190208a87c42266c3ec0b8a2793f5c37cb57dbf7944bfe8073afd16e0;pbt0=1761724900;pbt1=1761724920;pbb0=29000050;pbb1=29000060;pbsig0=0xd560111fd34312678e5648c5f86e99229bf9d01dc6f7166bbe8f8f617cba2240773aa1e06b5f82f7ecfe7a2c7da61b1e48cfbacbc835caf48f7ba10f624b4dbf1b;pbsig1=0x1ea630eebc9b12b4e4f19f6fb547d1e59d2968a9aed4b4701e0b64806935cc1d12d797c6216d82f4c2581a14f5d1bbb4a6edae98f6896a4264a6a81007c2dad01b",
+      "expected": {
+        "benchRecord": false,
+        "trustedzoneRecord": true
+      }
+    },
+    {
+      "name": "without-pbepc",
+      "rule": "the request carries the other sixteen keys and not pbepc",
+      "metadata4": "trustedzones=ecld-nodenithy-amoy,ecld-pynithy-amoy;ipfs=12D3KooWQYhTNQdmr3ArTeUHRYzFg94BKyTkoWBDWez9kSCVe2Xo;startrow=v1;cugflops=250;cuv=4;cuat=1761724810;cusig=306402300696d5835fffb8b950811294f210626e90d1b18c8b47f97fa64e4ef70e4ecd3334198eb09485b8c9d1ba50a3b829ac2e023054527a77efec630239a424aded6f3124ca98f506428efb797229848c8168d6a56f049bf9b8429ee35a5d32bd1a0c4770;cuheap=256M;cuworkers=4;pbgflops=118;pbcuv=4;pbsig=3066023100f7aca8d9f7e4c85ddb79b36f091bc109307ee32ca6afa5cdd31038ec1af3b82de42cddc720c53acf56763026b3a5dc8b023100963fff19b333eb74bb81b84ae9908927dd8edeeb311b0c6b0a97d1bbaec97111cf76b98909bd214109afe2edace86995;pbheap=3G;pbworkers=4;pbencmem=2;pbstorage=37",
+      "metadata3": "44.4268,26.1025;cuval=0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278;cun=0xf9324b49b24c8561481ef6b84ec6cbeabd1ccd691e3e55f109d1243ea864e569;cus=0xb6df4b03ac8957c50dc55aa44db55bac8e28268c51ad8f7148650749b5d0b954;cut0=1761724800;cut1=1761724810;cub0=29000000;cub1=29000005;cusig0=0x32dac36e060115ab6b0c8904fe92c8588affd0fec146186f68a61902a2f89d7f20c5392feeb2db341616f71eb82f6309fde0c8f6bdd9cd0237f21e43482551a81c;cusig1=0xfaeb40e95667f04e4e09fe927e6c73b5b32221ee7c69a6e8dab279af950a6fc27fac1d554458a73b32df4db8307345366f8e18a530335fa92d1ea7dc9e75740c1b;pbval=0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278;pbn=0xa81f48dd8790155f485518f51675243601f539a9ee6854446124e32dd1a62e11;pbs=0x82b8f32190208a87c42266c3ec0b8a2793f5c37cb57dbf7944bfe8073afd16e0;pbt0=1761724900;pbt1=1761724920;pbb0=29000050;pbb1=29000060;pbsig0=0xd560111fd34312678e5648c5f86e99229bf9d01dc6f7166bbe8f8f617cba2240773aa1e06b5f82f7ecfe7a2c7da61b1e48cfbacbc835caf48f7ba10f624b4dbf1b;pbsig1=0x1ea630eebc9b12b4e4f19f6fb547d1e59d2968a9aed4b4701e0b64806935cc1d12d797c6216d82f4c2581a14f5d1bbb4a6edae98f6896a4264a6a81007c2dad01b",
+      "expected": {
+        "benchRecord": false,
+        "trustedzoneRecord": true
+      }
+    },
+    {
+      "name": "without-pbval",
+      "rule": "the request carries the other sixteen keys and not pbval",
+      "metadata4": "trustedzones=ecld-nodenithy-amoy,ecld-pynithy-amoy;ipfs=12D3KooWQYhTNQdmr3ArTeUHRYzFg94BKyTkoWBDWez9kSCVe2Xo;startrow=v1;cugflops=250;cuv=4;cuat=1761724810;cusig=306402300696d5835fffb8b950811294f210626e90d1b18c8b47f97fa64e4ef70e4ecd3334198eb09485b8c9d1ba50a3b829ac2e023054527a77efec630239a424aded6f3124ca98f506428efb797229848c8168d6a56f049bf9b8429ee35a5d32bd1a0c4770;cuheap=256M;cuworkers=4;pbgflops=118;pbcuv=4;pbsig=3066023100f7aca8d9f7e4c85ddb79b36f091bc109307ee32ca6afa5cdd31038ec1af3b82de42cddc720c53acf56763026b3a5dc8b023100963fff19b333eb74bb81b84ae9908927dd8edeeb311b0c6b0a97d1bbaec97111cf76b98909bd214109afe2edace86995;pbheap=3G;pbworkers=4;pbencmem=2;pbstorage=37;pbepc=1024",
+      "metadata3": "44.4268,26.1025;cuval=0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278;cun=0xf9324b49b24c8561481ef6b84ec6cbeabd1ccd691e3e55f109d1243ea864e569;cus=0xb6df4b03ac8957c50dc55aa44db55bac8e28268c51ad8f7148650749b5d0b954;cut0=1761724800;cut1=1761724810;cub0=29000000;cub1=29000005;cusig0=0x32dac36e060115ab6b0c8904fe92c8588affd0fec146186f68a61902a2f89d7f20c5392feeb2db341616f71eb82f6309fde0c8f6bdd9cd0237f21e43482551a81c;cusig1=0xfaeb40e95667f04e4e09fe927e6c73b5b32221ee7c69a6e8dab279af950a6fc27fac1d554458a73b32df4db8307345366f8e18a530335fa92d1ea7dc9e75740c1b;pbn=0xa81f48dd8790155f485518f51675243601f539a9ee6854446124e32dd1a62e11;pbs=0x82b8f32190208a87c42266c3ec0b8a2793f5c37cb57dbf7944bfe8073afd16e0;pbt0=1761724900;pbt1=1761724920;pbb0=29000050;pbb1=29000060;pbsig0=0xd560111fd34312678e5648c5f86e99229bf9d01dc6f7166bbe8f8f617cba2240773aa1e06b5f82f7ecfe7a2c7da61b1e48cfbacbc835caf48f7ba10f624b4dbf1b;pbsig1=0x1ea630eebc9b12b4e4f19f6fb547d1e59d2968a9aed4b4701e0b64806935cc1d12d797c6216d82f4c2581a14f5d1bbb4a6edae98f6896a4264a6a81007c2dad01b",
+      "expected": {
+        "benchRecord": false,
+        "trustedzoneRecord": true
+      }
+    },
+    {
+      "name": "without-pbn",
+      "rule": "the request carries the other sixteen keys and not pbn",
+      "metadata4": "trustedzones=ecld-nodenithy-amoy,ecld-pynithy-amoy;ipfs=12D3KooWQYhTNQdmr3ArTeUHRYzFg94BKyTkoWBDWez9kSCVe2Xo;startrow=v1;cugflops=250;cuv=4;cuat=1761724810;cusig=306402300696d5835fffb8b950811294f210626e90d1b18c8b47f97fa64e4ef70e4ecd3334198eb09485b8c9d1ba50a3b829ac2e023054527a77efec630239a424aded6f3124ca98f506428efb797229848c8168d6a56f049bf9b8429ee35a5d32bd1a0c4770;cuheap=256M;cuworkers=4;pbgflops=118;pbcuv=4;pbsig=3066023100f7aca8d9f7e4c85ddb79b36f091bc109307ee32ca6afa5cdd31038ec1af3b82de42cddc720c53acf56763026b3a5dc8b023100963fff19b333eb74bb81b84ae9908927dd8edeeb311b0c6b0a97d1bbaec97111cf76b98909bd214109afe2edace86995;pbheap=3G;pbworkers=4;pbencmem=2;pbstorage=37;pbepc=1024",
+      "metadata3": "44.4268,26.1025;cuval=0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278;cun=0xf9324b49b24c8561481ef6b84ec6cbeabd1ccd691e3e55f109d1243ea864e569;cus=0xb6df4b03ac8957c50dc55aa44db55bac8e28268c51ad8f7148650749b5d0b954;cut0=1761724800;cut1=1761724810;cub0=29000000;cub1=29000005;cusig0=0x32dac36e060115ab6b0c8904fe92c8588affd0fec146186f68a61902a2f89d7f20c5392feeb2db341616f71eb82f6309fde0c8f6bdd9cd0237f21e43482551a81c;cusig1=0xfaeb40e95667f04e4e09fe927e6c73b5b32221ee7c69a6e8dab279af950a6fc27fac1d554458a73b32df4db8307345366f8e18a530335fa92d1ea7dc9e75740c1b;pbval=0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278;pbs=0x82b8f32190208a87c42266c3ec0b8a2793f5c37cb57dbf7944bfe8073afd16e0;pbt0=1761724900;pbt1=1761724920;pbb0=29000050;pbb1=29000060;pbsig0=0xd560111fd34312678e5648c5f86e99229bf9d01dc6f7166bbe8f8f617cba2240773aa1e06b5f82f7ecfe7a2c7da61b1e48cfbacbc835caf48f7ba10f624b4dbf1b;pbsig1=0x1ea630eebc9b12b4e4f19f6fb547d1e59d2968a9aed4b4701e0b64806935cc1d12d797c6216d82f4c2581a14f5d1bbb4a6edae98f6896a4264a6a81007c2dad01b",
+      "expected": {
+        "benchRecord": false,
+        "trustedzoneRecord": true
+      }
+    },
+    {
+      "name": "without-pbs",
+      "rule": "the request carries the other sixteen keys and not pbs",
+      "metadata4": "trustedzones=ecld-nodenithy-amoy,ecld-pynithy-amoy;ipfs=12D3KooWQYhTNQdmr3ArTeUHRYzFg94BKyTkoWBDWez9kSCVe2Xo;startrow=v1;cugflops=250;cuv=4;cuat=1761724810;cusig=306402300696d5835fffb8b950811294f210626e90d1b18c8b47f97fa64e4ef70e4ecd3334198eb09485b8c9d1ba50a3b829ac2e023054527a77efec630239a424aded6f3124ca98f506428efb797229848c8168d6a56f049bf9b8429ee35a5d32bd1a0c4770;cuheap=256M;cuworkers=4;pbgflops=118;pbcuv=4;pbsig=3066023100f7aca8d9f7e4c85ddb79b36f091bc109307ee32ca6afa5cdd31038ec1af3b82de42cddc720c53acf56763026b3a5dc8b023100963fff19b333eb74bb81b84ae9908927dd8edeeb311b0c6b0a97d1bbaec97111cf76b98909bd214109afe2edace86995;pbheap=3G;pbworkers=4;pbencmem=2;pbstorage=37;pbepc=1024",
+      "metadata3": "44.4268,26.1025;cuval=0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278;cun=0xf9324b49b24c8561481ef6b84ec6cbeabd1ccd691e3e55f109d1243ea864e569;cus=0xb6df4b03ac8957c50dc55aa44db55bac8e28268c51ad8f7148650749b5d0b954;cut0=1761724800;cut1=1761724810;cub0=29000000;cub1=29000005;cusig0=0x32dac36e060115ab6b0c8904fe92c8588affd0fec146186f68a61902a2f89d7f20c5392feeb2db341616f71eb82f6309fde0c8f6bdd9cd0237f21e43482551a81c;cusig1=0xfaeb40e95667f04e4e09fe927e6c73b5b32221ee7c69a6e8dab279af950a6fc27fac1d554458a73b32df4db8307345366f8e18a530335fa92d1ea7dc9e75740c1b;pbval=0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278;pbn=0xa81f48dd8790155f485518f51675243601f539a9ee6854446124e32dd1a62e11;pbt0=1761724900;pbt1=1761724920;pbb0=29000050;pbb1=29000060;pbsig0=0xd560111fd34312678e5648c5f86e99229bf9d01dc6f7166bbe8f8f617cba2240773aa1e06b5f82f7ecfe7a2c7da61b1e48cfbacbc835caf48f7ba10f624b4dbf1b;pbsig1=0x1ea630eebc9b12b4e4f19f6fb547d1e59d2968a9aed4b4701e0b64806935cc1d12d797c6216d82f4c2581a14f5d1bbb4a6edae98f6896a4264a6a81007c2dad01b",
+      "expected": {
+        "benchRecord": false,
+        "trustedzoneRecord": true
+      }
+    },
+    {
+      "name": "without-pbt0",
+      "rule": "the request carries the other sixteen keys and not pbt0",
+      "metadata4": "trustedzones=ecld-nodenithy-amoy,ecld-pynithy-amoy;ipfs=12D3KooWQYhTNQdmr3ArTeUHRYzFg94BKyTkoWBDWez9kSCVe2Xo;startrow=v1;cugflops=250;cuv=4;cuat=1761724810;cusig=306402300696d5835fffb8b950811294f210626e90d1b18c8b47f97fa64e4ef70e4ecd3334198eb09485b8c9d1ba50a3b829ac2e023054527a77efec630239a424aded6f3124ca98f506428efb797229848c8168d6a56f049bf9b8429ee35a5d32bd1a0c4770;cuheap=256M;cuworkers=4;pbgflops=118;pbcuv=4;pbsig=3066023100f7aca8d9f7e4c85ddb79b36f091bc109307ee32ca6afa5cdd31038ec1af3b82de42cddc720c53acf56763026b3a5dc8b023100963fff19b333eb74bb81b84ae9908927dd8edeeb311b0c6b0a97d1bbaec97111cf76b98909bd214109afe2edace86995;pbheap=3G;pbworkers=4;pbencmem=2;pbstorage=37;pbepc=1024",
+      "metadata3": "44.4268,26.1025;cuval=0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278;cun=0xf9324b49b24c8561481ef6b84ec6cbeabd1ccd691e3e55f109d1243ea864e569;cus=0xb6df4b03ac8957c50dc55aa44db55bac8e28268c51ad8f7148650749b5d0b954;cut0=1761724800;cut1=1761724810;cub0=29000000;cub1=29000005;cusig0=0x32dac36e060115ab6b0c8904fe92c8588affd0fec146186f68a61902a2f89d7f20c5392feeb2db341616f71eb82f6309fde0c8f6bdd9cd0237f21e43482551a81c;cusig1=0xfaeb40e95667f04e4e09fe927e6c73b5b32221ee7c69a6e8dab279af950a6fc27fac1d554458a73b32df4db8307345366f8e18a530335fa92d1ea7dc9e75740c1b;pbval=0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278;pbn=0xa81f48dd8790155f485518f51675243601f539a9ee6854446124e32dd1a62e11;pbs=0x82b8f32190208a87c42266c3ec0b8a2793f5c37cb57dbf7944bfe8073afd16e0;pbt1=1761724920;pbb0=29000050;pbb1=29000060;pbsig0=0xd560111fd34312678e5648c5f86e99229bf9d01dc6f7166bbe8f8f617cba2240773aa1e06b5f82f7ecfe7a2c7da61b1e48cfbacbc835caf48f7ba10f624b4dbf1b;pbsig1=0x1ea630eebc9b12b4e4f19f6fb547d1e59d2968a9aed4b4701e0b64806935cc1d12d797c6216d82f4c2581a14f5d1bbb4a6edae98f6896a4264a6a81007c2dad01b",
+      "expected": {
+        "benchRecord": false,
+        "trustedzoneRecord": true
+      }
+    },
+    {
+      "name": "without-pbt1",
+      "rule": "the request carries the other sixteen keys and not pbt1",
+      "metadata4": "trustedzones=ecld-nodenithy-amoy,ecld-pynithy-amoy;ipfs=12D3KooWQYhTNQdmr3ArTeUHRYzFg94BKyTkoWBDWez9kSCVe2Xo;startrow=v1;cugflops=250;cuv=4;cuat=1761724810;cusig=306402300696d5835fffb8b950811294f210626e90d1b18c8b47f97fa64e4ef70e4ecd3334198eb09485b8c9d1ba50a3b829ac2e023054527a77efec630239a424aded6f3124ca98f506428efb797229848c8168d6a56f049bf9b8429ee35a5d32bd1a0c4770;cuheap=256M;cuworkers=4;pbgflops=118;pbcuv=4;pbsig=3066023100f7aca8d9f7e4c85ddb79b36f091bc109307ee32ca6afa5cdd31038ec1af3b82de42cddc720c53acf56763026b3a5dc8b023100963fff19b333eb74bb81b84ae9908927dd8edeeb311b0c6b0a97d1bbaec97111cf76b98909bd214109afe2edace86995;pbheap=3G;pbworkers=4;pbencmem=2;pbstorage=37;pbepc=1024",
+      "metadata3": "44.4268,26.1025;cuval=0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278;cun=0xf9324b49b24c8561481ef6b84ec6cbeabd1ccd691e3e55f109d1243ea864e569;cus=0xb6df4b03ac8957c50dc55aa44db55bac8e28268c51ad8f7148650749b5d0b954;cut0=1761724800;cut1=1761724810;cub0=29000000;cub1=29000005;cusig0=0x32dac36e060115ab6b0c8904fe92c8588affd0fec146186f68a61902a2f89d7f20c5392feeb2db341616f71eb82f6309fde0c8f6bdd9cd0237f21e43482551a81c;cusig1=0xfaeb40e95667f04e4e09fe927e6c73b5b32221ee7c69a6e8dab279af950a6fc27fac1d554458a73b32df4db8307345366f8e18a530335fa92d1ea7dc9e75740c1b;pbval=0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278;pbn=0xa81f48dd8790155f485518f51675243601f539a9ee6854446124e32dd1a62e11;pbs=0x82b8f32190208a87c42266c3ec0b8a2793f5c37cb57dbf7944bfe8073afd16e0;pbt0=1761724900;pbb0=29000050;pbb1=29000060;pbsig0=0xd560111fd34312678e5648c5f86e99229bf9d01dc6f7166bbe8f8f617cba2240773aa1e06b5f82f7ecfe7a2c7da61b1e48cfbacbc835caf48f7ba10f624b4dbf1b;pbsig1=0x1ea630eebc9b12b4e4f19f6fb547d1e59d2968a9aed4b4701e0b64806935cc1d12d797c6216d82f4c2581a14f5d1bbb4a6edae98f6896a4264a6a81007c2dad01b",
+      "expected": {
+        "benchRecord": false,
+        "trustedzoneRecord": true
+      }
+    },
+    {
+      "name": "without-pbb0",
+      "rule": "the request carries the other sixteen keys and not pbb0",
+      "metadata4": "trustedzones=ecld-nodenithy-amoy,ecld-pynithy-amoy;ipfs=12D3KooWQYhTNQdmr3ArTeUHRYzFg94BKyTkoWBDWez9kSCVe2Xo;startrow=v1;cugflops=250;cuv=4;cuat=1761724810;cusig=306402300696d5835fffb8b950811294f210626e90d1b18c8b47f97fa64e4ef70e4ecd3334198eb09485b8c9d1ba50a3b829ac2e023054527a77efec630239a424aded6f3124ca98f506428efb797229848c8168d6a56f049bf9b8429ee35a5d32bd1a0c4770;cuheap=256M;cuworkers=4;pbgflops=118;pbcuv=4;pbsig=3066023100f7aca8d9f7e4c85ddb79b36f091bc109307ee32ca6afa5cdd31038ec1af3b82de42cddc720c53acf56763026b3a5dc8b023100963fff19b333eb74bb81b84ae9908927dd8edeeb311b0c6b0a97d1bbaec97111cf76b98909bd214109afe2edace86995;pbheap=3G;pbworkers=4;pbencmem=2;pbstorage=37;pbepc=1024",
+      "metadata3": "44.4268,26.1025;cuval=0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278;cun=0xf9324b49b24c8561481ef6b84ec6cbeabd1ccd691e3e55f109d1243ea864e569;cus=0xb6df4b03ac8957c50dc55aa44db55bac8e28268c51ad8f7148650749b5d0b954;cut0=1761724800;cut1=1761724810;cub0=29000000;cub1=29000005;cusig0=0x32dac36e060115ab6b0c8904fe92c8588affd0fec146186f68a61902a2f89d7f20c5392feeb2db341616f71eb82f6309fde0c8f6bdd9cd0237f21e43482551a81c;cusig1=0xfaeb40e95667f04e4e09fe927e6c73b5b32221ee7c69a6e8dab279af950a6fc27fac1d554458a73b32df4db8307345366f8e18a530335fa92d1ea7dc9e75740c1b;pbval=0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278;pbn=0xa81f48dd8790155f485518f51675243601f539a9ee6854446124e32dd1a62e11;pbs=0x82b8f32190208a87c42266c3ec0b8a2793f5c37cb57dbf7944bfe8073afd16e0;pbt0=1761724900;pbt1=1761724920;pbb1=29000060;pbsig0=0xd560111fd34312678e5648c5f86e99229bf9d01dc6f7166bbe8f8f617cba2240773aa1e06b5f82f7ecfe7a2c7da61b1e48cfbacbc835caf48f7ba10f624b4dbf1b;pbsig1=0x1ea630eebc9b12b4e4f19f6fb547d1e59d2968a9aed4b4701e0b64806935cc1d12d797c6216d82f4c2581a14f5d1bbb4a6edae98f6896a4264a6a81007c2dad01b",
+      "expected": {
+        "benchRecord": false,
+        "trustedzoneRecord": true
+      }
+    },
+    {
+      "name": "without-pbb1",
+      "rule": "the request carries the other sixteen keys and not pbb1",
+      "metadata4": "trustedzones=ecld-nodenithy-amoy,ecld-pynithy-amoy;ipfs=12D3KooWQYhTNQdmr3ArTeUHRYzFg94BKyTkoWBDWez9kSCVe2Xo;startrow=v1;cugflops=250;cuv=4;cuat=1761724810;cusig=306402300696d5835fffb8b950811294f210626e90d1b18c8b47f97fa64e4ef70e4ecd3334198eb09485b8c9d1ba50a3b829ac2e023054527a77efec630239a424aded6f3124ca98f506428efb797229848c8168d6a56f049bf9b8429ee35a5d32bd1a0c4770;cuheap=256M;cuworkers=4;pbgflops=118;pbcuv=4;pbsig=3066023100f7aca8d9f7e4c85ddb79b36f091bc109307ee32ca6afa5cdd31038ec1af3b82de42cddc720c53acf56763026b3a5dc8b023100963fff19b333eb74bb81b84ae9908927dd8edeeb311b0c6b0a97d1bbaec97111cf76b98909bd214109afe2edace86995;pbheap=3G;pbworkers=4;pbencmem=2;pbstorage=37;pbepc=1024",
+      "metadata3": "44.4268,26.1025;cuval=0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278;cun=0xf9324b49b24c8561481ef6b84ec6cbeabd1ccd691e3e55f109d1243ea864e569;cus=0xb6df4b03ac8957c50dc55aa44db55bac8e28268c51ad8f7148650749b5d0b954;cut0=1761724800;cut1=1761724810;cub0=29000000;cub1=29000005;cusig0=0x32dac36e060115ab6b0c8904fe92c8588affd0fec146186f68a61902a2f89d7f20c5392feeb2db341616f71eb82f6309fde0c8f6bdd9cd0237f21e43482551a81c;cusig1=0xfaeb40e95667f04e4e09fe927e6c73b5b32221ee7c69a6e8dab279af950a6fc27fac1d554458a73b32df4db8307345366f8e18a530335fa92d1ea7dc9e75740c1b;pbval=0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278;pbn=0xa81f48dd8790155f485518f51675243601f539a9ee6854446124e32dd1a62e11;pbs=0x82b8f32190208a87c42266c3ec0b8a2793f5c37cb57dbf7944bfe8073afd16e0;pbt0=1761724900;pbt1=1761724920;pbb0=29000050;pbsig0=0xd560111fd34312678e5648c5f86e99229bf9d01dc6f7166bbe8f8f617cba2240773aa1e06b5f82f7ecfe7a2c7da61b1e48cfbacbc835caf48f7ba10f624b4dbf1b;pbsig1=0x1ea630eebc9b12b4e4f19f6fb547d1e59d2968a9aed4b4701e0b64806935cc1d12d797c6216d82f4c2581a14f5d1bbb4a6edae98f6896a4264a6a81007c2dad01b",
+      "expected": {
+        "benchRecord": false,
+        "trustedzoneRecord": true
+      }
+    },
+    {
+      "name": "without-pbsig0",
+      "rule": "the request carries the other sixteen keys and not pbsig0",
+      "metadata4": "trustedzones=ecld-nodenithy-amoy,ecld-pynithy-amoy;ipfs=12D3KooWQYhTNQdmr3ArTeUHRYzFg94BKyTkoWBDWez9kSCVe2Xo;startrow=v1;cugflops=250;cuv=4;cuat=1761724810;cusig=306402300696d5835fffb8b950811294f210626e90d1b18c8b47f97fa64e4ef70e4ecd3334198eb09485b8c9d1ba50a3b829ac2e023054527a77efec630239a424aded6f3124ca98f506428efb797229848c8168d6a56f049bf9b8429ee35a5d32bd1a0c4770;cuheap=256M;cuworkers=4;pbgflops=118;pbcuv=4;pbsig=3066023100f7aca8d9f7e4c85ddb79b36f091bc109307ee32ca6afa5cdd31038ec1af3b82de42cddc720c53acf56763026b3a5dc8b023100963fff19b333eb74bb81b84ae9908927dd8edeeb311b0c6b0a97d1bbaec97111cf76b98909bd214109afe2edace86995;pbheap=3G;pbworkers=4;pbencmem=2;pbstorage=37;pbepc=1024",
+      "metadata3": "44.4268,26.1025;cuval=0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278;cun=0xf9324b49b24c8561481ef6b84ec6cbeabd1ccd691e3e55f109d1243ea864e569;cus=0xb6df4b03ac8957c50dc55aa44db55bac8e28268c51ad8f7148650749b5d0b954;cut0=1761724800;cut1=1761724810;cub0=29000000;cub1=29000005;cusig0=0x32dac36e060115ab6b0c8904fe92c8588affd0fec146186f68a61902a2f89d7f20c5392feeb2db341616f71eb82f6309fde0c8f6bdd9cd0237f21e43482551a81c;cusig1=0xfaeb40e95667f04e4e09fe927e6c73b5b32221ee7c69a6e8dab279af950a6fc27fac1d554458a73b32df4db8307345366f8e18a530335fa92d1ea7dc9e75740c1b;pbval=0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278;pbn=0xa81f48dd8790155f485518f51675243601f539a9ee6854446124e32dd1a62e11;pbs=0x82b8f32190208a87c42266c3ec0b8a2793f5c37cb57dbf7944bfe8073afd16e0;pbt0=1761724900;pbt1=1761724920;pbb0=29000050;pbb1=29000060;pbsig1=0x1ea630eebc9b12b4e4f19f6fb547d1e59d2968a9aed4b4701e0b64806935cc1d12d797c6216d82f4c2581a14f5d1bbb4a6edae98f6896a4264a6a81007c2dad01b",
+      "expected": {
+        "benchRecord": false,
+        "trustedzoneRecord": true
+      }
+    },
+    {
+      "name": "without-pbsig1",
+      "rule": "the request carries the other sixteen keys and not pbsig1",
+      "metadata4": "trustedzones=ecld-nodenithy-amoy,ecld-pynithy-amoy;ipfs=12D3KooWQYhTNQdmr3ArTeUHRYzFg94BKyTkoWBDWez9kSCVe2Xo;startrow=v1;cugflops=250;cuv=4;cuat=1761724810;cusig=306402300696d5835fffb8b950811294f210626e90d1b18c8b47f97fa64e4ef70e4ecd3334198eb09485b8c9d1ba50a3b829ac2e023054527a77efec630239a424aded6f3124ca98f506428efb797229848c8168d6a56f049bf9b8429ee35a5d32bd1a0c4770;cuheap=256M;cuworkers=4;pbgflops=118;pbcuv=4;pbsig=3066023100f7aca8d9f7e4c85ddb79b36f091bc109307ee32ca6afa5cdd31038ec1af3b82de42cddc720c53acf56763026b3a5dc8b023100963fff19b333eb74bb81b84ae9908927dd8edeeb311b0c6b0a97d1bbaec97111cf76b98909bd214109afe2edace86995;pbheap=3G;pbworkers=4;pbencmem=2;pbstorage=37;pbepc=1024",
+      "metadata3": "44.4268,26.1025;cuval=0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278;cun=0xf9324b49b24c8561481ef6b84ec6cbeabd1ccd691e3e55f109d1243ea864e569;cus=0xb6df4b03ac8957c50dc55aa44db55bac8e28268c51ad8f7148650749b5d0b954;cut0=1761724800;cut1=1761724810;cub0=29000000;cub1=29000005;cusig0=0x32dac36e060115ab6b0c8904fe92c8588affd0fec146186f68a61902a2f89d7f20c5392feeb2db341616f71eb82f6309fde0c8f6bdd9cd0237f21e43482551a81c;cusig1=0xfaeb40e95667f04e4e09fe927e6c73b5b32221ee7c69a6e8dab279af950a6fc27fac1d554458a73b32df4db8307345366f8e18a530335fa92d1ea7dc9e75740c1b;pbval=0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278;pbn=0xa81f48dd8790155f485518f51675243601f539a9ee6854446124e32dd1a62e11;pbs=0x82b8f32190208a87c42266c3ec0b8a2793f5c37cb57dbf7944bfe8073afd16e0;pbt0=1761724900;pbt1=1761724920;pbb0=29000050;pbb1=29000060;pbsig0=0xd560111fd34312678e5648c5f86e99229bf9d01dc6f7166bbe8f8f617cba2240773aa1e06b5f82f7ecfe7a2c7da61b1e48cfbacbc835caf48f7ba10f624b4dbf1b",
+      "expected": {
+        "benchRecord": false,
+        "trustedzoneRecord": true
+      }
+    },
+    {
+      "name": "pb-key-twice",
+      "rule": "pbepc written twice (a second, larger value after the first): a key of the pb family twice carries no bench record",
+      "metadata4": "trustedzones=ecld-nodenithy-amoy,ecld-pynithy-amoy;ipfs=12D3KooWQYhTNQdmr3ArTeUHRYzFg94BKyTkoWBDWez9kSCVe2Xo;startrow=v1;cugflops=250;cuv=4;cuat=1761724810;cusig=306402300696d5835fffb8b950811294f210626e90d1b18c8b47f97fa64e4ef70e4ecd3334198eb09485b8c9d1ba50a3b829ac2e023054527a77efec630239a424aded6f3124ca98f506428efb797229848c8168d6a56f049bf9b8429ee35a5d32bd1a0c4770;cuheap=256M;cuworkers=4;pbgflops=118;pbcuv=4;pbsig=3066023100f7aca8d9f7e4c85ddb79b36f091bc109307ee32ca6afa5cdd31038ec1af3b82de42cddc720c53acf56763026b3a5dc8b023100963fff19b333eb74bb81b84ae9908927dd8edeeb311b0c6b0a97d1bbaec97111cf76b98909bd214109afe2edace86995;pbheap=3G;pbworkers=4;pbencmem=2;pbstorage=37;pbepc=1024;pbepc=2048",
+      "metadata3": "44.4268,26.1025;cuval=0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278;cun=0xf9324b49b24c8561481ef6b84ec6cbeabd1ccd691e3e55f109d1243ea864e569;cus=0xb6df4b03ac8957c50dc55aa44db55bac8e28268c51ad8f7148650749b5d0b954;cut0=1761724800;cut1=1761724810;cub0=29000000;cub1=29000005;cusig0=0x32dac36e060115ab6b0c8904fe92c8588affd0fec146186f68a61902a2f89d7f20c5392feeb2db341616f71eb82f6309fde0c8f6bdd9cd0237f21e43482551a81c;cusig1=0xfaeb40e95667f04e4e09fe927e6c73b5b32221ee7c69a6e8dab279af950a6fc27fac1d554458a73b32df4db8307345366f8e18a530335fa92d1ea7dc9e75740c1b;pbval=0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278;pbn=0xa81f48dd8790155f485518f51675243601f539a9ee6854446124e32dd1a62e11;pbs=0x82b8f32190208a87c42266c3ec0b8a2793f5c37cb57dbf7944bfe8073afd16e0;pbt0=1761724900;pbt1=1761724920;pbb0=29000050;pbb1=29000060;pbsig0=0xd560111fd34312678e5648c5f86e99229bf9d01dc6f7166bbe8f8f617cba2240773aa1e06b5f82f7ecfe7a2c7da61b1e48cfbacbc835caf48f7ba10f624b4dbf1b;pbsig1=0x1ea630eebc9b12b4e4f19f6fb547d1e59d2968a9aed4b4701e0b64806935cc1d12d797c6216d82f4c2581a14f5d1bbb4a6edae98f6896a4264a6a81007c2dad01b",
+      "expected": {
+        "benchRecord": false,
+        "trustedzoneRecord": true
+      }
+    },
+    {
+      "name": "cu-key-twice",
+      "rule": "cugflops written twice: a key of the cu family twice carries no trustedzone record; the bench record stands, but a bench record proves nothing beside no trustedzone record (its share check reads cugflops)",
+      "metadata4": "trustedzones=ecld-nodenithy-amoy,ecld-pynithy-amoy;ipfs=12D3KooWQYhTNQdmr3ArTeUHRYzFg94BKyTkoWBDWez9kSCVe2Xo;startrow=v1;cugflops=250;cuv=4;cuat=1761724810;cusig=306402300696d5835fffb8b950811294f210626e90d1b18c8b47f97fa64e4ef70e4ecd3334198eb09485b8c9d1ba50a3b829ac2e023054527a77efec630239a424aded6f3124ca98f506428efb797229848c8168d6a56f049bf9b8429ee35a5d32bd1a0c4770;cuheap=256M;cuworkers=4;pbgflops=118;pbcuv=4;pbsig=3066023100f7aca8d9f7e4c85ddb79b36f091bc109307ee32ca6afa5cdd31038ec1af3b82de42cddc720c53acf56763026b3a5dc8b023100963fff19b333eb74bb81b84ae9908927dd8edeeb311b0c6b0a97d1bbaec97111cf76b98909bd214109afe2edace86995;pbheap=3G;pbworkers=4;pbencmem=2;pbstorage=37;pbepc=1024;cugflops=6400",
+      "metadata3": "44.4268,26.1025;cuval=0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278;cun=0xf9324b49b24c8561481ef6b84ec6cbeabd1ccd691e3e55f109d1243ea864e569;cus=0xb6df4b03ac8957c50dc55aa44db55bac8e28268c51ad8f7148650749b5d0b954;cut0=1761724800;cut1=1761724810;cub0=29000000;cub1=29000005;cusig0=0x32dac36e060115ab6b0c8904fe92c8588affd0fec146186f68a61902a2f89d7f20c5392feeb2db341616f71eb82f6309fde0c8f6bdd9cd0237f21e43482551a81c;cusig1=0xfaeb40e95667f04e4e09fe927e6c73b5b32221ee7c69a6e8dab279af950a6fc27fac1d554458a73b32df4db8307345366f8e18a530335fa92d1ea7dc9e75740c1b;pbval=0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278;pbn=0xa81f48dd8790155f485518f51675243601f539a9ee6854446124e32dd1a62e11;pbs=0x82b8f32190208a87c42266c3ec0b8a2793f5c37cb57dbf7944bfe8073afd16e0;pbt0=1761724900;pbt1=1761724920;pbb0=29000050;pbb1=29000060;pbsig0=0xd560111fd34312678e5648c5f86e99229bf9d01dc6f7166bbe8f8f617cba2240773aa1e06b5f82f7ecfe7a2c7da61b1e48cfbacbc835caf48f7ba10f624b4dbf1b;pbsig1=0x1ea630eebc9b12b4e4f19f6fb547d1e59d2968a9aed4b4701e0b64806935cc1d12d797c6216d82f4c2581a14f5d1bbb4a6edae98f6896a4264a6a81007c2dad01b",
+      "expected": {
+        "benchRecord": true,
+        "trustedzoneRecord": false
+      }
+    },
+    {
+      "name": "keys-order-free",
+      "rule": "the seventeen keys in another order, the pb keys of metadata4 before the cu keys: readers take keys order-free",
+      "metadata4": "trustedzones=ecld-nodenithy-amoy,ecld-pynithy-amoy;ipfs=12D3KooWQYhTNQdmr3ArTeUHRYzFg94BKyTkoWBDWez9kSCVe2Xo;startrow=v1;pbepc=1024;pbstorage=37;pbencmem=2;pbworkers=4;pbheap=3G;pbsig=3066023100f7aca8d9f7e4c85ddb79b36f091bc109307ee32ca6afa5cdd31038ec1af3b82de42cddc720c53acf56763026b3a5dc8b023100963fff19b333eb74bb81b84ae9908927dd8edeeb311b0c6b0a97d1bbaec97111cf76b98909bd214109afe2edace86995;pbcuv=4;pbgflops=118;cugflops=250;cuv=4;cuat=1761724810;cusig=306402300696d5835fffb8b950811294f210626e90d1b18c8b47f97fa64e4ef70e4ecd3334198eb09485b8c9d1ba50a3b829ac2e023054527a77efec630239a424aded6f3124ca98f506428efb797229848c8168d6a56f049bf9b8429ee35a5d32bd1a0c4770;cuheap=256M;cuworkers=4",
+      "metadata3": "44.4268,26.1025;pbsig1=0x1ea630eebc9b12b4e4f19f6fb547d1e59d2968a9aed4b4701e0b64806935cc1d12d797c6216d82f4c2581a14f5d1bbb4a6edae98f6896a4264a6a81007c2dad01b;pbsig0=0xd560111fd34312678e5648c5f86e99229bf9d01dc6f7166bbe8f8f617cba2240773aa1e06b5f82f7ecfe7a2c7da61b1e48cfbacbc835caf48f7ba10f624b4dbf1b;pbb1=29000060;pbb0=29000050;pbt1=1761724920;pbt0=1761724900;pbs=0x82b8f32190208a87c42266c3ec0b8a2793f5c37cb57dbf7944bfe8073afd16e0;pbn=0xa81f48dd8790155f485518f51675243601f539a9ee6854446124e32dd1a62e11;pbval=0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278;cuval=0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278;cun=0xf9324b49b24c8561481ef6b84ec6cbeabd1ccd691e3e55f109d1243ea864e569;cus=0xb6df4b03ac8957c50dc55aa44db55bac8e28268c51ad8f7148650749b5d0b954;cut0=1761724800;cut1=1761724810;cub0=29000000;cub1=29000005;cusig0=0x32dac36e060115ab6b0c8904fe92c8588affd0fec146186f68a61902a2f89d7f20c5392feeb2db341616f71eb82f6309fde0c8f6bdd9cd0237f21e43482551a81c;cusig1=0xfaeb40e95667f04e4e09fe927e6c73b5b32221ee7c69a6e8dab279af950a6fc27fac1d554458a73b32df4db8307345366f8e18a530335fa92d1ea7dc9e75740c1b",
+      "expected": {
+        "benchRecord": true,
+        "trustedzoneRecord": true
+      }
+    }
+  ],
+  "inputs": {
+    "bucketEnv": "the integration bucket's .env: ETNY_NODE_ADDRESS (the node, lower-case into the line), ETNY_STORAGE_FREE_BYTES (free bytes of the task filesystem, plain decimal at most 2^63 - 1), ETNY_EPC_MIB (the claim, plain decimal 1 to 2^31 - 1)",
+    "hostWritten": "the host writes all three; the node address is the only tie between the record and the node, and the members' time endpoint signs for any node and nonce"
+  },
+  "session": {
+    "values": [
+      "ECLD_PROBE_CHAIN_ID",
+      "ECLD_PROBE_POX",
+      "ECLD_PROBE_VALIDATOR_REGISTRY",
+      "ECLD_PROBE_RPC"
+    ],
+    "keyPath": "/private/ecld-probe/key.pem",
+    "perSize": "a SessionRegistry session per enclave size and network whose rules admit that size's non-EDMM probe measurement alone (OD17 A)"
+  },
+  "identity": {
+    "measurement": "ECImageRegistryV4 probeMrenclave(index, sizeGib) of a listed default release: the signed non-EDMM measurement of that size; a size-g measurement counts when probeMrenclave(i, g) equals it for some listed release i; the agent runs the probe of the newest release that lists its size",
+    "edmm": "the EDMM measurement of the same image is listed nowhere, admitted by no session and resolves to no key; the agent starts probes with EDMM off",
+    "imageLocation": "the probe image of each size is registered in ECImageRegistryV4's trustedzone table under a name per size with its compose (EDMM off, the memory limit); no member build's baked list of trustedzone names holds a probe name, so a probe name resolves to no record key",
+    "writer": "scripts/add-default-release.js lists a release with its executor and its non-EDMM probe measurements per size"
+  },
+  "platformBinding": {
+    "rule": "OD50 A: the member that admits a probe's CAS session records the DCAP quote's platform identity, and the node's trustedzone attestations must show the same identity; the field that carries it is not defined in this fixture",
+    "residual": "until it is built a bench record is tied to its node by ETNY_NODE_ADDRESS alone, a host input, and the time endpoint signs for any node: one platform of a large EPC can produce bench records for many node addresses, and no check in an order re-measures the EPC"
+  },
+  "benchChecks": {
+    "order": [
+      "keys",
+      "line",
+      "signature",
+      "node",
+      "statements",
+      "order",
+      "windowBound",
+      "expiry",
+      "region",
+      "share",
+      "floor",
+      "cuv"
+    ],
+    "rule": "a bench record is verified when, in this order: all seventeen pb keys are present and none twice (keys); the rebuilt line parses: tag etny-pb, version v1, fourteen fields, the readings grammar (line); pbsig verifies under the probe key of size pbencmem on the network, from the non-EDMM measurement, and under no trustedzone key (signature); node and PoX are the request's, which the rebuild bakes (node); pbsig0 and pbsig1 recover to a seated pbval over n0 = pbn and n1 = closeNonce(pbn, pbs, \"<pbgflops>|<pbcuv>|<readings>\") (statements); pbt1 >= pbt0 and pbb1 >= pbb0 (order); pbt1 - pbt0 at most the window bound of size pbencmem (windowBound); pbt1 within CU_TTL of the block timestamp (expiry); the claim leaves a region beside the allowance (region); the region's rate W / (pbt1 - pbt0) / 10^9, W the region run's fixed work below, at least shareMilli / 1000 x the cugflops of the request's verified trustedzone record (share) and at least the floor (floor); pbcuv at least CU_VERSION_MIN (cuv). No check reads the line's own GFLOPS, a figure of the enclave's clock, and 3.1's rate bound is not applied to it: the window holds the region's mapping, its touch and the reference run beside the strided run. A bench record that fails any check proves nothing: the offer is judged as one without a bench record (reasons 10 to 12 against 0); there is no reason of its own.",
+    "parameters": {
+      "shareMilli": 100,
+      "floorGflopsByIsa": {
+        "sse2": 7,
+        "avx2-fma": 7,
+        "avx512f": 7
+      },
+      "floorRule": "the bench line names no instruction set, so a reader applies the lowest floor of the table",
+      "windowBoundSeconds": {
+        "1": 80,
+        "2": 80,
+        "4": 80,
+        "8": 80,
+        "16": 80,
+        "32": 80,
+        "64": 80
+      },
+      "cuVersionMin": 4,
+      "cuTtlSeconds": 604800,
+      "expiry": "CU_TTL (ethernity-cas capability.rs CU_TTL_SECONDS, 7 days), the trustedzone record's: pbt1 at most CU_TTL from the block timestamp either way; each case is read at its readTime",
+      "status": "placeholders to be calibrated on bare metal (OD16). The rig (EPC-B, S27): a true region's rate from the attested window 22.9 to 26.2 GFLOPS on etnyvm11 (AVX-512, a trustedzone record of about 125) and 8.3 on etny003 (SSE2); paged regions 4.0 to 6.1 (etnyvm11) and 5.7 (etny003); true windows 21 to 67 s, paged 90 to 138 s."
+    },
+    "regionWork": {
+      "rule": "heapGib = ceil((encmem x 1024 + securelockHeapMib + trustedzoneHeapMib) / 1024); allowanceMib = epcAllowanceMib + versionArrayMibPerGib x heapGib; regionMib = epc - allowanceMib (no region below chunkMib); regionPages = regionMib x 2^20 / pageBytes; visits = max(epcPasses x regionPages, epcMinVisits); slices = max(1, min(epcSlices, floor(visits / regionPages))); rounds = ceil(visits / (slices x strideSegments x workers)); W = slices x rounds x workers x opsPerRound",
+      "constants": {
+        "sizesGib": [
+          1,
+          2,
+          4,
+          8,
+          16,
+          32,
+          64
+        ],
+        "trustedzoneHeapMib": 256,
+        "securelockHeapMib": 256,
+        "runtimeMib": 384,
+        "chunkMib": 1,
+        "pageBytes": 4096,
+        "strideSegments": 16,
+        "epcAllowanceMib": 16,
+        "versionArrayMibPerGib": 2,
+        "epcPasses": 2,
+        "epcMinVisits": 1048576,
+        "epcSlices": 8,
+        "opsPerRound": 8388608
+      },
+      "example": {
+        "heapGib": 3,
+        "allowanceMib": 22,
+        "regionMib": 1002,
+        "regionPages": 256512,
+        "visits": 1048576,
+        "slices": 4,
+        "rounds": 4096,
+        "work": "549755813888"
+      }
+    },
+    "cases": [
+      {
+        "name": "verified",
+        "rule": "the fixture's record: every check passes; the offer may state up to floor(1024 / 64) = 16 EPC units",
+        "cugflops": 250,
+        "readTime": 1761724980,
+        "line": "etny-pb|v1|80002:0xB8f46D2B943fFbe2A061Ae8be087ef5055AD96A3|0x470d8b388f4a0ae6bd512b74038c7e87957bb8fe|118|4|0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278|0xa81f48dd8790155f485518f51675243601f539a9ee6854446124e32dd1a62e11|0x82b8f32190208a87c42266c3ec0b8a2793f5c37cb57dbf7944bfe8073afd16e0|1761724900|1761724920|0xd560111fd34312678e5648c5f86e99229bf9d01dc6f7166bbe8f8f617cba2240773aa1e06b5f82f7ecfe7a2c7da61b1e48cfbacbc835caf48f7ba10f624b4dbf1b|0x1ea630eebc9b12b4e4f19f6fb547d1e59d2968a9aed4b4701e0b64806935cc1d12d797c6216d82f4c2581a14f5d1bbb4a6edae98f6896a4264a6a81007c2dad01b|heap=3G;workers=4;encmem=2;custorage=37;epc=1024",
+        "pbsig": "3065023014103c9887ae754def0c640ad58669473e94cfd9593d735b215e71620dd23c8c363a33cd19d3bdee9170806aeafa9c69023100ab08be8269439939ac3826223ae8abd46dafb8bbd5682dd9b21a745edfc4a6c66c9c6ce7e0561327f58b8935d2ce4f7e",
+        "keys": {
+          "pbgflops": "118",
+          "pbcuv": "4",
+          "pbsig": "3065023014103c9887ae754def0c640ad58669473e94cfd9593d735b215e71620dd23c8c363a33cd19d3bdee9170806aeafa9c69023100ab08be8269439939ac3826223ae8abd46dafb8bbd5682dd9b21a745edfc4a6c66c9c6ce7e0561327f58b8935d2ce4f7e",
+          "pbheap": "3G",
+          "pbworkers": "4",
+          "pbencmem": "2",
+          "pbstorage": "37",
+          "pbepc": "1024",
+          "pbval": "0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278",
+          "pbn": "0xa81f48dd8790155f485518f51675243601f539a9ee6854446124e32dd1a62e11",
+          "pbs": "0x82b8f32190208a87c42266c3ec0b8a2793f5c37cb57dbf7944bfe8073afd16e0",
+          "pbt0": "1761724900",
+          "pbt1": "1761724920",
+          "pbb0": "29000050",
+          "pbb1": "29000060",
+          "pbsig0": "0xd560111fd34312678e5648c5f86e99229bf9d01dc6f7166bbe8f8f617cba2240773aa1e06b5f82f7ecfe7a2c7da61b1e48cfbacbc835caf48f7ba10f624b4dbf1b",
+          "pbsig1": "0x1ea630eebc9b12b4e4f19f6fb547d1e59d2968a9aed4b4701e0b64806935cc1d12d797c6216d82f4c2581a14f5d1bbb4a6edae98f6896a4264a6a81007c2dad01b"
+        },
+        "regionWork": {
+          "heapGib": 3,
+          "allowanceMib": 22,
+          "regionMib": 1002,
+          "regionPages": 256512,
+          "visits": 1048576,
+          "slices": 4,
+          "rounds": 4096,
+          "work": "549755813888"
+        },
+        "expected": {
+          "verified": true
+        }
+      },
+      {
+        "name": "window-too-long-for-share",
+        "rule": "a window of 30 s: the region's rate from the attested window is 18 GFLOPS, below the share of 0.1 x 250",
+        "cugflops": 250,
+        "readTime": 1761724990,
+        "line": "etny-pb|v1|80002:0xB8f46D2B943fFbe2A061Ae8be087ef5055AD96A3|0x470d8b388f4a0ae6bd512b74038c7e87957bb8fe|118|4|0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278|0xa81f48dd8790155f485518f51675243601f539a9ee6854446124e32dd1a62e11|0x82b8f32190208a87c42266c3ec0b8a2793f5c37cb57dbf7944bfe8073afd16e0|1761724900|1761724930|0xd560111fd34312678e5648c5f86e99229bf9d01dc6f7166bbe8f8f617cba2240773aa1e06b5f82f7ecfe7a2c7da61b1e48cfbacbc835caf48f7ba10f624b4dbf1b|0x8cf47dd3cacd5703d8407f7b9c3a40a947c5390604d3981c01b924751dc9b7ab7c1630fe6efe3f53af8fb221d8e7cecb8a8638317afd7c9ef351b523d5b8784d1c|heap=3G;workers=4;encmem=2;custorage=37;epc=1024",
+        "pbsig": "306402303969e8710c18c7b18d90b1c4d98cc6c18d55dc584d9a101966ab7649ffbcac630a4bd7306a4d45a5f9d170e25985f0e702300fc8f53f4f5c2a7032ce634aa74bcf0a7aafde4b7f69c47f7dffe716a23c28fad804c360d8edcff98c6c6de1f5a67fac",
+        "keys": {
+          "pbgflops": "118",
+          "pbcuv": "4",
+          "pbsig": "306402303969e8710c18c7b18d90b1c4d98cc6c18d55dc584d9a101966ab7649ffbcac630a4bd7306a4d45a5f9d170e25985f0e702300fc8f53f4f5c2a7032ce634aa74bcf0a7aafde4b7f69c47f7dffe716a23c28fad804c360d8edcff98c6c6de1f5a67fac",
+          "pbheap": "3G",
+          "pbworkers": "4",
+          "pbencmem": "2",
+          "pbstorage": "37",
+          "pbepc": "1024",
+          "pbval": "0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278",
+          "pbn": "0xa81f48dd8790155f485518f51675243601f539a9ee6854446124e32dd1a62e11",
+          "pbs": "0x82b8f32190208a87c42266c3ec0b8a2793f5c37cb57dbf7944bfe8073afd16e0",
+          "pbt0": "1761724900",
+          "pbt1": "1761724930",
+          "pbb0": "29000050",
+          "pbb1": "29000065",
+          "pbsig0": "0xd560111fd34312678e5648c5f86e99229bf9d01dc6f7166bbe8f8f617cba2240773aa1e06b5f82f7ecfe7a2c7da61b1e48cfbacbc835caf48f7ba10f624b4dbf1b",
+          "pbsig1": "0x8cf47dd3cacd5703d8407f7b9c3a40a947c5390604d3981c01b924751dc9b7ab7c1630fe6efe3f53af8fb221d8e7cecb8a8638317afd7c9ef351b523d5b8784d1c"
+        },
+        "regionWork": {
+          "heapGib": 3,
+          "allowanceMib": 22,
+          "regionMib": 1002,
+          "regionPages": 256512,
+          "visits": 1048576,
+          "slices": 4,
+          "rounds": 4096,
+          "work": "549755813888"
+        },
+        "expected": {
+          "verified": false,
+          "failedCheck": "share"
+        }
+      },
+      {
+        "name": "below-floor",
+        "rule": "a trustedzone record of 50 GFLOPS (the share 5) and a window of 80 s: the rate 6.9 GFLOPS is below the floor of 7",
+        "cugflops": 50,
+        "readTime": 1761725040,
+        "line": "etny-pb|v1|80002:0xB8f46D2B943fFbe2A061Ae8be087ef5055AD96A3|0x470d8b388f4a0ae6bd512b74038c7e87957bb8fe|118|4|0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278|0xa81f48dd8790155f485518f51675243601f539a9ee6854446124e32dd1a62e11|0x82b8f32190208a87c42266c3ec0b8a2793f5c37cb57dbf7944bfe8073afd16e0|1761724900|1761724980|0xd560111fd34312678e5648c5f86e99229bf9d01dc6f7166bbe8f8f617cba2240773aa1e06b5f82f7ecfe7a2c7da61b1e48cfbacbc835caf48f7ba10f624b4dbf1b|0x931403e4d8edc97f373f56096cdac19d556750305c472c17a845c3448070bc0b204b6be1232210ade1342dc840c4b407be018c75461caa851021bb7c8e2ef3671b|heap=3G;workers=4;encmem=2;custorage=37;epc=1024",
+        "pbsig": "306402304b8520375814cf5d56bbe2bdda13df8b1c17e36375ddcf482f88e1d9a0e0f56f5ed2d7303ec31f98c72a988ee6d9d32802302440fa89f4420651110b385c06cf246f8017e231f64691e9916019c2e7f9e48c8a9740922dbdec9e2bad352e2df86c2d",
+        "keys": {
+          "pbgflops": "118",
+          "pbcuv": "4",
+          "pbsig": "306402304b8520375814cf5d56bbe2bdda13df8b1c17e36375ddcf482f88e1d9a0e0f56f5ed2d7303ec31f98c72a988ee6d9d32802302440fa89f4420651110b385c06cf246f8017e231f64691e9916019c2e7f9e48c8a9740922dbdec9e2bad352e2df86c2d",
+          "pbheap": "3G",
+          "pbworkers": "4",
+          "pbencmem": "2",
+          "pbstorage": "37",
+          "pbepc": "1024",
+          "pbval": "0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278",
+          "pbn": "0xa81f48dd8790155f485518f51675243601f539a9ee6854446124e32dd1a62e11",
+          "pbs": "0x82b8f32190208a87c42266c3ec0b8a2793f5c37cb57dbf7944bfe8073afd16e0",
+          "pbt0": "1761724900",
+          "pbt1": "1761724980",
+          "pbb0": "29000050",
+          "pbb1": "29000090",
+          "pbsig0": "0xd560111fd34312678e5648c5f86e99229bf9d01dc6f7166bbe8f8f617cba2240773aa1e06b5f82f7ecfe7a2c7da61b1e48cfbacbc835caf48f7ba10f624b4dbf1b",
+          "pbsig1": "0x931403e4d8edc97f373f56096cdac19d556750305c472c17a845c3448070bc0b204b6be1232210ade1342dc840c4b407be018c75461caa851021bb7c8e2ef3671b"
+        },
+        "regionWork": {
+          "heapGib": 3,
+          "allowanceMib": 22,
+          "regionMib": 1002,
+          "regionPages": 256512,
+          "visits": 1048576,
+          "slices": 4,
+          "rounds": 4096,
+          "work": "549755813888"
+        },
+        "expected": {
+          "verified": false,
+          "failedCheck": "floor"
+        }
+      },
+      {
+        "name": "window-above-bound",
+        "rule": "a window of 81 s, above the bound of 80 s for 2 GiB (the rate 6.8 GFLOPS above the share of 0.1 x 50)",
+        "cugflops": 50,
+        "readTime": 1761725041,
+        "line": "etny-pb|v1|80002:0xB8f46D2B943fFbe2A061Ae8be087ef5055AD96A3|0x470d8b388f4a0ae6bd512b74038c7e87957bb8fe|118|4|0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278|0xa81f48dd8790155f485518f51675243601f539a9ee6854446124e32dd1a62e11|0x82b8f32190208a87c42266c3ec0b8a2793f5c37cb57dbf7944bfe8073afd16e0|1761724900|1761724981|0xd560111fd34312678e5648c5f86e99229bf9d01dc6f7166bbe8f8f617cba2240773aa1e06b5f82f7ecfe7a2c7da61b1e48cfbacbc835caf48f7ba10f624b4dbf1b|0x03ef3a7808d6908465ee7ed23333a18b9411d38f62155e4f7938c00154fbdf78012094b89eae792cb8276df42ee62cceb0fdf17fa3336d31ded1208aaf59f3bc1b|heap=3G;workers=4;encmem=2;custorage=37;epc=1024",
+        "pbsig": "30660231009be5f1dc2831309340c7550972d4d83858799e81bd2821708140961a3a9db67ca89f5c58cd4af139e996a1ac03a5abe8023100b776aa8874f122f1d6f720d8c08a6e09ba11843b0103eeae2d20621437fe46163c15d0b706e0572075fbecfcd3178622",
+        "keys": {
+          "pbgflops": "118",
+          "pbcuv": "4",
+          "pbsig": "30660231009be5f1dc2831309340c7550972d4d83858799e81bd2821708140961a3a9db67ca89f5c58cd4af139e996a1ac03a5abe8023100b776aa8874f122f1d6f720d8c08a6e09ba11843b0103eeae2d20621437fe46163c15d0b706e0572075fbecfcd3178622",
+          "pbheap": "3G",
+          "pbworkers": "4",
+          "pbencmem": "2",
+          "pbstorage": "37",
+          "pbepc": "1024",
+          "pbval": "0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278",
+          "pbn": "0xa81f48dd8790155f485518f51675243601f539a9ee6854446124e32dd1a62e11",
+          "pbs": "0x82b8f32190208a87c42266c3ec0b8a2793f5c37cb57dbf7944bfe8073afd16e0",
+          "pbt0": "1761724900",
+          "pbt1": "1761724981",
+          "pbb0": "29000050",
+          "pbb1": "29000091",
+          "pbsig0": "0xd560111fd34312678e5648c5f86e99229bf9d01dc6f7166bbe8f8f617cba2240773aa1e06b5f82f7ecfe7a2c7da61b1e48cfbacbc835caf48f7ba10f624b4dbf1b",
+          "pbsig1": "0x03ef3a7808d6908465ee7ed23333a18b9411d38f62155e4f7938c00154fbdf78012094b89eae792cb8276df42ee62cceb0fdf17fa3336d31ded1208aaf59f3bc1b"
+        },
+        "regionWork": {
+          "heapGib": 3,
+          "allowanceMib": 22,
+          "regionMib": 1002,
+          "regionPages": 256512,
+          "visits": 1048576,
+          "slices": 4,
+          "rounds": 4096,
+          "work": "549755813888"
+        },
+        "expected": {
+          "verified": false,
+          "failedCheck": "windowBound"
+        }
+      },
+      {
+        "name": "edmm-key",
+        "rule": "signed by the key a session of the probe's EDMM measurement would give: it verifies under no listed probe key of size 2",
+        "cugflops": 250,
+        "readTime": 1761724980,
+        "line": "etny-pb|v1|80002:0xB8f46D2B943fFbe2A061Ae8be087ef5055AD96A3|0x470d8b388f4a0ae6bd512b74038c7e87957bb8fe|118|4|0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278|0xa81f48dd8790155f485518f51675243601f539a9ee6854446124e32dd1a62e11|0x82b8f32190208a87c42266c3ec0b8a2793f5c37cb57dbf7944bfe8073afd16e0|1761724900|1761724920|0xd560111fd34312678e5648c5f86e99229bf9d01dc6f7166bbe8f8f617cba2240773aa1e06b5f82f7ecfe7a2c7da61b1e48cfbacbc835caf48f7ba10f624b4dbf1b|0x1ea630eebc9b12b4e4f19f6fb547d1e59d2968a9aed4b4701e0b64806935cc1d12d797c6216d82f4c2581a14f5d1bbb4a6edae98f6896a4264a6a81007c2dad01b|heap=3G;workers=4;encmem=2;custorage=37;epc=1024",
+        "pbsig": "3064023044b1f895515a5f43346be35d38672a4ba63e0857512a9a4417e1fe4a8c34ee35e87a31a57da95b70816f42ce823d05a50230674cb034312bc2c5456d008db4d227ae255968de4e79fae92fe5cab8ddd77a37fd9b7de476763e3ac697ac0f1a3b0794",
+        "keys": {
+          "pbgflops": "118",
+          "pbcuv": "4",
+          "pbsig": "3064023044b1f895515a5f43346be35d38672a4ba63e0857512a9a4417e1fe4a8c34ee35e87a31a57da95b70816f42ce823d05a50230674cb034312bc2c5456d008db4d227ae255968de4e79fae92fe5cab8ddd77a37fd9b7de476763e3ac697ac0f1a3b0794",
+          "pbheap": "3G",
+          "pbworkers": "4",
+          "pbencmem": "2",
+          "pbstorage": "37",
+          "pbepc": "1024",
+          "pbval": "0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278",
+          "pbn": "0xa81f48dd8790155f485518f51675243601f539a9ee6854446124e32dd1a62e11",
+          "pbs": "0x82b8f32190208a87c42266c3ec0b8a2793f5c37cb57dbf7944bfe8073afd16e0",
+          "pbt0": "1761724900",
+          "pbt1": "1761724920",
+          "pbb0": "29000050",
+          "pbb1": "29000060",
+          "pbsig0": "0xd560111fd34312678e5648c5f86e99229bf9d01dc6f7166bbe8f8f617cba2240773aa1e06b5f82f7ecfe7a2c7da61b1e48cfbacbc835caf48f7ba10f624b4dbf1b",
+          "pbsig1": "0x1ea630eebc9b12b4e4f19f6fb547d1e59d2968a9aed4b4701e0b64806935cc1d12d797c6216d82f4c2581a14f5d1bbb4a6edae98f6896a4264a6a81007c2dad01b"
+        },
+        "regionWork": {
+          "heapGib": 3,
+          "allowanceMib": 22,
+          "regionMib": 1002,
+          "regionPages": 256512,
+          "visits": 1048576,
+          "slices": 4,
+          "rounds": 4096,
+          "work": "549755813888"
+        },
+        "expected": {
+          "verified": false,
+          "failedCheck": "signature"
+        }
+      },
+      {
+        "name": "trustedzone-key",
+        "rule": "signed by a trustedzone key: a bench line verifies under the probe key alone",
+        "cugflops": 250,
+        "readTime": 1761724980,
+        "line": "etny-pb|v1|80002:0xB8f46D2B943fFbe2A061Ae8be087ef5055AD96A3|0x470d8b388f4a0ae6bd512b74038c7e87957bb8fe|118|4|0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278|0xa81f48dd8790155f485518f51675243601f539a9ee6854446124e32dd1a62e11|0x82b8f32190208a87c42266c3ec0b8a2793f5c37cb57dbf7944bfe8073afd16e0|1761724900|1761724920|0xd560111fd34312678e5648c5f86e99229bf9d01dc6f7166bbe8f8f617cba2240773aa1e06b5f82f7ecfe7a2c7da61b1e48cfbacbc835caf48f7ba10f624b4dbf1b|0x1ea630eebc9b12b4e4f19f6fb547d1e59d2968a9aed4b4701e0b64806935cc1d12d797c6216d82f4c2581a14f5d1bbb4a6edae98f6896a4264a6a81007c2dad01b|heap=3G;workers=4;encmem=2;custorage=37;epc=1024",
+        "pbsig": "3065023100c8839ef8008d3a88a31f7b4ac5e7b34c8c79dc1664c974e4afcefae5f0268dfe39ddb80625b391662401a44d7cf8322f02305e1226d72d0ff53c495411e42328b95e1e196a29a7469a5aa81d6fae9a0005fcaf3eef89aac13f175d0f681529efd394",
+        "keys": {
+          "pbgflops": "118",
+          "pbcuv": "4",
+          "pbsig": "3065023100c8839ef8008d3a88a31f7b4ac5e7b34c8c79dc1664c974e4afcefae5f0268dfe39ddb80625b391662401a44d7cf8322f02305e1226d72d0ff53c495411e42328b95e1e196a29a7469a5aa81d6fae9a0005fcaf3eef89aac13f175d0f681529efd394",
+          "pbheap": "3G",
+          "pbworkers": "4",
+          "pbencmem": "2",
+          "pbstorage": "37",
+          "pbepc": "1024",
+          "pbval": "0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278",
+          "pbn": "0xa81f48dd8790155f485518f51675243601f539a9ee6854446124e32dd1a62e11",
+          "pbs": "0x82b8f32190208a87c42266c3ec0b8a2793f5c37cb57dbf7944bfe8073afd16e0",
+          "pbt0": "1761724900",
+          "pbt1": "1761724920",
+          "pbb0": "29000050",
+          "pbb1": "29000060",
+          "pbsig0": "0xd560111fd34312678e5648c5f86e99229bf9d01dc6f7166bbe8f8f617cba2240773aa1e06b5f82f7ecfe7a2c7da61b1e48cfbacbc835caf48f7ba10f624b4dbf1b",
+          "pbsig1": "0x1ea630eebc9b12b4e4f19f6fb547d1e59d2968a9aed4b4701e0b64806935cc1d12d797c6216d82f4c2581a14f5d1bbb4a6edae98f6896a4264a6a81007c2dad01b"
+        },
+        "regionWork": {
+          "heapGib": 3,
+          "allowanceMib": 22,
+          "regionMib": 1002,
+          "regionPages": 256512,
+          "visits": 1048576,
+          "slices": 4,
+          "rounds": 4096,
+          "work": "549755813888"
+        },
+        "expected": {
+          "verified": false,
+          "failedCheck": "signature"
+        }
+      },
+      {
+        "name": "close-over-n0",
+        "rule": "the closing statement over n0",
+        "cugflops": 250,
+        "readTime": 1761724980,
+        "line": "etny-pb|v1|80002:0xB8f46D2B943fFbe2A061Ae8be087ef5055AD96A3|0x470d8b388f4a0ae6bd512b74038c7e87957bb8fe|118|4|0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278|0xa81f48dd8790155f485518f51675243601f539a9ee6854446124e32dd1a62e11|0x82b8f32190208a87c42266c3ec0b8a2793f5c37cb57dbf7944bfe8073afd16e0|1761724900|1761724920|0xd560111fd34312678e5648c5f86e99229bf9d01dc6f7166bbe8f8f617cba2240773aa1e06b5f82f7ecfe7a2c7da61b1e48cfbacbc835caf48f7ba10f624b4dbf1b|0x8076fe42ad4460341849873563778726dbeeeacca209820f1da0198eb4a0c89c468dfd22ed9b5d0a1a23445aca90e7fd0f9eef3e8824083c1e1949e52bb94e9c1b|heap=3G;workers=4;encmem=2;custorage=37;epc=1024",
+        "pbsig": "306502301dcb7dbaedd2e7c6c137c9a597d3b3c50f604ec59cfba508a470ce1ef0477c78681c2312f310b34c8698f2e42151baab023100833ecd713dbc4c4e2e83765984d1e8212335f8ddc3436fc90ba34b95fde9862609c4c22ca69c506b5aa85d2599032eda",
+        "keys": {
+          "pbgflops": "118",
+          "pbcuv": "4",
+          "pbsig": "306502301dcb7dbaedd2e7c6c137c9a597d3b3c50f604ec59cfba508a470ce1ef0477c78681c2312f310b34c8698f2e42151baab023100833ecd713dbc4c4e2e83765984d1e8212335f8ddc3436fc90ba34b95fde9862609c4c22ca69c506b5aa85d2599032eda",
+          "pbheap": "3G",
+          "pbworkers": "4",
+          "pbencmem": "2",
+          "pbstorage": "37",
+          "pbepc": "1024",
+          "pbval": "0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278",
+          "pbn": "0xa81f48dd8790155f485518f51675243601f539a9ee6854446124e32dd1a62e11",
+          "pbs": "0x82b8f32190208a87c42266c3ec0b8a2793f5c37cb57dbf7944bfe8073afd16e0",
+          "pbt0": "1761724900",
+          "pbt1": "1761724920",
+          "pbb0": "29000050",
+          "pbb1": "29000060",
+          "pbsig0": "0xd560111fd34312678e5648c5f86e99229bf9d01dc6f7166bbe8f8f617cba2240773aa1e06b5f82f7ecfe7a2c7da61b1e48cfbacbc835caf48f7ba10f624b4dbf1b",
+          "pbsig1": "0x8076fe42ad4460341849873563778726dbeeeacca209820f1da0198eb4a0c89c468dfd22ed9b5d0a1a23445aca90e7fd0f9eef3e8824083c1e1949e52bb94e9c1b"
+        },
+        "regionWork": {
+          "heapGib": 3,
+          "allowanceMib": 22,
+          "regionMib": 1002,
+          "regionPages": 256512,
+          "visits": 1048576,
+          "slices": 4,
+          "rounds": 4096,
+          "work": "549755813888"
+        },
+        "expected": {
+          "verified": false,
+          "failedCheck": "statements"
+        }
+      },
+      {
+        "name": "t1-before-t0",
+        "rule": "t1 below t0",
+        "cugflops": 250,
+        "readTime": 1761724980,
+        "line": "etny-pb|v1|80002:0xB8f46D2B943fFbe2A061Ae8be087ef5055AD96A3|0x470d8b388f4a0ae6bd512b74038c7e87957bb8fe|118|4|0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278|0xa81f48dd8790155f485518f51675243601f539a9ee6854446124e32dd1a62e11|0x82b8f32190208a87c42266c3ec0b8a2793f5c37cb57dbf7944bfe8073afd16e0|1761724920|1761724900|0xda76c487b49780965ea566d6fa4cfb290a1b73a96d7b3603638431d38033a88039646a151eac5f866808bda72f4aaa244f45a90ba6fc88abb654e508706fddb01c|0x59c173c0b7991d63402d988cfb18d4fb01853e9c45a4e710a3c908f14f5d5daf4fcccc2eaad446f2c0453bd584fa9fe31d886eb16b34b85f37d4b657d2972ba41b|heap=3G;workers=4;encmem=2;custorage=37;epc=1024",
+        "pbsig": "306502304295861caa282920af6cb952b8173ea69b1223a12bdc4c0771980617b5e288e6307cc06b42c3dbb9acc8639577d9d9660231009defe1d5dafcacf01b820f047d088397cb4703e2dc193026ded3faf8fb6e4b6b77ca2a380d5052de90b14de48cf7ab78",
+        "keys": {
+          "pbgflops": "118",
+          "pbcuv": "4",
+          "pbsig": "306502304295861caa282920af6cb952b8173ea69b1223a12bdc4c0771980617b5e288e6307cc06b42c3dbb9acc8639577d9d9660231009defe1d5dafcacf01b820f047d088397cb4703e2dc193026ded3faf8fb6e4b6b77ca2a380d5052de90b14de48cf7ab78",
+          "pbheap": "3G",
+          "pbworkers": "4",
+          "pbencmem": "2",
+          "pbstorage": "37",
+          "pbepc": "1024",
+          "pbval": "0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278",
+          "pbn": "0xa81f48dd8790155f485518f51675243601f539a9ee6854446124e32dd1a62e11",
+          "pbs": "0x82b8f32190208a87c42266c3ec0b8a2793f5c37cb57dbf7944bfe8073afd16e0",
+          "pbt0": "1761724920",
+          "pbt1": "1761724900",
+          "pbb0": "29000050",
+          "pbb1": "29000060",
+          "pbsig0": "0xda76c487b49780965ea566d6fa4cfb290a1b73a96d7b3603638431d38033a88039646a151eac5f866808bda72f4aaa244f45a90ba6fc88abb654e508706fddb01c",
+          "pbsig1": "0x59c173c0b7991d63402d988cfb18d4fb01853e9c45a4e710a3c908f14f5d5daf4fcccc2eaad446f2c0453bd584fa9fe31d886eb16b34b85f37d4b657d2972ba41b"
+        },
+        "regionWork": {
+          "heapGib": 3,
+          "allowanceMib": 22,
+          "regionMib": 1002,
+          "regionPages": 256512,
+          "visits": 1048576,
+          "slices": 4,
+          "rounds": 4096,
+          "work": "549755813888"
+        },
+        "expected": {
+          "verified": false,
+          "failedCheck": "order"
+        }
+      },
+      {
+        "name": "block1-before-block0",
+        "rule": "block1 below block0",
+        "cugflops": 250,
+        "readTime": 1761724980,
+        "line": "etny-pb|v1|80002:0xB8f46D2B943fFbe2A061Ae8be087ef5055AD96A3|0x470d8b388f4a0ae6bd512b74038c7e87957bb8fe|118|4|0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278|0xa81f48dd8790155f485518f51675243601f539a9ee6854446124e32dd1a62e11|0x82b8f32190208a87c42266c3ec0b8a2793f5c37cb57dbf7944bfe8073afd16e0|1761724900|1761724920|0x031ac24241282f3ffa663b2e1fed5f32a6d6e0bb0fe8e74d7814a05b5b196e565db99b42d10a2aa89a6d9e2aa160caace7a54ec9445a91186d4b90f153c078651b|0xc8a7c104d044d2549a0a315e19939b058c99a9ee5f92af43d4342931d5721e740e89bb0453ec981d87c4f74eedc5dfc0eaf97afe073ccb462c204118fc96d54e1b|heap=3G;workers=4;encmem=2;custorage=37;epc=1024",
+        "pbsig": "306202301170c077343a3caefa2e8dff72c04e2c0c4b57f095950be488922faed0a50fdc2a2b91a0d52ea3dfa9603c9a0a16e56e022e6bca24d3709b160924ada5d5b996f606b550b8d0b81d1e00365c1683a76a834d1cf816163a4e92a37b063430d522",
+        "keys": {
+          "pbgflops": "118",
+          "pbcuv": "4",
+          "pbsig": "306202301170c077343a3caefa2e8dff72c04e2c0c4b57f095950be488922faed0a50fdc2a2b91a0d52ea3dfa9603c9a0a16e56e022e6bca24d3709b160924ada5d5b996f606b550b8d0b81d1e00365c1683a76a834d1cf816163a4e92a37b063430d522",
+          "pbheap": "3G",
+          "pbworkers": "4",
+          "pbencmem": "2",
+          "pbstorage": "37",
+          "pbepc": "1024",
+          "pbval": "0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278",
+          "pbn": "0xa81f48dd8790155f485518f51675243601f539a9ee6854446124e32dd1a62e11",
+          "pbs": "0x82b8f32190208a87c42266c3ec0b8a2793f5c37cb57dbf7944bfe8073afd16e0",
+          "pbt0": "1761724900",
+          "pbt1": "1761724920",
+          "pbb0": "29000060",
+          "pbb1": "29000050",
+          "pbsig0": "0x031ac24241282f3ffa663b2e1fed5f32a6d6e0bb0fe8e74d7814a05b5b196e565db99b42d10a2aa89a6d9e2aa160caace7a54ec9445a91186d4b90f153c078651b",
+          "pbsig1": "0xc8a7c104d044d2549a0a315e19939b058c99a9ee5f92af43d4342931d5721e740e89bb0453ec981d87c4f74eedc5dfc0eaf97afe073ccb462c204118fc96d54e1b"
+        },
+        "regionWork": {
+          "heapGib": 3,
+          "allowanceMib": 22,
+          "regionMib": 1002,
+          "regionPages": 256512,
+          "visits": 1048576,
+          "slices": 4,
+          "rounds": 4096,
+          "work": "549755813888"
+        },
+        "expected": {
+          "verified": false,
+          "failedCheck": "order"
+        }
+      },
+      {
+        "name": "expired",
+        "rule": "read 7 days and 1 second after pbt1, past CU_TTL",
+        "cugflops": 250,
+        "readTime": 1762329721,
+        "line": "etny-pb|v1|80002:0xB8f46D2B943fFbe2A061Ae8be087ef5055AD96A3|0x470d8b388f4a0ae6bd512b74038c7e87957bb8fe|118|4|0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278|0xa81f48dd8790155f485518f51675243601f539a9ee6854446124e32dd1a62e11|0x82b8f32190208a87c42266c3ec0b8a2793f5c37cb57dbf7944bfe8073afd16e0|1761724900|1761724920|0xd560111fd34312678e5648c5f86e99229bf9d01dc6f7166bbe8f8f617cba2240773aa1e06b5f82f7ecfe7a2c7da61b1e48cfbacbc835caf48f7ba10f624b4dbf1b|0x1ea630eebc9b12b4e4f19f6fb547d1e59d2968a9aed4b4701e0b64806935cc1d12d797c6216d82f4c2581a14f5d1bbb4a6edae98f6896a4264a6a81007c2dad01b|heap=3G;workers=4;encmem=2;custorage=37;epc=1024",
+        "pbsig": "3066023100b5b0fea6da50243564291c91a1a30663dbf26369fc2da1063374504558d383661b8e0f533a341d447bf63b30e1f0935b023100d374329b7c44c061579cfe0f172a70c1ce7cd84bb2b6960f6afc03a70e7ff75c60af361a2ef1594ea801f26d8794d306",
+        "keys": {
+          "pbgflops": "118",
+          "pbcuv": "4",
+          "pbsig": "3066023100b5b0fea6da50243564291c91a1a30663dbf26369fc2da1063374504558d383661b8e0f533a341d447bf63b30e1f0935b023100d374329b7c44c061579cfe0f172a70c1ce7cd84bb2b6960f6afc03a70e7ff75c60af361a2ef1594ea801f26d8794d306",
+          "pbheap": "3G",
+          "pbworkers": "4",
+          "pbencmem": "2",
+          "pbstorage": "37",
+          "pbepc": "1024",
+          "pbval": "0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278",
+          "pbn": "0xa81f48dd8790155f485518f51675243601f539a9ee6854446124e32dd1a62e11",
+          "pbs": "0x82b8f32190208a87c42266c3ec0b8a2793f5c37cb57dbf7944bfe8073afd16e0",
+          "pbt0": "1761724900",
+          "pbt1": "1761724920",
+          "pbb0": "29000050",
+          "pbb1": "29000060",
+          "pbsig0": "0xd560111fd34312678e5648c5f86e99229bf9d01dc6f7166bbe8f8f617cba2240773aa1e06b5f82f7ecfe7a2c7da61b1e48cfbacbc835caf48f7ba10f624b4dbf1b",
+          "pbsig1": "0x1ea630eebc9b12b4e4f19f6fb547d1e59d2968a9aed4b4701e0b64806935cc1d12d797c6216d82f4c2581a14f5d1bbb4a6edae98f6896a4264a6a81007c2dad01b"
+        },
+        "regionWork": {
+          "heapGib": 3,
+          "allowanceMib": 22,
+          "regionMib": 1002,
+          "regionPages": 256512,
+          "visits": 1048576,
+          "slices": 4,
+          "rounds": 4096,
+          "work": "549755813888"
+        },
+        "expected": {
+          "verified": false,
+          "failedCheck": "expiry"
+        }
+      },
+      {
+        "name": "cuv-below-minimum",
+        "rule": "pbcuv 3, below CU_VERSION_MIN",
+        "cugflops": 250,
+        "readTime": 1761724980,
+        "line": "etny-pb|v1|80002:0xB8f46D2B943fFbe2A061Ae8be087ef5055AD96A3|0x470d8b388f4a0ae6bd512b74038c7e87957bb8fe|118|3|0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278|0xa81f48dd8790155f485518f51675243601f539a9ee6854446124e32dd1a62e11|0x82b8f32190208a87c42266c3ec0b8a2793f5c37cb57dbf7944bfe8073afd16e0|1761724900|1761724920|0xd560111fd34312678e5648c5f86e99229bf9d01dc6f7166bbe8f8f617cba2240773aa1e06b5f82f7ecfe7a2c7da61b1e48cfbacbc835caf48f7ba10f624b4dbf1b|0xa228a363345e760c037aa3d6a73a810320e7e1610babc031445738a4027380e54ebe3a25c105bfa13867364e10c5c011e316902eb5bc33b6a609a478122194bc1c|heap=3G;workers=4;encmem=2;custorage=37;epc=1024",
+        "pbsig": "3064023075e9951090ce2b8b1cb54a325a6000fc1a98549f080c4d53aef9a601e23a6abc3f35176d7d37151183ea4aef8ac19718023030acb422cb3d41db22b23280900006dd565b07b81d93e146c0dabd0e9a26f3982370db21159156aac585a8006b7514d8",
+        "keys": {
+          "pbgflops": "118",
+          "pbcuv": "3",
+          "pbsig": "3064023075e9951090ce2b8b1cb54a325a6000fc1a98549f080c4d53aef9a601e23a6abc3f35176d7d37151183ea4aef8ac19718023030acb422cb3d41db22b23280900006dd565b07b81d93e146c0dabd0e9a26f3982370db21159156aac585a8006b7514d8",
+          "pbheap": "3G",
+          "pbworkers": "4",
+          "pbencmem": "2",
+          "pbstorage": "37",
+          "pbepc": "1024",
+          "pbval": "0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278",
+          "pbn": "0xa81f48dd8790155f485518f51675243601f539a9ee6854446124e32dd1a62e11",
+          "pbs": "0x82b8f32190208a87c42266c3ec0b8a2793f5c37cb57dbf7944bfe8073afd16e0",
+          "pbt0": "1761724900",
+          "pbt1": "1761724920",
+          "pbb0": "29000050",
+          "pbb1": "29000060",
+          "pbsig0": "0xd560111fd34312678e5648c5f86e99229bf9d01dc6f7166bbe8f8f617cba2240773aa1e06b5f82f7ecfe7a2c7da61b1e48cfbacbc835caf48f7ba10f624b4dbf1b",
+          "pbsig1": "0xa228a363345e760c037aa3d6a73a810320e7e1610babc031445738a4027380e54ebe3a25c105bfa13867364e10c5c011e316902eb5bc33b6a609a478122194bc1c"
+        },
+        "regionWork": {
+          "heapGib": 3,
+          "allowanceMib": 22,
+          "regionMib": 1002,
+          "regionPages": 256512,
+          "visits": 1048576,
+          "slices": 4,
+          "rounds": 4096,
+          "work": "549755813888"
+        },
+        "expected": {
+          "verified": false,
+          "failedCheck": "cuv"
+        }
+      },
+      {
+        "name": "no-region",
+        "rule": "an EPC claim of 22 MiB, which leaves no region beside the 22 MiB allowance of 2 GiB: no region work",
+        "cugflops": 250,
+        "readTime": 1761724980,
+        "line": "etny-pb|v1|80002:0xB8f46D2B943fFbe2A061Ae8be087ef5055AD96A3|0x470d8b388f4a0ae6bd512b74038c7e87957bb8fe|118|4|0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278|0xa81f48dd8790155f485518f51675243601f539a9ee6854446124e32dd1a62e11|0x82b8f32190208a87c42266c3ec0b8a2793f5c37cb57dbf7944bfe8073afd16e0|1761724900|1761724920|0xd560111fd34312678e5648c5f86e99229bf9d01dc6f7166bbe8f8f617cba2240773aa1e06b5f82f7ecfe7a2c7da61b1e48cfbacbc835caf48f7ba10f624b4dbf1b|0xa2f821cb3aa7af011240c9482973b4aefb34f5ac08aa499ec78a04eda82063fa0bf4de8674b0005e0bdc2f4b8d3b8a45a063d87e7ab0b35f6730f3202114f6921b|heap=3G;workers=4;encmem=2;custorage=37;epc=22",
+        "pbsig": "306502301370a801437ee947f6992bc8fffcb49279b77ad543c0f95a23527f700d7e464ec8a88ab39e47ad768e70884c281f327202310096ab3bbe0b73dd0fb0263bbe257cc67f182e9ff46aa8fb4f07efa0ad7eb8edd7da40ee86f31ef8cfb65dad26a5e3838c",
+        "keys": {
+          "pbgflops": "118",
+          "pbcuv": "4",
+          "pbsig": "306502301370a801437ee947f6992bc8fffcb49279b77ad543c0f95a23527f700d7e464ec8a88ab39e47ad768e70884c281f327202310096ab3bbe0b73dd0fb0263bbe257cc67f182e9ff46aa8fb4f07efa0ad7eb8edd7da40ee86f31ef8cfb65dad26a5e3838c",
+          "pbheap": "3G",
+          "pbworkers": "4",
+          "pbencmem": "2",
+          "pbstorage": "37",
+          "pbepc": "22",
+          "pbval": "0x2a0707de23c2c09d6ff7fadbde34c06cdb0e6278",
+          "pbn": "0xa81f48dd8790155f485518f51675243601f539a9ee6854446124e32dd1a62e11",
+          "pbs": "0x82b8f32190208a87c42266c3ec0b8a2793f5c37cb57dbf7944bfe8073afd16e0",
+          "pbt0": "1761724900",
+          "pbt1": "1761724920",
+          "pbb0": "29000050",
+          "pbb1": "29000060",
+          "pbsig0": "0xd560111fd34312678e5648c5f86e99229bf9d01dc6f7166bbe8f8f617cba2240773aa1e06b5f82f7ecfe7a2c7da61b1e48cfbacbc835caf48f7ba10f624b4dbf1b",
+          "pbsig1": "0xa2f821cb3aa7af011240c9482973b4aefb34f5ac08aa499ec78a04eda82063fa0bf4de8674b0005e0bdc2f4b8d3b8a45a063d87e7ab0b35f6730f3202114f6921b"
+        },
+        "regionWork": null,
+        "expected": {
+          "verified": false,
+          "failedCheck": "region"
+        }
+      }
+    ]
+  }
+}

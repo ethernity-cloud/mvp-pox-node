@@ -438,7 +438,7 @@
       "inputs": {
         "taskResult": "Hello, World!",
         "taskCode": 0,
-        "source": "capability-record.json: measurement.gflops, runNonce, t0, t1, validator.address, timeStatements.t0/t1.signature.serialized, block0, block1",
+        "source": "capability-record.json: measurement.gflops, runNonce, validator.address and legacyV1 (its t0, t1, timeStatements.t0/t1.signature.serialized, block0, block1)",
         "deliveredRule": "nine values: the probe's gflops (one CU is 100 GFLOPS), the run nonce the trustedzone drew for the probe, the two validator timestamps, the validator address lower-case, the two 65-byte signatures 0x hex, then the block field of the t0 and t1 statements in decimal, taken by the trustedzone from the two time answers it holds; a production probe draws its own nonce and its t1 - t0 is the probe length. The validators recover the two signatures over the statements rebuilt with node = the order's dproc, nonce, t and block from this field."
       },
       "fields": [

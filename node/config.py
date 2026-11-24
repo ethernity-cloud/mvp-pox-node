@@ -355,9 +355,10 @@ pricing_abi_filepath = base_path / 'pricing.abi'
 broker_abi_filepath = base_path / 'broker.abi'
 resolver_abi_filepath = base_path / 'resolver.abi'
 erc20_abi_filepath = base_path / 'erc20.abi'
-# PoX 2.0 matching's PoxMatching and PoxMatchReader, copied from
+# PoX 2.0 matching's PoxMatching and PoxMatchReader, byte copies of
 # pox-smart-contract-litvm abi/IPoxMatching.json and abi/IPoxMatchReader.json
-# at 52e36e0.
+# at 2f600f6 (tests/test_abi_selectors.py compares them with that commit and
+# with spec/abi-selectors.json).
 matching_abi_filepath = base_path / 'matching.abi'
 match_reader_abi_filepath = base_path / 'match_reader.abi'
 # The first sample of each network's gas profile (gas_profile.load_seed).

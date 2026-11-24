@@ -1,0 +1,625 @@
+{
+  "description": "spec/matching.md section 19 (SF10): the bit layouts of the stored words PoxMatching's views answer, each field [name, first bit, width] from the least significant bit, and the fields read from the words the contract holds at the end of sequences of matching-rank.json replayed on the in-process network, decoded by those layouts; slots in the case's coordinates, chain times, block numbers and order ids left out. A decoder that reads the layouts reads these values; a field the contract moved reads otherwise.",
+  "generator": "spec/make/words.js",
+  "specification": "spec/matching.md section 19",
+  "source": "matching-rank.json sequences, replayed by test/lib/matching-sequences.js",
+  "layouts": {
+    "failureOf": {
+      "source": "PoxMatchingState.Failure",
+      "fields": [
+        {
+          "name": "kind",
+          "at": 0,
+          "width": 8
+        },
+        {
+          "name": "units",
+          "at": 8,
+          "width": 16
+        },
+        {
+          "name": "slot",
+          "at": 24,
+          "width": 32,
+          "read": "slot"
+        },
+        {
+          "name": "at",
+          "at": 56,
+          "width": 32,
+          "read": "variesOnChain"
+        },
+        {
+          "name": "corrected",
+          "at": 88,
+          "width": 8
+        },
+        {
+          "name": "code",
+          "at": 96,
+          "width": 8
+        },
+        {
+          "name": "uncharged",
+          "at": 104,
+          "width": 8
+        },
+        {
+          "name": "charged",
+          "at": 112,
+          "width": 8
+        }
+      ]
+    },
+    "chargedInOf": {
+      "source": "PoxMatchingState.ChargedIn",
+      "fields": [
+        {
+          "name": "sum",
+          "at": 0,
+          "width": 32
+        },
+        {
+          "name": "taken",
+          "at": 32,
+          "width": 16
+        }
+      ]
+    },
+    "servingOf": {
+      "source": "PoxMatchingState.Serving",
+      "fields": [
+        {
+          "name": "orderId",
+          "at": 0,
+          "width": 48,
+          "read": "variesOnChain"
+        },
+        {
+          "name": "orderHours",
+          "at": 48,
+          "width": 16
+        },
+        {
+          "name": "lastFailureSlot",
+          "at": 64,
+          "width": 32,
+          "read": "slot"
+        },
+        {
+          "name": "lastAskAt",
+          "at": 96,
+          "width": 32,
+          "read": "variesOnChain"
+        },
+        {
+          "name": "settleAt",
+          "at": 128,
+          "width": 8
+        },
+        {
+          "name": "placed",
+          "at": 136,
+          "width": 8
+        },
+        {
+          "name": "failuresInLastSlot",
+          "at": 144,
+          "width": 16
+        }
+      ]
+    },
+    "accountOf": {
+      "source": "PoxMatchingState.Account; accountInChain answers the same word",
+      "fields": [
+        {
+          "name": "score",
+          "at": 0,
+          "width": 16
+        },
+        {
+          "name": "lastBeatSlot",
+          "at": 16,
+          "width": 32,
+          "read": "slot"
+        },
+        {
+          "name": "firstBeatSlot",
+          "at": 48,
+          "width": 32,
+          "read": "slot"
+        },
+        {
+          "name": "beats",
+          "at": 80,
+          "width": 24
+        },
+        {
+          "name": "lates",
+          "at": 104,
+          "width": 24
+        },
+        {
+          "name": "misses",
+          "at": 128,
+          "width": 24
+        },
+        {
+          "name": "failures",
+          "at": 152,
+          "width": 24
+        },
+        {
+          "name": "claims",
+          "at": 176,
+          "width": 24
+        },
+        {
+          "name": "pending",
+          "at": 200,
+          "width": 24
+        },
+        {
+          "name": "bannedUntil",
+          "at": 224,
+          "width": 32,
+          "read": "variesOnChain"
+        }
+      ]
+    },
+    "claimOf": {
+      "source": "PoxMatchingState.Claim",
+      "fields": [
+        {
+          "name": "dpRequestId",
+          "at": 0,
+          "width": 48,
+          "read": "variesOnChain"
+        },
+        {
+          "name": "blockNumber",
+          "at": 48,
+          "width": 48,
+          "read": "variesOnChain"
+        },
+        {
+          "name": "time",
+          "at": 96,
+          "width": 32,
+          "read": "variesOnChain"
+        },
+        {
+          "name": "round",
+          "at": 128,
+          "width": 4
+        },
+        {
+          "name": "step",
+          "at": 132,
+          "width": 4
+        },
+        {
+          "name": "state",
+          "at": 136,
+          "width": 4
+        },
+        {
+          "name": "stated",
+          "at": 140,
+          "width": 20
+        },
+        {
+          "name": "tipWei",
+          "at": 160,
+          "width": 96
+        }
+      ]
+    },
+    "periodsOfFirst": {
+      "source": "PoxMatchingState.Period, its first slot",
+      "fields": [
+        {
+          "name": "from",
+          "at": 0,
+          "width": 32,
+          "read": "variesOnChain"
+        },
+        {
+          "name": "to",
+          "at": 32,
+          "width": 32,
+          "read": "variesOnChain"
+        },
+        {
+          "name": "toBlock",
+          "at": 64,
+          "width": 48,
+          "read": "variesOnChain"
+        },
+        {
+          "name": "dpRequestId",
+          "at": 112,
+          "width": 48,
+          "read": "variesOnChain"
+        },
+        {
+          "name": "gflops",
+          "at": 160,
+          "width": 16
+        },
+        {
+          "name": "cpu",
+          "at": 176,
+          "width": 8
+        },
+        {
+          "name": "memGB",
+          "at": 184,
+          "width": 8
+        },
+        {
+          "name": "storageGB",
+          "at": 192,
+          "width": 8
+        },
+        {
+          "name": "bandwidth",
+          "at": 200,
+          "width": 8
+        },
+        {
+          "name": "tzMask",
+          "at": 208,
+          "width": 16
+        },
+        {
+          "name": "endReason",
+          "at": 224,
+          "width": 8
+        },
+        {
+          "name": "pastCount",
+          "at": 232,
+          "width": 24
+        }
+      ]
+    },
+    "periodsOfSecond": {
+      "source": "PoxMatchingState.Period, its second slot",
+      "fields": [
+        {
+          "name": "tip",
+          "at": 0,
+          "width": 128
+        },
+        {
+          "name": "chainFirst",
+          "at": 128,
+          "width": 24
+        },
+        {
+          "name": "enclaveMemoryGB",
+          "at": 152,
+          "width": 8
+        },
+        {
+          "name": "epcUnits",
+          "at": 160,
+          "width": 16
+        }
+      ]
+    }
+  },
+  "vectors": [
+    {
+      "sequence": "correction-under-cap",
+      "words": [
+        {
+          "view": "accountOf",
+          "key": {
+            "node": "0x2610dd766915e794c344e02b478fb2f2ffa4cd2d"
+          },
+          "fields": {
+            "score": "20137",
+            "lastBeatSlot": "498637",
+            "firstBeatSlot": "498610",
+            "beats": "3",
+            "lates": "0",
+            "misses": "0",
+            "failures": "0",
+            "claims": "2",
+            "pending": "0"
+          }
+        },
+        {
+          "view": "servingOf",
+          "key": {
+            "node": "0x2610dd766915e794c344e02b478fb2f2ffa4cd2d"
+          },
+          "fields": {
+            "orderHours": "1",
+            "lastFailureSlot": "0",
+            "settleAt": "0",
+            "placed": "1",
+            "failuresInLastSlot": "0"
+          }
+        },
+        {
+          "view": "periodsOfFirst",
+          "key": {
+            "node": "0x2610dd766915e794c344e02b478fb2f2ffa4cd2d"
+          },
+          "fields": {
+            "gflops": "100",
+            "cpu": "1",
+            "memGB": "1",
+            "storageGB": "1",
+            "bandwidth": "1",
+            "tzMask": "1",
+            "endReason": "0",
+            "pastCount": "1"
+          }
+        },
+        {
+          "view": "periodsOfSecond",
+          "key": {
+            "node": "0x2610dd766915e794c344e02b478fb2f2ffa4cd2d"
+          },
+          "fields": {
+            "tip": "100000000000000000",
+            "chainFirst": "1",
+            "enclaveMemoryGB": "1",
+            "epcUnits": "0"
+          }
+        },
+        {
+          "view": "chargedInOf",
+          "key": {
+            "node": "0x2610dd766915e794c344e02b478fb2f2ffa4cd2d",
+            "slot": "498612"
+          },
+          "fields": {
+            "sum": "0",
+            "taken": "0"
+          }
+        },
+        {
+          "view": "failureOf",
+          "key": {
+            "orderId": "77001"
+          },
+          "fields": {
+            "kind": "2",
+            "units": "1370",
+            "slot": "498612",
+            "corrected": "1",
+            "code": "0",
+            "uncharged": "0",
+            "charged": "1"
+          }
+        },
+        {
+          "view": "claimOf",
+          "key": {
+            "doRequestId": 9204,
+            "node": "0x2610dd766915e794c344e02b478fb2f2ffa4cd2d"
+          },
+          "fields": {
+            "round": "0",
+            "step": "2",
+            "state": "1",
+            "stated": "1",
+            "tipWei": "100000000000000000"
+          }
+        },
+        {
+          "view": "claimOf",
+          "key": {
+            "doRequestId": 9205,
+            "node": "0x2610dd766915e794c344e02b478fb2f2ffa4cd2d"
+          },
+          "fields": {
+            "round": "0",
+            "step": "1",
+            "state": "2",
+            "stated": "1",
+            "tipWei": "100000000000000000"
+          }
+        }
+      ]
+    },
+    {
+      "sequence": "strike-then-ban",
+      "words": [
+        {
+          "view": "accountOf",
+          "key": {
+            "node": "0xf9af747a55a71f73a2b2652afde4a6b18bde41f9"
+          },
+          "fields": {
+            "score": "0",
+            "lastBeatSlot": "498611",
+            "firstBeatSlot": "498610",
+            "beats": "2",
+            "lates": "0",
+            "misses": "0",
+            "failures": "1",
+            "claims": "0",
+            "pending": "0"
+          }
+        },
+        {
+          "view": "servingOf",
+          "key": {
+            "node": "0xf9af747a55a71f73a2b2652afde4a6b18bde41f9"
+          },
+          "fields": {
+            "orderHours": "1",
+            "lastFailureSlot": "498612",
+            "settleAt": "0",
+            "placed": "1",
+            "failuresInLastSlot": "1"
+          }
+        },
+        {
+          "view": "periodsOfFirst",
+          "key": {
+            "node": "0xf9af747a55a71f73a2b2652afde4a6b18bde41f9"
+          },
+          "fields": {
+            "gflops": "100",
+            "cpu": "1",
+            "memGB": "1",
+            "storageGB": "1",
+            "bandwidth": "1",
+            "tzMask": "1",
+            "endReason": "1",
+            "pastCount": "0"
+          }
+        },
+        {
+          "view": "periodsOfSecond",
+          "key": {
+            "node": "0xf9af747a55a71f73a2b2652afde4a6b18bde41f9"
+          },
+          "fields": {
+            "tip": "100000000000000000",
+            "chainFirst": "0",
+            "enclaveMemoryGB": "1",
+            "epcUnits": "0"
+          }
+        },
+        {
+          "view": "chargedInOf",
+          "key": {
+            "node": "0xf9af747a55a71f73a2b2652afde4a6b18bde41f9",
+            "slot": "498612"
+          },
+          "fields": {
+            "sum": "1918",
+            "taken": "1918"
+          }
+        },
+        {
+          "view": "failureOf",
+          "key": {
+            "orderId": "77020"
+          },
+          "fields": {
+            "kind": "3",
+            "units": "0",
+            "slot": "498612",
+            "corrected": "0",
+            "code": "0",
+            "uncharged": "0",
+            "charged": "0"
+          }
+        }
+      ]
+    },
+    {
+      "sequence": "failure-recorded-slots-after-add",
+      "words": [
+        {
+          "view": "accountOf",
+          "key": {
+            "node": "0x2610dd766915e794c344e02b478fb2f2ffa4cd2d"
+          },
+          "fields": {
+            "score": "20000",
+            "lastBeatSlot": "498610",
+            "firstBeatSlot": "498596",
+            "beats": "2",
+            "lates": "0",
+            "misses": "0",
+            "failures": "0",
+            "claims": "2",
+            "pending": "0"
+          }
+        },
+        {
+          "view": "servingOf",
+          "key": {
+            "node": "0x2610dd766915e794c344e02b478fb2f2ffa4cd2d"
+          },
+          "fields": {
+            "orderHours": "1",
+            "lastFailureSlot": "0",
+            "settleAt": "0",
+            "placed": "1",
+            "failuresInLastSlot": "0"
+          }
+        },
+        {
+          "view": "periodsOfFirst",
+          "key": {
+            "node": "0x2610dd766915e794c344e02b478fb2f2ffa4cd2d"
+          },
+          "fields": {
+            "gflops": "100",
+            "cpu": "1",
+            "memGB": "1",
+            "storageGB": "1",
+            "bandwidth": "1",
+            "tzMask": "1",
+            "endReason": "0",
+            "pastCount": "3"
+          }
+        },
+        {
+          "view": "periodsOfSecond",
+          "key": {
+            "node": "0x2610dd766915e794c344e02b478fb2f2ffa4cd2d"
+          },
+          "fields": {
+            "tip": "100000000000000000",
+            "chainFirst": "3",
+            "enclaveMemoryGB": "1",
+            "epcUnits": "0"
+          }
+        },
+        {
+          "view": "chargedInOf",
+          "key": {
+            "node": "0x2610dd766915e794c344e02b478fb2f2ffa4cd2d",
+            "slot": "498598"
+          },
+          "fields": {
+            "sum": "0",
+            "taken": "0"
+          }
+        },
+        {
+          "view": "failureOf",
+          "key": {
+            "orderId": "77015"
+          },
+          "fields": {
+            "kind": "2",
+            "units": "1918",
+            "slot": "498598",
+            "corrected": "1",
+            "code": "0",
+            "uncharged": "0",
+            "charged": "1"
+          }
+        },
+        {
+          "view": "failureOf",
+          "key": {
+            "orderId": "77016"
+          },
+          "fields": {
+            "kind": "2",
+            "units": "0",
+            "slot": "498598",
+            "corrected": "1",
+            "code": "0",
+            "uncharged": "0",
+            "charged": "1"
+          }
+        }
+      ]
+    }
+  ]
+}

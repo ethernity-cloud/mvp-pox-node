@@ -258,6 +258,8 @@ class EtnyPoXNode:
     # The network's PoX 2.0 matching (matching_node.MatchingNode), None on a
     # network without it (__bind_matching).
     __matching = None
+    # Whether the network's pricing names a PoxMatching (__bind_matching).
+    __matching_network = False
     # The offer figures last logged as below what the PoX admits
     # (__dp_request_held), None while they are not.
     __offer_figures_logged = None
@@ -558,15 +560,20 @@ class EtnyPoXNode:
         # hold's current state is logged (__dp_request_held).
         self.__record_missing_hold = capability.RecordMissingHold(self.cache_config.broker_cursor_filepath)
         self.__record_missing_hold_logged = False
-        # The enclave memory and the storage each DP request of this node
-        # stated and the figures a reason-10 or reason-11 cancel refused, kept
-        # in broker_cursor.json (capability.OfferFigureBook).
+        # The enclave memory, the storage, the EPC units and the GFLOPS each DP
+        # request of this node stated and the figures a reason-10, 11, 12 or
+        # 13 cancel refused, kept in broker_cursor.json
+        # (capability.OfferFigureBook).
         self.__enclave_memory = capability.enclave_memory_book(self.cache_config.broker_cursor_filepath)
         self.__offer_storage = capability.storage_book(self.cache_config.broker_cursor_filepath)
-        # The enclave memory and the storage the DP request being sent states
-        # (__dp_request_params).
+        self.__offer_epc = capability.epc_book(self.cache_config.broker_cursor_filepath)
+        self.__offer_gflops = capability.gflops_book(self.cache_config.broker_cursor_filepath)
+        # The enclave memory, the storage, the EPC units and the GFLOPS the DP
+        # request being sent states (__dp_request_params).
         self.__offer_enclave_memory_sent = 0
         self.__offer_storage_sent = 0
+        self.__offer_epc_sent = 0
+        self.__offer_gflops_sent = 0
         # The gas this node's own transactions use, priced into its tip
         # (gas_profile.GasProfile), seeded for the network at its first start.
         self.__gas_profile = gas_profile.GasProfile.load(
@@ -2377,11 +2384,15 @@ class EtnyPoXNode:
         if figures is not None:
             resources = (resources[0], figures.memory_gib, figures.storage_gib, resources[3])
             self.__offer_storage_sent = figures.storage_gib
-        gflops = int(record['gflops']) if record is not None else 0
+        # The record's GFLOPS, below a figure a reason-13 cancel refused under
+        # it (capability.offer_gflops); 0 without a record.
+        gflops = (capability.offer_gflops(record['gflops'], self.__offer_gflops.refused(record_key(record)))
+                  if record is not None else 0)
         # While this node's acceptance of a handover stands, its offer is at
         # most the predecessor's gflops (broker.bounded_gflops).
         if gflops and self.__broker is not None:
             gflops = broker.bounded_gflops(gflops, self.__accepted_handover())
+        self.__offer_gflops_sent = gflops
         tip = self.__current_tip(gflops) if self.__pox_is_20 else 0
         # On a network with matching the offer states the node's enclave
         # memory above its GFLOPS (7.24, D146, D167): the largest listed size
@@ -2444,9 +2455,11 @@ class EtnyPoXNode:
         processed_logs = self.__etny.events._addDPRequestEV().process_receipt(receipt)
         self.__record_gas('dpRequest', receipt)
         self.__adopt_dp_request(processed_logs[0].args._rowNumber, receipt.blockNumber)
+        self.__offer_gflops.record_stated(self.__dprequest, self.__offer_gflops_sent)
         if self.__matching is not None:
             self.__enclave_memory.record_stated(self.__dprequest, self.__offer_enclave_memory_sent)
             self.__offer_storage.record_stated(self.__dprequest, self.__offer_storage_sent)
+            self.__offer_epc.record_stated(self.__dprequest, self.__offer_epc_sent)
         self.logger.info(f"DP Request {self.__dprequest} initialized. Unlocking the value of decentralization.")
 
     def __record_gas(self, kind, receipt):
@@ -3125,8 +3138,12 @@ class EtnyPoXNode:
         hold, retest = capability.cancel_reaction(reason, key)
         cancelled = (f"DP request {req} was cancelled by the validators: "
                      f"{capability.cancel_reason_name(reason)} ({reason})")
-        if capability.cancel_disposition(reason) in ('memory', 'storage'):
+        if capability.cancel_disposition(reason) in ('memory', 'storage', 'epc'):
             retest = self.__figure_refused(capability.cancel_disposition(reason), req, key, cancelled)
+        if int(reason) == capability.REASON_GFLOPS_ABOVE_RECORD:
+            # The GFLOPS the request stated is refused under the record it
+            # carried, which the retest drops (OD7).
+            self.__offer_gflops.refuse(key, self.__offer_gflops.stated(req))
         if hold:
             self.__record_missing_hold.set(True)
         if retest:
@@ -3154,25 +3171,28 @@ class EtnyPoXNode:
 
     def __figure_refused(self, figure, req, key, cancelled):
         """The reaction to a cancel of DP request `req` for reason 10,
-        EnclaveMemoryAboveRecord (`figure` 'memory'), or 11,
-        StorageAboveRecord ('storage'), by capability.figure_after_cancel:
-        the figure the request stated (capability.OfferFigureBook) is
-        refused under the record `key` it carried, so no later request states
-        it on that record; the next request states the record's reading below
-        it, and when the record carries none, or none below it, the record is
-        dropped and its integration test, the bench, runs again (the returned
-        retest). The RecordMissing hold is not touched."""
-        book = self.__enclave_memory if figure == 'memory' else self.__offer_storage
-        reading = capability.record_enclave_memory if figure == 'memory' else capability.record_storage
+        EnclaveMemoryAboveRecord (`figure` 'memory'), 11, StorageAboveRecord
+        ('storage'), or 12, EpcAboveRecord ('epc', in EPC units), by
+        capability.figure_after_cancel: the figure the request stated
+        (capability.OfferFigureBook) is refused under the record `key` it
+        carried, so no later request states it on that record; the next
+        request states the record's reading below it, and when the record
+        carries none, or none below it, the record is dropped and its
+        integration test, the bench, runs again (the returned retest). The
+        RecordMissing hold is not touched."""
+        book, reading = {'memory': (self.__enclave_memory, capability.record_enclave_memory),
+                         'storage': (self.__offer_storage, capability.record_storage),
+                         'epc': (self.__offer_epc, capability.record_epc_units)}[figure]
         stated = book.stated(req)
         image = self.__record_store.image_of(key) if key is not None else None
         entry = self.__record_store.get(image) if image is not None else None
         record_figure = reading(entry.get('record') if entry else None)
         next_figure, rerun = capability.figure_after_cancel(stated, record_figure)
         book.refuse(key, stated)
+        unit = 'EPC units' if figure == 'epc' else 'GiB'
         if not rerun:
-            self.logger.warning(f"{cancelled}; it stated {stated} GiB of {figure}, its record {record_figure} GiB: "
-                                f"the next request states {next_figure} GiB")
+            self.logger.warning(f"{cancelled}; it stated {stated} {unit} of {figure}, its record {record_figure} "
+                                f"{unit}: the next request states {next_figure} {unit}")
         return rerun and key is not None
 
     def __dp_request_record_key(self, req):
@@ -6385,6 +6405,11 @@ class EtnyPoXNode:
         self.__pox_epc_forms = False
         self.__reader = self.__pricing = self.__broker = self.__token = None
         self.__matching = None
+        # Whether the pricing names a PoxMatching (matching() not zero): the
+        # network kind of the record forms' admission (pox-smart-contract-litvm
+        # 2f600f6 spec/capability-record.json admission, reserved-prefixes.json
+        # statementForm.cutRule), set by __bind_matching.
+        self.__matching_network = False
         # (NETWORK_FEE_PERCENT, VALIDATOR_FEE_PERCENT) of a 2.0 contract, the
         # legacy DO requests' fee-inclusive compare; None on a replication-only
         # handle.
@@ -6454,6 +6479,7 @@ class EtnyPoXNode:
         if address is None or int(address, 16) == 0:
             logger.info(f"Pricing {self.__pricing.address}: no matching contract; requests are placed as today")
             return
+        self.__matching_network = True
         with open(config.matching_abi_filepath) as f:
             matching_abi = f.read()
         with open(config.match_reader_abi_filepath) as f:
@@ -7461,15 +7487,17 @@ class EtnyPoXNode:
         this wallet and this network's chain id and PoX contract, a seated
         validator signed both time statements, the image requires dcap, the
         network has a validator set, the run length, gflops, cuv and t1 are
-        within the bounds), None otherwise, the reason logged. A registry read
-        that fails refuses the record and keeps the test's pass."""
+        within the bounds, a v2 record passes the closing checks and the
+        rate bound, and a v1 record is refused where the pricing names a
+        PoxMatching), None otherwise, the reason logged. A registry read that
+        fails refuses the record and keeps the test's pass."""
         logger = self.logger
         registry = self.__validator_registry_address()
         try:
             record, reason = capability.capability_record_from(
                 capability_etny, capability_time_etny, self.__address, self.__trustedzones[image], bool(registry),
                 time.time(), self.__network_config.chain_id, self.__network_config.contract_address, registry,
-                self.__is_seated)
+                self.__is_seated, self.__matching_network)
         except Exception as e:
             record, reason = None, f"the validator seat could not be read ({e})"
         if record is None:
@@ -7500,6 +7528,13 @@ class EtnyPoXNode:
                 if entry.get('record') is not None and capability.record_expired(entry['record']['t1'], now):
                     self.logger.info(f"The capability record of {image} reached CU_TTL_SECONDS; dropped")
                     self.__record_store.drop_record(image)
+                elif (entry.get('record') is not None
+                      and not capability.record_admitted_on(entry['record'], self.__matching_network)):
+                    self.logger.info(f"The capability record of {image} is v1, which the pricing's PoxMatching does "
+                                     f"not admit; dropped, and the integration test runs again")
+                    self.__record_store.drop_record(image)
+                    integration_test_remeasure.add(image)
+                    integration_test_retry[image] = (0, 0.0)
                 integration_test_passed[image] = entry['image_hash']
                 self.logger.info(f"Integration test of {image} passed at {entry['passed_at']} on {entry['image_hash']}"
                                  f"{' with a capability record' if entry.get('record') else ''}; loaded")

@@ -1,8 +1,9 @@
 """matching (MATCHING-DESIGN.md 4.4, 4.5, 7.5; D183, D191, D198): the ranking
 rule on a copy of the roll, the EPC filter and fit included, against the
-shared fixtures of pox-smart-contract-litvm spec/ at 52e36e0 (ranking.json
-871f3429, matching-rank.json 830791e8, matching.md 91b54a7f, result-fields.json
-081e702b). spec/ranking.json holds, per ranking case, the inputs the
+shared fixtures of pox-smart-contract-litvm spec/ at 2f600f6 (ranking.json
+871f3429, matching-rank.json 2ece369d, matching.md fb8dbe67, result-fields.json
+67318ca6; test_spec_manifest.py compares the copies with the source
+commit). spec/ranking.json holds, per ranking case, the inputs the
 copy holds and the reader's answers on them (candidates read from the top
 of the roll and on with `beyond`, each eligible entry with the band and the
 index of its place, and each roll node's turnOf in one page): the port's
@@ -12,9 +13,7 @@ results on each case's own inputs: the seed, the round's stamp, the
 template bit, the image key, the list hash, the matching count, the stop
 band, the mandated sequence, each listed node's mandate and first allowed
 step, and the steps of the case's blocks."""
-import hashlib
 import json
-import subprocess
 from pathlib import Path
 
 import pytest
@@ -22,46 +21,8 @@ import pytest
 import matching
 
 SPEC = Path(__file__).parent / "spec" / "matching"
-SOURCE = Path(__file__).resolve().parents[3] / "pox-smart-contract-litvm"
-SOURCE_COMMIT = "52e36e0"
-COPIES = ["ranking.json", "matching-rank.json", "matching.md", "result-fields.json"]
 RANKING = json.loads((SPEC / "ranking.json").read_text())
 RANK = json.loads((SPEC / "matching-rank.json").read_text())
-
-
-def manifest():
-    entries = {}
-    for line in (SPEC / "MANIFEST.sha256").read_text().splitlines():
-        digest, _, name = line.partition("  ")
-        entries[name.strip()] = digest.strip()
-    return entries
-
-
-@pytest.mark.parametrize("name", COPIES)
-def test_the_copy_matches_the_manifest(name):
-    assert hashlib.sha256((SPEC / name).read_bytes()).hexdigest() == manifest()[name]
-
-
-@pytest.mark.parametrize("name", COPIES)
-def test_the_copy_matches_the_source_commit(name):
-    if not (SOURCE / ".git").exists():
-        pytest.skip(f"{SOURCE} is not checked out beside this repository")
-    shown = subprocess.run(["git", "-C", str(SOURCE), "show", f"{SOURCE_COMMIT}:spec/{name}"],
-                           capture_output=True)
-    if shown.returncode != 0:
-        pytest.skip(f"{SOURCE} holds no commit {SOURCE_COMMIT}")
-    assert (SPEC / name).read_bytes() == shown.stdout
-
-
-def test_the_manifest_lines_are_the_source_manifest_lines():
-    if not (SOURCE / ".git").exists():
-        pytest.skip(f"{SOURCE} is not checked out beside this repository")
-    shown = subprocess.run(["git", "-C", str(SOURCE), "show", f"{SOURCE_COMMIT}:spec/MANIFEST.sha256"],
-                           capture_output=True, text=True)
-    if shown.returncode != 0:
-        pytest.skip(f"{SOURCE} holds no commit {SOURCE_COMMIT}")
-    source = dict(reversed(line.split("  ")) for line in shown.stdout.splitlines())
-    assert {name: source[name] for name in COPIES} == manifest()
 
 
 # ------------------------------------------------------------- the inputs
