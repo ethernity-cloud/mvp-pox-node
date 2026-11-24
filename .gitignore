@@ -9,6 +9,8 @@ __pychare__/
 .vs-code
 sgx/sgx_enable
 sgx/sgx_enable.o
+sgx/epc_sections
+sgx/epc_sections.o
 config
 Vagrantfile
 Vagrantfile.bak
