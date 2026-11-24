@@ -63,6 +63,13 @@ def order_terms(raw):
     return OrderTerms(*values)
 
 
+def cap_refuses_start(terms):
+    """Whether an order with `terms` (order_terms, None for an order the PoX
+    did not record) is not started: a recorded order whose gasPriceCapWei is
+    0, under which no relayed transaction is reimbursed (capped_price)."""
+    return terms is not None and int(terms.gas_price_cap_wei) == 0
+
+
 def pricing_params(raw):
     """PricingParams from IPoxPricing.params() (the struct as a sequence, or
     a mapping by name)."""

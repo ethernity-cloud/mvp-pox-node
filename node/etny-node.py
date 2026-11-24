@@ -3509,6 +3509,13 @@ class EtnyPoXNode:
                     timeout_in_seconds = int(self.__network_config.block_time) - 1.3
                     time.sleep(timeout_in_seconds)
 
+        # A recorded order whose gas price cap is 0 reimburses none of its
+        # relayed transactions (gas_ledger.cap_refuses_start): it is logged
+        # and not started.
+        if gas_ledger.cap_refuses_start(self.__read_order_terms(order_id)):
+            logger.error(f"Order {order_id}: its recorded gasPriceCapWei is 0; the order is not started")
+            return
+
         self.__send_order_started(order_id)
 
         # Backstop to the DO-request filter, for an order this node holds but
