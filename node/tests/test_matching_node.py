@@ -30,6 +30,11 @@ SPEC = Path(__file__).parent / "spec" / "matching"
 RANKING = json.loads((SPEC / "ranking.json").read_text())
 LOG = logging.getLogger("test")
 WALLET = "0x" + "33" * 20
+ZERO = "0x" + "00" * 20
+POX = "0x" + "ee" * 20
+BROKER = "0x" + "55" * 20
+OLD_BROKER = "0x" + "56" * 20
+FARM = "0x" + "44" * 20
 SETTINGS = matching_node.Settings(claim_ahead_blocks=2, claim_spread_nodes=8, claim_stand_limit=2,
                                   claim_hold_back=False, claim_marked_images=False, tip_keep_percent=10,
                                   minimum_score_hold=True, beat_gas_allowance=690000, page_entries=3, lag_blocks=1)
@@ -103,6 +108,9 @@ class FakeChain:
         self.request_epc = {}
         self.failure_words = {}
         self.charged_in_words = {}
+        self.join = (ZERO, ZERO, False)
+        self.approvals = {}
+        self.broker = BROKER
 
     # --- the chain
     def head_number(self):
@@ -217,6 +225,18 @@ class FakeChain:
 
     def payout_of(self):
         return self.payout
+
+    def farm_join(self):
+        return self.join
+
+    def farm_approval(self, wallet):
+        return self.approvals.get(matching.address_text(wallet), ZERO)
+
+    def broker_address(self):
+        return self.broker
+
+    def pox_address(self):
+        return POX
 
     def order_times(self, order_id):
         return self.times_of_orders[order_id]
@@ -1145,6 +1165,64 @@ def test_the_rewards_wallet_is_named_once_and_never_changed(tmp_path):
     chain.payout = "0x" + "44" * 20
     assert node.payout_tick(WALLET) == 'differs'
     assert len(chain.sent) == 1
+
+
+@pytest.mark.parametrize("setting", [ZERO, POX])
+def test_a_rewards_wallet_setting_the_pox_refuses_sends_nothing(tmp_path, caplog, setting):
+    chain, node = correction_node(tmp_path)
+    caplog.set_level(logging.ERROR)
+    assert node.payout_tick(setting) == 'refused'
+    assert node.payout_tick(setting) == 'refused'
+    assert chain.sent == []
+    assert sum("the PoX refuses it" in m for m in caplog.messages) == 1
+
+
+@pytest.mark.parametrize("stored, setting, named", [
+    (ZERO, WALLET, WALLET), (ME, WALLET, WALLET), (ZERO, '', ME), (ME, '', ME)])
+def test_a_join_left_behind_by_a_broker_replacement_is_undone_by_the_node(tmp_path, stored, setting, named):
+    # The join stored zero or the node itself and was reported by a broker
+    # the PoX no longer names: the node's setPayoutAddress undoes it, naming
+    # the setting, else the node (OD31 A).
+    chain, node = correction_node(tmp_path)
+    chain.join = (stored, OLD_BROKER, True)
+    chain.payout = "0x" + "77" * 20
+    assert node.payout_tick(setting) == 'recovered'
+    assert chain.sent[-1][:2] == ('pox.setPayoutAddress', (matching.address_text(named),))
+
+
+def test_a_join_left_behind_that_stored_another_wallet_is_named_not_sent(tmp_path, caplog):
+    chain, node = correction_node(tmp_path)
+    caplog.set_level(logging.WARNING)
+    chain.join = (WALLET, OLD_BROKER, True)
+    chain.payout = "0x" + "77" * 20
+    assert node.payout_tick(WALLET) == 'left'
+    assert node.payout_tick(WALLET) == 'left'
+    assert chain.sent == []
+    assert sum("changePayoutAddress" in m and f"broker {BROKER}" in m for m in caplog.messages) == 1
+
+
+def test_a_join_the_named_broker_reported_is_left_to_the_farm(tmp_path):
+    chain, node = correction_node(tmp_path)
+    chain.join = (ZERO, BROKER, True)
+    chain.payout = "0x" + "77" * 20
+    assert node.payout_tick(WALLET) == 'differs'
+    assert chain.sent == []
+
+
+def test_the_farm_join_reads_the_wallet_and_its_approval(tmp_path):
+    chain, node = correction_node(tmp_path)
+    assert node.farm_join_ready(FARM) == (True, matching.address_text(ME))
+    chain.payout = WALLET
+    assert node.farm_join_ready(FARM) == (False, WALLET)
+    chain.approvals[WALLET] = FARM
+    assert node.farm_join_ready(FARM) == (True, WALLET)
+    # While a join is stored its wallet is the one stored there, not the
+    # farm's reward address the payout points at.
+    other = "0x" + "88" * 20
+    chain.join, chain.payout = (other, BROKER, True), "0x" + "77" * 20
+    assert node.farm_join_ready(FARM) == (False, other)
+    chain.join = (ZERO, BROKER, True)
+    assert node.farm_join_ready(FARM) == (True, ZERO)
 
 
 def test_an_order_end_of_the_image_health_is_proven_wide_once_its_record_admits_it(tmp_path):

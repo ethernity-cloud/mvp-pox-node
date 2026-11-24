@@ -258,6 +258,24 @@ class ChainAdapter:
     def payout_of(self):
         return self.pox.functions.payoutAddressOf(self.address).call()
 
+    def farm_join(self):
+        """farmJoinOf(node): (the payout stored at its join, the broker that
+        reported it, whether a join is stored)."""
+        payout, broker, joined = self.pox.functions.farmJoinOf(self.address).call()
+        return payout, broker, bool(joined)
+
+    def farm_approval(self, wallet):
+        """The farm `wallet` last approved the node joining (farmApprovalOf),
+        the zero address for none."""
+        return self.pox.functions.farmApprovalOf(self.address, self.w3.to_checksum_address(wallet)).call()
+
+    def broker_address(self):
+        """The reservation broker the PoX names (reservationBrokerAddress)."""
+        return self.pox.functions.reservationBrokerAddress().call()
+
+    def pox_address(self):
+        return self.pox.address
+
     def order_times(self, order_id):
         """(approvedAt, placedAt, terminatedAt) of an order in the PoX."""
         return (int(self.pox.functions.orderApprovedAt(int(order_id)).call()),
@@ -1160,10 +1178,52 @@ class MatchingNode:
 
     # --------------------------------------------------- the rewards wallet
 
+    def farm_join_ready(self, farm):
+        """(ready, wallet) of a join of `farm` (7.13, D89): the node's wallet
+        as onFarmJoin reads it (rules.farm_wallet over farmJoinOf and
+        payoutAddressOf), and whether onFarmJoin admits the node into the
+        farm: on its own key when that wallet is zero or the node, else once
+        the wallet's approveFarm names the farm (farmApprovalOf)."""
+        wallet = rules.farm_wallet(self.chain.farm_join(), self.chain.payout_of())
+        if rules.farm_join_ready(wallet, self.address, None, farm):
+            return True, wallet
+        return rules.farm_join_ready(wallet, self.address, self.chain.farm_approval(wallet), farm), wallet
+
     def payout_tick(self, setting):
         """Names the rewards wallet of the setting once (7.13, D34): sent when
         the PoX answers the node's own address for payoutAddressOf; logged
-        once when another wallet is named."""
+        once when another wallet is named. A setting the PoX refuses, zero or
+        its own address, is logged once and sends nothing ('refused'). A farm
+        join another broker than the one the PoX names reported
+        (rules.join_left_behind) is undone first by the route
+        rules.left_behind_route names: the node's setPayoutAddress
+        ('recovered'), or, for a wallet stored at the join, that wallet's
+        change, logged once ('left')."""
+        if setting and rules.payout_setting_refused(setting, self.chain.pox_address()):
+            if self.payout_logged != ('refused', setting):
+                self.payout_logged = ('refused', setting)
+                self.logger.error(f"Matching: the rewards wallet setting {setting} is the zero address or the PoX's "
+                                  f"own; the PoX refuses it and nothing is sent")
+            return 'refused'
+        join = self.chain.farm_join()
+        broker = self.chain.broker_address()
+        if rules.join_left_behind(join, broker):
+            route, wallet = rules.left_behind_route(join, self.address, setting)
+            if route == 'set':
+                fn = self.chain.pox_function('setPayoutAddress', wallet)
+                self.chain.simulate(fn)
+                if mined(self.chain.transact(fn, 'setPayoutAddress', None, 0)):
+                    self.logger.info(f"Matching: the farm join broker {join[1]} reported, which the PoX no longer "
+                                     f"names, is undone; the rewards wallet is {wallet}")
+                    return 'recovered'
+                return 'failed'
+            if self.payout_logged != ('left', join[1]):
+                self.payout_logged = ('left', join[1])
+                self.logger.warning(f"Matching: the farm join broker {join[1]} reported, which the PoX no longer "
+                                    f"names, stored the rewards wallet {wallet}: that wallet undoes it with "
+                                    f"changePayoutAddress({self.address}, <payout>), or a join reported by broker "
+                                    f"{broker} carries it over")
+            return 'left'
         if not setting:
             return 'none'
         action = rules.payout_action(setting, self.address, self.chain.payout_of())
@@ -1174,8 +1234,8 @@ class MatchingNode:
                 self.logger.info(f"Matching: the rewards wallet {setting} is named")
                 return 'set'
             return 'failed'
-        if action == 'differs' and self.payout_logged != setting:
-            self.payout_logged = setting
+        if action == 'differs' and self.payout_logged != ('differs', setting):
+            self.payout_logged = ('differs', setting)
             self.logger.warning(f"Matching: another rewards wallet than {setting} is named; a change is the named "
                                 f"wallet's own transaction, changePayoutAddress")
         return action

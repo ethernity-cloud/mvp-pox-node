@@ -2667,18 +2667,17 @@ class EtnyPoXNode:
             return
         join = self.__broker.functions.joinFarm(self.__w3.to_checksum_address(farm), int(expires_at),
                                                 bytes.fromhex(signature[2:]))
-        # On a network with matching a node whose rewards wallet is named
-        # joins only once that wallet's approveFarm names the farm (D89,
-        # 7.13); the PoX answers no view of the approval, so the join is
-        # simulated, and a refusal waits for the approval and is not recorded.
-        payout = str(self.__etny.caller().payoutAddressOf(self.__address)) if self.__matching is not None else None
-        if payout is not None and not matching_rules.farm_join_ready(payout, self.__address, None, farm):
-            try:
-                join.call({'from': self.__address})
-            except exceptions.ContractLogicError as refusal:
-                self.logger.warning(f"The join of farm {farm} waits for the rewards wallet {payout} to send "
-                                    f"approveFarm({self.__address}, {farm}) on the PoX "
-                                    f"({revert_reason(refusal) or refusal})")
+        # On a network with matching a node whose wallet is another address
+        # than its own joins only once that wallet's approveFarm names the
+        # farm (D89, 7.13): the wallet is the payout stored at a join while
+        # one is stored, else its stored payout (farmJoinOf, payoutAddressOf),
+        # and its approval is read from farmApprovalOf; the join waits for it
+        # and is not recorded as refused.
+        if self.__matching is not None:
+            ready, wallet = self.__matching.farm_join_ready(farm)
+            if not ready:
+                self.logger.warning(f"The join of farm {farm} waits for the rewards wallet {wallet} to send "
+                                    f"approveFarm({self.__address}, {farm}) on the PoX")
                 return
         try:
             self.__broker_tx("joinFarm", join)

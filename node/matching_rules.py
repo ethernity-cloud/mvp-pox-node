@@ -435,13 +435,54 @@ def payout_action(setting, node, payout_of):
     return 'none' if current == setting else 'differs'
 
 
-def farm_join_ready(payout_of, node, approved_farm, farm):
-    """Whether the node joins a farm (7.13, D89): a node whose rewards
-    wallet is named joins only once that wallet's approveFarm names the
-    farm; a node with no wallet named joins on its own key."""
-    if matching.address_text(payout_of) == matching.address_text(node):
+def payout_setting_refused(setting, pox):
+    """Whether the rewards wallet setting is one the PoX refuses ("payout
+    invalid"): the zero address or the PoX's own address."""
+    return int(matching.address_text(setting), 16) == 0 or matching.address_text(setting) == matching.address_text(pox)
+
+
+def farm_wallet(join, payout_of):
+    """The node's wallet as onFarmJoin and approveFarm read it: the payout
+    stored at its farm join while one is stored (`join`, farmJoinOf's
+    (payout, broker, joined)), its stored payout (payoutAddressOf, the node
+    itself while none is) otherwise."""
+    payout, _, joined = join
+    return payout if joined else payout_of
+
+
+def farm_join_ready(wallet, node, approved_farm, farm):
+    """Whether the node joins a farm (7.13, D89): a node whose wallet
+    (farm_wallet) is zero or its own address joins on its own key; any
+    other only once that wallet's approveFarm names the farm
+    (farmApprovalOf)."""
+    wallet = matching.address_text(wallet)
+    if int(wallet, 16) == 0 or wallet == matching.address_text(node):
         return True
     return approved_farm is not None and matching.address_text(approved_farm) == matching.address_text(farm)
+
+
+def join_left_behind(join, broker):
+    """Whether the stored farm join (farmJoinOf's (payout, broker, joined))
+    was reported by another reservation broker than the one the PoX names
+    (`broker`, reservationBrokerAddress): the PoX's _leftBehind, after which
+    only the routes of left_behind_route undo the join."""
+    _, reported_by, joined = join
+    return bool(joined) and matching.address_text(reported_by) != matching.address_text(broker)
+
+
+def left_behind_route(join, node, setting):
+    """How the node's payout is recovered from a join left behind by a
+    broker replacement (OD31 A; the PoX's setPayoutAddress and
+    changePayoutAddress at pox-smart-contract-litvm 52e36e0): ('set',
+    wallet) when the join stored zero or the node itself, the node's own
+    setPayoutAddress naming the setting, else the node; ('wallet', stored)
+    otherwise, the stored wallet's changePayoutAddress, which only that
+    wallet sends, or the next join reported by the broker the PoX names,
+    which carries the stored wallet over."""
+    stored = matching.address_text(join[0])
+    if int(stored, 16) == 0 or stored == matching.address_text(node):
+        return 'set', matching.address_text(setting) if setting else matching.address_text(node)
+    return 'wallet', stored
 
 
 # ------------------------------------------- the local list of images

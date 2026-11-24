@@ -45,7 +45,8 @@ class StubMatching:
     ticks are recorded."""
 
     def __init__(self, served='claimed', approvable=False, standing=False, period=None, fetch_seconds=600,
-                 banned=False):
+                 banned=False, farm_ready=(True, None)):
+        self.farm_ready = farm_ready
         self.served = served
         self.approvable = approvable
         self.standing = standing
@@ -97,6 +98,10 @@ class StubMatching:
 
     def payout_tick(self, setting):
         self.calls.append(('payout', setting))
+
+    def farm_join_ready(self, farm):
+        self.calls.append(('farm', farm))
+        return self.farm_ready
 
 
 def served_run(agent, monkeypatch, tmp_path, stub, chain, passes=None):
@@ -537,16 +542,23 @@ def farm_node(agent, monkeypatch, tmp_path, stub, payout, refuse):
 
 
 def test_a_node_with_a_named_wallet_waits_for_its_approval_before_joining(agent, monkeypatch, tmp_path):
-    node, sent = farm_node(agent, monkeypatch, tmp_path, StubMatching(), "0x" + "33" * 20, refuse=True)
+    # MatchingNode.farm_join_ready reads the wallet and its approval
+    # (farmJoinOf, payoutAddressOf, farmApprovalOf); the join waits for it.
+    wallet = "0x" + "33" * 20
+    stub = StubMatching(farm_ready=(False, wallet))
+    node, sent = farm_node(agent, monkeypatch, tmp_path, stub, wallet, refuse=False)
     node._EtnyPoXNode__join_farm_if_invited()
     assert sent == [] and not (tmp_path / "farm.json").exists()
-    node, sent = farm_node(agent, monkeypatch, tmp_path, StubMatching(), "0x" + "33" * 20, refuse=False)
+    assert ('farm', FARM) in stub.calls
+    node, sent = farm_node(agent, monkeypatch, tmp_path, StubMatching(farm_ready=(True, wallet)), wallet,
+                           refuse=False)
     node._EtnyPoXNode__join_farm_if_invited()
     assert sent == ["joinFarm"]
 
 
 def test_a_node_without_a_wallet_joins_on_its_own_key(agent, monkeypatch, tmp_path):
-    node, sent = farm_node(agent, monkeypatch, tmp_path, StubMatching(), ADDRESS, refuse=True)
+    node, sent = farm_node(agent, monkeypatch, tmp_path, StubMatching(farm_ready=(True, ADDRESS)), ADDRESS,
+                           refuse=False)
     node._EtnyPoXNode__join_farm_if_invited()
     assert sent == ["joinFarm"]
 

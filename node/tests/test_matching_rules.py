@@ -372,9 +372,46 @@ def test_the_payout_setting_names_the_wallet_once_and_never_changes_it():
 
 def test_the_farm_step_waits_for_the_wallets_approval():
     assert rules.farm_join_ready(NODE, NODE, None, FARM)
+    assert rules.farm_join_ready("0x" + "00" * 20, NODE, None, FARM)
     assert not rules.farm_join_ready(WALLET, NODE, None, FARM)
     assert not rules.farm_join_ready(WALLET, NODE, OTHER, FARM)
     assert rules.farm_join_ready(WALLET, NODE, FARM, FARM)
+
+
+ZERO = "0x" + "00" * 20
+BROKER = "0x" + "55" * 20
+OLD_BROKER = "0x" + "56" * 20
+
+
+def test_the_payout_settings_the_pox_refuses():
+    pox = "0x" + "ee" * 20
+    assert rules.payout_setting_refused(ZERO, pox)
+    assert rules.payout_setting_refused(pox.upper().replace("0X", "0x"), pox)
+    assert not rules.payout_setting_refused(WALLET, pox)
+
+
+@pytest.mark.parametrize("join, payout_of, wallet", [
+    ((ZERO, ZERO, False), NODE, NODE),
+    ((ZERO, ZERO, False), WALLET, WALLET),
+    ((WALLET, BROKER, True), OTHER, WALLET),
+    ((ZERO, BROKER, True), OTHER, ZERO),
+])
+def test_the_wallet_a_join_reads(join, payout_of, wallet):
+    assert rules.farm_wallet(join, payout_of) == wallet
+
+
+@pytest.mark.parametrize("join, left, route", [
+    ((ZERO, ZERO, False), False, None),
+    ((ZERO, BROKER, True), False, None),
+    ((ZERO, OLD_BROKER, True), True, ('set', WALLET)),
+    ((NODE, OLD_BROKER, True), True, ('set', WALLET)),
+    ((OTHER, OLD_BROKER, True), True, ('wallet', OTHER)),
+])
+def test_each_stored_join_state_after_a_broker_replacement(join, left, route):
+    assert rules.join_left_behind(join, BROKER) is left
+    if left:
+        assert rules.left_behind_route(join, NODE, WALLET) == route
+    assert rules.left_behind_route((ZERO, OLD_BROKER, True), NODE, '') == ('set', NODE)
 
 
 # ------------------------------------------- the local list of images
