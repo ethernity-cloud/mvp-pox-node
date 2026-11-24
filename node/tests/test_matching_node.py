@@ -473,6 +473,47 @@ def test_a_heartbeat_in_the_last_quarter_takes_the_full_block_price(tmp_path):
     assert chain.sent[0][3] == 4
 
 
+# ------------------------------------------------- the parameter sets
+
+def test_nothing_is_sent_before_the_first_sets_effect_at(tmp_path, caplog):
+    # beat_node's chain time is 41550 x 3600 + 1799, its heartbeat due.
+    effect_at = 41550 * 3600 + 3000
+    chain, node = beat_node(tmp_path, sets=[params(effectAt=effect_at)], counts=False)
+    chain.leave(ME, matching.END_BUSY)
+    caplog.set_level(logging.INFO)
+    assert node.params() is None
+    for _ in range(3):
+        assert node.heartbeat_tick(offer(), False, lambda: None) == 'idle'
+        assert node.hold_tick(offer(), []) == 'idle'
+    node.unbeaten.add(41549)
+    assert node.correction_tick() == 'idle'
+    assert chain.sent == []
+    assert sum("no parameter set of PoxMatching is in force" in m for m in caplog.messages) == 1
+    chain.t = effect_at
+    chain.times[chain.head] = chain.t
+    assert node.heartbeat_tick(offer(), False, lambda: None) == 'announce'
+    assert chain.names() == ['announce']
+
+
+def test_the_set_in_force_is_the_last_whose_effect_at_has_passed(tmp_path):
+    first, pending = params(effectAt=0, maxSteps=8), params(effectAt=41550 * 3600 + 3000, maxSteps=3)
+    chain, node = beat_node(tmp_path, sets=[first, pending])
+    assert node.params() == first
+    assert node.params(41550 * 3600 + 3000) == pending
+
+
+def test_a_replaced_pending_set_is_read_again(tmp_path):
+    effect_at = 41550 * 3600 + 3000
+    chain, node = beat_node(tmp_path, sets=[params(effectAt=0), params(effectAt=effect_at, maxSteps=3)])
+    replaced = params(effectAt=effect_at + 600, maxSteps=5)
+    chain.sets = [chain.sets[0], replaced]
+    chain.log('ParametersReplaced', index=1, effectAt=effect_at + 600)
+    chain.mine(LAG + 1, 1)
+    node.follow()
+    assert node.copy.params == chain.sets
+    assert node.params(effect_at + 600).maxSteps == 5
+
+
 # ------------------------------------------------- announce and holds
 
 def test_a_hold_pauses_and_the_announce_waits_out_min_pause(tmp_path):

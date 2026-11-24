@@ -20,6 +20,10 @@ ZERO_IMAGE = b'\x00' * 31
 COPY_EVENTS = ('Beat', 'Announced', 'Left', 'Skipped')
 OWN_EVENTS = ('Charged', 'OrderFailed', 'Corrected', 'Banned')
 JUDGED_EVENTS = ('ListJudged',)
+# The owner's writes of the parameter sets (spec/matching.md section 2): a set
+# added, and the last one replaced while its effectAt is ahead; the copy reads
+# every set again at either.
+PARAMETER_EVENTS = ('ParametersAdded', 'ParametersReplaced')
 # The pricing's matching pointer (IPoxPricing.matching), which the agent's
 # pricing ABI does not carry, and the price stamp of a request as a PoX whose
 # VERSION() is "1.2" answers it: two values. The PoX whose VERSION() is "2.0"
@@ -335,11 +339,30 @@ class MatchingNode:
         self.ban_logged = None
         self.hold_logged = None
         self.payout_logged = None
+        self.no_set_logged = False
         self.score = None
 
-    def params(self):
-        """The parameter set in force for a request added now: the last one."""
-        return self.copy.params[-1] if self.copy.params else None
+    def params(self, t=None):
+        """The parameter set in force at time `t` (the latest block's time
+        when None) as PoxMatching holds the sets (matching.parameters_in_force),
+        None before the first set's effectAt."""
+        return matching.parameters_in_force(self.copy.params, self.now() if t is None else t)
+
+    def set_in_force(self, t=None):
+        """params(t); while no set is in force PoxMatching refuses a heartbeat,
+        an announce and a correction list and no request takes claims, so the
+        node sends none of them, logged once until a set is in force."""
+        params = self.params(t)
+        if params is None:
+            if not self.no_set_logged:
+                self.no_set_logged = True
+                first = min((int(p.effectAt) for p in self.copy.params), default=None)
+                self.logger.info(f"Matching: no parameter set of PoxMatching is in force "
+                                 f"({'none added' if first is None else f'the first takes effect at {first}'}); "
+                                 f"no heartbeat, announce, claim or correction is sent until one is")
+        else:
+            self.no_set_logged = False
+        return params
 
     def now(self):
         return self.chain.block(self.chain.head_number())['timestamp']
@@ -374,7 +397,8 @@ class MatchingNode:
         t = self.chain.block(head)['timestamp']
         self.copy = matching.RollCopy()
         self.copy.params = self.chain.parameter_sets()
-        max_age = self.params().maxRequestAgeSeconds if self.params() else 86400
+        params = self.params(t)
+        max_age = params.maxRequestAgeSeconds if params else 86400
         first = (t - max_age) // self.slot_seconds - 1
         self.oldest_time = t - max_age
         for slot in range(first, t // self.slot_seconds + 1):
@@ -407,7 +431,8 @@ class MatchingNode:
         `second`) back to the newest one whose start plus minListedSeconds is
         at or before the oldest open request's time, and its skips of the
         images seen requested, read at `block`."""
-        min_listed = self.params().minListedSeconds if self.params() else 60
+        params = self.params()
+        min_listed = params.minListedSeconds if params else 60
         if int(first) & matching.UINT32_MAX == 0:
             self.copy.set_periods(node, [], block)
         else:
@@ -433,8 +458,9 @@ class MatchingNode:
         Charged, OrderFailed, Corrected and Banned logs and the ListJudged
         logs of the requests it holds a late charge on; a node a Beat names
         that the copy does not hold is read at the last block applied. The
-        rolls no open round ranks on are dropped, and the parameter sets
-        read again when one was added."""
+        rolls no open round ranks on are dropped, and every parameter set is
+        read again at a ParametersAdded or ParametersReplaced log, or when
+        their count changed."""
         if not self.synced:
             return
         head = self.chain.head_number() - int(self.settings.lag_blocks)
@@ -473,10 +499,13 @@ class MatchingNode:
             for log in self.chain.events(JUDGED_EVENTS, start, head):
                 self._judged(log)
         self.copy.block = head
-        if self.chain.parameter_set_count() != len(self.copy.params):
+        if (self.chain.events(PARAMETER_EVENTS, start, head)
+                or self.chain.parameter_set_count() != len(self.copy.params)):
             self.copy.params = self.chain.parameter_sets()
-        max_age = self.params().maxRequestAgeSeconds if self.params() else 86400
-        self.oldest_time = self.chain.block(head)['timestamp'] - max_age
+        t = self.chain.block(head)['timestamp']
+        params = self.params(t)
+        max_age = params.maxRequestAgeSeconds if params else 86400
+        self.oldest_time = t - max_age
         self.copy.forget_slots_before(self.oldest_time // self.slot_seconds - 1)
 
     # ------------------------------------------------------- the heartbeat
@@ -487,13 +516,15 @@ class MatchingNode:
         node is banned; the leg beatCounts shows; the refresh first when the
         offer has expired (`refresh()`); the announce as the heartbeat when
         the node has no open period and does not hold; nothing between a
-        placement and its start row. A send that fails is tried at the next
-        tick, at most BEAT_ATTEMPTS_PER_SLOT times in the slot. Returns what
-        it did."""
+        placement and its start row; nothing while no parameter set is in
+        force (set_in_force). A send that fails is tried at the next tick, at
+        most BEAT_ATTEMPTS_PER_SLOT times in the slot. Returns what it did."""
         t = self.now()
         slot = rules.slot_of(t, self.slot_seconds)
         self._note_unbeaten(slot)
         if self.beat_slot == slot or not rules.beat_due(t, self.slot_seconds, self.offset):
+            return 'idle'
+        if self.set_in_force(t) is None:
             return 'idle'
         score, age, banned_until = self.chain.standing()
         self.score = score
@@ -580,7 +611,8 @@ class MatchingNode:
         """Pauses while a hold reason stands (7.8, 7.19) and announces when
         none does, the offer is AVAILABLE and unexpired and the node has no
         open period, or one at another tip than the offer's (7.3); after a
-        pause the announce waits minPauseSeconds. Nothing while banned.
+        pause the announce waits minPauseSeconds. Nothing while banned, and
+        no announce while no parameter set is in force (set_in_force).
         Returns 'paused', 'announced' or 'idle'."""
         if self.is_banned():
             return 'idle'
@@ -596,11 +628,14 @@ class MatchingNode:
         self.hold_logged = None
         if offer is None:
             return 'idle'
+        now = self.now()
+        params = self.set_in_force(now)
+        if params is None:
+            return 'idle'
         paused_at = period.to if period is not None and period.end_reason == matching.END_PAUSED else None
         tip_changed = open_period and int(period.tip) != int(offer.tip)
-        min_pause = self.params().minPauseSeconds if self.params() else 3600
-        if rules.announce_due(offer.available, offer.expired, open_period, False, paused_at, min_pause, self.now(),
-                              tip_changed):
+        if rules.announce_due(offer.available, offer.expired, open_period, False, paused_at, params.minPauseSeconds,
+                              now, tip_changed):
             if mined(self.announce(offer, 'its tip changed' if tip_changed else 'no open period')):
                 return 'announced'
         return 'idle'
@@ -714,7 +749,7 @@ class MatchingNode:
             return 'done'
         if request_id in self.claimed or (info['imageMarked'] and not self.settings.claim_marked_images):
             return 'done'
-        if not info['settled'] or offer is None:
+        if not info['settled'] or offer is None or self.set_in_force() is None:
             return 'wait'
         ((word, _),) = self.chain.claims_of(request_id, [self.address])
         if decode_claim(word).block != 0:
@@ -828,7 +863,8 @@ class MatchingNode:
         """How many of the last 8 blocks, the newest last, used at least the
         parameter set's fullBlockPercent of their gas limit without a break
         (7.18): the sender doubles its price per block of it."""
-        percent = self.params().fullBlockPercent if self.params() else 0
+        params = self.params()
+        percent = params.fullBlockPercent if params else 0
         if not percent:
             return 0
         head = self.chain.head_number()
@@ -928,8 +964,9 @@ class MatchingNode:
     def correction_tick(self):
         """The node's correction list, at most once an hour (7.18): first the
         kind 5 entries of its unmined heartbeats whose last fullWindowSeconds
-        were full, then every entry due, at most correctionMaxEntries."""
-        params = self.params()
+        were full, then every entry due, at most correctionMaxEntries, under
+        the parameter set in force (none: nothing sent, set_in_force)."""
+        params = self.set_in_force()
         if params is None:
             return 'idle'
         head = self.chain.head_number()

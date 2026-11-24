@@ -91,6 +91,18 @@ def parameters_of(answer):
     return Parameters(*answer)
 
 
+def parameters_in_force(sets, t):
+    """The parameter set in force at time `t`: the last of `sets` (in the
+    array's order) whose effectAt is at or before `t`
+    (PoxMatchingState._inForce); None while none is, when PoxMatching
+    refuses a heartbeat, an announce and a correction list (spec/matching.md
+    section 2)."""
+    for p in reversed(sets):
+        if int(p.effectAt) <= int(t):
+            return p
+    return None
+
+
 def address_bytes(address):
     """The 20 bytes of a hex address."""
     text = str(address)
