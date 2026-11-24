@@ -30,7 +30,10 @@ Commitment = namedtuple('Commitment', 'until breached_at recommit_after last_han
 COMMITMENT_FIELDS = ('until', 'breachedAt', 'recommitAfter', 'lastHandoverAt', 'handoverAllowedAfter',
                      'suspendedUntil')
 # The fields of IReservationBroker.ReservationParams the agent reads, with
-# their positions in params()' struct.
+# their positions in params()' struct. A broker of pox-smart-contract-litvm
+# 52e36e0 answers a 31st field, farmMinScore, after the 30 of the deployed
+# brokers; node/broker.abi declares the 30, whose decode reads both answers
+# and leaves the 31st unread, and every position below is the same in both.
 BrokerParams = namedtuple('BrokerParams', 'handover_seconds handover_notice_seconds handover_window_blocks '
                                           'handover_window_min_blocks handover_prep_seconds block_millis '
                                           'farm_claim_seconds appointee_claim_seconds handover_cooldown_seconds '

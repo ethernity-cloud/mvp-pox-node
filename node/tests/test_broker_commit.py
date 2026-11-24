@@ -1,6 +1,15 @@
 """broker (PHASE-E-PLAN.md E27, F.1): the commitment window's extension rule
-and the broker's structs read by position or by name."""
+and the broker's structs read by position or by name, params() from an
+answer of 30 fields or of 31."""
+import json
+from pathlib import Path
+
+import pytest
+from eth_utils.abi import collapse_if_tuple
+from web3 import Web3
+
 import broker
+import config
 from constants import COMMIT_WINDOW_FACTOR
 
 COMMIT_MIN = 7 * 86400
@@ -82,6 +91,25 @@ def test_params_of_reads_the_fields_the_agent_uses_by_position():
 def test_params_of_reads_a_mapping_by_name():
     named = {name: value for name, _ in broker.PARAMS_FIELDS for value in [7]}
     assert all(value == 7 for value in broker.params_of(named))
+
+
+@pytest.mark.parametrize("fields", [30, 31])
+def test_the_fourteen_parameters_are_read_from_either_length(fields):
+    # MATCHING-SYNC-PLAN.md D02, OD18: the deployed brokers answer 30
+    # fields, one of pox-smart-contract-litvm 52e36e0 a 31st, farmMinScore,
+    # last. The answer is decoded under node/broker.abi's params(), the 30.
+    abi = json.loads(Path(config.broker_abi_filepath).read_text())
+    entry = next(e for e in abi if e.get("type") == "function" and e.get("name") == "params")
+    components = entry["outputs"][0]["components"]
+    assert len(components) == 30 and components[-1]["name"] == "brokerMissesToReassign"
+    types = [c["type"] for c in components] + ["uint16"]
+    values = list(params_tuple()) + [45000]
+    values[29] = 3
+    answer = Web3().codec.encode([f"({','.join(types[:fields])})"], [tuple(values[:fields])])
+    decoded = Web3().codec.decode([collapse_if_tuple(o) for o in entry["outputs"]], answer)[0]
+    assert list(decoded) == values[:30]
+    assert broker.params_of(decoded) == broker.params_of(params_tuple())
+    assert broker.params_of(tuple(values[:fields])) == broker.params_of(params_tuple())
 
 
 def test_handover_of_and_the_role_it_gives_an_order():
