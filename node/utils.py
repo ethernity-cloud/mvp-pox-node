@@ -1475,6 +1475,165 @@ def result_fields(result_string):
     raise ValueError(f"not a v3, v4 or v5 result string: {str(result_string)[:32]!r}")
 
 
+# The stored result's grammar (pox-smart-contract-litvm spec/matching.md
+# section 17 "The stored result", spec/matching/result-fields.json
+# storedGrammar; PoxMatchingResults._decode at 52e36e0):
+#   stored = "v3:" "0x" 1*( hexdig hexdig ) [ ":" rest ],  hexdig 0-9 a-f
+# read as its bytes stand. The hex run, up to the next colon or the end, is
+# the canonical RLP of a signed legacy transaction of at most 4,096 bytes
+# calling _addResultToOrder(uint256,string).
+STORED_TRANSACTION_MAX_BYTES = 4096
+ADD_RESULT_SELECTOR = bytes.fromhex('14e9f384')
+SECP256K1_N = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141
+# What the grammar reads from a stored result for an order: 'decoded' (a
+# transaction for the order whose result string's field 1 is a run of digits,
+# its task code), 'notV3', 'noTransaction' (begins v3: and is outside the
+# grammar), 'otherOrder' (a transaction for another order) or 'noCode'; the
+# called order id and the signer of a transaction (None otherwise), and the
+# task code when decoded.
+StoredResult = namedtuple('StoredResult', 'status order_id signer code')
+_HEX_DIGITS = re.compile(r'[0-9a-fA-F]+', re.ASCII)
+
+
+def _rlp_item(raw, at):
+    """(is a list, payload offset, payload length) of the RLP item of `raw`
+    at `at`, None when it is not in canonical form: inside `raw`, a length
+    below 56 in the short form and from 56 in the long form without a
+    leading zero byte, a single byte below 0x80 never carried as a one-byte
+    string."""
+    if at >= len(raw):
+        return None
+    c = raw[at]
+    if c < 0x80:
+        return False, at, 1
+    is_list = c >= 0xc0
+    short = c - (0xc0 if is_list else 0x80)
+    if short <= 55:
+        off, length = at + 1, short
+        if not is_list and length == 1 and (off >= len(raw) or raw[off] < 0x80):
+            return None
+    else:
+        n = short - 55
+        if at + 1 + n > len(raw) or raw[at + 1] == 0:
+            return None
+        length = int.from_bytes(raw[at + 1:at + 1 + n], 'big')
+        if length < 56:
+            return None
+        off = at + 1 + n
+    if off + length > len(raw):
+        return None
+    return is_list, off, length
+
+
+def _rlp_uint(value):
+    if value == 0:
+        return b'\x80'
+    body = value.to_bytes((value.bit_length() + 7) // 8, 'big')
+    return body if len(body) == 1 and body[0] < 0x80 else bytes([0x80 + len(body)]) + body
+
+
+def _rlp_list(payload):
+    if len(payload) <= 55:
+        return bytes([0xc0 + len(payload)]) + payload
+    length = len(payload).to_bytes((len(payload).bit_length() + 7) // 8, 'big')
+    return bytes([0xf7 + len(length)]) + length + payload
+
+
+def _stored_transaction(raw):
+    """(signer lower-case, calldata offset, calldata length) of `raw` read as
+    a signed legacy transaction: one RLP list that is all of `raw`, of nine
+    items none a list; `to` empty or 20 bytes; v at most 8 bytes, 27 or 28
+    or 35 and above (EIP-155); r and s at most 32 bytes, s at most half the
+    curve order; a signature that recovers over keccak256 of the list of
+    items 0 to 5 as their bytes stand, followed for EIP-155 by the chain id,
+    0 and 0. None when it is not."""
+    from eth_keys import keys
+    from eth_utils import keccak
+    outer = _rlp_item(raw, 0)
+    if outer is None or not outer[0] or outer[1] + outer[2] != len(raw):
+        return None
+    items_at, end = outer[1], outer[1] + outer[2]
+    at, items = items_at, []
+    while at < end:
+        if len(items) == 9:
+            return None
+        item = _rlp_item(raw, at)
+        if item is None or item[0] or item[1] + item[2] > end:
+            return None
+        items.append((item[1], item[2]))
+        at = item[1] + item[2]
+    if len(items) != 9 or items[3][1] not in (0, 20) or items[6][1] > 8 or items[7][1] > 32 or items[8][1] > 32:
+        return None
+    v, r, s = (int.from_bytes(raw[o:o + n], 'big') for o, n in items[6:9])
+    if v >= 35:
+        recid, suffix = (v - 35) % 2, _rlp_uint((v - 35) // 2) + b'\x80\x80'
+    elif v in (27, 28):
+        recid, suffix = v - 27, b''
+    else:
+        return None
+    if s > SECP256K1_N // 2 or not 0 < r < SECP256K1_N or s == 0:
+        return None
+    digest = keccak(_rlp_list(raw[items_at:items[5][0] + items[5][1]] + suffix))
+    try:
+        signer = keys.Signature(vrs=(recid, r, s)).recover_public_key_from_msg_hash(digest).to_address()
+    except Exception:
+        return None
+    return signer.lower(), items[5][0], items[5][1]
+
+
+def stored_result_status(stored, order_id):
+    """What the stored result's grammar reads from `stored` for order
+    `order_id` (StoredResult), byte for byte as PoxMatching's decoder reads
+    it: nothing trimmed, skipped or folded."""
+    s = str(stored).encode('utf-8')
+    if not s.startswith(b'v3:'):
+        return StoredResult('notV3', None, None, None)
+    none = StoredResult('noTransaction', None, None, None)
+    if s[3:5] != b'0x':
+        return none
+    run = s[5:].split(b':', 1)[0]
+    if (len(run) % 2 or len(run) > 2 * STORED_TRANSACTION_MAX_BYTES
+            or any(c not in b'0123456789abcdef' for c in run)):
+        return none
+    raw = bytes.fromhex(run.decode('ascii'))
+    found = _stored_transaction(raw)
+    if found is None:
+        return none
+    signer, data_at, data_len = found
+    data = raw[data_at:data_at + data_len]
+    if data_len < 100 or data[:4] != ADD_RESULT_SELECTOR:
+        return none
+    called = int.from_bytes(data[4:36], 'big')
+    offset = int.from_bytes(data[36:68], 'big')
+    length = int.from_bytes(data[68:100], 'big')
+    if (called > 2**64 - 1 or offset != 0x40 or length > data_len or data_len != 100 + (length + 31) // 32 * 32
+            or any(data[100 + length:])):
+        return none
+    try:
+        text = data[100:100 + length].decode('utf-8')
+    except UnicodeDecodeError:
+        return none
+    if called != int(order_id):
+        return StoredResult('otherOrder', called, signer, None)
+    fields = text.split(':')
+    code = fields[1] if len(fields) >= 2 else ''
+    if not code or any(c not in '0123456789' for c in code):
+        return StoredResult('noCode', called, signer, None)
+    return StoredResult('decoded', called, signer, min(int(code), 2**64 - 1))
+
+
+def canonical_transaction_text(text):
+    """The trustedzone's transaction text in the stored result's form: for
+    the three spellings of the same bytes the grammar refuses, hex without
+    0x, the prefix 0X and upper-case digits (in any mix), 0x and the
+    lower-case hex of those bytes; any other text as it stands."""
+    text = str(text)
+    body = text[2:] if text[:2] in ('0x', '0X') else text
+    if body and len(body) % 2 == 0 and _HEX_DIGITS.fullmatch(body):
+        return '0x' + body.lower()
+    return text
+
+
 def result_send_decision(now, order_end, deadline, gas_wait, in_window, ceiling_exceeded):
     """What the result send does before a build: 'wait' while the order's
     gas wait holds before its end (`order_end`, None for unknown) and, at
