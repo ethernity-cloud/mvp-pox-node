@@ -101,6 +101,8 @@ class FakeChain:
         self.simulate_refusal = set()
         self.estimates = 80000
         self.request_epc = {}
+        self.failure_words = {}
+        self.charged_in_words = {}
 
     # --- the chain
     def head_number(self):
@@ -198,6 +200,12 @@ class FakeChain:
 
     def ambiguous(self, order_id):
         return self.ambiguous_words.get(order_id, 0)
+
+    def failure(self, order_id):
+        return self.failure_words.get(order_id, 1 << 112)
+
+    def charged_in(self, slot):
+        return self.charged_in_words.get(slot, 0)
 
     def early33(self, order_id, block):
         self.judged_at.append(block)
@@ -901,6 +909,98 @@ def test_a_never_started_order_whose_last_two_minutes_were_full_is_asked_back(tm
     node.follow()
     assert node.correction_tick() == 'sent'
     assert chain.sent[-1][1] == ([rules.correction_entry(2, order_id=77)],)
+
+
+def full_start_window(chain, order_id):
+    """Order `order_id` approved 2,000 s ago, its last two minutes before
+    the start timeout full."""
+    approved = chain.t - 2000
+    chain.times_of_orders[order_id] = (approved, approved - 10, 0)
+    end = approved + 900
+    for n in range(0, chain.head + 1):
+        if end - 120 <= chain.block(n)['timestamp'] < end:
+            chain.gas[n] = 9_900_000
+
+
+def test_a_charged_failure_that_took_nothing_is_asked_back_and_an_uncharged_one_is_not(tmp_path):
+    # Order 77's failure was charged (its charge is in its slot's sum) but
+    # the cap let it take 0 units; order 78's is the never-started record of
+    # expireUnstarted, not charged until the not-run ballot.
+    chain, node = correction_node(tmp_path)
+    full_start_window(chain, 77)
+    full_start_window(chain, 78)
+    chain.failure_words[77] = rules.FAIL_NEVER_STARTED | (1 << 112)
+    chain.failure_words[78] = rules.FAIL_NEVER_STARTED | (1 << 104)
+    chain.log('OrderFailed', orderId=77, node=ME, kind=rules.FAIL_NEVER_STARTED, units=0, scoreAfter=0)
+    chain.log('OrderFailed', orderId=78, node=ME, kind=rules.FAIL_NEVER_STARTED, units=0, scoreAfter=0)
+    chain.mine(LAG + 1, 5)
+    node.follow()
+    assert node.correction_tick() == 'sent'
+    assert chain.sent[-1][1] == ([rules.correction_entry(2, order_id=77)],)
+
+
+def test_a_late_charge_that_took_nothing_is_asked_while_its_slot_holds_units_taken(tmp_path):
+    chain, node = correction_node(tmp_path)
+    chain.rounds[(9, 0)] = {'roundBlock': 1900}
+    chain.gas[1903] = 9_500_000
+    created = 3600 * 499 + 10
+    chain.requests[9] = lambda block: {'createdAt': created}
+    chain.log('Charged', doRequestId=9, round=0, node=ME, kind=1, mandateStep=2, passed=1, units=548, taken=0,
+              scoreAfter=0)
+    chain.mine(LAG + 1, 5)
+    node.follow()
+    assert node.correction_tick() == 'idle'
+    chain.charged_in_words[created // 3600] = 1918 | (1918 << 32)
+    chain.log('Charged', doRequestId=9, round=0, node=ME, kind=1, mandateStep=2, passed=1, units=548, taken=0,
+              scoreAfter=0)
+    chain.mine(LAG + 1, 5)
+    node.follow()
+    assert node.correction_tick() == 'sent'
+    assert chain.sent[-1][1] == ([rules.correction_entry(1, request_id=9, rnd=0, step=2)],)
+
+
+def test_no_heartbeat_correction_for_a_slot_a_ban_covers(tmp_path):
+    chain, node = correction_node(tmp_path)
+    slot = chain.t // 3600 - 2
+    end = (slot + 1) * 3600
+    for n in range(0, chain.head + 1):
+        if end - 120 <= chain.block(n)['timestamp'] < end:
+            chain.gas[n] = 9_900_000
+    node.unbeaten.add(slot)
+    chain.banned_until = end
+    assert node.correction_tick() == 'idle'
+    assert node.corrections.entries == {}
+    # A ban recorded after the entry was booked drops it.
+    chain.banned_until = 0
+    node.unbeaten.add(slot)
+    node.corrections.last_ask = chain.t
+    assert node.correction_tick() == 'idle'
+    assert list(node.corrections.entries) == [rules.correction_entry(5, slot=slot)]
+    chain.banned_until = end + 7200
+    chain.t += 3600
+    chain.times[chain.head] = chain.t
+    assert node.correction_tick() == 'idle'
+    assert node.corrections.entries == {} and chain.sent == []
+
+
+def test_an_entry_poxmatching_refuses_leaves_the_book(tmp_path):
+    chain, node = correction_node(tmp_path)
+    full_start_window(chain, 77)
+    chain.log('OrderFailed', orderId=77, node=ME, kind=rules.FAIL_NEVER_STARTED, units=1918, scoreAfter=0)
+    chain.mine(LAG + 1, 5)
+    node.follow()
+    assert node.correction_tick() == 'sent'
+    entry = rules.correction_entry(2, order_id=77)
+    # The vote skipped it (ChargeSkipped with the entry's word); a ballot's
+    # ChargeSkipped of a request leaves the book as it is.
+    chain.log('ChargeSkipped', doRequestId=entry, round=0, node=ME, reason=4)
+    chain.log('ChargeSkipped', doRequestId=9, round=0, node=ME, reason=4)
+    chain.mine(LAG + 1, 5)
+    node.follow()
+    assert node.corrections.entries == {}
+    chain.t += 3600
+    chain.times[chain.head] = chain.t
+    assert node.correction_tick() == 'idle'
 
 
 def test_a_failure_whose_window_was_not_full_is_not_asked(tmp_path):

@@ -18,7 +18,7 @@ ZERO_IMAGE = b'\x00' * 31
 # The logs the copy of the roll follows, and those of the node's own
 # records it reads for its corrections and its ban (7.18, 7.12).
 COPY_EVENTS = ('Beat', 'Announced', 'Left', 'Skipped')
-OWN_EVENTS = ('Charged', 'OrderFailed', 'Corrected', 'Banned')
+OWN_EVENTS = ('Charged', 'OrderFailed', 'Corrected', 'Banned', 'ChargeSkipped')
 JUDGED_EVENTS = ('ListJudged',)
 # The owner's writes of the parameter sets (spec/matching.md section 2): a set
 # added, and the last one replaced while its effectAt is ahead; the copy reads
@@ -235,6 +235,14 @@ class ChainAdapter:
 
     def ambiguous(self, order_id):
         return int(self.matching.functions.ambiguousOf(int(order_id)).call())
+
+    def failure(self, order_id):
+        """The failure record of an order (failureOf's word)."""
+        return int(self.matching.functions.failureOf(int(order_id)).call())
+
+    def charged_in(self, slot):
+        """The node's charges of a slot (chargedInOf's word)."""
+        return int(self.matching.functions.chargedInOf(self.address, int(slot)).call())
 
     def early33(self, order_id, block):
         """PoxMatching's early33: whether a code 33 in the order's stored
@@ -882,25 +890,45 @@ class MatchingNode:
                 self._own_log(log)
 
     def _own_log(self, log):
+        """A log of the node's own records (OWN_EVENTS). The entries asked
+        for are those PoxMatching admits (PoxMatchingJudged._admits): kind 1
+        for a late charge while the request's slot holds units taken, kinds
+        2 to 4 for a failure whose record is charged; an entry a
+        ChargeSkipped log names, refused at the ask or at the vote, leaves
+        the book."""
         a = log.args
+        if log.event == 'ChargeSkipped':
+            entry = int(a['doRequestId'])
+            if entry >> 248 and self.corrections.drop(entry):
+                self.logger.info(f"Matching: correction {entry:#x} refused by PoxMatching (reason {a['reason']}); "
+                                 f"dropped")
+            return
         params = self.params()
         if params is None:
             return
         until = self.chain.block(log.blockNumber)['timestamp'] + params.correctionWindowSeconds
         if log.event == 'Charged' and int(a['kind']) == rules.CHARGE_LATE:
             self.late_records.add((int(a['doRequestId']), int(a['round'])))
-            if int(a['taken']) > 0:
+            if int(a['taken']) > 0 or self._slot_taken(int(a['doRequestId'])):
                 self._late_corrections(int(a['doRequestId']), int(a['round']), int(a['mandateStep']),
                                        int(a['passed']), until, params)
-        elif log.event == 'OrderFailed' and int(a['units']) > 0:
+        elif log.event == 'OrderFailed':
             kind = rules.CORRECTION_OF_FAILURE.get(int(a['kind']))
-            if kind is not None:
+            if kind is not None and rules.failure_charged(self.chain.failure(int(a['orderId']))):
                 self._failure_correction(kind, int(a['orderId']), until, params)
         elif log.event == 'Corrected':
             self.corrections.corrected(int(a['entry']))
             self.logger.info(f"Matching: correction {int(a['entry']):#x} confirmed, {a['unitsBack']} units back")
         elif log.event == 'Banned':
             self.logger.warning(f"Matching: this node was banned for order {a['orderId']} until {a['bannedUntil']}")
+
+    def _slot_taken(self, request_id):
+        """Whether the node's charges in the slot of request `request_id`
+        (its createdAt's) took units from its score (chargedInOf's taken):
+        a late charge that took nothing under the cap is admitted when
+        another charge of the slot took some."""
+        created_at = int(self.chain.request_info(request_id, None)['createdAt'])
+        return rules.charged_in_taken(self.chain.charged_in(created_at // self.slot_seconds)) > 0
 
     def _late_corrections(self, request_id, number, stated, passed, until, params):
         """An entry of kind 1 for each step a late charge counted, at most
@@ -965,13 +993,22 @@ class MatchingNode:
         """The node's correction list, at most once an hour (7.18): first the
         kind 5 entries of its unmined heartbeats whose last fullWindowSeconds
         were full, then every entry due, at most correctionMaxEntries, under
-        the parameter set in force (none: nothing sent, set_in_force)."""
+        the parameter set in force (none: nothing sent, set_in_force). No
+        kind 5 entry is asked for a slot that did not end after the end of
+        the node's ban (rules.beat_correction_admitted); one in the book
+        leaves it once a ban covers its slot."""
         params = self.set_in_force()
         if params is None:
             return 'idle'
         head = self.chain.head_number()
+        _, _, banned_until = self.chain.standing()
+        for entry in self.corrections.beat_entries():
+            if not rules.beat_correction_admitted(entry & matching.UINT32_MAX, self.slot_seconds, banned_until):
+                self.corrections.drop(entry)
         for slot in sorted(self.unbeaten):
             end = (slot + 1) * self.slot_seconds
+            if not rules.beat_correction_admitted(slot, self.slot_seconds, banned_until):
+                continue
             if rules.window_full(self.chain.blocks_in_time(end - params.fullWindowSeconds, end, head),
                                  params.fullBlockPercent):
                 self.corrections.add(rules.correction_entry(rules.CORRECTION_BEAT, slot=slot),

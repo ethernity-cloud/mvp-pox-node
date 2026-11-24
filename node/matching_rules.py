@@ -332,6 +332,30 @@ def full_block_price(price, streak, ceiling):
     return min(int(ceiling), int(price) * 2 ** int(streak))
 
 
+def failure_charged(word):
+    """Whether a failure record (failureOf's word, PoxMatchingState.Failure:
+    `charged` in bits 112 to 119) holds a charge added to its slot's sum,
+    the admission of a correction of kinds 2 to 4 whatever the cap let it
+    take (4.9; spec/matching.md section 16 item 13)."""
+    return (int(word) >> 112) & 255 != 0
+
+
+def charged_in_taken(word):
+    """The units a node's charges of one slot took from its score
+    (chargedInOf's word, PoxMatchingState.ChargedIn: sum in bits 0 to 31,
+    taken in bits 32 to 47, failures in bits 48 to 79)."""
+    return (int(word) >> 32) & 0xFFFF
+
+
+def beat_correction_admitted(slot, slot_seconds, banned_until):
+    """Whether a kind 5 entry for heartbeat slot `slot` can be admitted: the
+    slot ended after the end of the node's ban (`banned_until`), as
+    PoxMatching tests at the ask and at the vote (spec/matching.md section
+    16 item 26: a ban in force through the slot, or recorded since it, set
+    the score to 0)."""
+    return int(banned_until) < (int(slot) + 1) * int(slot_seconds)
+
+
 def correction_entry(kind, request_id=0, rnd=0, step=0, order_id=0, slot=0):
     """A correction entry word (spec/matching.md section 16 item 27): kind <<
     248; kinds 1 and 6 | uint48(doRequestId) << 16 | uint8(round) << 8 |
@@ -352,8 +376,10 @@ class CorrectionBook:
     record's time plus correctionWindowSeconds). due() gives at most
     correctionMaxEntries of them once correctionAskSeconds have passed since
     the last list, at most once an hour; an entry stays until the window
-    closes or a Corrected log names it, so a list that failed, an entry
-    found late and one the validators did not vote on go in a later list."""
+    closes, a Corrected log names it or PoxMatching refuses it (a
+    ChargeSkipped log naming it, at the ask or at the vote), so a list that
+    failed, an entry found late and one the validators did not vote on go in
+    a later list."""
 
     def __init__(self):
         self.entries = {}
@@ -364,6 +390,14 @@ class CorrectionBook:
 
     def corrected(self, entry):
         self.entries.pop(int(entry), None)
+
+    def drop(self, entry):
+        """Removes an entry PoxMatching refused; True when the book held it."""
+        return self.entries.pop(int(entry), None) is not None
+
+    def beat_entries(self):
+        """The book's kind 5 entries."""
+        return [e for e in self.entries if e >> 248 == CORRECTION_BEAT]
 
     def due(self, now, ask_seconds, max_entries):
         for entry in [e for e, until in self.entries.items() if until < int(now)]:
