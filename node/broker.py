@@ -536,6 +536,20 @@ def supervise_decision(kind, next_due, grace, now, order_placed, acted):
     return 'send'
 
 
+# The keeper calls' gas limit in percent over their estimate (OD28): a
+# placement step that fails after the pass applied a transition counts as
+# nothing placed, and a step that leaves at most a quarter of the gas held
+# reverts the pass, so a supervise sent at its estimate can place nothing
+# (pox-smart-contract-litvm 52e36e0 ReservationKeepers.sol).
+KEEPER_GAS_MARGIN_PERCENT = 50
+
+
+def keeper_gas_limit(estimate):
+    """The gas limit of a supervise or superviseWith: its estimate plus
+    KEEPER_GAS_MARGIN_PERCENT, rounded up."""
+    return (int(estimate) * (100 + KEEPER_GAS_MARGIN_PERCENT) + 99) // 100
+
+
 def transactions_admitted(sent_this_tick):
     """Whether another broker transaction goes out this idle tick (at most
     BROKER_TX_PER_TICK)."""

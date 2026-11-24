@@ -2593,10 +2593,12 @@ class EtnyPoXNode:
             self.__broker_params_read = broker.params_of(self.__broker.caller().params())
         return self.__broker_params_read
 
-    def __broker_tx(self, label, fn):
+    def __broker_tx(self, label, fn, keeper=False):
         """Simulates the bound call `fn` from this node's wallet, sends it
         in the wallet's nonce sequence (get_transaction_build) and awaits
-        its receipt; the receipt. A simulation that reverts raises with the
+        its receipt; the receipt. A keeper call (`keeper`: supervise,
+        superviseWith) carries its estimate plus the margin as its gas limit
+        (broker.keeper_gas_limit). A simulation that reverts raises with the
         contract's reason (utils.revert_reason) and costs no gas; a
         reverted transaction raises too."""
         try:
@@ -2604,7 +2606,10 @@ class EtnyPoXNode:
         except exceptions.ContractLogicError as refusal:
             raise Exception(revert_reason(refusal) or str(refusal))
         time.sleep(self.__network_config.rpc_delay / 1000)
-        _hash = self.send_transaction(fn.build_transaction(self.get_transaction_build()))
+        opts = self.get_transaction_build()
+        if keeper:
+            opts['gas'] = broker.keeper_gas_limit(fn.estimate_gas({'from': self.__address}))
+        _hash = self.send_transaction(fn.build_transaction(opts))
         self.logger.info(f"TXID {_hash} pending ({label})... ")
         receipt = self.__w3.eth.wait_for_transaction_receipt(_hash, timeout=RECEIPT_TIMEOUT_SECONDS)
         if receipt.status != 1:
@@ -2934,7 +2939,7 @@ class EtnyPoXNode:
             return False
         self.__started_reservations.pop(reservation, None)
         try:
-            self.__broker_tx(f"superviseWith({reservation}, {self.__dprequest})", fn)
+            self.__broker_tx(f"superviseWith({reservation}, {self.__dprequest})", fn, keeper=True)
             logger.info(f"Reservation {reservation} ({kind}): superviseWith sent with this node's offer {self.__dprequest}")
         except Exception as e:
             logger.info(f"Reservation {reservation}: superviseWith failed ({e})")
@@ -4332,7 +4337,7 @@ class EtnyPoXNode:
             return
         st['supervised'] = True
         try:
-            self.__broker_tx(f"supervise({reservation})", fn)
+            self.__broker_tx(f"supervise({reservation})", fn, keeper=True)
             self.logger.info(f"Order {order_id}: supervise sent for reservation {reservation}: the window passed without "
                              f"the predecessor's result")
         except Exception as e:
